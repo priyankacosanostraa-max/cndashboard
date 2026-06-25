@@ -696,6 +696,12 @@ def _refresh_data():
     # SOR WIP — some sheets may have a dedicated SOR WIP column; fallback to None
     I_WIP_SOR = _find_wip_col(["sor"]) or find_col(inv.columns,"WIP (SOR)","wip sor","sor wip")
 
+    # Blocked Qty (column U = index 20). Naam pehle, warna position.
+    _inv_cols = list(inv.columns)
+    def _inv_at(i): return _inv_cols[i] if len(_inv_cols) > i else None
+    I_BLOCKED = (find_col(inv.columns, "Blocked Qty", "blocked qty", "blocked", "block qty")
+                 or _inv_at(20))
+
     # ── COSSA columns ────────────────────────────────────────
     cols = list(cossa.columns)
     def _at(idx): return cols[idx] if len(cols) > idx else None
@@ -995,6 +1001,7 @@ def _refresh_data():
         wip_designer = to_int(r.get(I_WIP_DESIGNER,0)) if I_WIP_DESIGNER else 0
         wip_customer = to_int(r.get(I_WIP_CUSTOMER,0)) if I_WIP_CUSTOMER else 0
         wip_sor      = to_int(r.get(I_WIP_SOR,0))      if I_WIP_SOR      else 0
+        blocked      = to_int(r.get(I_BLOCKED,0))       if I_BLOCKED      else 0
         mrp   = to_num(r.get(I_MRP,0))                 if I_MRP  else 0.0
         cost  = to_num(r.get(I_COST,0))                if I_COST else 0.0
 
@@ -1025,6 +1032,7 @@ def _refresh_data():
             "inv_wip_designer": wip_designer,
             "inv_wip_customer": wip_customer,
             "inv_wip_sor":      wip_sor,
+            "blocked_qty":      blocked,
             "total_inv":   stk + wip,
             "mrp":         mrp,
             "cost":        cost,
@@ -6304,6 +6312,7 @@ function mkCard(item, rev, conf, slow){
     ${item.dimensions ? `<div class="row"><span>Dimensions</span><span>${escHtml(String(item.dimensions))}</span></div>` : ''}
     <div class="row"><span>Inv. Stock</span><span>${item.inv_stock}</span></div>
     <div class="row"><span>Inv (WIP)</span><span>${item.inv_wip}</span></div>
+    <div class="row"><span>Blocked Qty</span><span>${item.blocked_qty || 0}</span></div>
     <div class="row"><span>Plating</span><span>${safeText(item.plating || '')}</span></div>
     ${item.dimensions ? `<div class="row"><span>Dimensions</span><span>${safeText(String(item.dimensions))}</span></div>` : ''}
     <div class="row"><span>Category</span><span>${safeText(item.taxon || '')}</span></div>
@@ -6404,11 +6413,11 @@ function applyF(){
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
-        master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, img: it.image_url}; });
+        master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
         const rowsHtml = txns.map(t => {
           const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[t.sku] || {s:0, w:0, img:''};
-          const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
+          const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
+          const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
           return `<tr>
             <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku}</button></div></td>
@@ -6418,11 +6427,12 @@ function applyF(){
             <td class="green">${fmt(parseFloat(t.rev) || 0)}</td>
             <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
             <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
+            <td class="${blk > 0 ? 'red' : 'muted'}">${blk}</td>
           </tr>`;
         }).join('');
         grid.innerHTML = `<div class="ro-table-wrap" style="grid-column:1/-1">
           <table class="ro"><thead><tr>
-            <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Final Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Final Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
           </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
       }
     } else {
@@ -6682,6 +6692,7 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('final_qty',this)">Sold Qty</th>
     <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
     <th class="sort-arrow" onclick="sortRO('inv_wip',this)">Inv WIP</th>
+    <th class="sort-arrow" onclick="sortRO('blocked_qty',this)" title="Blocked Qty (column U)">Blocked Qty</th>
     <th class="sort-arrow" onclick="sortRO('forecast_60d',this)" title="Expected units to sell in the next 60 days. Based on recent sales velocity: last 60 days weighted 70%, last 180 days 30%, plus a small trend adjustment.">Forecast 60D</th>
     <th class="sort-arrow" onclick="sortRO('reorder_qty',this)" title="Next 60 days expected demand minus current stock + WIP">Reorder Qty</th>
     <th>Remark</th>
@@ -6764,13 +6775,14 @@ function applyRO(){
       <td class="gold">${qty}</td>
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
+      <td class="${(item.blocked_qty||0) > 0 ? 'red' : 'muted'}">${item.blocked_qty || 0}</td>
       <td><span class="forecast-pill">${item.forecast_60d || 0}</span></td>
       <td><span class="forecast-pill" style="background:#fff4e0;color:#b45309;border-color:#f3d9a8">${item.reorder_qty || 0}</span></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
     </tr>`;
   }).join('') + (filtered.length > RO_CAP
-    ? `<tr><td colspan="12" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
+    ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
     : '');
 
   const allBox = document.getElementById('roSelectAll');
@@ -7010,7 +7022,7 @@ function exportRO(fmtType){
   if (!rows.length) { alert('No rows to export'); return; }
 
   const emp1 = LOGIN_ROLE === 'employee';
-  const headers = ['SKU','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['SKU','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = rows.map(item => ({
     SKU: item.sku,
     'Product Dimensions': item.dimensions || '',
@@ -7023,6 +7035,7 @@ function exportRO(fmtType){
     ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0}),
     'Inv Stock': item.inv_stock || 0,
     'Inv WIP': item.inv_wip || 0,
+    'Blocked Qty': item.blocked_qty || 0,
     'Forecast Sold Qty': item.forecast_60d || 0,
     'Reorder Qty': item.reorder_qty || 0,
     Status: item.status || '',
@@ -8519,6 +8532,7 @@ mkCard = function(item, rev, conf, slow){
       <div class="row"><span>Final Qty</span><span>${item.final_qty || 0}</span></div>
       <div class="row"><span>Inv. Stock</span><span>${item.inv_stock}</span></div>
       <div class="row"><span>Inv (WIP)</span><span>${item.inv_wip}</span></div>
+      <div class="row"><span>Blocked Qty</span><span>${item.blocked_qty || 0}</span></div>
       <div class="sg">
         <div class="sc"><div class="sl">1M</div><div class="sv ${sCls(s.m1)}">${s.m1}</div></div>
         <div class="sc"><div class="sl">3M</div><div class="sv ${sCls(s.m3)}">${s.m3}</div></div>
@@ -8610,12 +8624,12 @@ function aiExport(fmtType){
   const items = AI_LAST_RESULTS || [];
   if (!items.length) return;
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['SKU','Category','Plating','Dimensions','Status','MRP', ...(emp ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Total Inv',
+  const headers = ['SKU','Category','Plating','Dimensions','Status','MRP', ...(emp ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Total Inv',
                    'Final Qty', ...(emp ? [] : ['Net Revenue']), 'Qty 7d','Qty 1M','Qty 3M','Qty 1Y',
                    ...(emp ? [] : ['Rev This Month','Rev This FY']), 'Forecast 30d','Last Dispatch','Image Link'];
   const data = items.map(i => [i.sku, i.taxon||'', i.plating||'', i.dimensions||'', i.status||'', i.mrp||0,
     ...(emp ? [] : [i.last_selling_price||0]),
-    i.inv_stock||0, i.inv_wip||0, i.total_inv||0, i.final_qty||0,
+    i.inv_stock||0, i.inv_wip||0, i.blocked_qty||0, i.total_inv||0, i.final_qty||0,
     ...(emp ? [] : [Math.round(i.total_net_revenue||0)]), i.qty_7d||0, i.qty_1m||0, i.qty_3m||0, i.qty_1y||0,
     ...(emp ? [] : [Math.round(i.rev_month||0), Math.round(i.rev_fy||0)]), i.forecast_30d||0,
     i.last_dispatch_date||'', i.image_url||'']);
