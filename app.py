@@ -4645,14 +4645,14 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
 
 
 /* Gift Set / combo — Stone Details with stock+wip */
-.combo-box{margin-top:4px;padding:8px 10px;background:var(--cn-ivory);border:1px solid var(--cn-line);border-radius:10px;max-width:280px}
+.combo-box{margin-top:4px;padding:8px 10px;background:var(--cn-ivory);border:1px solid var(--cn-line);border-radius:10px;max-width:560px;overflow-x:auto}
 .combo-title{font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--cn-mid);font-weight:800;margin-bottom:6px}
 .combo-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed #e6dcc4}
 .combo-row:last-child{border-bottom:none}
 .combo-detail{padding:6px 0;border-bottom:1px dashed #e6dcc4}
 .combo-detail:last-child{border-bottom:none}
-.combo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px 8px;margin-top:4px;font-size:.7rem;color:#6b5e3e}
-.combo-grid span{white-space:nowrap}
+.combo-grid{display:flex;flex-wrap:nowrap;align-items:center;gap:14px;margin-top:4px;font-size:.7rem;color:#6b5e3e;overflow-x:auto;white-space:nowrap}
+.combo-grid span{white-space:nowrap;flex:0 0 auto}
 .combo-grid b{color:var(--cn-dark);font-weight:800}
 .combo-sku{background:none;border:none;color:var(--cn-gold);font-weight:800;font-size:.8rem;cursor:pointer;padding:0;text-decoration:underline}
 .combo-iv{font-size:.74rem;color:#5a4a1a;font-weight:600;white-space:nowrap}
@@ -7069,30 +7069,62 @@ function exportRO(fmtType){
   if (!rows.length) { alert('No rows to export'); return; }
 
   const emp1 = LOGIN_ROLE === 'employee';
+  // Filter context — export ko screen jaisa channel-aware banane ke liye
+  const typeSel = getSelectedTypes('rType');
+  const singleType = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
+  const roNoFilterX = !(typeSel.length > 0);
+  const nowX = todayISO || new Date().toISOString().slice(0,10);
+  const _dAgo = n => new Date(new Date(nowX) - n*86400000).toISOString().slice(0,10);
+  const D7 = _dAgo(7), D15 = _dAgo(15), D30 = _dAgo(30);
+  // entries ko type filter ke hisaab se le aao (filter na ho to saari)
+  const filtEnts = (it) => {
+    if (typeSel.length > 0) {
+      return (it._fe && it._fe.length) ? it._fe : (it.sales_entries || []).filter(e => typeSel.includes(e.type));
+    }
+    return it.sales_entries || [];
+  };
+  const winQty = (ents, since) => ents.filter(e=>e.date!=='N/A'&&e.date>=since).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+  // channel-aware WIP (jaise screen pe)
+  const chWip = (o) => {
+    if (singleType && singleType.includes('website')) return o.inv_wip_website || 0;
+    if (singleType && (singleType.includes('sor')||singleType.includes('s.o.r'))) return o.inv_wip_sor || 0;
+    if (singleType && (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer'))) return o.inv_wip_designer || 0;
+    return o.inv_wip || 0;
+  };
   const headers = ['Row Type','SKU','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
+    // Main row: filter ke according 7D/15D/30D/Sold + channel WIP
+    let r7, r15, r30, rSold;
+    if (!roNoFilterX) {
+      const fe = filtEnts(item);
+      r7 = winQty(fe, D7); r15 = winQty(fe, D15); r30 = winQty(fe, D30);
+      rSold = item._fQty ?? fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+    } else {
+      r7 = item.qty_7d||0; r15 = item.qty_15d||0; r30 = item.qty_1m||0;
+      rSold = item.final_qty||0;
+    }
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
       'Pack Details': item.pack_details || '',
-      '7D Sale': item.qty_7d || 0,
-      '15D Sale': item.qty_15d || 0,
-      '30D Sale': item.qty_1m || 0,
-      'Sold Qty': item._fQty ?? item.final_qty ?? 0,
+      '7D Sale': Math.round(r7),
+      '15D Sale': Math.round(r15),
+      '30D Sale': Math.round(r30),
+      'Sold Qty': Math.round(rSold),
       'MRP': parseFloat(item.mrp) || 0,
       ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0}),
       'Inv Stock': item.inv_stock || 0,
-      'Inv WIP': item.inv_wip || 0,
+      'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
       'Forecast Sold Qty': item.forecast_60d || 0,
       'Reorder Qty': item.reorder_qty || 0,
       Status: item.status || '',
       Taxon: item.taxon || '',
       Plating: item.plating || '',
-      Type: (item.sales_entries && item.sales_entries[0] && item.sales_entries[0].type) ? item.sales_entries[0].type : '',
+      Type: (typeSel.length > 0 ? typeSel.join(', ') : ((item.sales_entries && item.sales_entries[0] && item.sales_entries[0].type) ? item.sales_entries[0].type : '')),
       'Customer Count': item._customer_count || (item.customer_count || 0),
       'Remark': roRemarks[item.sku] || '',
       'Remark 2': roRemarks2[item.sku] || '',
