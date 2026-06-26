@@ -1085,8 +1085,11 @@ def _refresh_data():
     # WIP channel-wise bhi store hoti hai taaki Type filter par us channel ki
     # WIP dikhe (Website/SOR/Designer), warna total.
     _stock_map = {}
+    _item_map = {}
     for it in compiled:
-        _stock_map[str(it["sku"]).strip().upper()] = {
+        ku = str(it["sku"]).strip().upper()
+        _item_map[ku] = it
+        _stock_map[ku] = {
             "stock": int(it.get("inv_stock") or 0),
             "wip":   int(it.get("inv_wip") or 0),
             "wip_website":  int(it.get("inv_wip_website") or 0),
@@ -1113,13 +1116,26 @@ def _refresh_data():
                 continue
             seen.add(cand)
             info = _stock_map.get(cand)
+            ci = _item_map.get(cand)   # combo SKU ka full item (saari details ke liye)
             it["combo_details"].append({
                 "sku": cand,
+                "image_url": (ci.get("image_url") if ci else ""),
                 "inv_stock": info["stock"] if info else 0,
                 "inv_wip":   info["wip"] if info else 0,
                 "inv_wip_website":  info["wip_website"] if info else 0,
                 "inv_wip_sor":      info["wip_sor"] if info else 0,
                 "inv_wip_designer": info["wip_designer"] if info else 0,
+                "blocked_qty": (ci.get("blocked_qty") if ci else 0),
+                # poori details — CMB jaisi (combo SKU khud bhi inventory me hai)
+                "qty_7d":   (ci.get("qty_7d") if ci else 0) or 0,
+                "qty_15d":  (ci.get("qty_15d") if ci else 0) or 0,
+                "qty_1m":   (ci.get("qty_1m") if ci else 0) or 0,
+                "final_qty":(ci.get("final_qty") if ci else 0) or 0,
+                "forecast_60d": (ci.get("forecast_60d") if ci else 0) or 0,
+                "reorder_qty":  (ci.get("reorder_qty") if ci else 0) or 0,
+                "mrp":      (ci.get("mrp") if ci else 0) or 0,
+                "taxon":    (ci.get("taxon") if ci else ""),
+                "plating":  (ci.get("plating") if ci else ""),
                 "found":     info is not None,
             })
 
@@ -4633,6 +4649,11 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
 .combo-title{font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--cn-mid);font-weight:800;margin-bottom:6px}
 .combo-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed #e6dcc4}
 .combo-row:last-child{border-bottom:none}
+.combo-detail{padding:6px 0;border-bottom:1px dashed #e6dcc4}
+.combo-detail:last-child{border-bottom:none}
+.combo-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:3px 8px;margin-top:4px;font-size:.7rem;color:#6b5e3e}
+.combo-grid span{white-space:nowrap}
+.combo-grid b{color:var(--cn-dark);font-weight:800}
 .combo-sku{background:none;border:none;color:var(--cn-gold);font-weight:800;font-size:.8rem;cursor:pointer;padding:0;text-decoration:underline}
 .combo-iv{font-size:.74rem;color:#5a4a1a;font-weight:600;white-space:nowrap}
 .combo-iv b{color:var(--cn-dark)}
@@ -6763,9 +6784,18 @@ function applyRO(){
       ? `<div class="combo-box">
            <div class="combo-title">Stone Details (set items) — ${escHtml(wipLabel)}:</div>
            ${item.combo_details.map(c => `
-             <div class="combo-row">
-               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${escHtml(c.sku)}</button>
-               <span class="combo-iv">Stock <b class="${(c.inv_stock||0)>0?'':'muted'}">${c.inv_stock||0}</b> | WIP <b class="${(comboWip(c)||0)>0?'':'muted'}">${comboWip(c)||0}</b>${c.found ? '' : ' <span class="muted" style="font-size:.7rem">(not in inv)</span>'}</span>
+             <div class="combo-detail">
+               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${escHtml(c.sku)}</button>${c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>'}
+               <div class="combo-grid">
+                 <span>7D <b>${c.qty_7d||0}</b></span>
+                 <span>15D <b>${c.qty_15d||0}</b></span>
+                 <span>30D <b>${c.qty_1m||0}</b></span>
+                 <span>Sold <b>${c.final_qty||0}</b></span>
+                 <span>Stock <b>${c.inv_stock||0}</b></span>
+                 <span>WIP <b>${comboWip(c)||0}</b></span>
+                 <span>Fcast <b>${c.forecast_60d||0}</b></span>
+                 <span>Reorder <b style="color:#b45309">${c.reorder_qty||0}</b></span>
+               </div>
              </div>`).join('')}
          </div>`
       : '';
@@ -6936,9 +6966,18 @@ function applyColFilters(){
       ? `<div class="combo-box">
            <div class="combo-title">Stone Details (set items) — ${escHtml(wipLabel2)}:</div>
            ${item.combo_details.map(c => `
-             <div class="combo-row">
-               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${c.sku}</button>
-               <span class="combo-iv">Stock <b class="${(c.inv_stock||0)>0?'':'muted'}">${c.inv_stock||0}</b> • WIP <b class="${(comboWip2(c)||0)>0?'':'muted'}">${comboWip2(c)||0}</b>${c.found ? '' : ' <span class="muted" style="font-size:.7rem">(not in inv)</span>'}</span>
+             <div class="combo-detail">
+               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${escHtml(c.sku)}</button>${c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>'}
+               <div class="combo-grid">
+                 <span>7D <b>${c.qty_7d||0}</b></span>
+                 <span>15D <b>${c.qty_15d||0}</b></span>
+                 <span>30D <b>${c.qty_1m||0}</b></span>
+                 <span>Sold <b>${c.final_qty||0}</b></span>
+                 <span>Stock <b>${c.inv_stock||0}</b></span>
+                 <span>WIP <b>${comboWip2(c)||0}</b></span>
+                 <span>Fcast <b>${c.forecast_60d||0}</b></span>
+                 <span>Reorder <b style="color:#b45309">${c.reorder_qty||0}</b></span>
+               </div>
              </div>`).join('')}
          </div>`
       : '';
@@ -7030,31 +7069,65 @@ function exportRO(fmtType){
   if (!rows.length) { alert('No rows to export'); return; }
 
   const emp1 = LOGIN_ROLE === 'employee';
-  const headers = ['SKU','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
-  const data = rows.map(item => ({
-    SKU: item.sku,
-    'Product Dimensions': item.dimensions || '',
-    'Pack Details': item.pack_details || '',
-    '7D Sale': item.qty_7d || 0,
-    '15D Sale': item.qty_15d || 0,
-    '30D Sale': item.qty_1m || 0,
-    'Sold Qty': item._fQty ?? item.final_qty ?? 0,
-    'MRP': parseFloat(item.mrp) || 0,
-    ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0}),
-    'Inv Stock': item.inv_stock || 0,
-    'Inv WIP': item.inv_wip || 0,
-    'Blocked Qty': item.blocked_qty || 0,
-    'Forecast Sold Qty': item.forecast_60d || 0,
-    'Reorder Qty': item.reorder_qty || 0,
-    Status: item.status || '',
-    Taxon: item.taxon || '',
-    Plating: item.plating || '',
-    Type: (item.sales_entries && item.sales_entries[0] && item.sales_entries[0].type) ? item.sales_entries[0].type : '',
-    'Customer Count': item._customer_count || (item.customer_count || 0),
-    'Remark': roRemarks[item.sku] || '',
-    'Remark 2': roRemarks2[item.sku] || '',
-    'Image Link': item.image_url || '',
-  }));
+  const headers = ['Row Type','SKU','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const data = [];
+  rows.forEach(item => {
+    data.push({
+      'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
+      SKU: item.sku,
+      'Set Item Of': '',
+      'Product Dimensions': item.dimensions || '',
+      'Pack Details': item.pack_details || '',
+      '7D Sale': item.qty_7d || 0,
+      '15D Sale': item.qty_15d || 0,
+      '30D Sale': item.qty_1m || 0,
+      'Sold Qty': item._fQty ?? item.final_qty ?? 0,
+      'MRP': parseFloat(item.mrp) || 0,
+      ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0}),
+      'Inv Stock': item.inv_stock || 0,
+      'Inv WIP': item.inv_wip || 0,
+      'Blocked Qty': item.blocked_qty || 0,
+      'Forecast Sold Qty': item.forecast_60d || 0,
+      'Reorder Qty': item.reorder_qty || 0,
+      Status: item.status || '',
+      Taxon: item.taxon || '',
+      Plating: item.plating || '',
+      Type: (item.sales_entries && item.sales_entries[0] && item.sales_entries[0].type) ? item.sales_entries[0].type : '',
+      'Customer Count': item._customer_count || (item.customer_count || 0),
+      'Remark': roRemarks[item.sku] || '',
+      'Remark 2': roRemarks2[item.sku] || '',
+      'Image Link': item.image_url || '',
+    });
+    // Gift set ke andar wale (stone details) SKUs ki bhi poori details
+    (item.combo_details || []).forEach(c => {
+      data.push({
+        'Row Type': '— Set Item',
+        SKU: c.sku,
+        'Set Item Of': item.sku,
+        'Product Dimensions': '',
+        'Pack Details': '',
+        '7D Sale': c.qty_7d || 0,
+        '15D Sale': c.qty_15d || 0,
+        '30D Sale': c.qty_1m || 0,
+        'Sold Qty': c.final_qty || 0,
+        'MRP': parseFloat(c.mrp) || 0,
+        ...(emp1 ? {} : {'Selling Price': ''}),
+        'Inv Stock': c.inv_stock || 0,
+        'Inv WIP': c.inv_wip || 0,
+        'Blocked Qty': c.blocked_qty || 0,
+        'Forecast Sold Qty': c.forecast_60d || 0,
+        'Reorder Qty': c.reorder_qty || 0,
+        Status: c.found ? '' : 'Not in inventory',
+        Taxon: c.taxon || '',
+        Plating: c.plating || '',
+        Type: '',
+        'Customer Count': '',
+        'Remark': '',
+        'Remark 2': '',
+        'Image Link': c.image_url || '',
+      });
+    });
+  });
   downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType);
 }
 
