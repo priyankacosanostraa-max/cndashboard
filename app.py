@@ -5485,6 +5485,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">Channel</label>
       <select class="fs" id="prodChannel" onchange="loadProduction()"><option value="">All Channels</option></select></div>
+    <div class="fc"><label class="fl">Balance Qty</label>
+      <select class="fs" id="prodBalance" onchange="loadProduction()">
+        <option value="">All</option>
+        <option value="yes">Yes (pending only)</option>
+        <option value="no">No (completed)</option>
+      </select></div>
     <div class="fc"><label class="fl">Type</label>
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
     <div class="fc"><label class="fl">Taxon</label>
@@ -5553,6 +5559,8 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select class="fs" id="tgtMonth" onchange="loadTarget()"></select></div>
     <div class="fc"><label class="fl">Stake Holder</label>
       <select class="fs" id="tgtStake" onchange="loadTarget()"><option value="">All Stake Holders</option></select></div>
+    <div class="fc"><label class="fl">Channel</label>
+      <select class="fs" id="tgtChannel" onchange="loadTarget()"><option value="">All Channels</option></select></div>
   </div>
   <div id="tgtContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
@@ -7512,7 +7520,8 @@ function loadTarget(){
   host.innerHTML = '<div class="home-empty" style="padding:30px">Loading target data…</div>';
   const mf = document.getElementById('tgtMonth')?.value || '';
   const sf = document.getElementById('tgtStake')?.value || '';
-  fetch('/api/target?month=' + encodeURIComponent(mf) + '&stake=' + encodeURIComponent(sf),
+  const chf = document.getElementById('tgtChannel')?.value || '';
+  fetch('/api/target?month=' + encodeURIComponent(mf) + '&stake=' + encodeURIComponent(sf) + '&channel=' + encodeURIComponent(chf),
         {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
@@ -7522,6 +7531,7 @@ function loadTarget(){
       if (!_tgtFilled){
         const mSel = document.getElementById('tgtMonth');
         const sSel = document.getElementById('tgtStake');
+        const cSel = document.getElementById('tgtChannel');
         if (mSel && d.months){
           mSel.innerHTML = d.months.map(m => `<option value="${m}">${m}</option>`).join('');
           // Default = present month (server jo select karke aaya).
@@ -7532,6 +7542,12 @@ function loadTarget(){
           sSel.innerHTML = '<option value="">All Stake Holders</option>' +
             d.stakeholders.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
           sSel.value = cur;
+        }
+        if (cSel && d.channels){
+          const cur = cSel.value;
+          cSel.innerHTML = '<option value="">All Channels</option>' +
+            d.channels.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+          cSel.value = cur;
         }
         _tgtFilled = true;
       }
@@ -7590,6 +7606,7 @@ function renderTargetTable(){
     return `<tr>
       <td style="text-align:center;font-weight:900;font-size:1.05rem">${medal}</td>
       <td style="font-weight:800">${escHtml(L.stakeholder)}</td>
+      <td style="color:var(--cn-mid)">${escHtml(L.channel||'—')}</td>
       <td>${fmt(L.sp_target)}</td>
       <td>${fmt(L.sp_actual)}</td>
       <td class="${(L.sp_short||0)>0?'red':'green'}" style="font-weight:800">${(L.sp_short||0)>0?fmt(L.sp_short):'✓ Met'}</td>
@@ -7610,7 +7627,7 @@ function renderTargetTable(){
     <div class="ro-table-wrap" style="padding:0;overflow-x:auto">
       <table class="ro" style="width:100%;min-width:760px">
         <thead><tr>
-          <th style="width:50px;text-align:center">#</th><th>Stake Holder</th>
+          <th style="width:50px;text-align:center">#</th><th>Stake Holder</th><th>Channel</th>
           <th>Target</th><th>Achieved</th><th>Short</th><th>Achievement</th><th>Projected</th>
         </tr></thead>
         <tbody>${lbRows}</tbody>
@@ -7622,11 +7639,11 @@ function renderTargetTable(){
 function exportTarget(){
   const d = _tgtData;
   if (!d || !d.leaderboard || !d.leaderboard.length){ alert('No target data to export.'); return; }
-  const headers = ['Rank','Stake Holder','SP Target','SP Achieved','SP Short','% Achieved','% Projected'];
-  const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, Math.round(L.sp_target),
+  const headers = ['Rank','Stake Holder','Channel','SP Target','SP Achieved','SP Short','% Achieved','% Projected'];
+  const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, L.channel||'', Math.round(L.sp_target),
     Math.round(L.sp_actual), Math.round(L.sp_short), L.pct_achieved, L.proj_pct]);
   const t = d.totals||{};
-  rows.push(['', 'TOTAL', Math.round(t.sp_target||0), Math.round(t.sp_actual||0),
+  rows.push(['', 'TOTAL', '', Math.round(t.sp_target||0), Math.round(t.sp_actual||0),
     Math.round(t.sp_short||0), t.pct_achieved||0, t.proj_pct||0]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -7729,7 +7746,7 @@ function loadProduction(){
   host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
   if (sumHost) sumHost.innerHTML = '';
   const q = id => encodeURIComponent(document.getElementById(id)?.value || '');
-  const url = '/api/production?channel=' + q('prodChannel') + '&type=' + q('prodType')
+  const url = '/api/production?channel=' + q('prodChannel') + '&balance=' + q('prodBalance') + '&type=' + q('prodType')
     + '&taxon=' + q('prodTaxon') + '&sku=' + q('prodSku')
     + '&od1=' + q('prodOD1') + '&od2=' + q('prodOD2')
     + '&dd1=' + q('prodDD1') + '&dd2=' + q('prodDD2');
@@ -7807,7 +7824,7 @@ function renderProduction(){
 }
 function resetProduction(){
   ['prodSku','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
-  ['prodChannel','prodType','prodTaxon'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  ['prodChannel','prodType','prodTaxon','prodBalance'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   loadProduction();
 }
 function exportProduction(){
@@ -9179,7 +9196,7 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
-def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter=""):
+def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only=""):
     # SKU -> image + taxon map (compiled data se, jisme inv image+taxon already hai)
     img_map = {}; tax_map = {}
     try:
@@ -9260,6 +9277,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     sq = sku_query.strip().lower()
     txf = taxon_filter.strip().lower()
     tyf = type_filter.strip().lower()
+    bo = (balance_only or "").strip().lower()   # "yes" = sirf balance qty waale, "no" = balance 0 waale
     rows = []
     for r in rows_all:
         if cf and r["channel"].strip().lower() != cf:
@@ -9267,6 +9285,10 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         if tyf and r["order_type"].strip().lower() != tyf:
             continue
         if txf and r["taxon"].strip().lower() != txf:
+            continue
+        if bo == "yes" and (r["bal_qty"] or 0) <= 0:
+            continue
+        if bo == "no" and (r["bal_qty"] or 0) > 0:
             continue
         if sq and sq not in r["sku"].lower() and sq not in r["order_no"].lower():
             continue
@@ -9301,7 +9323,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         "unique_skus": uniq_skus,
     }
 
-def _build_target_report(month_filter="", stake_filter=""):
+def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     """Target vs Actual + Achievement Forecast + Stakeholder Leaderboard.
     Default: present month. Stake Holder ↔ COSSA Customer, Channel ↔ COSSA Type."""
     targets = _fetch_target_rows()
@@ -9313,6 +9335,7 @@ def _build_target_report(month_filter="", stake_filter=""):
     # months available
     months_set = set(t["month"] for t in targets)
     stakes_set = set(t["stakeholder"] for t in targets)
+    channels_set = set(t["channel"] for t in targets if t.get("channel"))
 
     # Default month = present month (agar available ho), warna latest.
     if not month_filter:
@@ -9354,6 +9377,8 @@ def _build_target_report(month_filter="", stake_filter=""):
             continue
         if stake_filter and t["stakeholder"].strip().lower() != stake_filter.strip().lower():
             continue
+        if channel_filter and (t.get("channel") or "").strip().lower() != channel_filter.strip().lower():
+            continue
         a = act.get((mk, t["channel"].strip().lower()), {"rev": 0.0, "qty": 0.0})
         actual_rev = a["rev"]; actual_qty = a["qty"]
         sp_short  = t["sp_target"] - actual_rev
@@ -9370,8 +9395,10 @@ def _build_target_report(month_filter="", stake_filter=""):
             "pct_achieved": pct, "proj_rev": proj_rev, "proj_pct": proj_pct,
         })
         # leaderboard aggregate (per stakeholder, all channels)
-        L = lb.setdefault(t["stakeholder"], {"stakeholder": t["stakeholder"],
+        L = lb.setdefault(t["stakeholder"], {"stakeholder": t["stakeholder"], "channels": set(),
               "sp_target":0.0,"sp_actual":0.0,"qty_target":0.0,"qty_actual":0.0,"proj_rev":0.0})
+        if t.get("channel"):
+            L["channels"].add(t["channel"])
         L["sp_target"] += t["sp_target"]; L["sp_actual"] += actual_rev
         L["qty_target"] += t["qty_target"]; L["qty_actual"] += actual_qty
         L["proj_rev"] += proj_rev
@@ -9391,6 +9418,7 @@ def _build_target_report(month_filter="", stake_filter=""):
         L["pct_achieved"] = round((L["sp_actual"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["proj_pct"] = round((L["proj_rev"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["sp_short"] = L["sp_target"] - L["sp_actual"]
+        L["channel"] = ", ".join(sorted(L.pop("channels"))) if L.get("channels") else "—"
         leaderboard.append(L)
     leaderboard.sort(key=lambda x: x["pct_achieved"], reverse=True)
     for i, L in enumerate(leaderboard): L["rank"] = i + 1
@@ -9403,6 +9431,7 @@ def _build_target_report(month_filter="", stake_filter=""):
         "is_current_month": (month_filter == cur_month),
         "months": sorted(months_set, reverse=True),
         "stakeholders": sorted(stakes_set),
+        "channels": sorted(channels_set),
     }
 
 @app.route("/api/target")
@@ -9411,8 +9440,9 @@ def api_target():
         return jsonify({"error": "login required"}), 401
     mf = request.args.get("month", "").strip()
     sf = request.args.get("stake", "").strip()
+    chf = request.args.get("channel", "").strip()
     try:
-        rep = _build_target_report(mf, sf)
+        rep = _build_target_report(mf, sf, chf)
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"target build failed: {e}"}), 500
@@ -9487,8 +9517,9 @@ def api_production():
     dd2 = request.args.get("dd2", "").strip()
     txf = request.args.get("taxon", "").strip()
     tyf = request.args.get("type", "").strip()
+    bo  = request.args.get("balance", "").strip()
     try:
-        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf))
+        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf, bo))
     except Exception as e:
         return jsonify({"error": f"production build failed: {e}"}), 500
 
