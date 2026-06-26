@@ -4731,6 +4731,13 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
   vertical-align:top;
 }
 #prodContent table.prod-table th{font-size:8px !important;letter-spacing:1px !important}
+/* Freeze header row while scrolling the production table */
+#prodContent{overflow:auto;max-height:72vh}
+#prodContent table.prod-table thead th{
+  position:sticky;top:0;z-index:30;
+  background:var(--cn-ivory) !important;
+  box-shadow:0 2px 0 var(--cn-line);
+}
 .prod-sku-cell{display:flex;align-items:center;gap:8px;min-width:0}
 .prod-img,.prod-ph{
   width:72px;height:72px;border-radius:8px;flex:0 0 72px;
@@ -5516,8 +5523,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
     <div class="fc"><label class="fl">Taxon</label>
       <select class="fs" id="prodTaxon" onchange="loadProduction()"><option value="">All Taxons</option></select></div>
-    <div class="fc"><label class="fl">SKU / Order No. search</label>
-      <input class="fi" id="prodSku" placeholder="type SKU or order no…" oninput="prodSearchDebounced()"></div>
+    <div class="fc"><label class="fl">Search SKU</label>
+      <input class="fi" id="prodSku" placeholder="type SKU…" oninput="prodSearchDebounced()"></div>
+    <div class="fc"><label class="fl">Search Order No.</label>
+      <input class="fi" id="prodOrderNo" placeholder="type order no…" oninput="prodSearchDebounced()"></div>
     <div class="fc"><label class="fl">Order date from</label>
       <input class="fi" id="prodOD1" type="date" onchange="loadProduction()"></div>
     <div class="fc"><label class="fl">Order date to</label>
@@ -7880,7 +7889,7 @@ function loadProduction(){
   if (sumHost) sumHost.innerHTML = '';
   const q = id => encodeURIComponent(document.getElementById(id)?.value || '');
   const url = '/api/production?channel=' + q('prodChannel') + '&balance=' + q('prodBalance') + '&type=' + q('prodType')
-    + '&taxon=' + q('prodTaxon') + '&sku=' + q('prodSku')
+    + '&taxon=' + q('prodTaxon') + '&sku=' + q('prodSku') + '&order_no=' + q('prodOrderNo')
     + '&od1=' + q('prodOD1') + '&od2=' + q('prodOD2')
     + '&dd1=' + q('prodDD1') + '&dd2=' + q('prodDD2');
   fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
@@ -7956,7 +7965,7 @@ function renderProduction(){
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function resetProduction(){
-  ['prodSku','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   ['prodChannel','prodType','prodTaxon','prodBalance'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   loadProduction();
 }
@@ -9329,7 +9338,7 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
-def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only=""):
+def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query=""):
     # SKU -> image + taxon map (compiled data se, jisme inv image+taxon already hai)
     img_map = {}; tax_map = {}
     try:
@@ -9408,6 +9417,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     # Filters apply
     cf = channel_filter.strip().lower()
     sq = sku_query.strip().lower()
+    oq = order_query.strip().lower()
     txf = taxon_filter.strip().lower()
     tyf = type_filter.strip().lower()
     bo = (balance_only or "").strip().lower()   # "yes" = sirf balance qty waale, "no" = balance 0 waale
@@ -9423,7 +9433,9 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         if bo == "no" and (r["bal_qty"] or 0) > 0:
             continue
-        if sq and sq not in r["sku"].lower() and sq not in r["order_no"].lower():
+        if sq and sq not in r["sku"].lower():
+            continue
+        if oq and oq not in r["order_no"].lower():
             continue
         # Order date range
         if od1 and (not r["date"] or r["date"] < od1):
@@ -9644,6 +9656,7 @@ def api_production():
         return jsonify({"error": "login required"}), 401
     cf = request.args.get("channel", "").strip()
     sq = request.args.get("sku", "").strip()
+    oq = request.args.get("order_no", "").strip()
     od1 = request.args.get("od1", "").strip()
     od2 = request.args.get("od2", "").strip()
     dd1 = request.args.get("dd1", "").strip()
@@ -9652,7 +9665,7 @@ def api_production():
     tyf = request.args.get("type", "").strip()
     bo  = request.args.get("balance", "").strip()
     try:
-        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf, bo))
+        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf, bo, oq))
     except Exception as e:
         return jsonify({"error": f"production build failed: {e}"}), 500
 
