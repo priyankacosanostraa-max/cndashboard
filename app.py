@@ -5711,6 +5711,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 <footer><div class="fb">Cosa Nostraa</div><div class="fd">© 2026 • Developed by Team Cosa Nostraa</div></footer>
 
 </div><script>
+let _masterSkuMap = {};   // SKU.toUpperCase() → item (fast combo lookup)
 let master = [], allCusts = [], allTypes = [], allPlatings = [],
     allSkus = [], allFYs = [], allTaxons = [];
 let currentFY = "", previousFY = "", todayISO = "",
@@ -6251,6 +6252,7 @@ function loadData(force){
       }
 
       master = d.inventory || [];
+      _masterSkuMap = {}; master.forEach(it => { if(it&&it.sku) _masterSkuMap[String(it.sku).toUpperCase()] = it; });
       allCusts = d.customers || [];
       allTypes = d.types || [];
       allPlatings = d.platings || [];
@@ -6780,25 +6782,8 @@ function applyRO(){
       : (singleType.includes('sor')||singleType.includes('s.o.r')) ? 'WIP (SOR)'
       : (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer')) ? 'WIP (Designer)'
       : 'WIP') : 'WIP';
-    const comboHtml = (item.combo_details && item.combo_details.length)
-      ? `<div class="combo-box">
-           <div class="combo-title">Stone Details (set items) — ${escHtml(wipLabel)}:</div>
-           ${item.combo_details.map(c => `
-             <div class="combo-detail">
-               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${escHtml(c.sku)}</button>${c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>'}
-               <div class="combo-grid">
-                 <span>7D <b>${c.qty_7d||0}</b></span>
-                 <span>15D <b>${c.qty_15d||0}</b></span>
-                 <span>30D <b>${c.qty_1m||0}</b></span>
-                 <span>Sold <b>${c.final_qty||0}</b></span>
-                 <span>Stock <b>${c.inv_stock||0}</b></span>
-                 <span>WIP <b>${comboWip(c)||0}</b></span>
-                 <span>Fcast <b>${c.forecast_60d||0}</b></span>
-                 <span>Reorder <b style="color:#b45309">${c.reorder_qty||0}</b></span>
-               </div>
-             </div>`).join('')}
-         </div>`
-      : '';
+    // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
+    const comboHtml = _renderComboDetails(item.combo_details, comboWip, wipLabel, typeSel);
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
@@ -6962,25 +6947,8 @@ function applyColFilters(){
       : (singleType.includes('sor')||singleType.includes('s.o.r')) ? 'WIP (SOR)'
       : (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer')) ? 'WIP (Designer)'
       : 'WIP') : 'WIP';
-    const comboHtml = (item.combo_details && item.combo_details.length)
-      ? `<div class="combo-box">
-           <div class="combo-title">Stone Details (set items) — ${escHtml(wipLabel2)}:</div>
-           ${item.combo_details.map(c => `
-             <div class="combo-detail">
-               <button class="combo-sku" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\\\'")}')">${escHtml(c.sku)}</button>${c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>'}
-               <div class="combo-grid">
-                 <span>7D <b>${c.qty_7d||0}</b></span>
-                 <span>15D <b>${c.qty_15d||0}</b></span>
-                 <span>30D <b>${c.qty_1m||0}</b></span>
-                 <span>Sold <b>${c.final_qty||0}</b></span>
-                 <span>Stock <b>${c.inv_stock||0}</b></span>
-                 <span>WIP <b>${comboWip2(c)||0}</b></span>
-                 <span>Fcast <b>${c.forecast_60d||0}</b></span>
-                 <span>Reorder <b style="color:#b45309">${c.reorder_qty||0}</b></span>
-               </div>
-             </div>`).join('')}
-         </div>`
-      : '';
+    // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
+    const comboHtml = _renderComboDetails(item.combo_details, comboWip2, wipLabel2, getSelectedTypes('rType'));
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
@@ -7130,29 +7098,45 @@ function exportRO(fmtType){
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
     });
-    // Gift set ke andar wale (stone details) SKUs ki bhi poori details
+    // Gift set ke andar wale (stone details) SKUs — filter-aware: Type filter ke hisaab se sales
     (item.combo_details || []).forEach(c => {
+      // Type filter active hai to combo SKU ke filtered sales nikalo
+      let c7, c15, c30, cSold;
+      if (!roNoFilterX && typeSel.length > 0) {
+        const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
+        if (masterC) {
+          const fe = (masterC.sales_entries || []).filter(e => typeSel.includes(e.type));
+          c7    = Math.round(winQty(fe, D7));
+          c15   = Math.round(winQty(fe, D15));
+          c30   = Math.round(winQty(fe, D30));
+          cSold = Math.round(fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
+        } else {
+          c7 = c.qty_7d||0; c15 = c.qty_15d||0; c30 = c.qty_1m||0; cSold = c.final_qty||0;
+        }
+      } else {
+        c7 = c.qty_7d||0; c15 = c.qty_15d||0; c30 = c.qty_1m||0; cSold = c.final_qty||0;
+      }
       data.push({
         'Row Type': '— Set Item',
         SKU: c.sku,
         'Set Item Of': item.sku,
         'Product Dimensions': '',
         'Pack Details': '',
-        '7D Sale': c.qty_7d || 0,
-        '15D Sale': c.qty_15d || 0,
-        '30D Sale': c.qty_1m || 0,
-        'Sold Qty': c.final_qty || 0,
+        '7D Sale': c7,
+        '15D Sale': c15,
+        '30D Sale': c30,
+        'Sold Qty': cSold,
         'MRP': parseFloat(c.mrp) || 0,
         ...(emp1 ? {} : {'Selling Price': ''}),
         'Inv Stock': c.inv_stock || 0,
-        'Inv WIP': c.inv_wip || 0,
+        'Inv WIP': chWip(c),
         'Blocked Qty': c.blocked_qty || 0,
         'Forecast Sold Qty': c.forecast_60d || 0,
         'Reorder Qty': c.reorder_qty || 0,
         Status: c.found ? '' : 'Not in inventory',
         Taxon: c.taxon || '',
         Plating: c.plating || '',
-        Type: '',
+        Type: typeSel.length > 0 ? typeSel.join(', ') : '',
         'Customer Count': '',
         'Remark': '',
         'Remark 2': '',
@@ -7403,6 +7387,50 @@ function escHtml(v){
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+/* ── Helper: combo SKU ka filter-aware HTML (Type filter ke hisaab se
+   7D/15D/30D/Sold sales dikhata hai, warna pre-computed totals).
+   WIP bhi channel-aware (comboWipFn(c) se). ── */
+function _renderComboDetails(combo_details, comboWipFn, wipLabel, typeSel) {
+  if (!combo_details || !combo_details.length) return '';
+  const now = todayISO || new Date().toISOString().slice(0,10);
+  const cd7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
+  const cd15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
+  const cd30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
+  const items_html = combo_details.map(c => {
+    let cQ7, cQ15, cQ30, cSold;
+    if (typeSel && typeSel.length > 0) {
+      const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
+      if (masterC) {
+        const fe = (masterC.sales_entries || []).filter(e => typeSel.includes(e.type));
+        cQ7   = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
+        cQ15  = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
+        cQ30  = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
+        cSold = Math.round(fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
+      } else {
+        cQ7 = c.qty_7d||0; cQ15 = c.qty_15d||0; cQ30 = c.qty_1m||0; cSold = c.final_qty||0;
+      }
+    } else {
+      cQ7 = c.qty_7d||0; cQ15 = c.qty_15d||0; cQ30 = c.qty_1m||0; cSold = c.final_qty||0;
+    }
+    const skuEscC = String(c.sku).replace(/'/g, "\\\\'");
+    return '<div class="combo-detail">'
+      + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEscC + '\')">' + escHtml(c.sku) + '</button>'
+      + (c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>')
+      + '<div class="combo-grid">'
+      + '<span>7D <b>' + cQ7 + '</b></span>'
+      + '<span>15D <b>' + cQ15 + '</b></span>'
+      + '<span>30D <b>' + cQ30 + '</b></span>'
+      + '<span>Sold <b>' + cSold + '</b></span>'
+      + '<span>Stock <b>' + (c.inv_stock||0) + '</b></span>'
+      + '<span>WIP <b>' + (comboWipFn(c)||0) + '</b></span>'
+      + '<span>Fcast <b>' + (c.forecast_60d||0) + '</b></span>'
+      + '<span>Reorder <b style="color:#b45309">' + (c.reorder_qty||0) + '</b></span>'
+      + '</div></div>';
+  }).join('');
+  return '<div class="combo-box"><div class="combo-title">Stone Details (set items) — '
+    + escHtml(wipLabel) + ':</div>' + items_html + '</div>';
 }
 
 function copySku(sku){
