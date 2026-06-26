@@ -7931,7 +7931,7 @@ function renderProduction(){
   }
   const head = `<tr>
     <th>Order Date</th><th>Order No.</th><th>SKU</th><th>Taxon</th><th>Type</th><th>Channel</th><th>All Order Nos.</th>
-    <th>Order Qty</th><th>Recv Qty</th><th>Balance Qty</th><th>Delivery Date</th><th>Receiving Date</th></tr>`;
+    <th>Order Qty</th><th>Recv Qty</th><th>Balance Qty</th><th title="Iss SKU ki saare orders ki Balance Qty jodkar (total)">Total Balance (All Orders)</th><th>Delivery Date</th><th>Receiving Date</th></tr>`;
   const body = d.rows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
     const img = hasImg
@@ -7950,17 +7950,18 @@ function renderProduction(){
       <td class="prod-num">${Math.round(r.order_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.recv_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num ${balCls}" style="font-weight:800">${Math.round(r.bal_qty||0).toLocaleString('en-IN')}</td>
+      <td class="prod-num" style="font-weight:800;color:#b8860b">${Math.round(r.sku_total_balance||0).toLocaleString('en-IN')}</td>
       <td>${escHtml(r.delivery_date || '—')}</td>
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
   }).join('') + (d.count > d.rows.length
-    ? `<tr><td colspan="12" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
+    ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
     : '');
   const colgroup = `<colgroup>
-    <col style="width:8%"><col style="width:9%"><col style="width:16%"><col style="width:9%">
-    <col style="width:8%"><col style="width:8%"><col style="width:12%">
-    <col style="width:6%"><col style="width:6%"><col style="width:7%">
-    <col style="width:6%"><col style="width:5%">
+    <col style="width:7%"><col style="width:8%"><col style="width:15%"><col style="width:8%">
+    <col style="width:7%"><col style="width:7%"><col style="width:11%">
+    <col style="width:6%"><col style="width:6%"><col style="width:6%">
+    <col style="width:8%"><col style="width:6%"><col style="width:5%">
   </colgroup>`;
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
@@ -7972,9 +7973,9 @@ function resetProduction(){
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','Taxon','Type','Channel','All Order Nos.','Order Qty','Recv Qty','Balance Qty','Delivery Date','Receiving Date'];
+  const headers = ['Order Date','Order No.','SKU','Taxon','Type','Channel','All Order Nos.','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
   const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
-    Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), r.delivery_date, r.receiving_date]);
+    Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -9414,6 +9415,12 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             if r["order_no"] not in sku_orders[r["sku"]]:
                 sku_orders[r["sku"]].append(r["order_no"])
 
+    # SKU -> uss SKU ki saare orders ki Balance Qty jodke total (sab orders mil ke)
+    sku_total_balance = {}
+    for r in rows_all:
+        if r["sku"]:
+            sku_total_balance[r["sku"]] = sku_total_balance.get(r["sku"], 0) + (r["bal_qty"] or 0)
+
     # Filters apply
     cf = channel_filter.strip().lower()
     sq = sku_query.strip().lower()
@@ -9450,6 +9457,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr = dict(r)
         rr["image_url"] = img_map.get(r["sku"], "")
         rr["all_orders"] = sku_orders.get(r["sku"], [])
+        rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rows.append(rr)
 
     # KPIs
