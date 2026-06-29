@@ -5419,6 +5419,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="due">Has Due (not overdue)</option>
       </select></div>
   </div>
+  <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
@@ -5426,9 +5427,15 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
       <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
   </div>
-  <div style="margin-bottom:18px;max-width:420px">
-    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
-    <div id="payAgingTable" style="font-size:.78rem"></div>
+  <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
+    <div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+      <div id="payAgingTable" style="font-size:.78rem"></div>
+    </div>
+    <div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
+      <div id="payWeekTable" style="font-size:.78rem"></div>
+    </div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -8278,6 +8285,12 @@ function loadPayments(force){
       _payData = d;
       const asOf = document.getElementById('payAsOf');
       if (asOf) asOf.textContent = 'As of ' + d.today + ' · month-end ' + d.month_end;
+      const luHost = document.getElementById('payLastUpdated');
+      if (luHost){
+        luHost.textContent = d.ledger_last_updated
+          ? ('Ledger last updated till: ' + d.ledger_last_updated + ' (latest payment/credit received on this date)')
+          : 'Ledger last updated: no payment/credit entries found';
+      }
       if (!_payTagsFilled){
         const sel = document.getElementById('payTag');
         if (sel && d.tags){
@@ -8333,7 +8346,7 @@ function renderPayments(){
         <th>Customer Name</th><th style="text-align:center">Tag</th><th style="text-align:center">Term</th>
         <th style="text-align:right">Due</th><th style="text-align:right">Overdue</th><th style="text-align:right">Balance</th>
       </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
         <td>Total</td><td></td><td></td>
         <td style="text-align:right">${fmt(sumDue)}</td>
         <td style="text-align:right">${fmt(sumOver)}</td>
@@ -8356,7 +8369,7 @@ function renderPayments(){
         <th>Customer Name</th><th style="text-align:center">Tag</th>
         <th style="text-align:right">Due (by month-end)</th><th style="text-align:right">Overdue (by month-end)</th><th style="text-align:right">Balance</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
         <td>Total</td><td></td>
         <td style="text-align:right">${fmt(sumDueMe)}</td>
         <td style="text-align:right">${fmt(sumOverMe)}</td>
@@ -8381,6 +8394,24 @@ function renderPayments(){
         <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
+  }
+  // week-wise overdue tracker (fixed for whole current month — NOT filter-dependent, shows company-wide totals)
+  const wkHost = document.getElementById('payWeekTable');
+  if (wkHost){
+    const weeks = d.week_overdue || [];
+    const body = weeks.map(w => `<tr>
+        <td style="padding:5px 8px">${escHtml(w.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.range)}</span></td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(w.overdue)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(w.payment)}</td>
+        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(w.balance)}</td>
+      </tr>`).join('');
+    wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
+        <th style="padding:5px 8px">Week</th>
+        <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
+        <th style="text-align:right;padding:5px 8px">Payment Received</th>
+        <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
+      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody></table>
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Week buckets are fixed for the whole month (Week 1 = 1st–7th, and so on). "Overdue Becoming Due" = invoices whose due date falls in that week. "Balance Remaining" = total outstanding minus cumulative payments received so far this month.</p>`;
   }
 }
 // Single delegated click handler for customer rows (today + month-end tables)
@@ -8429,7 +8460,9 @@ function loadCustomerLedger(name){
       const grandTotal = sumDebit >= sumCredit ? sumDebit : sumCredit;
       host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:760px">
         <caption style="text-align:left;font-weight:800;padding:8px 10px;border:1px solid #ccc;border-bottom:0;background:#fafafa">
-          COSA NOSTRAA — COMPLETE LEDGER<br>
+          SalasarBalaji Creations Pvt. Ltd.<br>
+          <span style="font-weight:600;font-size:.82em">Current Account No. - 674805601615 &nbsp;|&nbsp; IFSC - ICIC0006748 &nbsp;|&nbsp; ICICI Bank, AS-1, SITAPURA INDUSTRIAL AREA, EPIP, JAIPUR-302022</span><br>
+          <span style="font-weight:600;font-size:.82em">Principal Address: H1-894, Phase-III, Riico Industrial Area, Sitapura, Jaipur-302022</span><br>
           <span style="font-weight:700">Ledger: ${escHtml(d.customer||'')}</span> &nbsp; <span style="color:#666;font-weight:600">${escHtml(d.period||'')}</span>
         </caption>
         <thead><tr>
@@ -10265,6 +10298,7 @@ def _build_payments():
     # till month-end totals
     me_due = me_over = 0.0
     tags_set = set()
+    all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -10297,6 +10331,7 @@ def _build_payments():
             cust_bal += rem
             idt = inv["date"]
             due_date = (idt + timedelta(days=term_days)) if idt else None
+            all_due_pairs.append((due_date, rem))
             # as of TODAY
             if due_date and today > due_date:
                 cust_over += rem
@@ -10339,16 +10374,72 @@ def _build_payments():
             e.pop("_sort", None)
     _PAY_RAW_LEDGER["data"] = raw_by_cust
 
+    # ---- Ledger last updated (latest payment/credit entry date across the whole ledger) ----
+    last_pay_date = None
+    for i in range(n):
+        if to_num(creds[i]) > 0:
+            cd = _fast_date(dates[i])
+            if cd and (last_pay_date is None or cd > last_pay_date):
+                last_pay_date = cd
+
+    # ---- Week-wise overdue tracker for the CURRENT month (fixed buckets, whole month) ----
+    month_start = date(today.year, today.month, 1)
+    week_bounds = []
+    ws = month_start
+    while ws <= month_end:
+        we = min(ws + timedelta(days=6), month_end)
+        week_bounds.append((ws, we))
+        ws = we + timedelta(days=1)
+
+    week_overdue_amt = [0.0] * len(week_bounds)
+    for due_date, rem in all_due_pairs:
+        if not due_date or rem <= 0.009:
+            continue
+        if due_date < month_start or due_date > month_end:
+            continue
+        for wi, (ws_, we_) in enumerate(week_bounds):
+            if ws_ <= due_date <= we_:
+                week_overdue_amt[wi] += rem
+                break
+
+    week_payment_amt = [0.0] * len(week_bounds)
+    for i in range(n):
+        credit_amt = to_num(creds[i])
+        if credit_amt <= 0:
+            continue
+        cd = _fast_date(dates[i])
+        if not cd or cd < month_start or cd > month_end:
+            continue
+        for wi, (ws_, we_) in enumerate(week_bounds):
+            if ws_ <= cd <= we_:
+                week_payment_amt[wi] += credit_amt
+                break
+
+    week_overdue = []
+    cum_pay = 0.0
+    for wi, (ws_, we_) in enumerate(week_bounds):
+        cum_pay += week_payment_amt[wi]
+        bal_after = tot_bal - cum_pay
+        week_overdue.append({
+            "label": f"Week {wi + 1}",
+            "range": f'{ws_.strftime("%d-%b")} to {we_.strftime("%d-%b")}',
+            "overdue": round(week_overdue_amt[wi], 0),
+            "payment": round(week_payment_amt[wi], 0),
+            "balance": round(bal_after, 0),
+        })
+
     data = {
         "rows": rows,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
+        "ledger_last_updated": last_pay_date.strftime("%d-%b-%y") if last_pay_date else None,
         "totals": {
             "due": round(tot_due, 0), "overdue": round(tot_over, 0), "balance": round(tot_bal, 0),
             "due_me": round(me_due, 0), "overdue_me": round(me_over, 0),
         },
         "aging": [{"bucket": k, "amount": round(aging[k], 0)} for k in AG_LABELS],
         "aging_total": round(sum(aging.values()), 0),
+        "week_overdue": week_overdue,
         "tags": sorted([t for t in tags_set if t]),
     }
     _PAY_CACHE["data"] = data
