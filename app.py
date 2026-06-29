@@ -8251,9 +8251,14 @@ function loadPayments(force){
   const todayHost = document.getElementById('payTodayTable');
   if (todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
   fetch('/api/payments' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-    .then(d => {
-      if (d.error){ if(todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(d.error) + '</div>'; return; }
+    .then(r => r.json().then(j => ({ok:r.ok, j})))
+    .then(({ok, j}) => {
+      if (!ok || j.error){
+        const extra = j.where ? '<br><span style="font-size:.72rem;color:#999">' + escHtml(JSON.stringify(j.where)) + '</span>' : '';
+        if (todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(j.error || 'Failed') + extra + '</div>';
+        return;
+      }
+      const d = j;
       _payData = d;
       const asOf = document.getElementById('payAsOf');
       if (asOf) asOf.textContent = 'As of ' + d.today + ' · month-end ' + d.month_end;
@@ -10012,46 +10017,50 @@ def _build_payments():
         return _PAY_CACHE["data"]
 
     # ---- Payment terms (Customer -> days, tag) ----
-    terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
-    tcols = list(terms_df.columns)
-    def _tcol(*names):
-        return find_col(terms_df.columns, *names)
-    T_CUST = _tcol("Customer Name", "customer", "name") or (tcols[0] if tcols else None)
-    T_TERM = _tcol("Payment Term", "payment terms", "term", "credit days", "days")
-    T_TAG  = _tcol("Tag", "type", "tag")
     term_map = {}; tag_map = {}
-    for _, r in terms_df.iterrows():
-        nm = _norm_name(r.get(T_CUST, "")) if T_CUST else ""
-        if not nm:
-            continue
-        term_map[nm] = to_int(r.get(T_TERM, 0)) if T_TERM else 0
-        tag_map[nm]  = clean(r.get(T_TAG, "")) if T_TAG else ""
+    try:
+        terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
+        tcols = list(terms_df.columns)
+        T_CUST = find_col(terms_df.columns, "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
+        T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "days")
+        T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag")
+        for _, r in terms_df.iterrows():
+            nm = _norm_name(r.get(T_CUST, "")) if T_CUST else ""
+            if not nm:
+                continue
+            term_map[nm] = to_int(r.get(T_TERM, 0)) if T_TERM else 0
+            tag_map[nm]  = clean(r.get(T_TAG, "")) if T_TAG else ""
+    except Exception as e:
+        print("payments terms fetch error:", str(e)[:200])
 
     # ---- Ledger ----
     led_df = _fetch_csv_fresh(PAY_LEDGER_URL)
     lcols = list(led_df.columns)
-    def _lcol(*names):
-        return find_col(led_df.columns, *names)
-    L_DATE = _lcol("Date", "date") or (lcols[0] if lcols else None)
-    L_CUST = _lcol("Customer Name", "customer", "name")
-    L_INV  = _lcol("Invoice No", "invoice", "inv no", "bill no")
-    L_DEB  = _lcol("Debit", "invoice amount", "debit (invoice)", "debit_invoice")
-    L_CRED = _lcol("Credit", "payment", "credit (payment)", "credit_payment")
-    L_BAL  = _lcol("Balance", "bal")
+    L_DATE = find_col(led_df.columns, "Date", "date", "invoice date", "txn date") or (lcols[0] if lcols else None)
+    L_CUST = find_col(led_df.columns, "Customer Name", "customer", "name", "party")
+    L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher")
+    L_DEB  = find_col(led_df.columns, "Debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
+    L_CRED = find_col(led_df.columns, "Credit", "payment", "credit (payment)", "credit_payment", "cr")
+    L_BAL  = find_col(led_df.columns, "Balance", "bal", "running balance")
 
-    # customer -> list of {date, inv, debit, credit}
+    if not L_CUST:
+        raise ValueError(f"Ledger me 'Customer Name' column nahi mila. Columns: {lcols[:12]}")
+
     by_cust = {}
     for _, r in led_df.iterrows():
         nm = _norm_name(r.get(L_CUST, "")) if L_CUST else ""
         if not nm:
             continue
-        d = parse_date_any(r.get(L_DATE, "")) if L_DATE else None
-        if isinstance(d, datetime):
-            d = d.date()
+        try:
+            dd = parse_date_any(r.get(L_DATE, "")) if L_DATE else None
+        except Exception:
+            dd = None
+        if isinstance(dd, datetime):
+            dd = dd.date()
         deb = to_num(r.get(L_DEB, 0)) if L_DEB else 0.0
         cred = to_num(r.get(L_CRED, 0)) if L_CRED else 0.0
         inv = clean(r.get(L_INV, "")) if L_INV else ""
-        by_cust.setdefault(nm, []).append({"date": d, "inv": inv, "debit": deb, "credit": cred})
+        by_cust.setdefault(nm, []).append({"date": dd, "inv": inv, "debit": deb, "credit": cred})
 
     today = now_ist().date()
     # month-end of current month
@@ -10162,7 +10171,10 @@ def api_payments():
             _PAY_CACHE["data"] = None
         return jsonify(_build_payments())
     except Exception as e:
-        return jsonify({"error": f"payments failed: {e}"}), 500
+        import traceback
+        tb = traceback.format_exc()
+        print("PAYMENTS ERROR:\n", tb)
+        return jsonify({"error": f"payments failed: {e}", "where": tb.splitlines()[-3:] if tb else ""}), 500
 
 
 # ════════════════════════════════════════════════════════════════
