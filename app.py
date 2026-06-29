@@ -5420,15 +5420,15 @@ select.lg-in option{background:#fff;color:#1a1610}
       </select></div>
   </div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
-      <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:60vh"></div></div>
-    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Aging Bucket</div>
-      <div id="payAgingTable"></div></div>
+      <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
+      <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
   </div>
-  <div style="margin-bottom:18px">
-    <div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
-    <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:60vh"></div>
+  <div style="margin-bottom:18px;max-width:420px">
+    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+    <div id="payAgingTable" style="font-size:.78rem"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -8321,7 +8321,7 @@ function renderPayments(){
   // outstanding till today table
   const todayHost = document.getElementById('payTodayTable');
   if (todayHost){
-    const body = rows.map(r => `<tr style="cursor:pointer" onclick="loadCustomerLedger(${JSON.stringify(r.customer)})">
+    const body = rows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
         <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
         <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
         <td style="text-align:center">${r.term_days||0}d</td>
@@ -8345,7 +8345,7 @@ function renderPayments(){
   const meTitle = document.getElementById('payMeTitle');
   if (meTitle) meTitle.textContent = 'Outstanding till month-end (' + (d.month_end||'') + ')';
   if (meHost){
-    const body = rows.map(r => `<tr style="cursor:pointer" onclick="loadCustomerLedger(${JSON.stringify(r.customer)})">
+    const body = rows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
         <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
         <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
         <td class="${(r.due_me||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due_me)}</td>
@@ -8363,7 +8363,7 @@ function renderPayments(){
         <td style="text-align:right">${fmt(sumBal)}</td>
       </tr></tfoot></table>`;
   }
-  // aging bucket — recomputed from the CURRENTLY FILTERED customers (tag/search/show)
+  // aging bucket — recomputed from the CURRENTLY FILTERED customers (tag/search/show); compact size
   const agHost = document.getElementById('payAgingTable');
   if (agHost){
     const AG_LABELS = ["0 Days","0-30 Days","31-60 Days","61-90 Days","91-180 Days",">180 Days"];
@@ -8371,18 +8371,23 @@ function renderPayments(){
     rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
     const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
     const body = AG_LABELS.map(k => `<tr>
-        <td>${escHtml(k)}</td>
-        <td style="text-align:right;font-weight:700">${fmt(agTotals[k])}</td>
+        <td style="padding:5px 8px">${escHtml(k)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(agTotals[k])}</td>
       </tr>`).join('');
-    agHost.innerHTML = `<table class="ro" style="width:100%"><thead><tr>
-        <th>Aging Bucket</th><th style="text-align:right">Sum of Balance</th>
+    agHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
+        <th style="padding:5px 8px">Aging Bucket</th><th style="text-align:right;padding:5px 8px">Sum of Balance</th>
       </tr></thead><tbody>${body}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-        <td>Total</td><td style="text-align:right">${fmt(grand)}</td>
+        <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.75rem;margin-top:8px">Aging respects the Tag/Search/Show filters above. 0 Days = within term / not overdue.</p>`;
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
   }
 }
+// Single delegated click handler for customer rows (today + month-end tables)
+document.addEventListener('click', function(ev){
+  const tr = ev.target.closest && ev.target.closest('.pay-row');
+  if (tr && tr.dataset && tr.dataset.customer) loadCustomerLedger(tr.dataset.customer);
+});
 let _custLedgerData = null;
 function loadCustomerLedger(name){
   const wrap = document.getElementById('payLedgerWrap');
@@ -8399,31 +8404,52 @@ function loadCustomerLedger(name){
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(d.error) + '</div>'; return; }
       _custLedgerData = d;
       const rows = d.entries || [];
-      const body = rows.map(e => `<tr>
-          <td></td>
+      let sumDebit = 0, sumCredit = 0;
+      const body = rows.map(e => {
+        const deb = e.debit || 0, cred = e.credit || 0;
+        sumDebit += deb; sumCredit += cred;
+        const side = deb > 0 ? 'To' : (cred > 0 ? 'By' : '');
+        return `<tr>
           <td>${escHtml(e.date||'')}</td>
+          <td>${side}</td>
           <td>${escHtml(e.particulars||'')}</td>
           <td>${escHtml(e.vch_type||'')}</td>
           <td>${escHtml(e.vch_no||'')}</td>
-          <td style="text-align:right">${e.debit ? fmt(e.debit) : ''}</td>
-          <td style="text-align:right">${e.credit ? fmt(e.credit) : ''}</td>
-          <td style="text-align:right">${e.balance != null ? fmt(e.balance) : ''}</td>
-          <td>${escHtml(e.due_date||'')}</td>
-        </tr>`).join('');
-      host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:820px">
-        <caption style="text-align:center;font-weight:800;padding:8px;border:1px solid #ccc;border-bottom:0">COSA NOSTRAA COMPLETE LEDGER — ${escHtml(d.customer||'')}</caption>
+          <td style="text-align:right">${deb ? fmt(deb) : ''}</td>
+          <td style="text-align:right">${cred ? fmt(cred) : ''}</td>
+        </tr>`;
+      }).join('');
+      sumDebit = Math.round(sumDebit); sumCredit = Math.round(sumCredit);
+      const closing = sumDebit - sumCredit; // +ve => customer owes us (closing shown on Credit side to balance)
+      const closingAbs = Math.abs(closing);
+      const closingRow = closing >= 0
+        ? `<tr style="font-weight:700"><td></td><td>By</td><td>Closing Balance</td><td></td><td></td><td></td><td style="text-align:right">${fmt(closingAbs)}</td></tr>`
+        : `<tr style="font-weight:700"><td></td><td>To</td><td>Closing Balance</td><td></td><td></td><td style="text-align:right">${fmt(closingAbs)}</td><td></td></tr>`;
+      const grand = Math.max(sumDebit, sumCredit + (closing >= 0 ? closingAbs : 0), sumDebit + (closing < 0 ? closingAbs : 0));
+      const grandTotal = sumDebit >= sumCredit ? sumDebit : sumCredit;
+      host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:760px">
+        <caption style="text-align:left;font-weight:800;padding:8px 10px;border:1px solid #ccc;border-bottom:0;background:#fafafa">
+          COSA NOSTRAA — COMPLETE LEDGER<br>
+          <span style="font-weight:700">Ledger: ${escHtml(d.customer||'')}</span> &nbsp; <span style="color:#666;font-weight:600">${escHtml(d.period||'')}</span>
+        </caption>
         <thead><tr>
-          <th>Company Details</th><th>Date</th><th>Particulars</th><th>Vch Type</th><th>Vch No</th>
-          <th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th><th>Due Date</th>
+          <th>Date</th><th></th><th>Particulars</th><th>Vch Type</th><th>Vch No.</th>
+          <th style="text-align:right">Debit</th><th style="text-align:right">Credit</th>
         </tr></thead>
-        <tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No transactions found</td></tr>'}</tbody>
-        <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-          <td colspan="5">Total</td>
-          <td style="text-align:right">${fmt(d.totals?.debit||0)}</td>
-          <td style="text-align:right">${fmt(d.totals?.credit||0)}</td>
-          <td style="text-align:right">${fmt(d.totals?.balance||0)}</td>
-          <td></td>
-        </tr></tfoot></table>`;
+        <tbody>${body || '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">No transactions found</td></tr>'}</tbody>
+        <tfoot>
+          <tr style="font-weight:800;background:var(--cn-ivory)">
+            <td colspan="5">Total</td>
+            <td style="text-align:right">${fmt(sumDebit)}</td>
+            <td style="text-align:right">${fmt(sumCredit)}</td>
+          </tr>
+          ${closingRow}
+          <tr style="font-weight:800;background:var(--cn-ivory)">
+            <td colspan="5">Grand Total</td>
+            <td style="text-align:right">${fmt(grandTotal)}</td>
+            <td style="text-align:right">${fmt(grandTotal)}</td>
+          </tr>
+        </tfoot></table>`;
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
 }
@@ -8434,8 +8460,8 @@ function closeCustomerLedger(){
 }
 function exportCustomerLedger(){
   const d = _custLedgerData; if (!d || !d.entries || !d.entries.length){ alert('No ledger loaded.'); return; }
-  const headers = ['Company Details','Date','Particulars','Vch Type','Vch No','Debit','Credit','Balance','Due Date'];
-  const rows = d.entries.map(e => [e.company||'', e.date||'', e.particulars||'', e.vch_type||'', e.vch_no||'', e.debit||0, e.credit||0, e.balance!=null?e.balance:'', e.due_date||'']);
+  const headers = ['Date','Type','Particulars','Vch Type','Vch No','Debit','Credit'];
+  const rows = d.entries.map(e => [e.date||'', (e.debit>0?'To':(e.credit>0?'By':'')), e.particulars||'', e.vch_type||'', e.vch_no||'', e.debit||0, e.credit||0]);
   _dlCsv(headers, rows, 'ledger_' + (d.customer||'customer').replace(/[^a-z0-9]+/gi,'_'));
 }
 function printCustomerLedger(){
@@ -10134,8 +10160,8 @@ def _build_payments():
         terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
         tcols = list(terms_df.columns)
         T_CUST = find_col(terms_df.columns, "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
-        T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "days")
-        T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag")
+        T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)")
+        T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type")
         tc = terms_df[T_CUST].tolist() if T_CUST else []
         tt = terms_df[T_TERM].tolist() if T_TERM else [0]*len(tc)
         tg = terms_df[T_TAG].tolist()  if T_TAG  else [""]*len(tc)
@@ -10357,8 +10383,15 @@ def api_payments_ledger():
         tot_debit = round(sum(e.get("debit") or 0 for e in entries), 2)
         tot_credit = round(sum(e.get("credit") or 0 for e in entries), 2)
         closing_bal = entries[-1]["balance"] if entries and entries[-1].get("balance") is not None else round(tot_debit - tot_credit, 2)
+        period = ""
+        if entries:
+            d0 = entries[0].get("date") or ""
+            d1 = entries[-1].get("date") or ""
+            if d0 or d1:
+                period = f"{d0} to {d1}"
         return jsonify({
             "customer": name,
+            "period": period,
             "entries": entries,
             "totals": {"debit": tot_debit, "credit": tot_credit, "balance": closing_bal},
         })
