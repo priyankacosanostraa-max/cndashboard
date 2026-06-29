@@ -4934,6 +4934,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m13" onclick="showTab('production')">Production</button>
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
+  <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m8" onclick="showTab('ai')">AI Studio</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -5395,6 +5396,36 @@ select.lg-in option{background:#fff;color:#1a1610}
   <p style="color:var(--cn-mid);font-size:.85rem;margin:0 0 12px">Customers who used to order regularly (2+ orders) but haven't returned. Reach out before they're lost.</p>
   <div id="arSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(2,1fr)"></div>
   <div id="arContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:70vh"></div>
+  </div>
+
+  <div id="vPayments" style="display:none">
+  <div class="insights-head">
+    <div><div class="insights-title">Payments</div>
+      <div style="color:var(--cn-mid);font-size:.8rem" id="payAsOf"></div></div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadPayments(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportPayments()">Export CSV</button>
+    </div>
+  </div>
+  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Tag / Type</label>
+      <select class="fs" id="payTag" onchange="renderPayments()"><option value="">All Tags</option></select></div>
+    <div class="fc"><label class="fl">Search Customer</label>
+      <input class="fi" id="paySearch" placeholder="Customer name…" oninput="renderPayments()" style="min-width:200px"></div>
+    <div class="fc"><label class="fl">Show</label>
+      <select class="fs" id="payView" onchange="renderPayments()">
+        <option value="overdue">Has Overdue</option>
+        <option value="all" selected>All Outstanding</option>
+        <option value="due">Has Due (not overdue)</option>
+      </select></div>
+  </div>
+  <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
+      <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:60vh"></div></div>
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Aging Bucket</div>
+      <div id="payAgingTable"></div></div>
+  </div>
   </div>
 
   <div id="vProfit" style="display:none">
@@ -8214,6 +8245,104 @@ function exportAtRisk(){
 }
 window.loadAtRisk = loadAtRisk; window.renderAtRisk = renderAtRisk; window.exportAtRisk = exportAtRisk;
 
+/* ── PAYMENTS ── */
+let _payData = null; let _payTagsFilled = false;
+function loadPayments(force){
+  const todayHost = document.getElementById('payTodayTable');
+  if (todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
+  fetch('/api/payments' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => {
+      if (d.error){ if(todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(d.error) + '</div>'; return; }
+      _payData = d;
+      const asOf = document.getElementById('payAsOf');
+      if (asOf) asOf.textContent = 'As of ' + d.today + ' · month-end ' + d.month_end;
+      if (!_payTagsFilled){
+        const sel = document.getElementById('payTag');
+        if (sel && d.tags){
+          sel.innerHTML = '<option value="">All Tags</option>' + d.tags.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+        }
+        _payTagsFilled = true;
+      }
+      renderPayments();
+    })
+    .catch(err => { if(todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
+}
+function _payFiltered(){
+  const d = _payData; if (!d) return [];
+  const tag = (document.getElementById('payTag')?.value || '').toLowerCase();
+  const q = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
+  const view = document.getElementById('payView')?.value || 'all';
+  return d.rows.filter(r => {
+    if (tag && (r.tag||'').toLowerCase() !== tag) return false;
+    if (q && !(r.customer||'').toLowerCase().includes(q)) return false;
+    if (view === 'overdue' && (r.overdue||0) <= 0) return false;
+    if (view === 'due' && (r.due||0) <= 0) return false;
+    return true;
+  });
+}
+function renderPayments(){
+  const d = _payData; if (!d) return;
+  const rows = _payFiltered();
+  // summary cards
+  const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
+  const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
+  const sumBal = rows.reduce((s,r)=>s+(r.balance||0),0);
+  const sumHost = document.getElementById('paySummary');
+  if (sumHost){
+    sumHost.innerHTML =
+      `<div class="yoy-card"><div class="yc-label">Total Outstanding</div><div class="yc-val">${fmt(sumBal)}</div><div class="yc-sub">${rows.length} customers</div></div>
+       <div class="yoy-card"><div class="yc-label">Due (within term)</div><div class="yc-val" style="color:#1f7a3a">${fmt(sumDue)}</div><div class="yc-sub">not overdue yet</div></div>
+       <div class="yoy-card"><div class="yc-label">Overdue</div><div class="yc-val" style="color:#c0392b">${fmt(sumOver)}</div><div class="yc-sub">term crossed</div></div>`;
+  }
+  // outstanding till today table
+  const todayHost = document.getElementById('payTodayTable');
+  if (todayHost){
+    const body = rows.map(r => `<tr>
+        <td style="font-weight:700">${escHtml(r.customer)}</td>
+        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'—')}</td>
+        <td style="text-align:center">${r.term_days||0}d</td>
+        <td class="${(r.due||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due)}</td>
+        <td class="${(r.overdue||0)>0?'red':'muted'}" style="text-align:right;font-weight:700">${fmt(r.overdue)}</td>
+        <td style="text-align:right;font-weight:800">${fmt(r.balance)}</td>
+      </tr>`).join('');
+    todayHost.innerHTML = `<table class="ro" style="width:100%;min-width:560px"><thead><tr>
+        <th>Customer Name</th><th style="text-align:center">Tag</th><th style="text-align:center">Term</th>
+        <th style="text-align:right">Due</th><th style="text-align:right">Overdue</th><th style="text-align:right">Balance</th>
+      </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+        <td>Total</td><td></td><td></td>
+        <td style="text-align:right">${fmt(sumDue)}</td>
+        <td style="text-align:right">${fmt(sumOver)}</td>
+        <td style="text-align:right">${fmt(sumBal)}</td>
+      </tr></tfoot></table>`;
+  }
+  // aging bucket (filtered customers ka recompute nahi hota server-side; total aging server se)
+  const agHost = document.getElementById('payAgingTable');
+  if (agHost){
+    const ag = d.aging || [];
+    const body = ag.map(a => `<tr>
+        <td>${escHtml(a.bucket)}</td>
+        <td style="text-align:right;font-weight:700">${fmt(a.amount)}</td>
+      </tr>`).join('');
+    agHost.innerHTML = `<table class="ro" style="width:100%"><thead><tr>
+        <th>Aging Bucket</th><th style="text-align:right">Sum of Balance</th>
+      </tr></thead><tbody>${body}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+        <td>Total</td><td style="text-align:right">${fmt(d.aging_total)}</td>
+      </tr></tfoot></table>
+      <p style="color:var(--cn-mid);font-size:.75rem;margin-top:8px">Aging = overall (all customers). 0 Days = within term / not overdue.</p>`;
+  }
+}
+function exportPayments(){
+  const rows = _payFiltered();
+  if (!rows.length){ alert('No rows to export'); return; }
+  const headers = ['Customer Name','Tag','Payment Term (days)','Due','Overdue','Balance','Due (till month-end)','Overdue (till month-end)'];
+  const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, r.due||0, r.overdue||0, r.balance||0, r.due_me||0, r.overdue_me||0]);
+  _dlCsv(headers, data, 'payments_outstanding');
+}
+window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
+
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
   const csv = [headers].concat(rows).map(r => r.map(c => {
@@ -8595,6 +8724,7 @@ showTab = function(t){
     production: {id: 'vProduction', btn: 'm13'},
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
+    payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
     ai: {id: 'vAi', btn: 'm8'},
@@ -8634,6 +8764,7 @@ showTab = function(t){
       production: 'PRODUCTION',
       profit: 'PROFIT MARGIN',
       atrisk: 'AT-RISK CUSTOMERS',
+      payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
       ai: 'AI STUDIO',
@@ -8656,6 +8787,7 @@ showTab = function(t){
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
+  if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
   if (t === 'ai') { aiOnOpen(); setTimeout(()=>{const i=document.getElementById('aiInput'); if(i) i.focus();}, 120); }
 };
@@ -9862,6 +9994,176 @@ def api_at_risk():
         return jsonify(_build_at_risk(gap))
     except Exception as e:
         return jsonify({"error": f"at-risk failed: {e}"}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  💰 PAYMENTS — Ledger + Payment Terms se Due / Overdue (FIFO aging)
+# ════════════════════════════════════════════════════════════════
+PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1428198813&single=true&output=csv")
+PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
+_PAY_CACHE = {"data": None, "ts": 0}
+
+def _norm_name(s):
+    return re.sub(r"\s+", " ", str(s or "").strip()).upper()
+
+def _build_payments():
+    if _PAY_CACHE["data"] is not None and (time.time() - _PAY_CACHE["ts"] < 600):
+        return _PAY_CACHE["data"]
+
+    # ---- Payment terms (Customer -> days, tag) ----
+    terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
+    tcols = list(terms_df.columns)
+    def _tcol(*names):
+        return find_col(terms_df.columns, *names)
+    T_CUST = _tcol("Customer Name", "customer", "name") or (tcols[0] if tcols else None)
+    T_TERM = _tcol("Payment Term", "payment terms", "term", "credit days", "days")
+    T_TAG  = _tcol("Tag", "type", "tag")
+    term_map = {}; tag_map = {}
+    for _, r in terms_df.iterrows():
+        nm = _norm_name(r.get(T_CUST, "")) if T_CUST else ""
+        if not nm:
+            continue
+        term_map[nm] = to_int(r.get(T_TERM, 0)) if T_TERM else 0
+        tag_map[nm]  = clean(r.get(T_TAG, "")) if T_TAG else ""
+
+    # ---- Ledger ----
+    led_df = _fetch_csv_fresh(PAY_LEDGER_URL)
+    lcols = list(led_df.columns)
+    def _lcol(*names):
+        return find_col(led_df.columns, *names)
+    L_DATE = _lcol("Date", "date") or (lcols[0] if lcols else None)
+    L_CUST = _lcol("Customer Name", "customer", "name")
+    L_INV  = _lcol("Invoice No", "invoice", "inv no", "bill no")
+    L_DEB  = _lcol("Debit", "invoice amount", "debit (invoice)", "debit_invoice")
+    L_CRED = _lcol("Credit", "payment", "credit (payment)", "credit_payment")
+    L_BAL  = _lcol("Balance", "bal")
+
+    # customer -> list of {date, inv, debit, credit}
+    by_cust = {}
+    for _, r in led_df.iterrows():
+        nm = _norm_name(r.get(L_CUST, "")) if L_CUST else ""
+        if not nm:
+            continue
+        d = parse_date_any(r.get(L_DATE, "")) if L_DATE else None
+        if isinstance(d, datetime):
+            d = d.date()
+        deb = to_num(r.get(L_DEB, 0)) if L_DEB else 0.0
+        cred = to_num(r.get(L_CRED, 0)) if L_CRED else 0.0
+        inv = clean(r.get(L_INV, "")) if L_INV else ""
+        by_cust.setdefault(nm, []).append({"date": d, "inv": inv, "debit": deb, "credit": cred})
+
+    today = now_ist().date()
+    # month-end of current month
+    if today.month == 12:
+        month_end = date(today.year, 12, 31)
+    else:
+        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
+
+    AG_LABELS = ["0 Days", "0-30 Days", "31-60 Days", "61-90 Days", "91-180 Days", ">180 Days"]
+    def _ag_bucket(days):
+        if days <= 0:   return "0 Days"
+        if days <= 30:  return "0-30 Days"
+        if days <= 60:  return "31-60 Days"
+        if days <= 90:  return "61-90 Days"
+        if days <= 180: return "91-180 Days"
+        return ">180 Days"
+
+    rows = []
+    aging = {k: 0.0 for k in AG_LABELS}
+    tot_due = tot_over = tot_bal = 0.0
+    # till month-end totals
+    me_due = me_over = 0.0
+    tags_set = set()
+
+    for nm, entries in by_cust.items():
+        term_days = term_map.get(nm, 0)
+        tag = tag_map.get(nm, "")
+        if tag: tags_set.add(tag)
+
+        # FIFO: open invoices queue (oldest first), payments knock them off
+        ents = sorted(entries, key=lambda e: (e["date"] or date(1900,1,1)))
+        open_inv = []   # list of {date, amt_remaining}
+        credit_pool = 0.0
+        for e in ents:
+            credit_pool += e["credit"]
+            if e["debit"] > 0:
+                open_inv.append({"date": e["date"], "amt": e["debit"]})
+        # apply credit pool FIFO
+        cp = credit_pool
+        for inv in open_inv:
+            if cp <= 0: break
+            pay = min(cp, inv["amt"])
+            inv["amt"] -= pay
+            cp -= pay
+
+        cust_due = cust_over = cust_bal = 0.0
+        cust_due_me = cust_over_me = 0.0
+        for inv in open_inv:
+            rem = round(inv["amt"], 2)
+            if rem <= 0.009:
+                continue
+            cust_bal += rem
+            idt = inv["date"]
+            due_date = (idt + timedelta(days=term_days)) if idt else None
+            # as of TODAY
+            if due_date and today > due_date:
+                cust_over += rem
+                od = (today - due_date).days
+                aging[_ag_bucket(od)] += rem
+            else:
+                cust_due += rem
+                aging["0 Days"] += rem
+            # as of MONTH-END
+            if due_date and month_end > due_date:
+                cust_over_me += rem
+            else:
+                cust_due_me += rem
+
+        if cust_bal <= 0.009:
+            continue
+        rows.append({
+            "customer": nm.title(),
+            "tag": tag,
+            "term_days": term_days,
+            "due": round(cust_due, 0),
+            "overdue": round(cust_over, 0),
+            "balance": round(cust_bal, 0),
+            "due_me": round(cust_due_me, 0),
+            "overdue_me": round(cust_over_me, 0),
+        })
+        tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
+        me_due += cust_due_me; me_over += cust_over_me
+
+    rows.sort(key=lambda x: x["balance"], reverse=True)
+
+    data = {
+        "rows": rows,
+        "today": today.strftime("%d-%b-%y"),
+        "month_end": month_end.strftime("%d-%b-%y"),
+        "totals": {
+            "due": round(tot_due, 0), "overdue": round(tot_over, 0), "balance": round(tot_bal, 0),
+            "due_me": round(me_due, 0), "overdue_me": round(me_over, 0),
+        },
+        "aging": [{"bucket": k, "amount": round(aging[k], 0)} for k in AG_LABELS],
+        "aging_total": round(sum(aging.values()), 0),
+        "tags": sorted([t for t in tags_set if t]),
+    }
+    _PAY_CACHE["data"] = data
+    _PAY_CACHE["ts"] = time.time()
+    return data
+
+@app.route("/api/payments")
+def api_payments():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        if request.args.get("force", "").lower() == "true":
+            _PAY_CACHE["data"] = None
+        return jsonify(_build_payments())
+    except Exception as e:
+        return jsonify({"error": f"payments failed: {e}"}), 500
+
 
 # ════════════════════════════════════════════════════════════════
 #  🆘 HELP QUERIES  (employee bhejta hai → admin home par 24h dikhta hai)
