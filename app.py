@@ -5426,7 +5426,23 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Aging Bucket</div>
       <div id="payAgingTable"></div></div>
   </div>
+  <div style="margin-bottom:18px">
+    <div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
+    <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:60vh"></div>
   </div>
+  <div id="payLedgerWrap" style="display:none;margin-top:10px">
+    <div class="insights-head" style="margin-bottom:8px">
+      <div><div class="insights-title" id="payLedgerTitle">Customer Ledger</div></div>
+      <div class="insight-toolbar-actions">
+        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportCustomerLedger()">Export CSV</button>
+        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="printCustomerLedger()">Print</button>
+        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px" onclick="closeCustomerLedger()">Close</button>
+      </div>
+    </div>
+    <div id="payLedgerTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:65vh"></div>
+  </div>
+  </div>
+
 
   <div id="vProfit" style="display:none">
   <div class="insights-head">
@@ -8293,6 +8309,8 @@ function renderPayments(){
   const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
   const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
   const sumBal = rows.reduce((s,r)=>s+(r.balance||0),0);
+  const sumDueMe = rows.reduce((s,r)=>s+(r.due_me||0),0);
+  const sumOverMe = rows.reduce((s,r)=>s+(r.overdue_me||0),0);
   const sumHost = document.getElementById('paySummary');
   if (sumHost){
     sumHost.innerHTML =
@@ -8303,9 +8321,9 @@ function renderPayments(){
   // outstanding till today table
   const todayHost = document.getElementById('payTodayTable');
   if (todayHost){
-    const body = rows.map(r => `<tr>
-        <td style="font-weight:700">${escHtml(r.customer)}</td>
-        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'—')}</td>
+    const body = rows.map(r => `<tr style="cursor:pointer" onclick="loadCustomerLedger(${JSON.stringify(r.customer)})">
+        <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
+        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
         <td style="text-align:center">${r.term_days||0}d</td>
         <td class="${(r.due||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due)}</td>
         <td class="${(r.overdue||0)>0?'red':'muted'}" style="text-align:right;font-weight:700">${fmt(r.overdue)}</td>
@@ -8322,23 +8340,116 @@ function renderPayments(){
         <td style="text-align:right">${fmt(sumBal)}</td>
       </tr></tfoot></table>`;
   }
-  // aging bucket (filtered customers ka recompute nahi hota server-side; total aging server se)
+  // outstanding till current month-end
+  const meHost = document.getElementById('payMeTable');
+  const meTitle = document.getElementById('payMeTitle');
+  if (meTitle) meTitle.textContent = 'Outstanding till month-end (' + (d.month_end||'') + ')';
+  if (meHost){
+    const body = rows.map(r => `<tr style="cursor:pointer" onclick="loadCustomerLedger(${JSON.stringify(r.customer)})">
+        <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
+        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
+        <td class="${(r.due_me||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due_me)}</td>
+        <td class="${(r.overdue_me||0)>0?'red':'muted'}" style="text-align:right;font-weight:700">${fmt(r.overdue_me)}</td>
+        <td style="text-align:right;font-weight:800">${fmt(r.balance)}</td>
+      </tr>`).join('');
+    meHost.innerHTML = `<table class="ro" style="width:100%;min-width:520px"><thead><tr>
+        <th>Customer Name</th><th style="text-align:center">Tag</th>
+        <th style="text-align:right">Due (by month-end)</th><th style="text-align:right">Overdue (by month-end)</th><th style="text-align:right">Balance</th>
+      </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+        <td>Total</td><td></td>
+        <td style="text-align:right">${fmt(sumDueMe)}</td>
+        <td style="text-align:right">${fmt(sumOverMe)}</td>
+        <td style="text-align:right">${fmt(sumBal)}</td>
+      </tr></tfoot></table>`;
+  }
+  // aging bucket — recomputed from the CURRENTLY FILTERED customers (tag/search/show)
   const agHost = document.getElementById('payAgingTable');
   if (agHost){
-    const ag = d.aging || [];
-    const body = ag.map(a => `<tr>
-        <td>${escHtml(a.bucket)}</td>
-        <td style="text-align:right;font-weight:700">${fmt(a.amount)}</td>
+    const AG_LABELS = ["0 Days","0-30 Days","31-60 Days","61-90 Days","91-180 Days",">180 Days"];
+    const agTotals = {}; AG_LABELS.forEach(k => agTotals[k] = 0);
+    rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
+    const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
+    const body = AG_LABELS.map(k => `<tr>
+        <td>${escHtml(k)}</td>
+        <td style="text-align:right;font-weight:700">${fmt(agTotals[k])}</td>
       </tr>`).join('');
     agHost.innerHTML = `<table class="ro" style="width:100%"><thead><tr>
         <th>Aging Bucket</th><th style="text-align:right">Sum of Balance</th>
       </tr></thead><tbody>${body}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-        <td>Total</td><td style="text-align:right">${fmt(d.aging_total)}</td>
+        <td>Total</td><td style="text-align:right">${fmt(grand)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.75rem;margin-top:8px">Aging = overall (all customers). 0 Days = within term / not overdue.</p>`;
+      <p style="color:var(--cn-mid);font-size:.75rem;margin-top:8px">Aging respects the Tag/Search/Show filters above. 0 Days = within term / not overdue.</p>`;
   }
 }
+let _custLedgerData = null;
+function loadCustomerLedger(name){
+  const wrap = document.getElementById('payLedgerWrap');
+  const host = document.getElementById('payLedgerTable');
+  const title = document.getElementById('payLedgerTitle');
+  if (!wrap || !host) return;
+  wrap.style.display = 'block';
+  if (title) title.textContent = 'Ledger — ' + name;
+  host.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
+  wrap.scrollIntoView({behavior:'smooth', block:'start'});
+  fetch('/api/payments/ledger?customer=' + encodeURIComponent(name), {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.json())
+    .then(d => {
+      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(d.error) + '</div>'; return; }
+      _custLedgerData = d;
+      const rows = d.entries || [];
+      const body = rows.map(e => `<tr>
+          <td></td>
+          <td>${escHtml(e.date||'')}</td>
+          <td>${escHtml(e.particulars||'')}</td>
+          <td>${escHtml(e.vch_type||'')}</td>
+          <td>${escHtml(e.vch_no||'')}</td>
+          <td style="text-align:right">${e.debit ? fmt(e.debit) : ''}</td>
+          <td style="text-align:right">${e.credit ? fmt(e.credit) : ''}</td>
+          <td style="text-align:right">${e.balance != null ? fmt(e.balance) : ''}</td>
+          <td>${escHtml(e.due_date||'')}</td>
+        </tr>`).join('');
+      host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:820px">
+        <caption style="text-align:center;font-weight:800;padding:8px;border:1px solid #ccc;border-bottom:0">COSA NOSTRAA COMPLETE LEDGER — ${escHtml(d.customer||'')}</caption>
+        <thead><tr>
+          <th>Company Details</th><th>Date</th><th>Particulars</th><th>Vch Type</th><th>Vch No</th>
+          <th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th><th>Due Date</th>
+        </tr></thead>
+        <tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No transactions found</td></tr>'}</tbody>
+        <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+          <td colspan="5">Total</td>
+          <td style="text-align:right">${fmt(d.totals?.debit||0)}</td>
+          <td style="text-align:right">${fmt(d.totals?.credit||0)}</td>
+          <td style="text-align:right">${fmt(d.totals?.balance||0)}</td>
+          <td></td>
+        </tr></tfoot></table>`;
+    })
+    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
+}
+function closeCustomerLedger(){
+  const wrap = document.getElementById('payLedgerWrap');
+  if (wrap) wrap.style.display = 'none';
+  _custLedgerData = null;
+}
+function exportCustomerLedger(){
+  const d = _custLedgerData; if (!d || !d.entries || !d.entries.length){ alert('No ledger loaded.'); return; }
+  const headers = ['Company Details','Date','Particulars','Vch Type','Vch No','Debit','Credit','Balance','Due Date'];
+  const rows = d.entries.map(e => [e.company||'', e.date||'', e.particulars||'', e.vch_type||'', e.vch_no||'', e.debit||0, e.credit||0, e.balance!=null?e.balance:'', e.due_date||'']);
+  _dlCsv(headers, rows, 'ledger_' + (d.customer||'customer').replace(/[^a-z0-9]+/gi,'_'));
+}
+function printCustomerLedger(){
+  const tbl = document.getElementById('custLedgerPrintTable');
+  if (!tbl){ alert('No ledger loaded.'); return; }
+  const w = window.open('', '_blank');
+  w.document.write('<html><head><title>Customer Ledger</title><style>' +
+    'body{font-family:Arial,sans-serif;padding:20px} table{width:100%;border-collapse:collapse;font-size:12px}' +
+    'th,td{border:1px solid #333;padding:6px 8px} th{background:#f0f0f0} caption{font-weight:800;padding:10px}' +
+    '</style></head><body>' + tbl.outerHTML + '</body></html>');
+  w.document.close(); w.focus(); w.print();
+}
+window.loadCustomerLedger = loadCustomerLedger; window.closeCustomerLedger = closeCustomerLedger;
+window.exportCustomerLedger = exportCustomerLedger; window.printCustomerLedger = printCustomerLedger;
 function exportPayments(){
   const rows = _payFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
@@ -10008,6 +10119,7 @@ PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
 PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
+_PAY_RAW_LEDGER = {"data": None}
 
 def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
@@ -10041,21 +10153,32 @@ def _build_payments():
     lcols = list(led_df.columns)
     L_DATE = find_col(led_df.columns, "Date", "date", "invoice date", "txn date") or (lcols[0] if lcols else None)
     L_CUST = find_col(led_df.columns, "Customer Name", "customer", "name", "party")
-    L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher")
-    L_DEB  = find_col(led_df.columns, "Debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
-    L_CRED = find_col(led_df.columns, "Credit", "payment", "credit (payment)", "credit_payment", "cr")
-    L_BAL  = find_col(led_df.columns, "Balance", "bal", "running balance")
+    L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno")
+    L_DEB  = find_col(led_df.columns, "Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
+    L_CRED = find_col(led_df.columns, "Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr")
+    L_BAL  = find_col(led_df.columns, "Balance", "sum of outstanding", "bal", "running balance")
+    L_PART = find_col(led_df.columns, "Particulars", "particular", "narration")
+    L_VTYPE = find_col(led_df.columns, "Vch Type", "voucher type", "vch_type")
+    L_DUE  = find_col(led_df.columns, "Due Date", "due date", "duedate")
+    L_CMP  = find_col(led_df.columns, "Company Details", "company")
 
     if not L_CUST:
         raise ValueError(f"Ledger me 'Customer Name' column nahi mila. Columns: {lcols[:12]}")
 
     by_cust = {}
+    raw_by_cust = {}
     # FAST: column lists nikaal ke zip karo (.iterrows bahut dheema hota hai)
     custs = led_df[L_CUST].tolist() if L_CUST else []
-    dates = led_df[L_DATE].tolist() if L_DATE else [None]*len(custs)
-    debs  = led_df[L_DEB].tolist()  if L_DEB  else [0]*len(custs)
-    creds = led_df[L_CRED].tolist() if L_CRED else [0]*len(custs)
-    invs  = led_df[L_INV].tolist()  if L_INV  else [""]*len(custs)
+    n = len(custs)
+    dates = led_df[L_DATE].tolist() if L_DATE else [None]*n
+    debs  = led_df[L_DEB].tolist()  if L_DEB  else [0]*n
+    creds = led_df[L_CRED].tolist() if L_CRED else [0]*n
+    invs  = led_df[L_INV].tolist()  if L_INV  else [""]*n
+    bals  = led_df[L_BAL].tolist()  if L_BAL  else [None]*n
+    parts = led_df[L_PART].tolist() if L_PART else [""]*n
+    vtyps = led_df[L_VTYPE].tolist() if L_VTYPE else [""]*n
+    dues  = led_df[L_DUE].tolist()  if L_DUE  else [None]*n
+    cmps  = led_df[L_CMP].tolist()  if L_CMP  else [""]*n
     _date_cache = {}
     def _fast_date(v):
         key = str(v)
@@ -10069,15 +10192,29 @@ def _build_payments():
             dd = dd.date()
         _date_cache[key] = dd
         return dd
-    for i in range(len(custs)):
+    for i in range(n):
         nm = _norm_name(custs[i])
         if not nm:
             continue
+        dt = _fast_date(dates[i])
         by_cust.setdefault(nm, []).append({
-            "date": _fast_date(dates[i]),
+            "date": dt,
             "inv":  clean(invs[i]),
             "debit":  to_num(debs[i]),
             "credit": to_num(creds[i]),
+        })
+        due_v = _fast_date(dues[i]) if dues[i] not in (None, "") else None
+        raw_by_cust.setdefault(nm, []).append({
+            "company": clean(cmps[i]),
+            "date": dt.strftime("%d-%b-%y") if dt else clean(dates[i]),
+            "particulars": clean(parts[i]) or ("To Opening Balance" if i == 0 else ""),
+            "vch_type": clean(vtyps[i]),
+            "vch_no": clean(invs[i]),
+            "debit": to_num(debs[i]),
+            "credit": to_num(creds[i]),
+            "balance": to_num(bals[i]) if bals[i] is not None else None,
+            "due_date": due_v.strftime("%d-%b-%y") if due_v else None,
+            "_sort": dt or date(1900, 1, 1),
         })
 
     today = now_ist().date()
@@ -10105,8 +10242,8 @@ def _build_payments():
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
-        tag = tag_map.get(nm, "")
-        if tag: tags_set.add(tag)
+        tag = tag_map.get(nm, "") or "Unknown"
+        tags_set.add(tag)
 
         # FIFO: open invoices queue (oldest first), payments knock them off
         ents = sorted(entries, key=lambda e: (e["date"] or date(1900,1,1)))
@@ -10126,6 +10263,7 @@ def _build_payments():
 
         cust_due = cust_over = cust_bal = 0.0
         cust_due_me = cust_over_me = 0.0
+        cust_aging = {k: 0.0 for k in AG_LABELS}
         for inv in open_inv:
             rem = round(inv["amt"], 2)
             if rem <= 0.009:
@@ -10137,10 +10275,13 @@ def _build_payments():
             if due_date and today > due_date:
                 cust_over += rem
                 od = (today - due_date).days
-                aging[_ag_bucket(od)] += rem
+                bkt = _ag_bucket(od)
+                aging[bkt] += rem
+                cust_aging[bkt] += rem
             else:
                 cust_due += rem
                 aging["0 Days"] += rem
+                cust_aging["0 Days"] += rem
             # as of MONTH-END
             if due_date and month_end > due_date:
                 cust_over_me += rem
@@ -10158,11 +10299,19 @@ def _build_payments():
             "balance": round(cust_bal, 0),
             "due_me": round(cust_due_me, 0),
             "overdue_me": round(cust_over_me, 0),
+            "aging": {k: round(v, 0) for k, v in cust_aging.items()},
         })
         tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
         me_due += cust_due_me; me_over += cust_over_me
 
     rows.sort(key=lambda x: x["balance"], reverse=True)
+
+    # raw ledger lines sorted by date, per customer (for the printable customer ledger view)
+    for nm in raw_by_cust:
+        raw_by_cust[nm].sort(key=lambda e: e["_sort"])
+        for e in raw_by_cust[nm]:
+            e.pop("_sort", None)
+    _PAY_RAW_LEDGER["data"] = raw_by_cust
 
     data = {
         "rows": rows,
@@ -10193,6 +10342,30 @@ def api_payments():
         tb = traceback.format_exc()
         print("PAYMENTS ERROR:\n", tb)
         return jsonify({"error": f"payments failed: {e}", "where": tb.splitlines()[-3:] if tb else ""}), 500
+
+@app.route("/api/payments/ledger")
+def api_payments_ledger():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    name = request.args.get("customer", "")
+    if not name:
+        return jsonify({"error": "customer required"}), 400
+    try:
+        _build_payments()  # ensure cache populated
+        raw = _PAY_RAW_LEDGER.get("data") or {}
+        entries = raw.get(_norm_name(name)) or []
+        tot_debit = round(sum(e.get("debit") or 0 for e in entries), 2)
+        tot_credit = round(sum(e.get("credit") or 0 for e in entries), 2)
+        closing_bal = entries[-1]["balance"] if entries and entries[-1].get("balance") is not None else round(tot_debit - tot_credit, 2)
+        return jsonify({
+            "customer": name,
+            "entries": entries,
+            "totals": {"debit": tot_debit, "credit": tot_credit, "balance": closing_bal},
+        })
+    except Exception as e:
+        import traceback
+        print("PAYMENTS LEDGER ERROR:\n", traceback.format_exc())
+        return jsonify({"error": f"ledger failed: {e}"}), 500
 
 
 # ════════════════════════════════════════════════════════════════
