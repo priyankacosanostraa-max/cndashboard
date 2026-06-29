@@ -10004,7 +10004,7 @@ def api_at_risk():
 #  💰 PAYMENTS — Ledger + Payment Terms se Due / Overdue (FIFO aging)
 # ════════════════════════════════════════════════════════════════
 PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1428198813&single=true&output=csv")
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=745089354&single=true&output=csv")
 PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
