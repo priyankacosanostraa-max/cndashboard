@@ -254,7 +254,7 @@ except Exception as _genai_err:
     GENAI_AVAILABLE = False
     print("google-genai not installed — AI Studio disabled (baaki sab chalega).",
           str(_genai_err)[:120])
-from flask import Flask, request, jsonify, render_template_string, session
+from flask import Flask, request, jsonify, render_template_string, session, Response
 
 # ── Config ───────────────────────────────────────────────────
 INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv"
@@ -1091,6 +1091,25 @@ def _refresh_data():
         compiled.append(item)
         taxons.add(taxon)
         if plat != "N/A": platings.add(plat)
+
+    # ── Motif / Collection tags (from Motif Tagger, if it has been run) ──
+    try:
+        _motif_rows = _motif_load_results()
+    except Exception:
+        _motif_rows = None
+    motifs, collections = set(), set()
+    if _motif_rows:
+        _motif_map = {str(r.get("sku", "")).strip().upper(): r for r in _motif_rows}
+        for it in compiled:
+            mrow = _motif_map.get(str(it["sku"]).strip().upper())
+            it["motif"] = mrow.get("motif", "") if mrow else ""
+            it["collection"] = mrow.get("collection", "") if mrow else ""
+            if it["motif"]: motifs.add(it["motif"])
+            if it["collection"]: collections.add(it["collection"])
+    else:
+        for it in compiled:
+            it["motif"] = ""
+            it["collection"] = ""
 
     # ── COMBO/GIFT-SET enrichment ──
     # Stone Details (combo_skus) me jo SKUs likhe hain, un sabki Inv Stock + WIP
@@ -4021,6 +4040,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
+  <button class="menu-item" id="m18" onclick="window.open('/admin/motif-tagger','_blank')">Motif Tagger</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
@@ -4087,6 +4107,10 @@ select.lg-in option{background:#fff;color:#1a1610}
           <datalist id="custList"></datalist></div>
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Motif</label>
+          <select class="fs" id="fMotif" onchange="applyF()"><option value="">All Motifs</option></select></div>
+        <div class="fc"><label class="fl">Collection</label>
+          <select class="fs" id="fCollection" onchange="applyF()"><option value="">All Collections</option></select></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">Status</label>
@@ -4172,6 +4196,10 @@ select.lg-in option{background:#fff;color:#1a1610}
         </div>
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="rTypeChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Motif</label>
+          <select class="fs" id="rMotif" onchange="applyRO()"><option value="">All Motifs</option></select></div>
+        <div class="fc"><label class="fl">Collection</label>
+          <select class="fs" id="rCollection" onchange="applyRO()"><option value="">All Collections</option></select></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
@@ -4730,6 +4758,14 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div id="iTypeChecks" class="type-checks"></div>
       </div>
       <div class="fc">
+        <label class="fl">Motif</label>
+        <select class="fs" id="iMotif" onchange="applyInsights()"><option value="">All Motifs</option></select>
+      </div>
+      <div class="fc">
+        <label class="fl">Collection</label>
+        <select class="fs" id="iCollection" onchange="applyInsights()"><option value="">All Collections</option></select>
+      </div>
+      <div class="fc">
         <label class="fl">Taxon / Category</label>
         <select class="fs" id="iTaxon" onchange="applyInsights()"></select>
       </div>
@@ -4820,7 +4856,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 </div><script>
 let _masterSkuMap = {};   // SKU.toUpperCase() → item (fast combo lookup)
 let master = [], allCusts = [], allTypes = [], allPlatings = [],
-    allSkus = [], allFYs = [], allTaxons = [];
+    allSkus = [], allFYs = [], allTaxons = [], allMotifs = [], allCollections = [];
 let currentFY = "", previousFY = "", todayISO = "",
     yesterdayISO = "", currentMonthKey = "";
 let grandNetRevenue = 0, grandFinalQty = 0;
@@ -4890,6 +4926,19 @@ function renderTypeChecks(){
       return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
     }).join('') || '<span class="small-note">No types</span>';
   });
+}
+
+function renderMotifCollectionSelects(){
+  const fill = (id, opts, label) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">All ${label}</option>` +
+      (opts || []).map(v => `<option value="${escHtml(v)}"${v===cur?' selected':''}>${escHtml(v)}</option>`).join('');
+  };
+  fill('fMotif', allMotifs, 'Motifs');       fill('fCollection', allCollections, 'Collections');
+  fill('rMotif', allMotifs, 'Motifs');       fill('rCollection', allCollections, 'Collections');
+  fill('iMotif', allMotifs, 'Motifs');       fill('iCollection', allCollections, 'Collections');
 }
 
 let allPacks = [];
@@ -5362,6 +5411,8 @@ function loadData(force){
       _masterSkuMap = {}; master.forEach(it => { if(it&&it.sku) _masterSkuMap[String(it.sku).toUpperCase()] = it; });
       allCusts = d.customers || [];
       allTypes = d.types || [];
+      allMotifs = d.motifs || [];
+      allCollections = d.collections || [];
       allPlatings = d.platings || [];
       allSkus = d.skus || [];
       allFYs = d.fys || [];
@@ -5386,6 +5437,7 @@ function loadData(force){
       const fyHtml = '<option value="All FYs">All FYs</option>' + allFYs.map(f => `<option value="${f}">${f}</option>`).join('');
 
       renderTypeChecks();
+      renderMotifCollectionSelects();
       renderPackChecks();
       ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = taxHtml; });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
@@ -5467,6 +5519,8 @@ function applyF(){
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('fType');
   const taxonQ = document.getElementById('fTaxon')?.value || 'All';
+  const motifQ = document.getElementById('fMotif')?.value || '';
+  const collQ = document.getElementById('fCollection')?.value || '';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
   const fyQ = document.getElementById('fFY')?.value || 'All FYs';
   const plat = document.getElementById('fPlat')?.value || 'All';
@@ -5494,6 +5548,8 @@ function applyF(){
     if (txt && !hay.includes(txt)) return;
     if (selected.length > 0 && !selected.includes(item.sku)) return;
     if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
+    if (motifQ && item.motif !== motifQ) return;
+    if (collQ && item.collection !== collQ) return;
     if (statusQ !== 'All' && item.status !== statusQ) return;
     if (fyQ !== 'All FYs' && !(item.sales_entries || []).some(e => e.fy === fyQ)) return;
     if (plat !== 'All' && item.plating !== plat) return;
@@ -5597,7 +5653,7 @@ function applyF(){
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
-  ['fTaxon','fStatus','fFY','fPlat','fLaunch'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
+  ['fTaxon','fStatus','fFY','fPlat','fLaunch','fMotif','fCollection'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : (id==='fMotif'||id==='fCollection') ? '' : 'All'; });
   document.querySelectorAll('#fTypeChecks input:checked').forEach(c => c.checked = false);
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
   selectedSkuSet.clear();
@@ -5632,6 +5688,8 @@ function applyRO(){
   const txt = (document.getElementById('rSearch')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('rType');
   const taxQ = document.getElementById('rTaxon')?.value || 'All';
+  const motifQ = document.getElementById('rMotif')?.value || '';
+  const collQ = document.getElementById('rCollection')?.value || '';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const d1 = document.getElementById('rD1')?.value || '';
   const d2 = document.getElementById('rD2')?.value || '';
@@ -5656,6 +5714,8 @@ function applyRO(){
     if (pastedSkuSet) return pastedSkuSet.has(String(item.sku).toUpperCase());
     if (txt && !item.sku.toLowerCase().includes(txt)) return false;
     if (taxQ !== 'All' && item.taxon !== taxQ) return false;
+    if (motifQ && item.motif !== motifQ) return false;
+    if (collQ && item.collection !== collQ) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
     // Hide SKUs where Stone Details/Remarks (combo_skus) contains the word "customer"
     if ((item.combo_skus || '').toLowerCase().includes('customer')) return false;
@@ -5673,29 +5733,69 @@ function applyRO(){
     return true;
   });
 
+  // Channel-aware WIP: if exactly one channel selected, sort/display use its specific WIP.
+  // (Computed early so it can be baked into each row below — keeps sort and on-screen
+  // values 100% consistent, which was the root cause of the "wrong sort" issue.)
+  const singleType = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
+
   filtered = filtered.map(item => {
     const fe = (item.sales_entries || []).filter(entOk);
     const totalRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = fe.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
+
+    // Channel-aware WIP (matches what the row actually displays)
+    let fWip;
+    if (singleType && singleType.includes('website')) fWip = parseInt(item.inv_wip_website) || 0;
+    else if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) fWip = parseInt(item.inv_wip_sor) || 0;
+    else if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) fWip = parseInt(item.inv_wip_designer) || 0;
+    else fWip = parseInt(item.inv_wip) || 0;
+
+    // Channel/date-aware 7d/15d/30d sale qty (matches what the row actually displays)
+    let fQ7, fQ15, fQ30;
+    if (typeSel.length > 0) {
+      const now = todayISO || new Date().toISOString().slice(0,10);
+      const d7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
+      const d15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
+      const d30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
+      fQ7  = fe.filter(e=>e.date!=='N/A'&&e.date>=d7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+      fQ15 = fe.filter(e=>e.date!=='N/A'&&e.date>=d15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+      fQ30 = fe.filter(e=>e.date!=='N/A'&&e.date>=d30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+    } else {
+      fQ7  = item.qty_7d  || 0;
+      fQ15 = item.qty_15d || 0;
+      fQ30 = item.qty_1m  || 0;
+    }
+
     return {
       ...item,
       _fe: fe,
       _fRev: totalRev,
       _fQty: totalQty,
+      _fWip: fWip,
+      _fQ7: fQ7,
+      _fQ15: fQ15,
+      _fQ30: fQ30,
       _customer_count: new Set(fe.map(e=>e.cust)).size
     };
   });
+
+  // Map header sort-keys to the channel/filter-aware fields computed above, so the
+  // sort order always matches exactly what's shown on screen for that column.
+  const SORT_FIELD_MAP = { qty_7d: '_fQ7', qty_15d: '_fQ15', qty_1m: '_fQ30', final_qty: '_fQty', inv_wip: '_fWip' };
 
   filtered.sort((a,b) => {
     if (roSortKey === 'sku') {
       const sa = String(a.sku || '').toUpperCase();
       const sb = String(b.sku || '').toUpperCase();
-      return roSortDir * (sa < sb ? 1 : sa > sb ? -1 : 0);
+      // roSortDir === -1 -> descending (Z→A), roSortDir === 1 -> ascending (A→Z)
+      return roSortDir * (sa < sb ? -1 : sa > sb ? 1 : 0);
     }
+    const mapped = SORT_FIELD_MAP[roSortKey];
     const fb = drill ? '_fRev' : 'total_net_revenue';
-    const va = Number(a[roSortKey] ?? a[fb] ?? 0);
-    const vb = Number(b[roSortKey] ?? b[fb] ?? 0);
-    return roSortDir * (vb - va);
+    const va = Number((mapped ? a[mapped] : a[roSortKey]) ?? a[fb] ?? 0);
+    const vb = Number((mapped ? b[mapped] : b[roSortKey]) ?? b[fb] ?? 0);
+    // roSortDir === -1 -> descending (high→low), roSortDir === 1 -> ascending (low→high)
+    return roSortDir * (va - vb);
   });
 
   roFiltered = filtered;
@@ -5706,7 +5806,6 @@ function applyRO(){
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
 
   // Channel-aware WIP: if exactly one channel selected, show its specific WIP column
-  const singleType = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const wipSum = filtered.reduce((s,i) => {
     if (singleType && singleType.includes('website')) return s + (parseInt(i.inv_wip_website) || 0);
     if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) return s + (parseInt(i.inv_wip_sor) || 0);
@@ -5853,28 +5952,10 @@ function applyRO(){
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
     const stk = parseInt(item.inv_stock) || 0;
-    // Channel-aware WIP per row
-    let wip;
-    if (singleType && singleType.includes('website')) wip = parseInt(item.inv_wip_website) || 0;
-    else if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) wip = parseInt(item.inv_wip_sor) || 0;
-    else if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) wip = parseInt(item.inv_wip_designer) || 0;
-    else wip = parseInt(item.inv_wip) || 0;
-    // Channel-aware sale qty per row
-    let q7, q15, q30;
-    if (!roNoFilter && typeSel.length > 0) {
-      const fe = item._fe || [];
-      const now = todayISO || new Date().toISOString().slice(0,10);
-      const d7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
-      const d15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
-      const d30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
-      q7  = fe.filter(e=>e.date!=='N/A'&&e.date>=d7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q15 = fe.filter(e=>e.date!=='N/A'&&e.date>=d15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q30 = fe.filter(e=>e.date!=='N/A'&&e.date>=d30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-    } else {
-      q7  = item.qty_7d  || 0;
-      q15 = item.qty_15d || 0;
-      q30 = item.qty_1m  || 0;
-    }
+    // Channel-aware WIP per row (precomputed above, identical to sort value)
+    const wip = item._fWip;
+    // Channel-aware sale qty per row (precomputed above, identical to sort value)
+    const q7 = item._fQ7, q15 = item._fQ15, q30 = item._fQ30;
     const qty = roNoFilter ? (item.final_qty || 0) : (item._fQty ?? item.final_qty ?? 0);
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
@@ -6095,6 +6176,8 @@ function resetRO(){
   document.querySelectorAll('#rTypeChecks input:checked').forEach(c => c.checked = false);
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   const rx = document.getElementById('rTaxon'); if (rx) rx.value='All';
+  const rm = document.getElementById('rMotif'); if (rm) rm.value='';
+  const rc = document.getElementById('rCollection'); if (rc) rc.value='';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
   const pinfo = document.getElementById('rPasteInfo'); if (pinfo) pinfo.textContent = '';
@@ -6405,6 +6488,9 @@ function applyRoleUI(){
   // Profit Margin SIRF admin ko (cost/margin sensitive).
   const pmBtn = document.getElementById('m14');
   if (pmBtn) pmBtn.style.display = isEmployee ? 'none' : '';
+  // Motif Tagger SIRF admin ko (CLIP batch tool — heavy/sensitive).
+  const motifBtn = document.getElementById('m18');
+  if (motifBtn) motifBtn.style.display = isEmployee ? 'none' : '';
   // Insights "Sort By" me revenue option employee ko na dikhe → sirf Qty.
   const iSort = document.getElementById('iSort');
   if (iSort) {
@@ -7655,6 +7741,8 @@ function renderInsights(){
 
   const typeSel = getSelectedTypes('iType');
   const taxonQ = document.getElementById('iTaxon')?.value || 'All';
+  const motifQ = document.getElementById('iMotif')?.value || '';
+  const collQ = document.getElementById('iCollection')?.value || '';
   const d1 = document.getElementById('iD1')?.value || '';
   const d2 = document.getElementById('iD2')?.value || '';
 
@@ -7669,8 +7757,10 @@ function renderInsights(){
 
   const items = (master || []).filter(i => {
     if (taxonQ !== 'All' && i.taxon !== taxonQ) return false;
+    if (motifQ && i.motif !== motifQ) return false;
+    if (collQ && i.collection !== collQ) return false;
     const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinDate(e));
-    if (!typeSel.length && !(d1 || d2) && taxonQ === 'All') return true;
+    if (!typeSel.length && !(d1 || d2) && taxonQ === 'All' && !motifQ && !collQ) return true;
     return ents.length > 0;
   }).map(i => {
     const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinDate(e));
@@ -7831,6 +7921,8 @@ function applyInsights(){
 function resetInsights(){
   document.querySelectorAll('#iTypeChecks input:checked').forEach(c => c.checked = false);
   const tx = document.getElementById('iTaxon'); if (tx) tx.value = 'All';
+  const im = document.getElementById('iMotif'); if (im) im.value = '';
+  const ic = document.getElementById('iCollection'); if (ic) ic.value = '';
   const d1 = document.getElementById('iD1'); if (d1) d1.value = '';
   const d2 = document.getElementById('iD2'); if (d2) d2.value = '';
   renderInsights();
@@ -8374,6 +8466,8 @@ def _build_role_gz(role, force=False):
         "inventory":     comp,
         "taxons":        tx,
         "types":         ty,
+        "motifs":        sorted({i.get("motif") for i in comp if i.get("motif")}),
+        "collections":   sorted({i.get("collection") for i in comp if i.get("collection")}),
         "customers":     cu,
         "platings":      pl,
         "skus":          sk,
@@ -9736,6 +9830,270 @@ def api_smart_search():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  🏷️  MOTIF + COLLECTION TAGGER — CLIP zero-shot classification
+#  Har unique SKU ki photo (Inventory sheet ke "Image Link" se) CLIP
+#  model se classify hoti hai: "Motif" (tiger/lion/peacock/etc.) aur
+#  "Collection" (Religious / Non-Religious). FREE — koi external API
+#  nahi, wahi CLIP model use hota hai jo Smart Search ke liye load
+#  hota hai. One-time batch job — admin "Build Tags" click karta hai,
+#  result CSV download ho jaati hai (SKU, Motif, Collection columns),
+#  jise Inventory sheet mein paste/VLOOKUP kar sakte ho.
+# ════════════════════════════════════════════════════════════════
+MOTIF_INDEX_FILE = "motif_index.pkl"
+MOTIF_LABELS = [
+    "tiger", "lion", "elephant", "horse", "deer", "peacock", "owl",
+    "eagle or hawk", "parrot or bird", "butterfly", "dragonfly", "fish",
+    "snake or serpent", "scorpion", "floral or flower", "leaf or vine",
+    "paisley", "geometric pattern", "heart", "star", "moon and star",
+    "sun", "crown", "skull", "om symbol", "lotus", "trishul or damru",
+    "cross", "anchor", "alphabet or initial letter", "beads or chain",
+    "abstract or plain design",
+]
+# Religious figure ke liye dedicated god/deity labels — agar in mein se
+# koi best-match hua to Collection = Religious, warna Non-Religious.
+RELIGIOUS_MOTIF_LABELS = [
+    "Hindu god or goddess idol (Ganesha, Lakshmi, Krishna, Shiva, Durga)",
+    "Buddha statue", "religious deity figure", "om symbol", "lotus",
+    "trishul or damru", "cross (Christian religious symbol)",
+]
+_MOTIF = {"building": False,
+          "progress": {"done": 0, "total": 0, "status": "idle", "error": ""},
+          "results": None}
+
+def _motif_label_embeddings():
+    """Motif aur Religious label text-embeddings — ek baar compute karke cache."""
+    if _MOTIF.get("motif_embs") is None:
+        _clip_load_model()
+        m_embs = np.vstack([_clip_text_embed(f"a jewellery piece with a {lbl} design")
+                             for lbl in MOTIF_LABELS])
+        r_embs = np.vstack([_clip_text_embed(f"a jewellery piece shaped like a {lbl}")
+                             for lbl in RELIGIOUS_MOTIF_LABELS])
+        _MOTIF["motif_embs"] = m_embs
+        _MOTIF["religious_embs"] = r_embs
+    return _MOTIF["motif_embs"], _MOTIF["religious_embs"]
+
+def _classify_motif_collection(img_emb):
+    """Ek image-embedding se (motif, motif_score, collection, collection_score) return karta hai."""
+    m_embs, r_embs = _motif_label_embeddings()
+    m_sims = m_embs @ img_emb
+    best_m = int(np.argmax(m_sims))
+    motif = MOTIF_LABELS[best_m].split(" or ")[0].title()
+    motif_score = round(float(m_sims[best_m]) * 100, 1)
+
+    r_sims = r_embs @ img_emb
+    best_r = int(np.argmax(r_sims))
+    relig_score = round(float(r_sims[best_r]) * 100, 1)
+    # Religious tabhi maanenge jab religious-label ka match motif-label ke
+    # best generic match se bhi zyada confident ho (threshold se bachta hai).
+    is_religious = relig_score >= max(motif_score, 22.0)
+    collection = "Religious" if is_religious else "Non-Religious"
+    return motif, motif_score, collection, relig_score if is_religious else motif_score
+
+def _build_motif_index_worker():
+    """One-time background job: unique SKU images → CLIP embed → motif+collection tag."""
+    from concurrent.futures import ThreadPoolExecutor
+    prog = _MOTIF["progress"]
+    try:
+        comp = get_data()[0]
+        seen_sku = set()
+        targets = []
+        for i in comp:
+            sku = i.get("sku", "")
+            url = str(i.get("image_url", "")).strip()
+            if not sku or sku in seen_sku or not url or url.lower() == "nan":
+                continue
+            seen_sku.add(sku)
+            targets.append((sku, url))
+
+        prog.update({"done": 0, "total": len(targets), "ok": 0, "fail": 0,
+                     "status": "building", "error": ""})
+        if not targets:
+            prog.update({"status": "error", "error": "No Image Link URLs found in the inventory sheet."})
+            return
+
+        try:
+            _clip_load_model()
+            _motif_label_embeddings()
+        except Exception as e:
+            prog.update({"status": "error", "error": "AI encoder failed to start: " + str(e)[:220]})
+            return
+
+        results = []
+        batch_imgs, batch_skus = [], []
+
+        def flush():
+            nonlocal batch_imgs, batch_skus
+            if not batch_imgs:
+                return
+            try:
+                vecs = _clip_image_embed_batch(batch_imgs)
+                for sku, vec in zip(batch_skus, vecs):
+                    motif, mscore, coll, cscore = _classify_motif_collection(vec)
+                    results.append({"sku": sku, "motif": motif, "motif_score": mscore,
+                                    "collection": coll, "collection_score": cscore})
+            except Exception as e:
+                print("motif batch encode failed:", e)
+            batch_imgs, batch_skus = [], []
+
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            for sku, img in zip([t[0] for t in targets],
+                                ex.map(lambda t: _fetch_catalog_image(t[1]), targets)):
+                prog["done"] += 1
+                if img is not None:
+                    prog["ok"] += 1
+                    batch_imgs.append(img); batch_skus.append(sku)
+                    if len(batch_imgs) >= 16:
+                        flush()
+                else:
+                    prog["fail"] += 1
+        flush()
+
+        if not results:
+            prog.update({"status": "error",
+                         "error": "Koi bhi image download/encode nahi ho payi. Image Link column check karo."})
+            return
+
+        with open(MOTIF_INDEX_FILE, "wb") as f:
+            pickle.dump(results, f)
+        _MOTIF["results"] = results
+        prog.update({"status": "ready"})
+        print(f"Motif/Collection tagging READY: {len(results)} SKUs -> {MOTIF_INDEX_FILE}")
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        prog.update({"status": "error", "error": str(e)[:300]})
+    finally:
+        _MOTIF["building"] = False
+
+def _motif_load_results():
+    if _MOTIF["results"] is None and os.path.exists(MOTIF_INDEX_FILE):
+        try:
+            with open(MOTIF_INDEX_FILE, "rb") as f:
+                _MOTIF["results"] = pickle.load(f)
+        except Exception as e:
+            print("motif index load failed:", e)
+    return _MOTIF["results"]
+
+@app.route("/api/motif-index", methods=["POST"])
+def api_motif_index():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin only"}), 401
+    if _MOTIF["building"]:
+        return jsonify({"status": "building", **_MOTIF["progress"]})
+    force = request.args.get("force", "").lower() == "true"
+    if not force and _motif_load_results() is not None:
+        return jsonify({"status": "ready", "count": len(_MOTIF["results"])})
+    _MOTIF["building"] = True
+    _MOTIF["progress"] = {"done": 0, "total": 0, "status": "building", "error": ""}
+    threading.Thread(target=_build_motif_index_worker, daemon=True).start()
+    return jsonify({"status": "building", **_MOTIF["progress"]})
+
+@app.route("/api/motif-index-status")
+def api_motif_index_status():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin only"}), 401
+    if not _MOTIF["building"] and _motif_load_results() is not None:
+        return jsonify({"status": "ready", "count": len(_MOTIF["results"])})
+    return jsonify({"status": _MOTIF["progress"].get("status", "idle"), **_MOTIF["progress"]})
+
+@app.route("/api/motif-export")
+def api_motif_export():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin only"}), 401
+    results = _motif_load_results()
+    if not results:
+        return jsonify({"error": "Tags abhi build nahi hui — pehle 'Build Tags' click karo."}), 400
+    lines = ["SKU,Motif,Motif Confidence %,Collection,Collection Confidence %"]
+    for r in results:
+        sku = str(r["sku"]).replace('"', '""')
+        motif = str(r["motif"]).replace('"', '""')
+        lines.append(f'"{sku}","{motif}",{r["motif_score"]},"{r["collection"]}",{r["collection_score"]}')
+    csv_text = "\n".join(lines)
+    return Response(csv_text, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=motif_collection_tags.csv"})
+
+@app.route("/admin/motif-tagger")
+def admin_motif_tagger_page():
+    if session.get("role") != "admin":
+        return "Admin login required", 401
+    return render_template_string(MOTIF_TAGGER_HTML)
+
+MOTIF_TAGGER_HTML = """
+<!doctype html><html><head><meta charset="utf-8">
+<title>Motif & Collection Tagger</title>
+<style>
+  body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;background:#0f1115;color:#eee;
+       max-width:680px;margin:40px auto;padding:0 20px}
+  h1{font-size:20px;margin-bottom:4px}
+  p.sub{opacity:.65;font-size:13px;margin-top:0}
+  button{background:#4f7cff;color:#fff;border:none;padding:12px 22px;border-radius:8px;
+         font-size:14px;cursor:pointer;font-weight:600}
+  button:disabled{opacity:.5;cursor:default}
+  button.secondary{background:#2a2d36}
+  .card{background:#181b22;border:1px solid #262a33;border-radius:12px;padding:20px;margin-top:18px}
+  .prog-bar{background:#262a33;border-radius:6px;height:10px;overflow:hidden;margin-top:10px}
+  .prog-fill{background:#4f7cff;height:100%;width:0%;transition:width .4s}
+  #note{margin-top:14px;font-size:13px;line-height:1.6;opacity:.85}
+  .err{color:#ff6b6b}
+  .ok{color:#5fd97a}
+  a.dl{color:#7da9ff}
+</style></head>
+<body>
+  <h1>🏷️ Motif &amp; Collection Tagger</h1>
+  <p class="sub">Inventory sheet ke "Image Link" se har unique SKU ki photo dekh kar
+     Motif (tiger/lion/peacock…) aur Collection (Religious/Non-Religious) tag karta hai.
+     Free CLIP model — koi external API cost nahi. Ek baar build karo, CSV download karo,
+     Inventory sheet mein paste/VLOOKUP kar do.</p>
+  <div class="card">
+    <button id="buildBtn" onclick="buildTags()">Build Tags</button>
+    <button id="rebuildBtn" class="secondary" onclick="buildTags(true)" style="display:none">Rebuild (force)</button>
+    <a id="dlLink" class="dl" href="/api/motif-export" style="display:none;margin-left:14px">⬇ Download CSV</a>
+    <div id="note"></div>
+    <div class="prog-bar" id="bar" style="display:none"><div class="prog-fill" id="barFill"></div></div>
+  </div>
+<script>
+let POLL=null;
+async function buildTags(force){
+  const note=document.getElementById('note'), bar=document.getElementById('bar'),
+        fill=document.getElementById('barFill'), btn=document.getElementById('buildBtn'),
+        dl=document.getElementById('dlLink'), rb=document.getElementById('rebuildBtn');
+  btn.disabled=true; dl.style.display='none';
+  try{
+    const r=await fetch('/api/motif-index'+(force?'?force=true':''),{method:'POST'});
+    const d=await r.json();
+    handle(d);
+    if(d.status==='building'){
+      if(POLL) clearInterval(POLL);
+      POLL=setInterval(async()=>{
+        const s=await (await fetch('/api/motif-index-status')).json();
+        handle(s);
+        if(s.status==='ready'||s.status==='error'){ clearInterval(POLL); POLL=null; btn.disabled=false; }
+      },3000);
+    } else { btn.disabled=false; }
+  }catch(e){ note.innerHTML='<span class="err">⚠ '+e.message+'</span>'; btn.disabled=false; }
+}
+function handle(d){
+  const note=document.getElementById('note'), bar=document.getElementById('bar'),
+        fill=document.getElementById('barFill'), dl=document.getElementById('dlLink'),
+        rb=document.getElementById('rebuildBtn');
+  if(d.status==='ready'){
+    bar.style.display='none';
+    note.innerHTML='<span class="ok">✔ Ready — '+(d.count||'')+' SKUs tagged.</span>';
+    dl.style.display='inline'; rb.style.display='inline-block';
+  } else if(d.status==='building'){
+    bar.style.display='block';
+    const pct = d.total? Math.round((d.done||0)*100/d.total) : 0;
+    fill.style.width=pct+'%';
+    note.innerHTML='Building… '+(d.done||0)+'/'+(d.total||0)+' ('+pct+'%) — '+(d.ok||0)+' ok, '+(d.fail||0)+' failed';
+  } else if(d.status==='error'){
+    bar.style.display='none';
+    note.innerHTML='<span class="err">⚠ '+(d.error||'failed')+'</span>';
+  }
+}
+</script>
+</body></html>
+"""
 
 @app.route("/api/upload-report", methods=["POST"])
 def api_upload_report():
