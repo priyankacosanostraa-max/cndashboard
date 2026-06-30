@@ -849,9 +849,12 @@ def _refresh_data():
         custs.add(cust); types_.add(typ)
         if fy != "N/A": fyears.add(fy)
 
-        # Return amount = return qty × us transaction ki selling price (COSSA F × H)
-        entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
+        # MEMORY: ret_amt hata diya (ret*sp se recompute), ret sirf jab return ho.
+        # sp rakha (avg/last selling price ke liye zaroori).
+        entry = {"qty":qty,"rev":rev,"sp":sp,
                  "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),"fy":_si(fy)}
+        if ret:
+            entry["ret"] = ret
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
         sales_exact[mapped_sku]["entries"].append(entry)
@@ -935,8 +938,10 @@ def _refresh_data():
         for e in ent:
             d=e["date"]; q=e["qty"]; rv=e["rev"]
             tot_rev+=rv; tot_qty+=q
-            tot_ret += e.get("ret") or 0
-            tot_ret_amt += e.get("ret_amt") or 0
+            _r = e.get("ret") or 0
+            tot_ret += _r
+            if _r:
+                tot_ret_amt += _r * (e.get("sp") or 0)
             custs.add(e["cust"])
             if e["fy"]==fy_current: rev_fy+=rv
             elif e["fy"]==fy_previous: rev_pfy+=rv
@@ -8414,7 +8419,12 @@ function renderInsights(){
     const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
     const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
-    const totalRetAmt = ents.reduce((s,e) => s + (parseFloat(e.ret_amt) || 0), 0);
+    const totalRetAmt = ents.reduce((s,e) => {
+      const ret = parseFloat(e.ret) || 0;
+      if (!ret) return s;
+      const sp = parseFloat(e.sp) || (parseFloat(e.qty) ? (parseFloat(e.rev)||0)/parseFloat(e.qty) : 0);
+      return s + ret * sp;
+    }, 0);
     const lastDate = ents.length ? ents.map(e => e.date).filter(Boolean).sort().slice(-1)[0] : 'N/A';
     const firstDate = ents.length ? ents.map(e => e.date).filter(Boolean).sort()[0] : 'N/A';
     return {...i, _iEnts: ents, _iRev: totalRev, _iQty: totalQty, _iRet: totalRet, _iRetAmt: totalRetAmt, _firstDate:firstDate, _lastDate:lastDate, _typeList:[...new Set(ents.map(e => e.type))].join(', ')};
