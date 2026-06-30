@@ -4917,7 +4917,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
-    <button class="app-chip" onclick="showTab('ai')">✦ AI</button>
     <button class="app-chip" onclick="doLogout()" style="border-color:rgba(220,38,38,.4);color:#dc2626">Sign Out</button>
   </div>
 </div>
@@ -4935,7 +4934,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
-  <button class="menu-item" id="m8" onclick="showTab('ai')">AI Studio</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
