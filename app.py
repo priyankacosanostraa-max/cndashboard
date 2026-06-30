@@ -1379,6 +1379,957 @@ def vision_search(img_bytes, inventory, top_k=10):
 
 
 
+# ── AI STUDIO (Dashboard Chat Assistant) ────────────────────
+AI_CHAT_MODEL = "gemini-2.0-flash"
+_AI_CLIENT = None
+
+def _gemini_client():
+    """Lazy Gemini client — returns None if key missing/invalid so the
+    local fallback engine can take over."""
+    global _AI_CLIENT
+    if _AI_CLIENT is None and GEMINI_KEY and GENAI_AVAILABLE:
+        try:
+            _AI_CLIENT = genai.Client(api_key=GEMINI_KEY)
+        except Exception as e:
+            print("AI Studio: Gemini client init failed:", e)
+    return _AI_CLIENT
+
+_AI_METRICS = {
+    "total_net_revenue": "Net Revenue (all time)",
+    "final_qty":         "Final Qty (all time units)",
+    "qty_7d":  "Qty last 7 days",  "qty_15d": "Qty last 15 days",
+    "qty_1m":  "Qty last 1 month", "qty_3m":  "Qty last 3 months",
+    "qty_6m":  "Qty last 6 months","qty_1y":  "Qty last 1 year",
+    "rev_yesterday": "Revenue yesterday", "rev_month": "Revenue this month",
+    "rev_fy": "Revenue this FY", "rev_prev_fy": "Revenue previous FY",
+    "inv_stock": "Inventory stock", "inv_wip": "WIP stock",
+    "total_inv": "Total inventory (stock+WIP)", "mrp": "MRP",
+    "forecast_30d": "30-day forecast", "dispatch_count": "Dispatch count",
+    "customer_count": "Unique customers",
+}
+
+def _ai_norm(s):
+    return re.sub(r"[^A-Z0-9]", "", str(s).upper())
+
+def _ai_find_skus_in_text(text, comp):
+    """Detect SKU codes mentioned in the user's message (exact normalized
+    match first, then prefix / base-SKU fallback)."""
+    by_norm = {}
+    for i in comp:
+        k = _ai_norm(i.get("sku", ""))
+        if k and k not in by_norm:
+            by_norm[k] = i
+    found, seen = [], set()
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9\-_/\.]{2,}", text)
+    for tok in tokens:
+        k = _ai_norm(tok)
+        if len(k) < 3 or k in seen:
+            continue
+        if not re.search(r"\d", k):       # SKU codes contain digits
+            continue
+        item = by_norm.get(k)
+        if item is None:
+            pref = [v for nk, v in by_norm.items() if nk.startswith(k)]
+            if 1 <= len(pref) <= 6:
+                for p in pref:
+                    nk = _ai_norm(p["sku"])
+                    if nk not in seen:
+                        seen.add(nk); found.append(p)
+                continue
+        if item is not None:
+            seen.add(k); found.append(item)
+    return found[:24]
+
+def _ai_match_canon(val, options):
+    """Loose match a value (e.g. taxon typed by user/Gemini) to canonical list."""
+    if not val:
+        return ""
+    v = str(val).strip().lower()
+    for o in options:
+        if str(o).lower() == v:
+            return o
+    for o in options:
+        ol = str(o).lower()
+        if v in ol or ol in v:
+            return o
+    m = difflib.get_close_matches(v, [str(o).lower() for o in options], n=1, cutoff=0.75)
+    if m:
+        for o in options:
+            if str(o).lower() == m[0]:
+                return o
+    return ""
+
+# ── AI FORECASTING (Prophet + trend fallback) ───────────────
+_PROPHET_OK = None
+
+def _prophet_available():
+    global _PROPHET_OK
+    if _PROPHET_OK is None:
+        try:
+            import logging as _lg
+            for nm in ("prophet", "cmdstanpy"):
+                _lg.getLogger(nm).setLevel(_lg.ERROR)
+            from prophet import Prophet  # noqa
+            _PROPHET_OK = True
+        except Exception:
+            _PROPHET_OK = False
+            print("Prophet not installed — trend forecast use hoga. "
+                  "(Colab: !pip install prophet)")
+    return _PROPHET_OK
+
+def _ai_daily_series(comp, f, lookback_days, today):
+    """Daily {date: {rev, qty}} for entries matching type/customer/taxon filters."""
+    typ   = str(f.get("type") or "").strip().lower()
+    cust  = str(f.get("customer") or "").strip().lower()
+    taxon = str(f.get("taxon") or "").strip().lower()
+    start = (today - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    daily = {}
+    for i in comp:
+        if taxon and taxon not in str(i.get("taxon", "")).lower():
+            continue
+        for e in i.get("sales_entries", []):
+            d = e.get("date", "N/A")
+            if d == "N/A" or d < start:
+                continue
+            if typ and typ not in str(e.get("type", "")).lower(): continue
+            if cust and cust not in str(e.get("cust", "")).lower(): continue
+            slot = daily.setdefault(d, {"rev": 0.0, "qty": 0.0})
+            slot["rev"] += float(e.get("rev") or 0)
+            slot["qty"] += float(e.get("qty") or 0)
+    return daily
+
+def _forecast_series(daily, key, days_ahead, today):
+    """Forecast next `days_ahead` daily values. Prophet if available,
+    else weighted moving-average trend. Returns (list, method)."""
+    if days_ahead <= 0:
+        return [], "none"
+    dates = sorted(daily.keys())
+    vals  = [daily[d][key] for d in dates]
+    # need a continuous daily frame (fill missing days with 0)
+    if dates:
+        d0 = datetime.strptime(dates[0], "%Y-%m-%d")
+        frame, cur = [], d0
+        end = today.replace(tzinfo=None)
+        dd = {d: daily[d][key] for d in dates}
+        while cur <= end:
+            ds = cur.strftime("%Y-%m-%d")
+            frame.append((ds, float(dd.get(ds, 0.0))))
+            cur += timedelta(days=1)
+    else:
+        frame = []
+
+    if len(frame) >= 14 and _prophet_available():
+        try:
+            from prophet import Prophet
+            import pandas as _pd
+            df = _pd.DataFrame({"ds": [a for a, _ in frame], "y": [b for _, b in frame]})
+            mdl = Prophet(weekly_seasonality=True, daily_seasonality=False,
+                          yearly_seasonality=False, interval_width=0.8)
+            mdl.fit(df)
+            fut = mdl.make_future_dataframe(periods=days_ahead)
+            fc  = mdl.predict(fut).tail(days_ahead)
+            return [max(0.0, float(v)) for v in fc["yhat"]], "prophet"
+        except Exception as e:
+            print("Prophet fit failed, trend fallback:", str(e)[:140])
+    # trend fallback: weighted avg (recent weeks heavier)
+    vals28 = [b for _, b in frame[-28:]] or [0.0]
+    vals7  = [b for _, b in frame[-7:]] or vals28
+    base = 0.6 * (sum(vals7) / max(len(vals7), 1)) + 0.4 * (sum(vals28) / max(len(vals28), 1))
+    return [base] * days_ahead, "trend"
+
+def _ai_exec_forecast(plan, comp, today):
+    """Project sales for the rest of the current month (default) or next N days.
+    Returns (items, summary)."""
+    f      = plan.get("filters") or {}
+    period = plan.get("period") or {}
+    top_n  = max(1, min(24, int(plan.get("top_n") or 10)))
+
+    # horizon: default = current month end
+    tn = today.replace(tzinfo=None)
+    if period.get("days_ahead"):
+        days_ahead = max(1, min(90, int(period["days_ahead"])))
+        horizon_label = f"next {days_ahead} days"
+        h_start = tn + timedelta(days=1)
+    else:
+        if tn.month == 12:
+            nxt = tn.replace(year=tn.year + 1, month=1, day=1)
+        else:
+            nxt = tn.replace(month=tn.month + 1, day=1)
+        month_end = nxt - timedelta(days=1)
+        days_ahead = max(0, (month_end - tn).days)
+        horizon_label = tn.strftime("%B %Y")
+        h_start = tn + timedelta(days=1)
+
+    daily = _ai_daily_series(comp, f, 120, tn)
+    month_pref = tn.strftime("%Y-%m")
+    mtd_rev = sum(v["rev"] for d, v in daily.items() if d.startswith(month_pref))
+    mtd_qty = sum(v["qty"] for d, v in daily.items() if d.startswith(month_pref))
+
+    fc_rev, method = _forecast_series(daily, "rev", days_ahead, tn)
+    fc_qty, _      = _forecast_series(daily, "qty", days_ahead, tn)
+    rem_rev, rem_qty = sum(fc_rev), sum(fc_qty)
+
+    # per-SKU projection from last-30d velocity (filter-aware)
+    typ   = str(f.get("type") or "").strip().lower()
+    cust  = str(f.get("customer") or "").strip().lower()
+    taxon = str(f.get("taxon") or "").strip().lower()
+    start30 = (tn - timedelta(days=30)).strftime("%Y-%m-%d")
+    per = []
+    for i in comp:
+        if taxon and taxon not in str(i.get("taxon", "")).lower():
+            continue
+        q30 = r30 = 0.0
+        for e in i.get("sales_entries", []):
+            d = e.get("date", "N/A")
+            if d == "N/A" or d < start30: continue
+            if typ and typ not in str(e.get("type", "")).lower(): continue
+            if cust and cust not in str(e.get("cust", "")).lower(): continue
+            q30 += float(e.get("qty") or 0); r30 += float(e.get("rev") or 0)
+        if q30 > 0:
+            pred_q = q30 / 30.0 * days_ahead
+            per.append({"item": i, "pred_qty": pred_q, "pred_rev": r30 / 30.0 * days_ahead})
+    per.sort(key=lambda x: x["pred_qty"], reverse=True)
+    items = [p["item"] for p in per[:top_n]]
+
+    flt_bits = {k: v for k, v in {"type": f.get("type"), "customer": f.get("customer"),
+                                  "taxon": f.get("taxon")}.items() if v}
+    summary = {
+        "action": "forecast", "method": method, "horizon": horizon_label,
+        "days_remaining": days_ahead, "filters": flt_bits,
+        "month_so_far": {"revenue": round(mtd_rev), "qty": int(round(mtd_qty))},
+        "projected_remaining": {"revenue": round(rem_rev), "qty": int(round(rem_qty))},
+        "projected_month_total": {"revenue": round(mtd_rev + rem_rev),
+                                  "qty": int(round(mtd_qty + rem_qty))},
+        "top_predicted_skus": [{"sku": p["item"]["sku"],
+                                "pred_qty": int(round(p["pred_qty"])),
+                                "pred_rev": round(p["pred_rev"])} for p in per[:top_n]],
+        "note": "prophet model" if method == "prophet" else
+                "trend model (install Prophet for better accuracy: run !pip install prophet in Colab)",
+    }
+    return items, summary
+
+_AI_MONTHS = {"jan":1,"january":1,"feb":2,"february":2,"mar":3,"march":3,"apr":4,"april":4,
+              "may":5,"jun":6,"june":6,"jul":7,"july":7,"aug":8,"august":8,
+              "sep":9,"sept":9,"september":9,"oct":10,"october":10,
+              "nov":11,"november":11,"dec":12,"december":12}
+
+def _ai_parse_period_text(m, today):
+    """Find a date / month-year / relative period mentioned in the message.
+    Returns dict like {"date_from","date_to"} or {"month":"YYYY-MM"} or {}."""
+    # explicit YYYY-MM
+    g = re.search(r"\b(20\d{2})[-/](0?[1-9]|1[0-2])\b", m)
+    if g:
+        return {"month": f"{g.group(1)}-{int(g.group(2)):02d}"}
+    # "june 2025" / "2025 june" / "june" alone
+    for name, num in sorted(_AI_MONTHS.items(), key=lambda x: -len(x[0])):
+        if re.search(r"\b" + name + r"\b", m):
+            y = re.search(r"\b(20\d{2})\b", m)
+            if y:
+                return {"month": f"{y.group(1)}-{num:02d}"}
+            yr = today.year if num <= today.month else today.year - 1
+            return {"month": f"{yr}-{num:02d}"}
+    # specific date like 5/6/2026 or 05-06-2026 (DD-MM-YYYY)
+    g = re.search(r"\b(0?[1-9]|[12]\d|3[01])[-/](0?[1-9]|1[0-2])[-/](20\d{2})\b", m)
+    if g:
+        d = f"{g.group(3)}-{int(g.group(2)):02d}-{int(g.group(1)):02d}"
+        return {"date_from": d, "date_to": d}
+    if re.search(r"\bkal\b|yesterday", m):
+        d = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+        return {"date_from": d, "date_to": d}
+    if re.search(r"\baaj\b|today", m):
+        d = today.strftime("%Y-%m-%d")
+        return {"date_from": d, "date_to": d}
+    if re.search(r"last\s*7|pichl\w*\s*7|7\s*din", m):
+        return {"date_from": (today - timedelta(days=7)).strftime("%Y-%m-%d"),
+                "date_to": today.strftime("%Y-%m-%d")}
+    if re.search(r"last\s*30|pichl\w*\s*30|30\s*din|last\s*month|pichl\w*\s*mah", m):
+        first_this = today.replace(day=1)
+        last_prev = first_this - timedelta(days=1)
+        if re.search(r"last\s*month|pichl\w*\s*mah", m):
+            return {"month": last_prev.strftime("%Y-%m")}
+        return {"date_from": (today - timedelta(days=30)).strftime("%Y-%m-%d"),
+                "date_to": today.strftime("%Y-%m-%d")}
+    if re.search(r"is\s*mah?ine|this\s*month", m):
+        return {"month": today.strftime("%Y-%m")}
+    g = re.search(r"\bfy\s*(20\d{2})[-–\s]*(\d{2,4})?", m)
+    if g:
+        y1 = g.group(1); y2 = g.group(2) or str(int(y1) + 1)[-2:]
+        return {"fy": f"FY {y1}-{y2[-2:]}"}
+    return {}
+
+def _ai_exec_transactions(plan, comp, today):
+    """Query at transaction (sales-entry) level: date range / month / FY /
+    sales Type (channel) / customer. Returns (items, summary)."""
+    f      = plan.get("filters") or {}
+    period = plan.get("period") or {}
+    top_n  = max(1, min(24, int(plan.get("top_n") or 12)))
+    want_skus = [_ai_norm(s) for s in (plan.get("skus") or [])]
+
+    typ   = str(f.get("type") or "").strip().lower()
+    cust  = str(f.get("customer") or "").strip().lower()
+    taxon = str(f.get("taxon") or "").strip().lower()
+    month = str(period.get("month") or "").strip()
+    fy    = str(period.get("fy") or "").strip().lower()
+    d_from = str(period.get("date_from") or "").strip()
+    d_to   = str(period.get("date_to") or "").strip()
+
+    per_sku, total_rev, total_qty, txn = {}, 0.0, 0.0, 0
+    type_break, cust_break = {}, {}
+    for i in comp:
+        if want_skus:
+            k = _ai_norm(i["sku"])
+            if not any(k == w or k.startswith(w) for w in want_skus):
+                continue
+        if taxon and taxon not in str(i.get("taxon", "")).lower():
+            continue
+        srev = sqty = 0.0; scount = 0
+        for e in i.get("sales_entries", []):
+            d = e.get("date", "N/A")
+            if month and not str(d).startswith(month): continue
+            if d_from and (d == "N/A" or d < d_from): continue
+            if d_to and (d == "N/A" or d > d_to): continue
+            if fy and fy not in str(e.get("fy", "")).lower(): continue
+            if typ and typ not in str(e.get("type", "")).lower(): continue
+            if cust and cust not in str(e.get("cust", "")).lower(): continue
+            srev += float(e.get("rev") or 0); sqty += float(e.get("qty") or 0); scount += 1
+            tkey = e.get("type", "Regular");  type_break[tkey] = type_break.get(tkey, 0.0) + float(e.get("rev") or 0)
+            ckey = e.get("cust", "Unknown");  cust_break[ckey] = cust_break.get(ckey, 0.0) + float(e.get("rev") or 0)
+        if scount:
+            per_sku[i["sku"]] = {"item": i, "rev": srev, "qty": sqty, "txn": scount}
+            total_rev += srev; total_qty += sqty; txn += scount
+
+    ranked = sorted(per_sku.values(), key=lambda x: x["rev"], reverse=True)
+    items  = [r["item"] for r in ranked[:top_n]]
+
+    if month:
+        plabel = month
+    elif d_from and d_from == d_to:
+        plabel = d_from
+    elif d_from or d_to:
+        plabel = f"{d_from or '…'} → {d_to or '…'}"
+    elif fy:
+        plabel = period.get("fy")
+    else:
+        plabel = "all time"
+
+    summary = {
+        "action": "transactions",
+        "period_label": plabel,
+        "filters": {k: v for k, v in {"type": f.get("type"), "customer": f.get("customer"),
+                                      "taxon": f.get("taxon")}.items() if v},
+        "total_revenue": round(total_rev), "total_qty": int(round(total_qty)),
+        "transactions": txn, "unique_skus": len(per_sku),
+        "top_skus": [{"sku": r["item"]["sku"], "revenue": round(r["rev"]),
+                      "qty": int(round(r["qty"])), "txns": r["txn"]} for r in ranked[:top_n]],
+        "type_breakup": {k: round(v) for k, v in sorted(type_break.items(), key=lambda x: -x[1])[:8]},
+        "top_customers": {k: round(v) for k, v in sorted(cust_break.items(), key=lambda x: -x[1])[:5]},
+    }
+    return items, summary
+
+def _ai_exec_briefing(comp, period_kpis):
+    """One-shot business briefing: KPIs, momentum, stock alerts, top movers."""
+    by_7d = sorted(comp, key=lambda i: float(i.get("qty_7d") or 0), reverse=True)
+    movers = [i for i in by_7d if float(i.get("qty_7d") or 0) > 0][:5]
+    zero_stock_selling = [i for i in comp
+                          if float(i.get("total_inv") or 0) <= 0 and float(i.get("qty_1m") or 0) > 0]
+    low_stock_fast = [i for i in comp
+                      if 0 < float(i.get("total_inv") or 0) <= 10 and float(i.get("qty_1m") or 0) >= 5]
+    slow = sum(1 for i in comp if float(i.get("qty_3m") or 0) == 0 and float(i.get("total_inv") or 0) > 0)
+    summary = {
+        "action": "briefing",
+        "kpis": period_kpis,
+        "total_skus": len(comp),
+        "top_movers_7d": [{"sku": i["sku"], "qty_7d": i["qty_7d"],
+                           "stock": i["total_inv"]} for i in movers],
+        "out_of_stock_but_selling": len(zero_stock_selling),
+        "low_stock_fast_sellers": len(low_stock_fast),
+        "slow_movers_with_stock": slow,
+        "restock_urgent": [i["sku"] for i in (zero_stock_selling + low_stock_fast)[:5]],
+    }
+    items = (zero_stock_selling[:3] + low_stock_fast[:3] + movers[:3])[:9]
+    # dedupe preserving order
+    seen, uniq = set(), []
+    for i in items:
+        if i["sku"] not in seen:
+            seen.add(i["sku"]); uniq.append(i)
+    return uniq, summary
+
+def _ai_default_plan():
+    return {"action": "aggregate", "skus": [], "filters": {}, "period": {},
+            "metric": "total_net_revenue", "sort": "desc", "top_n": 10}
+
+def _ai_parse_json(text):
+    if not text:
+        return None
+    t = text.strip()
+    t = re.sub(r"^```(?:json)?", "", t).strip()
+    t = re.sub(r"```$", "", t).strip()
+    m = re.search(r"\{.*\}", t, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except Exception:
+        return None
+
+def _ai_gemini_plan(cli, msg, history, taxons, statuses, platings, context_skus=None, sale_types=None):
+    """Step 1: ask Gemini to turn the question into a structured query plan."""
+    try:
+        hist_txt = "\n".join(f"{h.get('role','user')}: {h.get('text','')[:300]}"
+                             for h in history[-6:])
+        ctx_txt = (", ".join(context_skus[:10]) if context_skus else "none")
+        types_txt = ", ".join([str(t) for t in (sale_types or [])][:30]) or "Regular"
+        today = now_ist()
+        today_s = today.strftime("%Y-%m-%d")
+        yest_s  = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+        prompt = f"""You convert a question about a jewellery e-commerce dashboard into a JSON query plan.
+The dashboard has one record per SKU with these numeric fields:
+{json.dumps(_AI_METRICS, indent=1)}
+And text fields: sku, taxon (category), plating, status, combo_skus, first_dispatch_date, last_dispatch_date.
+Available taxons: {", ".join(taxons[:60])}
+Available statuses: {", ".join(statuses)}
+Available platings: {", ".join(platings[:40])}
+
+Each SKU also has "sales_entries": individual sale transactions with date (YYYY-MM-DD),
+qty, rev, fy, customer name and sales TYPE (channel). Available sales types: {types_txt}.
+Today is {today_s}, yesterday was {yest_s}.
+
+Reply ONLY with JSON (no markdown, no explanation) in this exact schema:
+{{
+ "action": "sku_lookup" | "filter_rank" | "aggregate" | "transactions" | "forecast" | "briefing" | "compare" | "chat",
+ "skus": ["exact SKU codes mentioned by user, else empty"],
+ "filters": {{"taxon":"", "plating":"", "status":"", "search":"", "type":"", "customer":"", "mrp_min":0, "mrp_max":0, "stock":"any|zero|low|in_stock"}},
+ "period": {{"month":"YYYY-MM or empty", "date_from":"YYYY-MM-DD or empty", "date_to":"YYYY-MM-DD or empty", "fy":"FY 2025-26 or empty"}},
+ "metric": "one key from the numeric fields above",
+ "sort": "desc|asc",
+ "top_n": 10
+}}
+Rules:
+- "top/best selling" => filter_rank, metric final_qty (or a qty_* period if a period is mentioned).
+- "highest revenue" => filter_rank, metric total_net_revenue (rev_month/rev_fy/rev_yesterday if period mentioned).
+- "out of stock / stock khatam" => filter_rank with filters.stock="zero", metric total_inv, sort asc.
+- "low stock / kam stock" => filters.stock="low".
+- "slow moving / not selling" => filter_rank, metric qty_3m, sort asc.
+- totals like "total revenue", "is mahine ki sale" => aggregate (set metric to the matching period field).
+- a specific SKU code => sku_lookup with that code in skus.
+- Use action "briefing" when the user asks for a business briefing/summary/daily report/overview.
+- Use action "compare" when the user asks to COMPARE last month with the same month last year /
+  month-on-month / YoY ("compare with last month", "pichhle saal ke is mahine se compare",
+  "month on month", "last month vs last year"). No skus/filters needed.
+- Use action "forecast" for FUTURE/prediction questions: "is mahine kitni sale HO SAKTI hai",
+  "agle mahine kitna bikega", "kaunse SKU bikenge", "expected/projected revenue". Channel like
+  Website/SOR => filters.type. For "agle N din" set period.days_ahead=N (add it inside "period").
+- Use action "transactions" whenever the question involves: a specific month/year
+  ("june 2025 me kitna revenue"), a specific date, "kal/aaj kya kya bika" (what sold
+  yesterday/today => set date_from=date_to to that date), a sales TYPE/channel like SOR
+  ("SOR me kitna revenue" => filters.type="SOR"), or a customer name. Fill "period" accordingly.
+- greetings/small-talk/questions not about data => action "chat".
+- The user often writes in Hinglish (Hindi+English mix).
+- CONTEXT SKUs currently being discussed: {ctx_txt}. If the question is a follow-up about them
+  (e.g. "last 7 days?", "iska revenue?", "30 din ka batao", "aur is mahine?") then use
+  action "sku_lookup" with those SKU codes in "skus" and set "metric" to the asked period/field.
+
+Conversation so far:
+{hist_txt}
+
+User question: {msg}"""
+        resp = cli.models.generate_content(model=AI_CHAT_MODEL, contents=prompt)
+        plan = _ai_parse_json(getattr(resp, "text", "") or "")
+        if not isinstance(plan, dict) or "action" not in plan:
+            return None
+        base = _ai_default_plan()
+        base.update({k: v for k, v in plan.items() if v is not None})
+        if not isinstance(base.get("filters"), dict):
+            base["filters"] = {}
+        return base
+    except Exception as e:
+        print("AI Studio: Gemini plan failed:", e)
+        return None
+
+def _ai_local_plan(msg, taxons, statuses, platings, sale_types=None, customers=None):
+    """Rule-based fallback planner (works without Gemini)."""
+    m = msg.lower()
+    plan = _ai_default_plan()
+    f = plan["filters"] = {}
+
+    # period → metric suffix
+    rev_metric, qty_metric = "total_net_revenue", "final_qty"
+    if re.search(r"\bkal\b|yesterday", m):
+        rev_metric, qty_metric = "rev_yesterday", "qty_7d"
+    elif re.search(r"is\s*mah?ine|this\s*month|mahina", m):
+        rev_metric, qty_metric = "rev_month", "qty_1m"
+    elif re.search(r"pichl\w*\s*(fy|saal|year)|previous\s*fy|last\s*fy", m):
+        rev_metric = "rev_prev_fy"
+    elif re.search(r"\bfy\b|financial\s*year|is\s*saal|this\s*year", m):
+        rev_metric, qty_metric = "rev_fy", "qty_1y"
+    elif re.search(r"7\s*d|7\s*din|week|hafte", m):
+        qty_metric = "qty_7d"
+    elif re.search(r"15\s*d|15\s*din", m):
+        qty_metric = "qty_15d"
+    elif re.search(r"30\s*d|30\s*din|1\s*mah|ek\s*mah|1\s*month|last\s*month", m):
+        rev_metric, qty_metric = "rev_month", "qty_1m"
+    elif re.search(r"3\s*m|3\s*mah|90\s*d", m):
+        qty_metric = "qty_3m"
+    elif re.search(r"6\s*m|6\s*mah|180\s*d", m):
+        qty_metric = "qty_6m"
+
+    if re.search(r"forecast|agla\s*mahin|next\s*month|aage\s*kitn", m):
+        qty_metric = rev_metric = "forecast_30d"
+
+    n = re.search(r"top\s*(\d+)|(\d+)\s*(?:sku|best|top)", m)
+    if n:
+        plan["top_n"] = max(1, min(24, int(n.group(1) or n.group(2))))
+
+    tx = _ai_match_canon(next((t for t in taxons if str(t).lower() in m), ""), taxons)
+    if not tx:
+        for t in taxons:
+            tl = str(t).lower()
+            if len(tl) >= 4 and tl in m:
+                tx = t; break
+    if tx: f["taxon"] = tx
+    for p in platings:
+        if len(str(p)) >= 4 and str(p).lower() in m:
+            f["plating"] = p; break
+
+    # transaction-level intent: explicit month/date/period + sales type/customer channel
+    today = now_ist()
+    period = _ai_parse_period_text(m, today)
+
+    # Daily briefing / business summary
+    if re.search(r"briefing|business\s*summary|daily\s*(report|summary)|aaj\s*ka\s*(summary|report)|"
+                 r"morning\s*report|how\s*is\s*(the\s*)?business|overview\s*do", m):
+        plan["action"] = "briefing"
+        return plan
+
+    # Compare-with-last-month / month-on-month YoY intent
+    if re.search(r"\bcompare\b|comparison|vs\s*last|last\s*month\s*(se|vs|comparison)|"
+                 r"pichl\w*\s*mah?in\w*\s*(se|tulna)|month\s*on\s*month|\bmom\b|"
+                 r"same\s*month\s*last\s*year|pichl\w*\s*saal\s*(ka)?\s*(is)?\s*mah", m):
+        plan["action"] = "compare"
+        return plan
+
+    # FUTURE / forecast intent (check pehle — "ho sakti hai" jaise words)
+    if re.search(r"ho\s*sakt[ai]|hoga\b|hogi\b|bikeg|bik\s*sakt|forecast|predict|"
+                 r"expect|project|estimat|anuman|agle\s*(mah|month|\d+\s*din)|next\s*month", m):
+        plan["action"] = "forecast"
+        nd = re.search(r"agle\s*(\d+)\s*din|next\s*(\d+)\s*day", m)
+        if nd:
+            plan["period"] = {"days_ahead": int(nd.group(1) or nd.group(2))}
+        for t in (sale_types or []):
+            ts = str(t).strip()
+            if len(ts) >= 2 and re.search(r"\b" + re.escape(ts.lower()) + r"\b", m):
+                f["type"] = ts; break
+        for cu in (customers or []):
+            cs = str(cu).strip()
+            if len(cs) >= 3 and re.search(r"\b" + re.escape(cs.lower()) + r"\b", m):
+                f["customer"] = cs; break
+        if tx: f["taxon"] = tx
+        return plan
+    typ_hit = ""
+    for t in (sale_types or []):
+        ts = str(t).strip()
+        if len(ts) >= 2 and re.search(r"\b" + re.escape(ts.lower()) + r"\b", m):
+            typ_hit = ts; break
+    cust_hit = ""
+    for cu in (customers or []):
+        cs = str(cu).strip()
+        if len(cs) >= 3 and re.search(r"\b" + re.escape(cs.lower()) + r"\b", m):
+            cust_hit = cs; break
+    explicit_month = bool(period.get("month") and re.search(r"\b(20\d{2})\b|" + "|".join(_AI_MONTHS), m))
+    sale_word = re.search(r"\bsale|sales|revenue|bik|bech|becha|sold|sell|dispatch|order|kamai\b", m)
+    sold_what = re.search(r"(kya\s*kya|kaun\s*s\w*|which|what)\s*.*\b(sku|bik|sell|sale|dispatch)|\b(bik[ae]|sold|sell\s*hue)\b", m)
+    if (typ_hit or cust_hit or explicit_month
+            or (period.get("date_from") and (sold_what or sale_word))
+            or (period and sold_what)):
+        plan["action"] = "transactions"
+        plan["period"] = period
+        if typ_hit:  f["type"] = typ_hit
+        if cust_hit: f["customer"] = cust_hit
+        if tx: f["taxon"] = tx
+        plan["top_n"] = max(plan.get("top_n") or 12, 12)
+        return plan
+
+    if re.search(r"out\s*of\s*stock|stock\s*(?:0|zero|khatam|khtm|nahi|nil)|zero\s*stock", m):
+        plan["action"] = "filter_rank"; f["stock"] = "zero"
+        plan["metric"] = qty_metric; plan["sort"] = "desc"
+    elif re.search(r"low\s*stock|kam\s*stock|stock\s*kam", m):
+        plan["action"] = "filter_rank"; f["stock"] = "low"
+        plan["metric"] = qty_metric; plan["sort"] = "desc"
+    elif re.search(r"slow|nahi\s*bik|not\s*sell|no\s*sale|dead\s*stock", m):
+        plan["action"] = "filter_rank"; plan["metric"] = "qty_3m"; plan["sort"] = "asc"
+        f["stock"] = "in_stock"
+    elif re.search(r"top|best|sabse\s*(?:zyada|jyada|accha)|highest|max", m):
+        plan["action"] = "filter_rank"
+        plan["metric"] = rev_metric if re.search(r"rev|sale\s*amount|amount|₹|kamai", m) else qty_metric
+        plan["sort"] = "desc"
+    elif re.search(r"total|kitn[ai]|kitna|overall|grand|summary|revenue|sale|qty|quantity", m):
+        plan["action"] = "aggregate"
+        plan["metric"] = rev_metric if re.search(r"rev|sale|amount|kamai|₹", m) else qty_metric
+    elif re.search(r"^(hi|hii+|hello|hey|namaste|namaskar|kaise|how are|kya kar)", m.strip()):
+        plan["action"] = "chat"
+    else:
+        plan["action"] = "filter_rank"
+        plan["metric"] = qty_metric
+        if tx == "" and not f:
+            f["search"] = msg.strip()[:60]
+    return plan
+
+def _ai_execute_plan(plan, comp, period_kpis, fy_cur, fy_prev):
+    """Run the plan locally over the compiled inventory. Returns (items, summary)."""
+    action  = plan.get("action", "aggregate")
+    metric  = plan.get("metric") if plan.get("metric") in _AI_METRICS else "total_net_revenue"
+    sort_d  = plan.get("sort", "desc") != "asc"
+    top_n   = max(1, min(24, int(plan.get("top_n") or 10)))
+    filters = plan.get("filters") or {}
+
+    if action == "chat":
+        return [], {"action": "chat", "period_kpis": period_kpis,
+                    "fy_current": fy_cur, "fy_previous": fy_prev,
+                    "total_skus": len(comp)}
+
+    if action == "compare":
+        return [], {"action": "compare", "period_kpis": period_kpis,
+                    "fy_current": fy_cur, "fy_previous": fy_prev}
+
+    if action == "transactions":
+        return _ai_exec_transactions(plan, comp, now_ist())
+
+    if action == "forecast":
+        return _ai_exec_forecast(plan, comp, now_ist())
+
+    if action == "briefing":
+        return _ai_exec_briefing(comp, period_kpis)
+
+    # SKU lookup
+    if action == "sku_lookup" and plan.get("skus"):
+        wanted, items = [_ai_norm(s) for s in plan["skus"]], []
+        for i in comp:
+            k = _ai_norm(i["sku"])
+            if k in wanted or any(k.startswith(w) or w.startswith(k) for w in wanted if len(w) >= 4):
+                items.append(i)
+        items = items[:24]
+        summary = {"action": "sku_lookup", "found": len(items),
+                   "metric": metric, "metric_label": _AI_METRICS.get(metric, metric),
+                   "items": [{ "sku": i["sku"], "taxon": i["taxon"], "plating": i["plating"],
+                               "status": i["status"], "mrp": i["mrp"],
+                               "inv_stock": i["inv_stock"], "inv_wip": i["inv_wip"],
+                               "total_inv": i["total_inv"],
+                               "total_net_revenue": round(i["total_net_revenue"]),
+                               "final_qty": i["final_qty"],
+                               "qty_7d": i["qty_7d"], "qty_15d": i["qty_15d"],
+                               "qty_1m": i["qty_1m"], "qty_3m": i["qty_3m"],
+                               "qty_6m": i["qty_6m"], "qty_1y": i["qty_1y"],
+                               "rev_yesterday": round(i["rev_yesterday"]),
+                               "rev_month": round(i["rev_month"]), "rev_fy": round(i["rev_fy"]),
+                               "rev_prev_fy": round(i["rev_prev_fy"]),
+                               "forecast_30d": i["forecast_30d"],
+                               "first_dispatch_date": i["first_dispatch_date"],
+                               "last_dispatch_date": i["last_dispatch_date"],
+                               "dispatch_count": i["dispatch_count"],
+                               "combo_skus": i.get("combo_skus",""),
+                               "customer_count": i["customer_count"]} for i in items]}
+        return items, summary
+
+    # Filtering
+    def keep(i):
+        tx = filters.get("taxon")
+        if tx and str(i.get("taxon", "")).lower() != str(tx).lower():
+            return False
+        pl = filters.get("plating")
+        if pl and str(pl).lower() not in str(i.get("plating", "")).lower():
+            return False
+        st = filters.get("status")
+        if st and str(st).lower() not in str(i.get("status", "")).lower():
+            return False
+        srch = filters.get("search")
+        if srch:
+            blob = f"{i.get('sku','')} {i.get('taxon','')} {i.get('plating','')} {i.get('status','')}".lower()
+            if not all(w in blob for w in str(srch).lower().split() if len(w) > 2):
+                return False
+        try:
+            if filters.get("mrp_min") and float(i.get("mrp") or 0) < float(filters["mrp_min"]):
+                return False
+            if filters.get("mrp_max") and float(i.get("mrp") or 0) > float(filters["mrp_max"]):
+                return False
+        except Exception:
+            pass
+        stock = filters.get("stock", "any")
+        tinv = float(i.get("total_inv") or 0)
+        if stock == "zero" and tinv > 0: return False
+        if stock == "low" and not (0 < tinv <= 10): return False
+        if stock == "in_stock" and tinv <= 0: return False
+        return True
+
+    pool = [i for i in comp if keep(i)]
+    pool.sort(key=lambda i: float(i.get(metric) or 0), reverse=sort_d)
+
+    agg = {
+        "matched_skus":   len(pool),
+        "sum_net_revenue": round(sum(float(i.get("total_net_revenue") or 0) for i in pool)),
+        "sum_final_qty":   int(sum(float(i.get("final_qty") or 0) for i in pool)),
+        "sum_rev_month":   round(sum(float(i.get("rev_month") or 0) for i in pool)),
+        "sum_rev_fy":      round(sum(float(i.get("rev_fy") or 0) for i in pool)),
+        "sum_rev_prev_fy": round(sum(float(i.get("rev_prev_fy") or 0) for i in pool)),
+        "sum_rev_yesterday": round(sum(float(i.get("rev_yesterday") or 0) for i in pool)),
+        "sum_stock":       int(sum(float(i.get("inv_stock") or 0) for i in pool)),
+        "sum_wip":         int(sum(float(i.get("inv_wip") or 0) for i in pool)),
+        "zero_stock_skus": sum(1 for i in pool if float(i.get("total_inv") or 0) <= 0),
+    }
+
+    items = pool[:top_n]
+    summary = {
+        "action": action, "metric": metric, "metric_label": _AI_METRICS.get(metric, metric),
+        "sort": "desc" if sort_d else "asc", "filters": filters,
+        "aggregates": agg, "fy_current": fy_cur, "fy_previous": fy_prev,
+        "period_kpis": period_kpis,
+        "top_items": [{"sku": i["sku"], "taxon": i["taxon"], "status": i["status"],
+                       "value": round(float(i.get(metric) or 0), 2),
+                       "inv_stock": i["inv_stock"], "mrp": i["mrp"],
+                       "final_qty": i["final_qty"],
+                       "total_net_revenue": round(i["total_net_revenue"])} for i in items],
+    }
+    if action == "aggregate":
+        items = items[:6]
+    return items, summary
+
+def _ai_gemini_answer(cli, msg, history, plan, summary, items):
+    """Step 2: Gemini writes the final reply using ONLY computed results."""
+    try:
+        hist_txt = "\n".join(f"{h.get('role','user')}: {h.get('text','')[:300]}"
+                             for h in history[-6:])
+        prompt = f"""You are "Cosa AI", the in-dashboard assistant for COSA NOSTRAA (premium brass jewellery brand, Jaipur).
+Answer the user's question using ONLY the RESULTS JSON below — never invent numbers.
+Style: reply in the SAME language style as the user (they usually write Hinglish — Hindi-English mix).
+CRITICAL RULES:
+1. Answer ONLY the exact question — zero extra information. One number asked = ONE short sentence.
+2. Never add summaries, totals, breakdowns, or tips that were not asked.
+3. Max 3 short sentences (or max 5 bullets ONLY if user asked for a list).
+4. Use ₹ with Indian number format (e.g. ₹1,23,456). 
+The matching SKU cards (with image, stock, revenue etc.) are shown below your message automatically, so do NOT list every field of every SKU — just give the headline insight and mention the top 2-3 SKU codes if relevant.
+If RESULTS has action "chat", just chat normally as a helpful dashboard assistant and tell them what you can do (top sellers, stock, revenue, SKU details, category analysis).
+
+Conversation so far:
+{hist_txt}
+
+User question: {msg}
+
+RESULTS JSON:
+{json.dumps(summary, ensure_ascii=False)[:14000]}"""
+        resp = cli.models.generate_content(model=AI_CHAT_MODEL, contents=prompt)
+        txt = (getattr(resp, "text", "") or "").strip()
+        return txt or None
+    except Exception as e:
+        print("AI Studio: Gemini answer failed:", e)
+        return None
+
+def _inr(n):
+    try:
+        v = int(round(float(n or 0)))
+        sign = "-" if v < 0 else ""
+        s = str(abs(v))
+        if len(s) > 3:
+            head, tail = s[:-3], s[-3:]
+            parts = []
+            while len(head) > 2:
+                parts.insert(0, head[-2:]); head = head[:-2]
+            if head: parts.insert(0, head)
+            s = ",".join(parts) + "," + tail
+        return "₹" + sign + s
+    except Exception:
+        return "₹0"
+
+def _ai_local_answer(msg, plan, summary, items):
+    """Template answer when Gemini is unavailable — still fully functional."""
+    a = summary.get("action")
+    if a == "compare":
+        k = summary.get("period_kpis") or {}
+        lm = k.get("last_month") or 0
+        ly = k.get("last_year_month") or 0
+        lm_l = k.get("last_month_label") or "last month"
+        ly_l = k.get("last_year_month_label") or "same month last year"
+        yoy = k.get("mom_yoy_pct")
+        tm = k.get("this_month") or 0
+        if not lm and not ly:
+            return "No monthly data available for comparison yet. Please try again in a moment."
+        lines = [f"**Month comparison (Net Revenue):**"]
+        lines.append(f"• {lm_l}: **{_inr(lm)}**")
+        lines.append(f"• {ly_l}: **{_inr(ly)}**")
+        if yoy is not None:
+            arrow = "▲ +" if yoy >= 0 else "▼ "
+            verdict = "higher" if yoy >= 0 else "lower"
+            lines.append(f"• YoY change: **{arrow}{yoy}%** — **{verdict}** than the same month last year.")
+        elif ly == 0:
+            lines.append("• No data for the same month last year, so % change could not be computed.")
+        lines.append(f"• This month (running): {_inr(tm)}")
+        return "\n".join(lines)
+    if a == "chat":
+        k = summary.get("period_kpis") or {}
+        rev_line = (f"All-time revenue {_inr(k.get('total'))}; this month {_inr(k.get('this_month'))}.\n"
+                    if (k.get('total') or k.get('this_month')) else "")
+        return ("Hello! I am **Cosa AI**, your business assistant.\n"
+                f"The catalog currently has **{summary.get('total_skus',0)} SKUs**. " + rev_line +
+                "Ask me about *top sellers*, *out of stock items*, *any SKU's details*, "
+                "*category-wise sales*, *forecasts* — anything.")
+    if a == "sku_lookup":
+        if not items:
+            return "This SKU was not found in the catalog. Please check the code and try again."
+        met = summary.get("metric") or ""
+        met_label = summary.get("metric_label") or met
+        period_metric = met in ("qty_7d","qty_15d","qty_1m","qty_3m","qty_6m","qty_1y",
+                                "rev_yesterday","rev_month","rev_fy","rev_prev_fy","forecast_30d")
+        lines = [f"**{len(items)} SKU{'s' if len(items)>1 else ''} found:**"]
+        for i in items[:4]:
+            if period_metric:
+                v = i.get(met, 0)
+                v_txt = _inr(v) if met.startswith("rev") else f"{int(round(float(v or 0)))} pcs"
+                lines.append(f"• **{i['sku']}** — *{met_label}*: **{v_txt}** | "
+                             f"Stock {i['inv_stock']} (+{i['inv_wip']} WIP)")
+            else:
+                ml = (msg or "").lower()
+                want = []
+                if re.search(r"stock|inventory|inv\b|bach[ae]", ml):
+                    want.append(f"Stock **{i['inv_stock']}** (+{i['inv_wip']} WIP)")
+                if re.search(r"revenue|sale|kamai|amount|₹|becha", ml):
+                    want.append(f"Revenue **{_inr(i['total_net_revenue'])}**")
+                if re.search(r"qty|quantity|kitn[ae]\s*(pc|piece|bik)|units", ml):
+                    want.append(f"Qty **{i['final_qty']} pcs**")
+                if re.search(r"mrp|price|daam|rate", ml) and i.get('mrp'):
+                    want.append(f"MRP **₹{int(i['mrp'] or 0)}**")
+                if re.search(r"dimension|size|naap|length|width|height|kitna bada", ml) and i.get('dimensions'):
+                    want.append(f"Dimensions **{i['dimensions']}**")
+                if re.search(r"customer|client|party", ml):
+                    want.append(f"**{i['customer_count']}** customers")
+                if re.search(r"status|halat", ml):
+                    want.append(f"Status *{i['status']}*")
+                if not want:
+                    want = [f"Stock **{i['inv_stock']}** (+{i['inv_wip']} WIP)",
+                            f"qty {i['final_qty']}"]
+                    if i.get('total_net_revenue'):
+                        want.append(f"revenue {_inr(i['total_net_revenue'])}")
+                    want.append(f"*{i['status']}*")
+                lines.append(f"• **{i['sku']}** — " + " | ".join(want))
+        return "\n".join(lines)
+    if a == "briefing":
+        k = summary.get("kpis") or {}
+        tm = summary.get("top_movers_7d") or []
+        lines = ["**Business Briefing**"]
+        if any(k.get(x) for x in ("yesterday", "this_month", "this_fy")):
+            lines.append(f"• Yesterday: **{_inr(k.get('yesterday'))}** | This month: **{_inr(k.get('this_month'))}** | This FY: {_inr(k.get('this_fy'))}")
+        lines.append(f"• Catalog: {summary.get('total_skus',0)} SKUs | Slow movers holding stock: {summary.get('slow_movers_with_stock',0)}")
+        if tm:
+            lines.append("• Hot this week: " + ", ".join(f"**{t['sku']}** ({t['qty_7d']} pcs)" for t in tm[:3]))
+        urgent = summary.get("restock_urgent") or []
+        oos = summary.get("out_of_stock_but_selling", 0)
+        lsf = summary.get("low_stock_fast_sellers", 0)
+        if oos or lsf:
+            lines.append(f"• ⚠ Restock alert: {oos} selling SKUs are OUT of stock, {lsf} fast sellers are low" +
+                         (f" — priority: {', '.join(urgent[:4])}" if urgent else ""))
+        return "\n".join(lines)
+
+    if a == "forecast":
+        flt = summary.get("filters") or {}
+        bits = []
+        if flt.get("type"): bits.append(f"*{flt['type']}*")
+        if flt.get("customer"): bits.append(f"*{flt['customer']}*")
+        if flt.get("taxon"): bits.append(f"*{flt['taxon']}*")
+        where = (" (" + ", ".join(bits) + ")") if bits else ""
+        pm = summary.get("projected_month_total") or {}
+        sf = summary.get("month_so_far") or {}
+        pr = summary.get("projected_remaining") or {}
+        hz = str(summary.get('horizon') or '')
+        has_rev = "revenue" in (pm or {})
+        if hz.startswith('agle') or hz.startswith('next'):
+            est = f"**~{_inr(pr.get('revenue'))} ({pr.get('qty',0)} pcs)**" if has_rev else f"**~{pr.get('qty',0)} pcs**"
+            lines = [f"**{hz}**{where} projection ({summary.get('method')}):",
+                     f"• Estimate: {est}"]
+        elif has_rev:
+            lines = [f"**{hz}**{where} projection ({summary.get('method')}):",
+                     f"• So far: {_inr(sf.get('revenue'))} ({sf.get('qty',0)} pcs) | "
+                     f"Next {summary.get('days_remaining',0)} days: ~{_inr(pr.get('revenue'))} ({pr.get('qty',0)} pcs)",
+                     f"• **Projected month total: {_inr(pm.get('revenue'))} ({pm.get('qty',0)} pcs)**"]
+        else:
+            lines = [f"**{hz}**{where} projection ({summary.get('method')}):",
+                     f"• So far: {sf.get('qty',0)} pcs | Next {summary.get('days_remaining',0)} days: ~{pr.get('qty',0)} pcs",
+                     f"• **Projected month total: {pm.get('qty',0)} pcs**"]
+        tops = summary.get("top_predicted_skus") or []
+        if tops:
+            lines.append("Most likely top sellers:")
+            for t in tops[:5]:
+                if "pred_rev" in t:
+                    lines.append(f"• **{t['sku']}** — ~{t['pred_qty']} pcs ({_inr(t['pred_rev'])})")
+                else:
+                    lines.append(f"• **{t['sku']}** — ~{t['pred_qty']} pcs")
+        if summary.get("method") != "prophet":
+            lines.append(f"_{summary.get('note','')}_")
+        return "\n".join(lines)
+
+    if a == "transactions":
+        flt = summary.get("filters") or {}
+        bits = []
+        if flt.get("type"): bits.append(f"Type *{flt['type']}*")
+        if flt.get("customer"): bits.append(f"Customer *{flt['customer']}*")
+        if flt.get("taxon"): bits.append(f"Category *{flt['taxon']}*")
+        where = (" — " + ", ".join(bits)) if bits else ""
+        if not summary.get("transactions"):
+            return (f"No sales entries found for **{summary.get('period_label','this period')}**{where}. "
+                    "Please verify the period, type or SKU.")
+        if "total_revenue" in summary:
+            stat = f"• Revenue: **{_inr(summary.get('total_revenue'))}** | Qty: **{summary.get('total_qty',0)} pcs** | "
+        else:
+            stat = f"• Qty: **{summary.get('total_qty',0)} pcs** | "
+        lines = [f"**{summary.get('period_label')}**{where}:",
+                 stat + f"{summary.get('transactions',0)} entries | {summary.get('unique_skus',0)} unique SKUs"]
+        tops = summary.get("top_skus") or []
+        if tops:
+            lines.append("Top SKUs:")
+            for t in tops[:5]:
+                if "revenue" in t:
+                    lines.append(f"• **{t['sku']}** — {_inr(t['revenue'])} ({t['qty']} pcs)")
+                else:
+                    lines.append(f"• **{t['sku']}** — {t['qty']} pcs")
+        tb = summary.get("type_breakup") or {}
+        if len(tb) > 1 and not flt.get("type"):
+            lines.append("Type-wise: " + ", ".join(f"*{k}* {_inr(v)}" for k, v in list(tb.items())[:4]))
+        return "\n".join(lines)
+
+    agg = summary.get("aggregates") or {}
+    flt = summary.get("filters") or {}
+    where = f" ({flt.get('taxon')})" if flt.get("taxon") else ""
+    if a == "aggregate":
+        met = summary.get("metric") or "total_net_revenue"
+        n_skus = agg.get('matched_skus', 0)
+        metric_map = {
+            "rev_month":        ("Is mahine ka revenue", _inr(agg.get('sum_rev_month'))),
+            "rev_yesterday":    ("Kal ka revenue", _inr(agg.get('sum_rev_yesterday'))),
+            "rev_fy":           ("Is FY ka revenue", _inr(agg.get('sum_rev_fy'))),
+            "rev_prev_fy":      ("Previous FY ka revenue", _inr(agg.get('sum_rev_prev_fy'))),
+            "total_net_revenue":("All-time revenue", _inr(agg.get('sum_net_revenue'))),
+            "final_qty":        ("Total quantity", f"{agg.get('sum_final_qty',0)} pcs"),
+            "inv_stock":        ("Total stock", f"{agg.get('sum_stock',0)} (+{agg.get('sum_wip',0)} WIP)"),
+            "total_inv":        ("Total inventory", f"{agg.get('sum_stock',0)} (+{agg.get('sum_wip',0)} WIP)"),
+        }
+        label, val = metric_map.get(met, metric_map["total_net_revenue"])
+        if met.startswith("qty_"):
+            label, val = _AI_METRICS.get(met, met), f"{int(agg.get('sum_final_qty',0))} pcs"
+        return f"{label}{where}: **{val}**" + (f" ({n_skus} SKUs)" if where else "")
+    label = summary.get("metric_label", "value")
+    if not items:
+        return f"No SKUs matched this filter{where}."
+    top = summary.get("top_items") or []
+    head = f"**Top {len(items)}{where}** by *{label}* 👇"
+    def _v(x):
+        return _inr(x) if "rev" in (summary.get("metric") or "") or summary.get("metric") == "total_net_revenue" else f"{int(round(float(x or 0))):,}"
+    bl = [f"• **{t['sku']}** — {_v(t['value'])}" for t in top[:5]]
+    return head + "\n" + "\n".join(bl)
+
+
+# ── Marketplace Live Sync ───────────────────────────────────
+
+MYNTRA_V4_SEARCH_URL = "https://api.pretr.com/partner/v4/inventory/search"
+MYNTRA_V3_SEARCH_URL = "https://api.pretr.com/partner/v3/inventory/search"
+MYNTRA_TOKEN_URL      = "https://api.pretr.com/authorization/generate_token"
+MYNTRA_REFRESH_URL    = "https://api.pretr.com/authorization/refresh_token"
+
 def _chunks(seq, size):
     for i in range(0, len(seq), size):
         yield seq[i:i+size]
@@ -3966,6 +4917,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
+    <button class="app-chip" onclick="showTab('ai')">✦ AI</button>
     <button class="app-chip" onclick="doLogout()" style="border-color:rgba(220,38,38,.4);color:#dc2626">Sign Out</button>
   </div>
 </div>
@@ -3983,6 +4935,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
+  <button class="menu-item" id="m8" onclick="showTab('ai')">AI Studio</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
@@ -4359,6 +5312,47 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ai-cards" id="smartResults" style="margin-top:18px"></div>
   </div>
 
+  <div id="vAi" style="display:none">
+    <div class="ai-shell">
+      <div class="ai-hd">
+        <div class="ai-hd-row">
+          <div>
+            <div class="ai-hd-title">AI STUDIO</div>
+            <div class="ai-hd-sub">Ask anything about your business data</div>
+          </div>
+          <div class="ai-hd-actions">
+            <button class="ai-hbtn design" onclick="aiToggleDesign()">NEW DESIGN</button>
+            <button class="ai-hbtn" onclick="aiClearChat()">CLEAR CHAT</button>
+          </div>
+        </div>
+      </div>
+      <div class="ai-design" id="aiDesignPanel" style="display:none">
+        <div class="ai-design-title">CREATE NEW DESIGN <span class="ai-design-sub">AI generates an original design inspired by your bestsellers</span></div>
+        <textarea id="aiDesignPrompt" rows="2" placeholder="Describe the design — e.g. bold lion head bracelet, antique gold finish, premium festive look"></textarea>
+        <input id="aiDesignRefs" placeholder="Reference SKU codes (optional, comma separated)">
+        <div class="ai-design-foot">
+          <button class="ai-hbtn design" id="aiDesignBtn" onclick="aiDesign()">GENERATE</button>
+          <span class="ai-design-note">Generation takes 15–30 seconds</span>
+        </div>
+      </div>
+      <div class="ai-chat" id="aiChat"></div>
+      <div class="ai-suggest" id="aiSuggest">
+        <button class="ai-chip" onclick="aiSend('Daily briefing')">Daily briefing</button>
+        <button class="ai-chip" onclick="aiSend('Show top 10 best selling SKUs')">Top 10 best sellers</button>
+        <button class="ai-chip rev-only" onclick="aiSend('What is the total revenue this month?')">Revenue this month</button>
+        <button class="ai-chip" onclick="aiSend('Which SKUs are out of stock?')">Out of stock</button>
+        <button class="ai-chip" onclick="aiSend('Show fast selling SKUs with low stock')">Low stock, fast selling</button>
+        <button class="ai-chip" onclick="aiSend('Which SKUs have not sold in the last 3 months?')">Slow movers</button>
+        <button class="ai-chip" onclick="aiToggleDesign(true)">Create a design</button>
+      </div>
+      <div class="ai-inputbar">
+        <textarea id="aiInput" rows="1" placeholder="Ask anything — e.g. stock and revenue of BR-1023"
+          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();aiSend();}"></textarea>
+        <button class="ai-sendbtn" id="aiSendBtn" onclick="aiSend()" title="Send">➤</button>
+      </div>
+    </div>
+  </div>
+
 
   <div id="vMarketplaces" style="display:none">
     <div id="marketplaceRoot"></div>
@@ -4425,7 +5419,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="due">Has Due (not overdue)</option>
       </select></div>
   </div>
-  <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
@@ -4433,15 +5426,9 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
       <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
   </div>
-  <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
-    <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
-      <div id="payAgingTable" style="font-size:.78rem"></div>
-    </div>
-    <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
-      <div id="payWeekTable" style="font-size:.78rem"></div>
-    </div>
+  <div style="margin-bottom:18px;max-width:420px">
+    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+    <div id="payAgingTable" style="font-size:.78rem"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -7291,12 +8278,6 @@ function loadPayments(force){
       _payData = d;
       const asOf = document.getElementById('payAsOf');
       if (asOf) asOf.textContent = 'As of ' + d.today + ' · month-end ' + d.month_end;
-      const luHost = document.getElementById('payLastUpdated');
-      if (luHost){
-        luHost.textContent = d.ledger_last_updated
-          ? ('Ledger last updated till: ' + d.ledger_last_updated + ' (latest payment/credit received on this date)')
-          : 'Ledger last updated: no payment/credit entries found';
-      }
       if (!_payTagsFilled){
         const sel = document.getElementById('payTag');
         if (sel && d.tags){
@@ -7352,7 +8333,7 @@ function renderPayments(){
         <th>Customer Name</th><th style="text-align:center">Tag</th><th style="text-align:center">Term</th>
         <th style="text-align:right">Due</th><th style="text-align:right">Overdue</th><th style="text-align:right">Balance</th>
       </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td>Total</td><td></td><td></td>
         <td style="text-align:right">${fmt(sumDue)}</td>
         <td style="text-align:right">${fmt(sumOver)}</td>
@@ -7375,7 +8356,7 @@ function renderPayments(){
         <th>Customer Name</th><th style="text-align:center">Tag</th>
         <th style="text-align:right">Due (by month-end)</th><th style="text-align:right">Overdue (by month-end)</th><th style="text-align:right">Balance</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td>Total</td><td></td>
         <td style="text-align:right">${fmt(sumDueMe)}</td>
         <td style="text-align:right">${fmt(sumOverMe)}</td>
@@ -7400,24 +8381,6 @@ function renderPayments(){
         <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
-  }
-  // week-wise overdue tracker (fixed for whole current month — NOT filter-dependent, shows company-wide totals)
-  const wkHost = document.getElementById('payWeekTable');
-  if (wkHost){
-    const weeks = d.week_overdue || [];
-    const body = weeks.map(w => `<tr>
-        <td style="padding:5px 8px">${escHtml(w.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.range)}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(w.overdue)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(w.payment)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(w.balance)}</td>
-      </tr>`).join('');
-    wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
-        <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
-        <th style="text-align:right;padding:5px 8px">Payment Received</th>
-        <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Week buckets are fixed for the whole month (Week 1 = 1st–7th, and so on). "Overdue Becoming Due" = invoices whose due date falls in that week. "Balance Remaining" = total outstanding minus cumulative payments received so far this month.</p>`;
   }
 }
 // Single delegated click handler for customer rows (today + month-end tables)
@@ -7466,9 +8429,7 @@ function loadCustomerLedger(name){
       const grandTotal = sumDebit >= sumCredit ? sumDebit : sumCredit;
       host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:760px">
         <caption style="text-align:left;font-weight:800;padding:8px 10px;border:1px solid #ccc;border-bottom:0;background:#fafafa">
-          SalasarBalaji Creations Pvt. Ltd.<br>
-          <span style="font-weight:600;font-size:.82em">Current Account No. - 674805601615 &nbsp;|&nbsp; IFSC - ICIC0006748 &nbsp;|&nbsp; ICICI Bank, AS-1, SITAPURA INDUSTRIAL AREA, EPIP, JAIPUR-302022</span><br>
-          <span style="font-weight:600;font-size:.82em">Principal Address: H1-894, Phase-III, Riico Industrial Area, Sitapura, Jaipur-302022</span><br>
+          COSA NOSTRAA — COMPLETE LEDGER<br>
           <span style="font-weight:700">Ledger: ${escHtml(d.customer||'')}</span> &nbsp; <span style="color:#666;font-weight:600">${escHtml(d.period||'')}</span>
         </caption>
         <thead><tr>
@@ -7908,6 +8869,7 @@ showTab = function(t){
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
+    ai: {id: 'vAi', btn: 'm8'},
     smart: {id: 'vSmart', btn: 'm9'},
   };
   Object.values(map).forEach(x => {
@@ -7947,6 +8909,7 @@ showTab = function(t){
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
+      ai: 'AI STUDIO',
       smart: 'SMART SEARCH'
     };
     appBarSub.textContent = labels[t] || 'HOME';
@@ -7968,6 +8931,7 @@ showTab = function(t){
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
+  if (t === 'ai') { aiOnOpen(); setTimeout(()=>{const i=document.getElementById('aiInput'); if(i) i.focus();}, 120); }
 };
 
 const __origMkCard = mkCard;
@@ -8039,6 +9003,73 @@ document.addEventListener('DOMContentLoaded', () => {
   showTab('home');
 });
 
+
+/* ===== AI STUDIO ===== */
+let AI_HISTORY = [];
+let AI_BUSY = false;
+let AI_WELCOMED = false;
+let AI_CTX_SKUS = [];
+
+function aiMd(text){
+  let t = escHtml(text || '');
+  t = t.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  t = t.replace(/\*(.+?)\*/g, '<i>$1</i>');
+  t = t.replace(/^[\-\u2022]\s?/gm, '• ');
+  t = t.replace(/\n/g, '<br>');
+  return t;
+}
+
+function aiScroll(){
+  const c = document.getElementById('aiChat');
+  if (c) c.scrollTop = c.scrollHeight;
+}
+
+function aiAppend(role, html){
+  const c = document.getElementById('aiChat');
+  if (!c) return null;
+  const d = document.createElement('div');
+  d.className = 'ai-msg ' + role;
+  d.innerHTML = html;
+  c.appendChild(d);
+  aiScroll();
+  return d;
+}
+
+let AI_LAST_RESULTS = [];
+
+function aiAppendCards(items){
+  const c = document.getElementById('aiChat');
+  if (!c || !items || !items.length) return;
+  AI_LAST_RESULTS = items;
+  const bar = document.createElement('div');
+  bar.className = 'ai-exportbar';
+  bar.innerHTML = `<span>${items.length} SKU${items.length>1?'s':''}</span>
+    <button class="ai-hbtn" onclick="aiExport('csv')">CSV</button>
+    <button class="ai-hbtn" onclick="aiExport('excel')">EXCEL</button>`;
+  c.appendChild(bar);
+  const wrap = document.createElement('div');
+  wrap.className = 'ai-cards';
+  wrap.innerHTML = items.map(i => mkCard(i)).join('');
+  c.appendChild(wrap);
+  aiScroll();
+}
+
+function aiExport(fmtType){
+  const items = AI_LAST_RESULTS || [];
+  if (!items.length) return;
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['SKU','Category','Plating','Dimensions','Status','MRP', ...(emp ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Total Inv',
+                   'Final Qty', ...(emp ? [] : ['Net Revenue']), 'Qty 7d','Qty 1M','Qty 3M','Qty 1Y',
+                   ...(emp ? [] : ['Rev This Month','Rev This FY']), 'Forecast 30d','Last Dispatch','Image Link'];
+  const data = items.map(i => [i.sku, i.taxon||'', i.plating||'', i.dimensions||'', i.status||'', i.mrp||0,
+    ...(emp ? [] : [i.last_selling_price||0]),
+    i.inv_stock||0, i.inv_wip||0, i.blocked_qty||0, i.total_inv||0, i.final_qty||0,
+    ...(emp ? [] : [Math.round(i.total_net_revenue||0)]), i.qty_7d||0, i.qty_1m||0, i.qty_3m||0, i.qty_1y||0,
+    ...(emp ? [] : [Math.round(i.rev_month||0), Math.round(i.rev_fy||0)]), i.forecast_30d||0,
+    i.last_dispatch_date||'', i.image_url||'']);
+  downloadTable(headers, data, 'AI_Studio_Results', fmtType);
+}
+window.aiExport = aiExport;
 
 /* ===== SMART VISUAL SEARCH (Repeat Orders, CLIP offline) ===== */
 let SMART_BUSY = false;
@@ -8155,6 +9186,163 @@ window.smartClear = smartClear;
     if (el && (!e.relatedTarget || !el.contains(e.relatedTarget))) el.style.transform = '';
   });
 })();
+
+function aiTyping(show){
+  const c = document.getElementById('aiChat');
+  if (!c) return;
+  const ex = document.getElementById('aiTypingEl');
+  if (ex) ex.remove();
+  if (show){
+    const d = document.createElement('div');
+    d.id = 'aiTypingEl';
+    d.className = 'ai-typing';
+    d.innerHTML = '<span></span><span></span><span></span>';
+    c.appendChild(d);
+    aiScroll();
+  }
+}
+
+function aiOnOpen(){
+  if (AI_WELCOMED) return;
+  AI_WELCOMED = true;
+  const n = (master || []).length;
+  aiAppend('bot', aiMd(
+    'Welcome to **Cosa AI** — your business intelligence assistant.\n' +
+    (n ? `Live data for **${n.toLocaleString('en-IN')} SKUs** is loaded. ` : '') +
+    'Ask about *top sellers*, *stock*, *revenue*, *forecasts*, or any *SKU* — or use the shortcuts below.'
+  ));
+}
+
+async function aiSend(preset){
+  if (AI_BUSY) return;
+  const inp = document.getElementById('aiInput');
+  const msg = (preset !== undefined ? String(preset) : (inp ? inp.value : '')).trim();
+  if (!msg) return;
+  if (inp && preset === undefined) inp.value = '';
+
+  aiAppend('user', escHtml(msg));
+  AI_HISTORY.push({role: 'user', text: msg});
+
+  AI_BUSY = true;
+  const btn = document.getElementById('aiSendBtn');
+  if (btn) btn.disabled = true;
+  aiTyping(true);
+
+  try{
+    const r = await fetch('/api/ai-chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
+      body: JSON.stringify({message: msg, history: AI_HISTORY.slice(-10), context_skus: AI_CTX_SKUS, role: LOGIN_ROLE || 'admin'})
+    });
+    const d = await r.json();
+    aiTyping(false);
+    if (d.error){
+      aiAppend('err', escHtml(d.error));
+    } else {
+      const eng = d.engine === 'gemini' ? 'Gemini AI' : (d.engine === 'local' ? 'Local engine' : escHtml(d.engine || ''));
+      aiAppend('bot', aiMd(d.answer || '...') + `<span class="ai-engine">${eng}</span>`);
+      AI_HISTORY.push({role: 'assistant', text: (d.answer || '').slice(0, 600)});
+      if (d.context_skus) AI_CTX_SKUS = d.context_skus;
+      if (d.skus && d.skus.length) aiAppendCards(d.skus);
+      if (d.suggestions && d.suggestions.length){
+        const c2 = document.getElementById('aiChat');
+        if (c2){
+          const sb = document.createElement('div');
+          sb.className = 'ai-followups';
+          sb.innerHTML = d.suggestions.map(s => `<button class="ai-chip" onclick="aiSend('${String(s).replace(/'/g,"\\'")}')">${escHtml(s)}</button>`).join('');
+          c2.appendChild(sb);
+          aiScroll();
+        }
+      }
+    }
+  } catch(e){
+    aiTyping(false);
+    aiAppend('err', 'Network error: ' + escHtml(e.message) + '. Please try again.');
+  }
+  AI_BUSY = false;
+  if (btn) btn.disabled = false;
+  if (inp) inp.focus();
+}
+window.aiSend = aiSend;
+
+function aiClearChat(){
+  AI_HISTORY = [];
+  AI_CTX_SKUS = [];
+  AI_WELCOMED = false;
+  const c = document.getElementById('aiChat');
+  if (c) c.innerHTML = '';
+  aiOnOpen();
+  const i = document.getElementById('aiInput');
+  if (i) { i.value = ''; i.focus(); }
+}
+window.aiClearChat = aiClearChat;
+
+function aiToggleDesign(forceOpen){
+  const p = document.getElementById('aiDesignPanel');
+  if (!p) return;
+  const open = forceOpen === true ? true : p.style.display === 'none';
+  p.style.display = open ? 'flex' : 'none';
+  if (open) {
+    const t = document.getElementById('aiDesignPrompt');
+    if (t) t.focus();
+  }
+}
+window.aiToggleDesign = aiToggleDesign;
+
+async function aiDesign(){
+  if (AI_BUSY) return;
+  const pEl = document.getElementById('aiDesignPrompt');
+  const rEl = document.getElementById('aiDesignRefs');
+  const prompt = (pEl ? pEl.value : '').trim();
+  const refs = (rEl ? rEl.value : '').trim();
+  if (!prompt){ if (pEl) pEl.focus(); return; }
+
+  aiAppend('user', '<b>Design request:</b> ' + escHtml(prompt) + (refs ? '<br><small>Refs: ' + escHtml(refs) + '</small>' : ''));
+  AI_HISTORY.push({role: 'user', text: 'Design request: ' + prompt});
+
+  AI_BUSY = true;
+  const btn = document.getElementById('aiDesignBtn');
+  const sbtn = document.getElementById('aiSendBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'GENERATING…'; }
+  if (sbtn) sbtn.disabled = true;
+  aiTyping(true);
+
+  try{
+    const r = await fetch('/api/ai-design', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
+      body: JSON.stringify({prompt: prompt, ref_skus: refs})
+    });
+    const d = await r.json();
+    aiTyping(false);
+    if (d.error){
+      aiAppend('err', escHtml(d.error));
+    } else {
+      const refsTxt = (d.refs_used && d.refs_used.length)
+        ? `<span class="ai-engine">Inspiration: ${d.refs_used.map(escHtml).join(', ')} • ${escHtml(d.model || '')}</span>` : '';
+      aiAppend('bot', aiMd(d.text || 'Your design is ready.') + refsTxt);
+      AI_HISTORY.push({role: 'assistant', text: (d.text || 'design generated').slice(0, 400)});
+      const c = document.getElementById('aiChat');
+      if (c && d.image){
+        const w = document.createElement('div');
+        w.className = 'ai-genwrap';
+        const fname = 'CosaNostraa_AI_Design_' + Date.now() + '.png';
+        w.innerHTML = `<img class="ai-genimg" src="${d.image}" alt="AI generated design">` +
+                      `<a class="ai-dl" href="${d.image}" download="${fname}">DOWNLOAD</a>`;
+        c.appendChild(w);
+        aiScroll();
+      }
+      if (pEl) pEl.value = '';
+    }
+  } catch(e){
+    aiTyping(false);
+    aiAppend('err', 'Network error: ' + escHtml(e.message));
+  }
+  AI_BUSY = false;
+  if (btn) { btn.disabled = false; btn.textContent = 'GENERATE'; }
+  if (sbtn) sbtn.disabled = false;
+}
+window.aiDesign = aiDesign;
 
 /* ── Lightweight premium particle background (gold dust) ──
    Bahut halka: thode particles, 24fps cap, tab hidden par pause, aur
@@ -9077,7 +10265,6 @@ def _build_payments():
     # till month-end totals
     me_due = me_over = 0.0
     tags_set = set()
-    all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -9110,7 +10297,6 @@ def _build_payments():
             cust_bal += rem
             idt = inv["date"]
             due_date = (idt + timedelta(days=term_days)) if idt else None
-            all_due_pairs.append((due_date, rem))
             # as of TODAY
             if due_date and today > due_date:
                 cust_over += rem
@@ -9153,72 +10339,16 @@ def _build_payments():
             e.pop("_sort", None)
     _PAY_RAW_LEDGER["data"] = raw_by_cust
 
-    # ---- Ledger last updated (latest payment/credit entry date across the whole ledger) ----
-    last_pay_date = None
-    for i in range(n):
-        if to_num(creds[i]) > 0:
-            cd = _fast_date(dates[i])
-            if cd and (last_pay_date is None or cd > last_pay_date):
-                last_pay_date = cd
-
-    # ---- Week-wise overdue tracker for the CURRENT month (fixed buckets, whole month) ----
-    month_start = date(today.year, today.month, 1)
-    week_bounds = []
-    ws = month_start
-    while ws <= month_end:
-        we = min(ws + timedelta(days=6), month_end)
-        week_bounds.append((ws, we))
-        ws = we + timedelta(days=1)
-
-    week_overdue_amt = [0.0] * len(week_bounds)
-    for due_date, rem in all_due_pairs:
-        if not due_date or rem <= 0.009:
-            continue
-        if due_date < month_start or due_date > month_end:
-            continue
-        for wi, (ws_, we_) in enumerate(week_bounds):
-            if ws_ <= due_date <= we_:
-                week_overdue_amt[wi] += rem
-                break
-
-    week_payment_amt = [0.0] * len(week_bounds)
-    for i in range(n):
-        credit_amt = to_num(creds[i])
-        if credit_amt <= 0:
-            continue
-        cd = _fast_date(dates[i])
-        if not cd or cd < month_start or cd > month_end:
-            continue
-        for wi, (ws_, we_) in enumerate(week_bounds):
-            if ws_ <= cd <= we_:
-                week_payment_amt[wi] += credit_amt
-                break
-
-    week_overdue = []
-    cum_pay = 0.0
-    for wi, (ws_, we_) in enumerate(week_bounds):
-        cum_pay += week_payment_amt[wi]
-        bal_after = tot_bal - cum_pay
-        week_overdue.append({
-            "label": f"Week {wi + 1}",
-            "range": f'{ws_.strftime("%d-%b")} to {we_.strftime("%d-%b")}',
-            "overdue": round(week_overdue_amt[wi], 0),
-            "payment": round(week_payment_amt[wi], 0),
-            "balance": round(bal_after, 0),
-        })
-
     data = {
         "rows": rows,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
-        "ledger_last_updated": last_pay_date.strftime("%d-%b-%y") if last_pay_date else None,
         "totals": {
             "due": round(tot_due, 0), "overdue": round(tot_over, 0), "balance": round(tot_bal, 0),
             "due_me": round(me_due, 0), "overdue_me": round(me_over, 0),
         },
         "aging": [{"bucket": k, "amount": round(aging[k], 0)} for k in AG_LABELS],
         "aging_total": round(sum(aging.values()), 0),
-        "week_overdue": week_overdue,
         "tags": sorted([t for t in tags_set if t]),
     }
     _PAY_CACHE["data"] = data
@@ -9689,6 +10819,445 @@ def api_smart_search():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/ai-chat", methods=["POST"])
+def api_ai_chat():
+    try:
+        payload = request.get_json(silent=True) or {}
+        msg     = (payload.get("message") or "").strip()
+        history = payload.get("history") or []
+        role    = str(session.get("role") or payload.get("role") or "admin").lower()
+        if not msg:
+            return jsonify({"error": "empty message"}), 400
+
+        # EMPLOYEE: revenue/sales-value questions are not available
+        if role == "employee" and re.search(
+                r"revenue|turnover|earning|kamai|sale\s*(amount|value)|"
+                r"net\s*rev|profit|income|rev\b", msg.lower()):
+            return jsonify({"answer": "Revenue and sales-value information is not available on "
+                                      "employee accounts. You can ask about quantities, stock, "
+                                      "dispatches and forecast quantities instead.",
+                            "skus": [], "engine": "policy", "context_skus": [],
+                            "suggestions": ["Which SKUs are out of stock?",
+                                            "Top 10 best sellers by quantity",
+                                            "Daily briefing"]})
+
+        data = get_data()
+        comp, taxons, platings = data[0], data[1], data[4]
+        sale_types, customers = data[2], data[3]
+        fy_cur, fy_prev, period_kpis = data[7], data[8], data[14]
+        statuses = sorted({i.get("status", "") for i in comp if i.get("status")})
+
+        context_skus = [str(s) for s in (payload.get("context_skus") or [])][:12]
+        direct = _ai_find_skus_in_text(msg, comp)
+
+        engine, plan = "local", None
+        cli = _gemini_client()
+        if cli:
+            plan = _ai_gemini_plan(cli, msg, history, taxons, statuses, platings, context_skus, sale_types)
+            if plan:
+                engine = "gemini"
+        if not plan:
+            plan = _ai_local_plan(msg, taxons, statuses, platings, sale_types, customers)
+
+        if direct:
+            plan["skus"] = sorted(set((plan.get("skus") or []) + [i["sku"] for i in direct]))
+
+        # Follow-up handling: short question about previously discussed SKUs
+        if not plan.get("skus") and context_skus:
+            fl = plan.get("filters") or {}
+            has_new_scope = bool(fl.get("taxon") or fl.get("plating") or fl.get("status")
+                                 or fl.get("stock") not in (None, "", "any"))
+            mlow = msg.lower()
+            followup_kw = re.search(
+                r"\b(iska|uska|inka|isk[ae]|wahi|same|ye[h]?|fir|phir|aur)\b"
+                r"|last\s*\d|\d+\s*(d|din|day|days|mahin|month)"
+                r"|7\s*d|15\s*d|30\s*d|yesterday|kal|is\s*mah?ine|this\s*month"
+                r"|\bfy\b|forecast|revenue|stock|qty|quantity|customer|dispatch|mrp", mlow)
+            new_scope_kw = re.search(
+                r"\b(top|best|sabse|highest|lowest|kaun\w*|konsa|kon\s|sare|saare|all\b"
+                r"|list|category|taxon|out\s*of\s*stock|slow|total|overall|grand|summary)\b", mlow)
+            if not has_new_scope and not new_scope_kw and (followup_kw or len(msg) <= 45):
+                plan["skus"] = context_skus
+
+        if plan.get("skus") and plan.get("action") != "transactions":
+            plan["action"] = "sku_lookup"
+
+        # canonicalise filter values
+        f = plan.get("filters") or {}
+        if f.get("taxon"):   f["taxon"]   = _ai_match_canon(f["taxon"], taxons) or f["taxon"]
+        if f.get("plating"): f["plating"] = _ai_match_canon(f["plating"], platings) or f["plating"]
+        plan["filters"] = f
+
+        if role == "employee":
+            # force qty metrics; revenue kabhi compute/leak na ho
+            if str(plan.get("metric", "")).startswith("rev") or plan.get("metric") == "total_net_revenue":
+                plan["metric"] = "final_qty"
+            # KPIs zero — briefing/chat templates revenue line khud skip kar dete hain
+            period_kpis = {kk: (0 if isinstance(vv, (int, float)) else vv)
+                           for kk, vv in (period_kpis or {}).items()}
+
+        items, summary = _ai_execute_plan(plan, comp, period_kpis, fy_cur, fy_prev)
+
+        if role == "employee":
+            # Revenue value-wale keys (jaise type_breakup, total_revenue,
+            # sum_net_revenue) employee ko KABHI na milein — yeh ₹ leak karte the
+            # (e.g. "kal kitna dispatch" par Type-wise revenue dikh raha tha).
+            _REV_SUMMARY_KEYS = {"type_breakup", "total_revenue", "revenue", "pred_rev",
+                                 "projected_revenue", "sum_net_revenue", "sum_rev_month",
+                                 "sum_rev_yesterday", "sum_rev_fy", "sum_rev_prev_fy"}
+            def _strip_rev(o):
+                if isinstance(o, dict):
+                    return {k: _strip_rev(v) for k, v in o.items()
+                            if k not in _REV_SUMMARY_KEYS
+                            and "rev" not in k.lower() and "revenue" not in k.lower()
+                            and "amount" not in k.lower() and "value" not in k.lower()}
+                if isinstance(o, list):
+                    return [_strip_rev(x) for x in o]
+                return o
+            summary = _strip_rev(summary)
+            items = [{k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items() if k != "sales_entries"}
+                     for i in items]
+        if plan.get("action") == "chat":
+            summary["total_skus"] = len(comp)
+
+        answer = _ai_gemini_answer(cli, msg, history, plan, summary, items) if cli else None
+        if not answer:
+            answer = _ai_local_answer(msg, plan, summary, items)
+            if engine == "gemini":
+                engine = "gemini+local"
+
+        # SAFETY NET: employee answer me galti se bhi koi ₹ figure / revenue line
+        # na bache — ₹ wali lines hata do, aur "Type-wise … ₹…" jaise hisse bhi.
+        if role == "employee" and answer:
+            kept = []
+            for ln in answer.split("\n"):
+                low = ln.lower()
+                if "₹" in ln or re.search(r"\brevenue\b|\bturnover\b|type-wise", low):
+                    continue
+                kept.append(ln)
+            answer = "\n".join(kept).strip() or \
+                "This is quantity/stock info. Revenue is not available on employee accounts."
+
+        # smart follow-up suggestions
+        act_now = plan.get("action")
+        if act_now == "sku_lookup" and items:
+            s0 = items[0]["sku"]
+            suggestions = [f"{s0} sales in last 30 days", f"Forecast for {s0}", f"Top sellers in {items[0].get('taxon','this category')}"]
+        elif act_now == "filter_rank":
+            suggestions = ["Forecast for this month", "Which SKUs are out of stock?", "Daily briefing"]
+        elif act_now == "transactions":
+            suggestions = ["Compare with last month", "Top customers this month", "Forecast for this month"]
+        elif act_now == "forecast":
+            suggestions = ["Which fast sellers are low on stock?", "Top 10 best sellers", "Daily briefing"]
+        elif act_now == "briefing":
+            suggestions = ["Forecast for this month", "Show slow movers", "Top 10 best sellers"]
+        else:
+            suggestions = ["Daily briefing", "Top 10 best sellers", "Revenue this month"]
+        if role == "employee":
+            suggestions = [s for s in suggestions if not re.search(r"revenue|customers", s.lower())] or \
+                          ["Which SKUs are out of stock?", "Top 10 best sellers", "Daily briefing"]
+
+        new_ctx = [i["sku"] for i in items[:12]] if plan.get("action") == "sku_lookup" else context_skus
+        # SKU cards sirf tab dikhao jab user ne SKUs maange hon:
+        #  - specific SKU pucha (sku_lookup), ya
+        #  - list-intent words (dikhao/kaunse/top/which/list...) ke saath rank/txn/forecast
+        list_intent = re.search(
+            r"dikha|show|list|kaun|kon\s|konse|kya\s*kya|which|top\s*\d*|best|sabse|"
+            r"saare|sare\b|details|cards|photo|image|wale\s*sku|sku\s*batao", msg.lower())
+        act = plan.get("action")
+        show_cards = (act in ("sku_lookup", "briefing")) or (act in ("filter_rank", "transactions", "forecast") and bool(list_intent))
+        return jsonify({"answer": answer, "skus": (items[:24] if show_cards else []),
+                        "engine": engine, "context_skus": new_ctx,
+                        "suggestions": suggestions[:3]})
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ── AI DESIGN GENERATOR ─────────────────────────────────────
+AI_IMAGE_MODELS = [
+    "gemini-3-pro-image-preview",        # Nano Banana Pro (Gemini 3) — best
+    "gemini-2.5-flash-image",            # Nano Banana
+    "gemini-2.5-flash-image-preview",
+    "gemini-2.0-flash-preview-image-generation",
+]
+
+def _ai_image_model_candidates(cli):
+    """Preferred models first, then ANY image-capable model the key actually
+    has access to (so naming changes kabhi break na karein)."""
+    models = list(AI_IMAGE_MODELS)
+    try:
+        for m in cli.models.list():
+            name = str(getattr(m, "name", "") or "")
+            short = name.split("/")[-1]
+            sl = short.lower()
+            if ("image" in sl and "embedding" not in sl and "veo" not in sl
+                    and "imagen" not in sl and short not in models):
+                models.append(short)
+    except Exception as e:
+        print("AI Design: model list failed:", e)
+    return models
+
+def _ai_fetch_ref_image(url, max_px=512):
+    """Download a catalog image and return small JPEG bytes (or None)."""
+    for cu in _img_url_candidates(url):
+        try:
+            r = requests.get(cu, timeout=15, allow_redirects=True, headers=_browser_headers(cu))
+            if not r.ok or len(r.content) < 400:
+                continue
+            img = Image.open(io.BytesIO(r.content)).convert("RGB")
+            img.thumbnail((max_px, max_px))
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            return buf.getvalue()
+        except Exception:
+            continue
+    print("AI Design: ref image fetch failed:", str(url)[:80])
+    return None
+
+def _ai_pick_reference_items(comp, ref_skus, taxon_hint=""):
+    """Choose reference designs: user-given SKUs first, else best sellers
+    (optionally from a category) that have images."""
+    refs = []
+    if ref_skus:
+        wanted = [_ai_norm(s) for s in ref_skus]
+        for i in comp:
+            k = _ai_norm(i["sku"])
+            if any(k == w or k.startswith(w) for w in wanted if len(w) >= 3):
+                refs.append(i)
+    if not refs:
+        pool = [i for i in comp if str(i.get("image_url", "")).strip()
+                and str(i.get("image_url", "")).lower() != "nan"]
+        if taxon_hint:
+            tpool = [i for i in pool if taxon_hint.lower() in str(i.get("taxon", "")).lower()]
+            if tpool:
+                pool = tpool
+        pool.sort(key=lambda i: float(i.get("final_qty") or 0), reverse=True)
+        refs = pool[:3]
+    out = []
+    for i in refs[:3]:
+        url = str(i.get("image_url", "")).strip()
+        if not url or url.lower() == "nan":
+            continue
+        b = _ai_fetch_ref_image(url)
+        if b:
+            out.append((i["sku"], b))
+    return out
+
+def _ai_pollinations_design(prompt, size=1024, fast=False):
+    """100% FREE keyless image generation via Pollinations.ai.
+    Multiple attempts across models/URL variants so ek attempt fail ho to
+    bhi design ban jaye."""
+    import urllib.parse
+    q = urllib.parse.quote(prompt[:1200])
+    attempts = []
+    models = ["turbo", "flux"] if fast else ["flux", "turbo"]
+    for mdl in models:
+        attempts.append(f"https://image.pollinations.ai/prompt/{q}"
+                        f"?width={size}&height={size}&nologo=true&model={mdl}"
+                        f"&seed={int(time.time()*1000) % 999999}")
+    attempts.append(f"https://image.pollinations.ai/prompt/{q}")  # plain, defaults
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+               "Accept": "image/*,*/*"}
+    for url in attempts:
+        try:
+            r = requests.get(url, timeout=(15, 120), headers=headers, allow_redirects=True)
+            ct = r.headers.get("Content-Type", "").lower()
+            if r.ok and (ct.startswith("image") or (len(r.content) > 5000 and r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"\xff\xd8\xff\xee", b"RIFF"))):
+                return r.content
+            print("Pollinations attempt failed:", r.status_code, ct, url[:80])
+        except Exception as e:
+            print("Pollinations attempt error:", str(e)[:120])
+        time.sleep(1.5)
+    return None
+
+def _ai_cloudflare_design(prompt):
+    """FREE engine: Cloudflare Workers AI (FLUX-schnell) — fast & reliable.
+    Free tier: roughly 100+ images har din."""
+    if not (CF_ACCOUNT_ID and CF_API_TOKEN):
+        return None
+    base = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/"
+    headers = {"Authorization": f"Bearer {CF_API_TOKEN}",
+               "Content-Type": "application/json"}
+    # model 1: FLUX schnell — JSON response with base64 image
+    try:
+        r = requests.post(base + "@cf/black-forest-labs/flux-1-schnell",
+                          headers=headers,
+                          json={"prompt": prompt[:2000], "steps": 8}, timeout=(15, 120))
+        if r.ok:
+            try:
+                j = r.json()
+                b64 = (j.get("result") or {}).get("image")
+                if b64:
+                    return base64.b64decode(b64)
+            except Exception:
+                pass
+        print("CF flux attempt:", r.status_code, str(r.text)[:140])
+    except Exception as e:
+        print("CF flux error:", str(e)[:120])
+    # model 2/3: SDXL variants — binary image response
+    for mdl in ("@cf/bytedance/stable-diffusion-xl-lightning",
+                "@cf/stabilityai/stable-diffusion-xl-base-1.0"):
+        try:
+            r = requests.post(base + mdl, headers=headers,
+                              json={"prompt": prompt[:2000]}, timeout=(15, 120))
+            ct = r.headers.get("Content-Type", "").lower()
+            if r.ok and (ct.startswith("image") or r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"RIFF")):
+                return r.content
+            print("CF attempt:", mdl, r.status_code, str(r.text)[:120])
+        except Exception as e:
+            print("CF error:", str(e)[:120])
+    return None
+
+def _ai_hf_design(prompt):
+    """FREE backup engine #2: Hugging Face (FLUX-schnell).
+    Naya router endpoint pehle, purana api-inference fallback mein."""
+    if not HF_TOKEN:
+        return None
+    models = ("black-forest-labs/FLUX.1-schnell",
+              "stabilityai/stable-diffusion-xl-base-1.0")
+    bases = ("https://router.huggingface.co/hf-inference/models/{m}",
+             "https://api-inference.huggingface.co/models/{m}")
+    for mdl in models:
+        for base in bases:
+            try:
+                r = requests.post(
+                    base.format(m=mdl),
+                    headers={"Authorization": f"Bearer {HF_TOKEN}",
+                             "Accept": "image/png"},
+                    json={"inputs": prompt[:1000],
+                          "parameters": {"width": 1024, "height": 1024}},
+                    timeout=(15, 180))
+                ct = r.headers.get("Content-Type", "").lower()
+                if r.ok and (ct.startswith("image") or r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"RIFF")):
+                    return r.content
+                print("HF attempt:", mdl, base.split("/")[2], r.status_code, str(r.text)[:100])
+                if r.status_code in (401, 403):
+                    print("HF token issue: token par 'Make calls to Inference Providers' "
+                          "permission tick honi chahiye (fine-grained token settings).")
+            except Exception as e:
+                print("HF error:", str(e)[:120])
+    return None
+
+def _ai_extract_image_and_text(resp):
+    """Pull generated image bytes + text from a Gemini response."""
+    img_bytes, text = None, []
+    try:
+        for cand in (getattr(resp, "candidates", None) or []):
+            content = getattr(cand, "content", None)
+            for part in (getattr(content, "parts", None) or []):
+                t = getattr(part, "text", None)
+                if t:
+                    text.append(t)
+                inline = getattr(part, "inline_data", None)
+                if inline is not None and getattr(inline, "data", None):
+                    data = inline.data
+                    if isinstance(data, str):
+                        data = base64.b64decode(data)
+                    if img_bytes is None:
+                        img_bytes = data
+    except Exception as e:
+        print("AI Design: parse response failed:", e)
+    return img_bytes, " ".join(text).strip()
+
+@app.route("/api/ai-design", methods=["POST"])
+def api_ai_design():
+    try:
+        payload  = request.get_json(silent=True) or {}
+        prompt   = (payload.get("prompt") or "").strip()
+        ref_skus = [s.strip() for s in re.split(r"[,\s]+", str(payload.get("ref_skus") or "")) if s.strip()]
+        if not prompt:
+            return jsonify({"error": "Please write a design prompt first."}), 400
+
+        cli = _gemini_client()
+
+        data = get_data()
+        comp, taxons = data[0], data[1]
+        taxon_hint = next((t for t in taxons if str(t).lower() in prompt.lower()), "")
+        refs = _ai_pick_reference_items(comp, ref_skus, taxon_hint) if cli else []
+
+        base_brief = (
+            "Premium men's brass jewellery product photo for COSA NOSTRAA (Jaipur luxury brand). "
+            "ONE single product, photorealistic studio render, clean light grey/white background, "
+            "centered, sharp macro details, professional e-commerce catalog style. Design: " + prompt
+        )
+
+        parts = []
+        for _, b in refs:
+            parts.append(types.Part.from_bytes(data=b, mime_type="image/jpeg"))
+        ref_note = (f"The {len(refs)} attached images are existing best-selling designs from the brand; "
+                    f"take style inspiration (finish, detailing level, premium brass aesthetic) from them, "
+                    f"but create a completely NEW original design. ") if refs else ""
+        parts.append(types.Part.from_text(text=(
+            "You are a senior jewellery designer for COSA NOSTRAA, a premium men's brass "
+            "jewellery & accessories brand from Jaipur, India. "
+            + ref_note +
+            "Generate ONE high-quality, photorealistic product render of the new design on a "
+            "clean studio background (light grey/white), professional e-commerce catalog style, "
+            "single product, centered, sharp details.\n\nDesign brief from the founder: " + prompt +
+            "\n\nAlso reply with 2-3 short lines (Hinglish is fine) describing the design "
+            "(style, plating suggestion, target MRP range)."
+        )))
+
+        last_err = None
+        if cli is None:
+            last_err = "GEMINI_KEY not set — using free engine"
+        for model in (_ai_image_model_candidates(cli) if cli else []):
+            try:
+                try:
+                    resp = cli.models.generate_content(
+                        model=model,
+                        contents=parts,
+                        config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
+                    )
+                except Exception as cfg_err:
+                    # some models reject response_modalities config — retry plain
+                    if "404" in str(cfg_err) or "NOT_FOUND" in str(cfg_err):
+                        raise
+                    resp = cli.models.generate_content(model=model, contents=parts)
+                img_bytes, text = _ai_extract_image_and_text(resp)
+                if img_bytes:
+                    b64 = base64.b64encode(img_bytes).decode()
+                    return jsonify({
+                        "image": "data:image/png;base64," + b64,
+                        "text": text or "Your new design is ready.",
+                        "refs_used": [s for s, _ in refs],
+                        "model": model,
+                    })
+                last_err = f"{model}: image nahi mili (text-only response)"
+            except Exception as e:
+                last_err = f"{model}: {e}"
+                print("AI Design:", last_err)
+                continue
+        # ── FREE FALLBACK 1: Cloudflare Workers AI (best free) ──
+        print("AI Design: Gemini unavailable/exhausted -> free engines. Last:", str(last_err)[:160])
+        img_bytes = _ai_cloudflare_design(base_brief)
+        engine_name = "cloudflare-flux (FREE)"
+        # ── FREE FALLBACK 2: Pollinations.ai (keyless) ──
+        if not img_bytes:
+            img_bytes = _ai_pollinations_design(base_brief)
+            engine_name = "pollinations-flux (FREE)"
+        # ── FREE FALLBACK 3: Hugging Face ──
+        if not img_bytes:
+            img_bytes = _ai_hf_design(base_brief)
+            engine_name = "huggingface-flux (FREE)"
+        if img_bytes:
+            b64 = base64.b64encode(img_bytes).decode()
+            return jsonify({
+                "image": "data:image/jpeg;base64," + b64,
+                "text": "Your new design is ready. (Generated by the free engine — reference images are used only by the Gemini engine.)",
+                "refs_used": [],
+                "model": engine_name,
+            })
+        cf_hint = "" if (CF_ACCOUNT_ID and CF_API_TOKEN) else (
+            " Fix: add your free Cloudflare CF_ACCOUNT_ID and CF_API_TOKEN at the top of this file.")
+        return jsonify({"error": "Design generation failed — all engines unavailable." + cf_hint +
+                                 " Detail: " + str(last_err or "")[:200]}), 500
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/upload-report", methods=["POST"])
 def api_upload_report():
