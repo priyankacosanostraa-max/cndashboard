@@ -1216,32 +1216,57 @@ _HF_LAST_ERROR = {"msg": ""}
 _SPACE_CLI = {"cli": None}
 
 def _space_dinov2_embedding(path):
-    """DINOv2 embedding apne HF Space se (free CPU, 16GB) — lite servers ke liye."""
+    """DINOv2 embedding apne HF Space se (free CPU, 16GB) — lite servers ke liye.
+    HARD TIMEOUT lagaya hai: agar free HF Space so raha hai (cold/inactive),
+    to gradio_client ka Client(SPACE_ID) ya .predict() call bina timeout ke
+    bahut der tak hang ho sakta hai — itni der ki Railway/Render ka gunicorn
+    worker timeout (120s) khud worker ko SIGKILL kar deta hai, jisse browser
+    me "Failed to fetch" / connection-reset error aata hai. Ab dono blocking
+    calls ek background thread me chalte hain aur fixed time ke baad fail-fast
+    ho jaate hain — worker kabhi crash nahi hoga, sirf saaf error milega."""
     try:
         from gradio_client import Client, handle_file
     except Exception as e:
         _HF_LAST_ERROR["msg"] = "gradio_client installed nahi hai: " + str(e)[:80]
         return None
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
+    CONNECT_TIMEOUT = 25   # Space cold-start/connect ke liye max wait
+    PREDICT_TIMEOUT  = 45   # actual embedding inference ke liye max wait
     last = ""
     for attempt in range(2):
         try:
             cli = _SPACE_CLI["cli"]
             if cli is None:
-                # gradio_client versions: naya 'token', purana 'hf_token', public space ko kuch nahi chahiye
-                for kw in ({}, {"token": HF_TOKEN or None}, {"hf_token": HF_TOKEN or None}):
+                def _connect():
+                    for kw in ({}, {"token": HF_TOKEN or None}, {"hf_token": HF_TOKEN or None}):
+                        try:
+                            return Client(SPACE_ID, verbose=False, **kw)
+                        except TypeError:
+                            continue
+                    return Client(SPACE_ID)
+                with ThreadPoolExecutor(max_workers=1) as ex:
+                    fut = ex.submit(_connect)
                     try:
-                        cli = Client(SPACE_ID, verbose=False, **kw)
-                        break
-                    except TypeError:
-                        cli = None
+                        cli = fut.result(timeout=CONNECT_TIMEOUT)
+                    except _FutTimeout:
+                        last = f"HF Space connect timed out after {CONNECT_TIMEOUT}s — Space so raha hai shayad, dobara try karo (cold-start me 30-60s lagta hai)"
+                        print("Space embed:", last)
+                        time.sleep(3)
                         continue
-                if cli is None:
-                    cli = Client(SPACE_ID)
                 _SPACE_CLI["cli"] = cli
             out = None
+            def _predict(call_kw):
+                return cli.predict(handle_file(path), **call_kw)
             for call_kw in ({"api_name": "/predict"}, {}, {"fn_index": 0}):
                 try:
-                    out = cli.predict(handle_file(path), **call_kw)
+                    with ThreadPoolExecutor(max_workers=1) as ex:
+                        fut = ex.submit(_predict, call_kw)
+                        try:
+                            out = fut.result(timeout=PREDICT_TIMEOUT)
+                        except _FutTimeout:
+                            last = f"HF Space predict timed out after {PREDICT_TIMEOUT}s"
+                            print("Space embed:", last)
+                            continue
                     break
                 except (ValueError, KeyError) as ve:
                     last = f"{type(ve).__name__}: {str(ve)[:100]}"
@@ -6299,14 +6324,23 @@ function doVision(){
   const btn = document.getElementById('goBtn'); if (btn) btn.disabled = true;
   const out = document.getElementById('gFinder'); if (out) out.innerHTML = '';
 
-  fetch('/search', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'}, body: JSON.stringify({image:imgB64})})
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 75000); // backend ab khud 25-45s me fail-fast hota hai, 75s safety margin
+
+  fetch('/search', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'}, body: JSON.stringify({image:imgB64}), signal: ctrl.signal})
     .then(r => r.json())
     .then(d => {
       if (d.error) throw new Error(d.error);
       if (out) out.innerHTML = (d.results || []).map(m => mkCard(m, m.total_net_revenue, m.confidence, false)).join('') || '<div class="no-data">No match found</div>';
     })
-    .catch(e => alert('Error: ' + e.message))
+    .catch(e => {
+      const msg = (e && e.name === 'AbortError')
+        ? 'AI model is taking too long to respond (it may be waking up from sleep — free server). Please try again in a moment.'
+        : e.message;
+      alert('Error: ' + msg);
+    })
     .finally(() => {
+      clearTimeout(timer);
       if (L) L.style.display='none';
       if (btn) btn.disabled = false;
     });
