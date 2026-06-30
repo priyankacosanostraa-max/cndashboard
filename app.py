@@ -10927,12 +10927,12 @@ def _warmup_and_refresh_loop():
     Baaki role pehli request par lazy ban jata hai."""
     try:
         get_data(True)
-        try:
-            _build_role_gz("admin")          # sirf admin prebuild (RAM bachat)
-        except Exception as e:
-            print("prebuild admin failed:", str(e)[:100])
+        # MEMORY: gzip prebuild startup pe memory spike karta tha (512MB cross ->
+        # OOM -> restart loop -> "Syncing databases" kabhi khatam nahi hota).
+        # Isliye prebuild skip; pehli /api/data request par lazy ban jayega.
         _wstage("ready", "Ready")
         print("WARMUP: data ready ✔")
+        _gc.collect(); _malloc_trim()
         # vision init memory leta hai — Render 512MB par startup ke waqt skip.
         # SKU Finder pehli baar use hone par lazy load ho jayega (init_vision wahin call hota hai).
         if os.environ.get("EAGER_VISION") == "1":
@@ -10947,7 +10947,7 @@ def _warmup_and_refresh_loop():
         time.sleep(REFRESH_INTERVAL)
         try:
             get_data(True)
-            _build_role_gz("admin")          # background me bhi sirf admin
+            _gc.collect(); _malloc_trim()
             try:
                 import resource
                 _mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
