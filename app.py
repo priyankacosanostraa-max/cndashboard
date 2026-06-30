@@ -4917,7 +4917,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
-    <button class="app-chip" onclick="showTab('ai')">✦ AI</button>
     <button class="app-chip" onclick="doLogout()" style="border-color:rgba(220,38,38,.4);color:#dc2626">Sign Out</button>
   </div>
 </div>
@@ -4935,7 +4934,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
-  <button class="menu-item" id="m8" onclick="showTab('ai')">AI Studio</button>
+  <button class="menu-item" id="m8" onclick="showTab('ai')" style="display:none">AI Studio</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
@@ -5312,46 +5311,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ai-cards" id="smartResults" style="margin-top:18px"></div>
   </div>
 
-  <div id="vAi" style="display:none">
-    <div class="ai-shell">
-      <div class="ai-hd">
-        <div class="ai-hd-row">
-          <div>
-            <div class="ai-hd-title">AI STUDIO</div>
-            <div class="ai-hd-sub">Ask anything about your business data</div>
-          </div>
-          <div class="ai-hd-actions">
-            <button class="ai-hbtn design" onclick="aiToggleDesign()">NEW DESIGN</button>
-            <button class="ai-hbtn" onclick="aiClearChat()">CLEAR CHAT</button>
-          </div>
-        </div>
-      </div>
-      <div class="ai-design" id="aiDesignPanel" style="display:none">
-        <div class="ai-design-title">CREATE NEW DESIGN <span class="ai-design-sub">AI generates an original design inspired by your bestsellers</span></div>
-        <textarea id="aiDesignPrompt" rows="2" placeholder="Describe the design — e.g. bold lion head bracelet, antique gold finish, premium festive look"></textarea>
-        <input id="aiDesignRefs" placeholder="Reference SKU codes (optional, comma separated)">
-        <div class="ai-design-foot">
-          <button class="ai-hbtn design" id="aiDesignBtn" onclick="aiDesign()">GENERATE</button>
-          <span class="ai-design-note">Generation takes 15–30 seconds</span>
-        </div>
-      </div>
-      <div class="ai-chat" id="aiChat"></div>
-      <div class="ai-suggest" id="aiSuggest">
-        <button class="ai-chip" onclick="aiSend('Daily briefing')">Daily briefing</button>
-        <button class="ai-chip" onclick="aiSend('Show top 10 best selling SKUs')">Top 10 best sellers</button>
-        <button class="ai-chip rev-only" onclick="aiSend('What is the total revenue this month?')">Revenue this month</button>
-        <button class="ai-chip" onclick="aiSend('Which SKUs are out of stock?')">Out of stock</button>
-        <button class="ai-chip" onclick="aiSend('Show fast selling SKUs with low stock')">Low stock, fast selling</button>
-        <button class="ai-chip" onclick="aiSend('Which SKUs have not sold in the last 3 months?')">Slow movers</button>
-        <button class="ai-chip" onclick="aiToggleDesign(true)">Create a design</button>
-      </div>
-      <div class="ai-inputbar">
-        <textarea id="aiInput" rows="1" placeholder="Ask anything — e.g. stock and revenue of BR-1023"
-          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();aiSend();}"></textarea>
-        <button class="ai-sendbtn" id="aiSendBtn" onclick="aiSend()" title="Send">➤</button>
-      </div>
-    </div>
-  </div>
+  <div id="vAi" style="display:none"></div>
 
 
   <div id="vMarketplaces" style="display:none">
@@ -5419,37 +5379,14 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="due">Has Due (not overdue)</option>
       </select></div>
   </div>
-  <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
     <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
-      <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
-    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
-      <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
-    <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
-      <div id="payAgingTable" style="font-size:.78rem"></div>
-    </div>
-    <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
-      <div id="payWeekTable" style="font-size:.78rem"></div>
-    </div>
-  </div>
-  <div id="payLedgerWrap" style="display:none;margin-top:10px">
-    <div class="insights-head" style="margin-bottom:8px">
-      <div><div class="insights-title" id="payLedgerTitle">Customer Ledger</div></div>
-      <div class="insight-toolbar-actions">
-        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportCustomerLedger()">Export CSV</button>
-        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="printCustomerLedger()">Print</button>
-        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px" onclick="closeCustomerLedger()">Close</button>
-      </div>
-    </div>
-    <div id="payLedgerTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:65vh"></div>
+      <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:60vh"></div></div>
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Aging Bucket</div>
+      <div id="payAgingTable"></div></div>
   </div>
   </div>
-
 
   <div id="vProfit" style="display:none">
   <div class="insights-head">
@@ -8285,12 +8222,6 @@ function loadPayments(force){
       _payData = d;
       const asOf = document.getElementById('payAsOf');
       if (asOf) asOf.textContent = 'As of ' + d.today + ' · month-end ' + d.month_end;
-      const luHost = document.getElementById('payLastUpdated');
-      if (luHost){
-        luHost.textContent = d.ledger_last_updated
-          ? ('Ledger last updated till: ' + d.ledger_last_updated + ' (latest payment/credit received on this date)')
-          : 'Ledger last updated: no payment/credit entries found';
-      }
       if (!_payTagsFilled){
         const sel = document.getElementById('payTag');
         if (sel && d.tags){
@@ -8322,8 +8253,6 @@ function renderPayments(){
   const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
   const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
   const sumBal = rows.reduce((s,r)=>s+(r.balance||0),0);
-  const sumDueMe = rows.reduce((s,r)=>s+(r.due_me||0),0);
-  const sumOverMe = rows.reduce((s,r)=>s+(r.overdue_me||0),0);
   const sumHost = document.getElementById('paySummary');
   if (sumHost){
     sumHost.innerHTML =
@@ -8334,9 +8263,9 @@ function renderPayments(){
   // outstanding till today table
   const todayHost = document.getElementById('payTodayTable');
   if (todayHost){
-    const body = rows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
-        <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
-        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
+    const body = rows.map(r => `<tr>
+        <td style="font-weight:700">${escHtml(r.customer)}</td>
+        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'—')}</td>
         <td style="text-align:center">${r.term_days||0}d</td>
         <td class="${(r.due||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due)}</td>
         <td class="${(r.overdue||0)>0?'red':'muted'}" style="text-align:right;font-weight:700">${fmt(r.overdue)}</td>
@@ -8346,169 +8275,30 @@ function renderPayments(){
         <th>Customer Name</th><th style="text-align:center">Tag</th><th style="text-align:center">Term</th>
         <th style="text-align:right">Due</th><th style="text-align:right">Overdue</th><th style="text-align:right">Balance</th>
       </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td>Total</td><td></td><td></td>
         <td style="text-align:right">${fmt(sumDue)}</td>
         <td style="text-align:right">${fmt(sumOver)}</td>
         <td style="text-align:right">${fmt(sumBal)}</td>
       </tr></tfoot></table>`;
   }
-  // outstanding till current month-end
-  const meHost = document.getElementById('payMeTable');
-  const meTitle = document.getElementById('payMeTitle');
-  if (meTitle) meTitle.textContent = 'Outstanding till month-end (' + (d.month_end||'') + ')';
-  if (meHost){
-    const body = rows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
-        <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
-        <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
-        <td class="${(r.due_me||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due_me)}</td>
-        <td class="${(r.overdue_me||0)>0?'red':'muted'}" style="text-align:right;font-weight:700">${fmt(r.overdue_me)}</td>
-        <td style="text-align:right;font-weight:800">${fmt(r.balance)}</td>
-      </tr>`).join('');
-    meHost.innerHTML = `<table class="ro" style="width:100%;min-width:520px"><thead><tr>
-        <th>Customer Name</th><th style="text-align:center">Tag</th>
-        <th style="text-align:right">Due (by month-end)</th><th style="text-align:right">Overdue (by month-end)</th><th style="text-align:right">Balance</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
-        <td>Total</td><td></td>
-        <td style="text-align:right">${fmt(sumDueMe)}</td>
-        <td style="text-align:right">${fmt(sumOverMe)}</td>
-        <td style="text-align:right">${fmt(sumBal)}</td>
-      </tr></tfoot></table>`;
-  }
-  // aging bucket — recomputed from the CURRENTLY FILTERED customers (tag/search/show); compact size
+  // aging bucket (filtered customers ka recompute nahi hota server-side; total aging server se)
   const agHost = document.getElementById('payAgingTable');
   if (agHost){
-    const AG_LABELS = ["0 Days","0-30 Days","31-60 Days","61-90 Days","91-180 Days",">180 Days"];
-    const agTotals = {}; AG_LABELS.forEach(k => agTotals[k] = 0);
-    rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
-    const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
-    const body = AG_LABELS.map(k => `<tr>
-        <td style="padding:5px 8px">${escHtml(k)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(agTotals[k])}</td>
+    const ag = d.aging || [];
+    const body = ag.map(a => `<tr>
+        <td>${escHtml(a.bucket)}</td>
+        <td style="text-align:right;font-weight:700">${fmt(a.amount)}</td>
       </tr>`).join('');
-    agHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
-        <th style="padding:5px 8px">Aging Bucket</th><th style="text-align:right;padding:5px 8px">Sum of Balance</th>
+    agHost.innerHTML = `<table class="ro" style="width:100%"><thead><tr>
+        <th>Aging Bucket</th><th style="text-align:right">Sum of Balance</th>
       </tr></thead><tbody>${body}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-        <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
+        <td>Total</td><td style="text-align:right">${fmt(d.aging_total)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
-  }
-  // week-wise overdue tracker (fixed for whole current month — NOT filter-dependent, shows company-wide totals)
-  const wkHost = document.getElementById('payWeekTable');
-  if (wkHost){
-    const weeks = d.week_overdue || [];
-    const body = weeks.map(w => `<tr>
-        <td style="padding:5px 8px">${escHtml(w.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.range)}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(w.overdue)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(w.payment)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(w.balance)}</td>
-      </tr>`).join('');
-    wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
-        <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
-        <th style="text-align:right;padding:5px 8px">Payment Received</th>
-        <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Week buckets are fixed for the whole month (Week 1 = 1st–7th, and so on). "Overdue Becoming Due" = invoices whose due date falls in that week. "Balance Remaining" = total outstanding minus cumulative payments received so far this month.</p>`;
+      <p style="color:var(--cn-mid);font-size:.75rem;margin-top:8px">Aging = overall (all customers). 0 Days = within term / not overdue.</p>`;
   }
 }
-// Single delegated click handler for customer rows (today + month-end tables)
-document.addEventListener('click', function(ev){
-  const tr = ev.target.closest && ev.target.closest('.pay-row');
-  if (tr && tr.dataset && tr.dataset.customer) loadCustomerLedger(tr.dataset.customer);
-});
-let _custLedgerData = null;
-function loadCustomerLedger(name){
-  const wrap = document.getElementById('payLedgerWrap');
-  const host = document.getElementById('payLedgerTable');
-  const title = document.getElementById('payLedgerTitle');
-  if (!wrap || !host) return;
-  wrap.style.display = 'block';
-  if (title) title.textContent = 'Ledger — ' + name;
-  host.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
-  wrap.scrollIntoView({behavior:'smooth', block:'start'});
-  fetch('/api/payments/ledger?customer=' + encodeURIComponent(name), {headers:{'ngrok-skip-browser-warning':'true'}})
-    .then(r => r.json())
-    .then(d => {
-      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(d.error) + '</div>'; return; }
-      _custLedgerData = d;
-      const rows = d.entries || [];
-      let sumDebit = 0, sumCredit = 0;
-      const body = rows.map(e => {
-        const deb = e.debit || 0, cred = e.credit || 0;
-        sumDebit += deb; sumCredit += cred;
-        const side = deb > 0 ? 'To' : (cred > 0 ? 'By' : '');
-        return `<tr>
-          <td>${escHtml(e.date||'')}</td>
-          <td>${side}</td>
-          <td>${escHtml(e.particulars||'')}</td>
-          <td>${escHtml(e.vch_type||'')}</td>
-          <td>${escHtml(e.vch_no||'')}</td>
-          <td style="text-align:right">${deb ? fmt(deb) : ''}</td>
-          <td style="text-align:right">${cred ? fmt(cred) : ''}</td>
-        </tr>`;
-      }).join('');
-      sumDebit = Math.round(sumDebit); sumCredit = Math.round(sumCredit);
-      const closing = sumDebit - sumCredit; // +ve => customer owes us (closing shown on Credit side to balance)
-      const closingAbs = Math.abs(closing);
-      const closingRow = closing >= 0
-        ? `<tr style="font-weight:700"><td></td><td>By</td><td>Closing Balance</td><td></td><td></td><td></td><td style="text-align:right">${fmt(closingAbs)}</td></tr>`
-        : `<tr style="font-weight:700"><td></td><td>To</td><td>Closing Balance</td><td></td><td></td><td style="text-align:right">${fmt(closingAbs)}</td><td></td></tr>`;
-      const grand = Math.max(sumDebit, sumCredit + (closing >= 0 ? closingAbs : 0), sumDebit + (closing < 0 ? closingAbs : 0));
-      const grandTotal = sumDebit >= sumCredit ? sumDebit : sumCredit;
-      host.innerHTML = `<table class="ro" id="custLedgerPrintTable" style="width:100%;min-width:760px">
-        <caption style="text-align:left;font-weight:800;padding:8px 10px;border:1px solid #ccc;border-bottom:0;background:#fafafa">
-          SalasarBalaji Creations Pvt. Ltd.<br>
-          <span style="font-weight:600;font-size:.82em">Current Account No. - 674805601615 &nbsp;|&nbsp; IFSC - ICIC0006748 &nbsp;|&nbsp; ICICI Bank, AS-1, SITAPURA INDUSTRIAL AREA, EPIP, JAIPUR-302022</span><br>
-          <span style="font-weight:600;font-size:.82em">Principal Address: H1-894, Phase-III, Riico Industrial Area, Sitapura, Jaipur-302022</span><br>
-          <span style="font-weight:700">Ledger: ${escHtml(d.customer||'')}</span> &nbsp; <span style="color:#666;font-weight:600">${escHtml(d.period||'')}</span>
-        </caption>
-        <thead><tr>
-          <th>Date</th><th></th><th>Particulars</th><th>Vch Type</th><th>Vch No.</th>
-          <th style="text-align:right">Debit</th><th style="text-align:right">Credit</th>
-        </tr></thead>
-        <tbody>${body || '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">No transactions found</td></tr>'}</tbody>
-        <tfoot>
-          <tr style="font-weight:800;background:var(--cn-ivory)">
-            <td colspan="5">Total</td>
-            <td style="text-align:right">${fmt(sumDebit)}</td>
-            <td style="text-align:right">${fmt(sumCredit)}</td>
-          </tr>
-          ${closingRow}
-          <tr style="font-weight:800;background:var(--cn-ivory)">
-            <td colspan="5">Grand Total</td>
-            <td style="text-align:right">${fmt(grandTotal)}</td>
-            <td style="text-align:right">${fmt(grandTotal)}</td>
-          </tr>
-        </tfoot></table>`;
-    })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
-}
-function closeCustomerLedger(){
-  const wrap = document.getElementById('payLedgerWrap');
-  if (wrap) wrap.style.display = 'none';
-  _custLedgerData = null;
-}
-function exportCustomerLedger(){
-  const d = _custLedgerData; if (!d || !d.entries || !d.entries.length){ alert('No ledger loaded.'); return; }
-  const headers = ['Date','Type','Particulars','Vch Type','Vch No','Debit','Credit'];
-  const rows = d.entries.map(e => [e.date||'', (e.debit>0?'To':(e.credit>0?'By':'')), e.particulars||'', e.vch_type||'', e.vch_no||'', e.debit||0, e.credit||0]);
-  _dlCsv(headers, rows, 'ledger_' + (d.customer||'customer').replace(/[^a-z0-9]+/gi,'_'));
-}
-function printCustomerLedger(){
-  const tbl = document.getElementById('custLedgerPrintTable');
-  if (!tbl){ alert('No ledger loaded.'); return; }
-  const w = window.open('', '_blank');
-  w.document.write('<html><head><title>Customer Ledger</title><style>' +
-    'body{font-family:Arial,sans-serif;padding:20px} table{width:100%;border-collapse:collapse;font-size:12px}' +
-    'th,td{border:1px solid #333;padding:6px 8px} th{background:#f0f0f0} caption{font-weight:800;padding:10px}' +
-    '</style></head><body>' + tbl.outerHTML + '</body></html>');
-  w.document.close(); w.focus(); w.print();
-}
-window.loadCustomerLedger = loadCustomerLedger; window.closeCustomerLedger = closeCustomerLedger;
-window.exportCustomerLedger = exportCustomerLedger; window.printCustomerLedger = printCustomerLedger;
 function exportPayments(){
   const rows = _payFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
@@ -8964,7 +8754,7 @@ showTab = function(t){
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
-  if (t === 'ai') { aiOnOpen(); setTimeout(()=>{const i=document.getElementById('aiInput'); if(i) i.focus();}, 120); }
+  if (t === 'ai') { /* AI Studio removed */ }
 };
 
 const __origMkCard = mkCard;
@@ -10178,7 +9968,6 @@ PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
 PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
-_PAY_RAW_LEDGER = {"data": None}
 
 def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
@@ -10193,8 +9982,8 @@ def _build_payments():
         terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
         tcols = list(terms_df.columns)
         T_CUST = find_col(terms_df.columns, "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
-        T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)")
-        T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type")
+        T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "days")
+        T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag")
         tc = terms_df[T_CUST].tolist() if T_CUST else []
         tt = terms_df[T_TERM].tolist() if T_TERM else [0]*len(tc)
         tg = terms_df[T_TAG].tolist()  if T_TAG  else [""]*len(tc)
@@ -10212,32 +10001,21 @@ def _build_payments():
     lcols = list(led_df.columns)
     L_DATE = find_col(led_df.columns, "Date", "date", "invoice date", "txn date") or (lcols[0] if lcols else None)
     L_CUST = find_col(led_df.columns, "Customer Name", "customer", "name", "party")
-    L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno")
-    L_DEB  = find_col(led_df.columns, "Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
-    L_CRED = find_col(led_df.columns, "Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr")
-    L_BAL  = find_col(led_df.columns, "Balance", "sum of outstanding", "bal", "running balance")
-    L_PART = find_col(led_df.columns, "Particulars", "particular", "narration")
-    L_VTYPE = find_col(led_df.columns, "Vch Type", "voucher type", "vch_type")
-    L_DUE  = find_col(led_df.columns, "Due Date", "due date", "duedate")
-    L_CMP  = find_col(led_df.columns, "Company Details", "company")
+    L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher")
+    L_DEB  = find_col(led_df.columns, "Debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
+    L_CRED = find_col(led_df.columns, "Credit", "payment", "credit (payment)", "credit_payment", "cr")
+    L_BAL  = find_col(led_df.columns, "Balance", "bal", "running balance")
 
     if not L_CUST:
         raise ValueError(f"Ledger me 'Customer Name' column nahi mila. Columns: {lcols[:12]}")
 
     by_cust = {}
-    raw_by_cust = {}
     # FAST: column lists nikaal ke zip karo (.iterrows bahut dheema hota hai)
     custs = led_df[L_CUST].tolist() if L_CUST else []
-    n = len(custs)
-    dates = led_df[L_DATE].tolist() if L_DATE else [None]*n
-    debs  = led_df[L_DEB].tolist()  if L_DEB  else [0]*n
-    creds = led_df[L_CRED].tolist() if L_CRED else [0]*n
-    invs  = led_df[L_INV].tolist()  if L_INV  else [""]*n
-    bals  = led_df[L_BAL].tolist()  if L_BAL  else [None]*n
-    parts = led_df[L_PART].tolist() if L_PART else [""]*n
-    vtyps = led_df[L_VTYPE].tolist() if L_VTYPE else [""]*n
-    dues  = led_df[L_DUE].tolist()  if L_DUE  else [None]*n
-    cmps  = led_df[L_CMP].tolist()  if L_CMP  else [""]*n
+    dates = led_df[L_DATE].tolist() if L_DATE else [None]*len(custs)
+    debs  = led_df[L_DEB].tolist()  if L_DEB  else [0]*len(custs)
+    creds = led_df[L_CRED].tolist() if L_CRED else [0]*len(custs)
+    invs  = led_df[L_INV].tolist()  if L_INV  else [""]*len(custs)
     _date_cache = {}
     def _fast_date(v):
         key = str(v)
@@ -10251,29 +10029,15 @@ def _build_payments():
             dd = dd.date()
         _date_cache[key] = dd
         return dd
-    for i in range(n):
+    for i in range(len(custs)):
         nm = _norm_name(custs[i])
         if not nm:
             continue
-        dt = _fast_date(dates[i])
         by_cust.setdefault(nm, []).append({
-            "date": dt,
+            "date": _fast_date(dates[i]),
             "inv":  clean(invs[i]),
             "debit":  to_num(debs[i]),
             "credit": to_num(creds[i]),
-        })
-        due_v = _fast_date(dues[i]) if dues[i] not in (None, "") else None
-        raw_by_cust.setdefault(nm, []).append({
-            "company": clean(cmps[i]),
-            "date": dt.strftime("%d-%b-%y") if dt else clean(dates[i]),
-            "particulars": clean(parts[i]) or ("To Opening Balance" if i == 0 else ""),
-            "vch_type": clean(vtyps[i]),
-            "vch_no": clean(invs[i]),
-            "debit": to_num(debs[i]),
-            "credit": to_num(creds[i]),
-            "balance": to_num(bals[i]) if bals[i] is not None else None,
-            "due_date": due_v.strftime("%d-%b-%y") if due_v else None,
-            "_sort": dt or date(1900, 1, 1),
         })
 
     today = now_ist().date()
@@ -10298,12 +10062,11 @@ def _build_payments():
     # till month-end totals
     me_due = me_over = 0.0
     tags_set = set()
-    all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
-        tag = tag_map.get(nm, "") or "Unknown"
-        tags_set.add(tag)
+        tag = tag_map.get(nm, "")
+        if tag: tags_set.add(tag)
 
         # FIFO: open invoices queue (oldest first), payments knock them off
         ents = sorted(entries, key=lambda e: (e["date"] or date(1900,1,1)))
@@ -10323,7 +10086,6 @@ def _build_payments():
 
         cust_due = cust_over = cust_bal = 0.0
         cust_due_me = cust_over_me = 0.0
-        cust_aging = {k: 0.0 for k in AG_LABELS}
         for inv in open_inv:
             rem = round(inv["amt"], 2)
             if rem <= 0.009:
@@ -10331,18 +10093,14 @@ def _build_payments():
             cust_bal += rem
             idt = inv["date"]
             due_date = (idt + timedelta(days=term_days)) if idt else None
-            all_due_pairs.append((due_date, rem))
             # as of TODAY
             if due_date and today > due_date:
                 cust_over += rem
                 od = (today - due_date).days
-                bkt = _ag_bucket(od)
-                aging[bkt] += rem
-                cust_aging[bkt] += rem
+                aging[_ag_bucket(od)] += rem
             else:
                 cust_due += rem
                 aging["0 Days"] += rem
-                cust_aging["0 Days"] += rem
             # as of MONTH-END
             if due_date and month_end > due_date:
                 cust_over_me += rem
@@ -10360,90 +10118,30 @@ def _build_payments():
             "balance": round(cust_bal, 0),
             "due_me": round(cust_due_me, 0),
             "overdue_me": round(cust_over_me, 0),
-            "aging": {k: round(v, 0) for k, v in cust_aging.items()},
         })
         tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
         me_due += cust_due_me; me_over += cust_over_me
 
     rows.sort(key=lambda x: x["balance"], reverse=True)
 
-    # raw ledger lines sorted by date, per customer (for the printable customer ledger view)
-    for nm in raw_by_cust:
-        raw_by_cust[nm].sort(key=lambda e: e["_sort"])
-        for e in raw_by_cust[nm]:
-            e.pop("_sort", None)
-    _PAY_RAW_LEDGER["data"] = raw_by_cust
-
-    # ---- Ledger last updated (latest payment/credit entry date across the whole ledger) ----
-    last_pay_date = None
-    for i in range(n):
-        if to_num(creds[i]) > 0:
-            cd = _fast_date(dates[i])
-            if cd and (last_pay_date is None or cd > last_pay_date):
-                last_pay_date = cd
-
-    # ---- Week-wise overdue tracker for the CURRENT month (fixed buckets, whole month) ----
-    month_start = date(today.year, today.month, 1)
-    week_bounds = []
-    ws = month_start
-    while ws <= month_end:
-        we = min(ws + timedelta(days=6), month_end)
-        week_bounds.append((ws, we))
-        ws = we + timedelta(days=1)
-
-    week_overdue_amt = [0.0] * len(week_bounds)
-    for due_date, rem in all_due_pairs:
-        if not due_date or rem <= 0.009:
-            continue
-        if due_date < month_start or due_date > month_end:
-            continue
-        for wi, (ws_, we_) in enumerate(week_bounds):
-            if ws_ <= due_date <= we_:
-                week_overdue_amt[wi] += rem
-                break
-
-    week_payment_amt = [0.0] * len(week_bounds)
-    for i in range(n):
-        credit_amt = to_num(creds[i])
-        if credit_amt <= 0:
-            continue
-        cd = _fast_date(dates[i])
-        if not cd or cd < month_start or cd > month_end:
-            continue
-        for wi, (ws_, we_) in enumerate(week_bounds):
-            if ws_ <= cd <= we_:
-                week_payment_amt[wi] += credit_amt
-                break
-
-    week_overdue = []
-    cum_pay = 0.0
-    for wi, (ws_, we_) in enumerate(week_bounds):
-        cum_pay += week_payment_amt[wi]
-        bal_after = tot_bal - cum_pay
-        week_overdue.append({
-            "label": f"Week {wi + 1}",
-            "range": f'{ws_.strftime("%d-%b")} to {we_.strftime("%d-%b")}',
-            "overdue": round(week_overdue_amt[wi], 0),
-            "payment": round(week_payment_amt[wi], 0),
-            "balance": round(bal_after, 0),
-        })
-
     data = {
         "rows": rows,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
-        "ledger_last_updated": last_pay_date.strftime("%d-%b-%y") if last_pay_date else None,
         "totals": {
             "due": round(tot_due, 0), "overdue": round(tot_over, 0), "balance": round(tot_bal, 0),
             "due_me": round(me_due, 0), "overdue_me": round(me_over, 0),
         },
         "aging": [{"bucket": k, "amount": round(aging[k], 0)} for k in AG_LABELS],
         "aging_total": round(sum(aging.values()), 0),
-        "week_overdue": week_overdue,
         "tags": sorted([t for t in tags_set if t]),
     }
     _PAY_CACHE["data"] = data
     _PAY_CACHE["ts"] = time.time()
+    try:
+        by_cust.clear(); _gc.collect(); _malloc_trim()
+    except Exception:
+        pass
     return data
 
 @app.route("/api/payments")
@@ -10459,37 +10157,6 @@ def api_payments():
         tb = traceback.format_exc()
         print("PAYMENTS ERROR:\n", tb)
         return jsonify({"error": f"payments failed: {e}", "where": tb.splitlines()[-3:] if tb else ""}), 500
-
-@app.route("/api/payments/ledger")
-def api_payments_ledger():
-    if session.get("role") not in ("admin", "employee"):
-        return jsonify({"error": "login required"}), 401
-    name = request.args.get("customer", "")
-    if not name:
-        return jsonify({"error": "customer required"}), 400
-    try:
-        _build_payments()  # ensure cache populated
-        raw = _PAY_RAW_LEDGER.get("data") or {}
-        entries = raw.get(_norm_name(name)) or []
-        tot_debit = round(sum(e.get("debit") or 0 for e in entries), 2)
-        tot_credit = round(sum(e.get("credit") or 0 for e in entries), 2)
-        closing_bal = entries[-1]["balance"] if entries and entries[-1].get("balance") is not None else round(tot_debit - tot_credit, 2)
-        period = ""
-        if entries:
-            d0 = entries[0].get("date") or ""
-            d1 = entries[-1].get("date") or ""
-            if d0 or d1:
-                period = f"{d0} to {d1}"
-        return jsonify({
-            "customer": name,
-            "period": period,
-            "entries": entries,
-            "totals": {"debit": tot_debit, "credit": tot_credit, "balance": closing_bal},
-        })
-    except Exception as e:
-        import traceback
-        print("PAYMENTS LEDGER ERROR:\n", traceback.format_exc())
-        return jsonify({"error": f"ledger failed: {e}"}), 500
 
 
 # ════════════════════════════════════════════════════════════════
@@ -10910,445 +10577,6 @@ def api_smart_search():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-@app.route("/api/ai-chat", methods=["POST"])
-def api_ai_chat():
-    try:
-        payload = request.get_json(silent=True) or {}
-        msg     = (payload.get("message") or "").strip()
-        history = payload.get("history") or []
-        role    = str(session.get("role") or payload.get("role") or "admin").lower()
-        if not msg:
-            return jsonify({"error": "empty message"}), 400
-
-        # EMPLOYEE: revenue/sales-value questions are not available
-        if role == "employee" and re.search(
-                r"revenue|turnover|earning|kamai|sale\s*(amount|value)|"
-                r"net\s*rev|profit|income|rev\b", msg.lower()):
-            return jsonify({"answer": "Revenue and sales-value information is not available on "
-                                      "employee accounts. You can ask about quantities, stock, "
-                                      "dispatches and forecast quantities instead.",
-                            "skus": [], "engine": "policy", "context_skus": [],
-                            "suggestions": ["Which SKUs are out of stock?",
-                                            "Top 10 best sellers by quantity",
-                                            "Daily briefing"]})
-
-        data = get_data()
-        comp, taxons, platings = data[0], data[1], data[4]
-        sale_types, customers = data[2], data[3]
-        fy_cur, fy_prev, period_kpis = data[7], data[8], data[14]
-        statuses = sorted({i.get("status", "") for i in comp if i.get("status")})
-
-        context_skus = [str(s) for s in (payload.get("context_skus") or [])][:12]
-        direct = _ai_find_skus_in_text(msg, comp)
-
-        engine, plan = "local", None
-        cli = _gemini_client()
-        if cli:
-            plan = _ai_gemini_plan(cli, msg, history, taxons, statuses, platings, context_skus, sale_types)
-            if plan:
-                engine = "gemini"
-        if not plan:
-            plan = _ai_local_plan(msg, taxons, statuses, platings, sale_types, customers)
-
-        if direct:
-            plan["skus"] = sorted(set((plan.get("skus") or []) + [i["sku"] for i in direct]))
-
-        # Follow-up handling: short question about previously discussed SKUs
-        if not plan.get("skus") and context_skus:
-            fl = plan.get("filters") or {}
-            has_new_scope = bool(fl.get("taxon") or fl.get("plating") or fl.get("status")
-                                 or fl.get("stock") not in (None, "", "any"))
-            mlow = msg.lower()
-            followup_kw = re.search(
-                r"\b(iska|uska|inka|isk[ae]|wahi|same|ye[h]?|fir|phir|aur)\b"
-                r"|last\s*\d|\d+\s*(d|din|day|days|mahin|month)"
-                r"|7\s*d|15\s*d|30\s*d|yesterday|kal|is\s*mah?ine|this\s*month"
-                r"|\bfy\b|forecast|revenue|stock|qty|quantity|customer|dispatch|mrp", mlow)
-            new_scope_kw = re.search(
-                r"\b(top|best|sabse|highest|lowest|kaun\w*|konsa|kon\s|sare|saare|all\b"
-                r"|list|category|taxon|out\s*of\s*stock|slow|total|overall|grand|summary)\b", mlow)
-            if not has_new_scope and not new_scope_kw and (followup_kw or len(msg) <= 45):
-                plan["skus"] = context_skus
-
-        if plan.get("skus") and plan.get("action") != "transactions":
-            plan["action"] = "sku_lookup"
-
-        # canonicalise filter values
-        f = plan.get("filters") or {}
-        if f.get("taxon"):   f["taxon"]   = _ai_match_canon(f["taxon"], taxons) or f["taxon"]
-        if f.get("plating"): f["plating"] = _ai_match_canon(f["plating"], platings) or f["plating"]
-        plan["filters"] = f
-
-        if role == "employee":
-            # force qty metrics; revenue kabhi compute/leak na ho
-            if str(plan.get("metric", "")).startswith("rev") or plan.get("metric") == "total_net_revenue":
-                plan["metric"] = "final_qty"
-            # KPIs zero — briefing/chat templates revenue line khud skip kar dete hain
-            period_kpis = {kk: (0 if isinstance(vv, (int, float)) else vv)
-                           for kk, vv in (period_kpis or {}).items()}
-
-        items, summary = _ai_execute_plan(plan, comp, period_kpis, fy_cur, fy_prev)
-
-        if role == "employee":
-            # Revenue value-wale keys (jaise type_breakup, total_revenue,
-            # sum_net_revenue) employee ko KABHI na milein — yeh ₹ leak karte the
-            # (e.g. "kal kitna dispatch" par Type-wise revenue dikh raha tha).
-            _REV_SUMMARY_KEYS = {"type_breakup", "total_revenue", "revenue", "pred_rev",
-                                 "projected_revenue", "sum_net_revenue", "sum_rev_month",
-                                 "sum_rev_yesterday", "sum_rev_fy", "sum_rev_prev_fy"}
-            def _strip_rev(o):
-                if isinstance(o, dict):
-                    return {k: _strip_rev(v) for k, v in o.items()
-                            if k not in _REV_SUMMARY_KEYS
-                            and "rev" not in k.lower() and "revenue" not in k.lower()
-                            and "amount" not in k.lower() and "value" not in k.lower()}
-                if isinstance(o, list):
-                    return [_strip_rev(x) for x in o]
-                return o
-            summary = _strip_rev(summary)
-            items = [{k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items() if k != "sales_entries"}
-                     for i in items]
-        if plan.get("action") == "chat":
-            summary["total_skus"] = len(comp)
-
-        answer = _ai_gemini_answer(cli, msg, history, plan, summary, items) if cli else None
-        if not answer:
-            answer = _ai_local_answer(msg, plan, summary, items)
-            if engine == "gemini":
-                engine = "gemini+local"
-
-        # SAFETY NET: employee answer me galti se bhi koi ₹ figure / revenue line
-        # na bache — ₹ wali lines hata do, aur "Type-wise … ₹…" jaise hisse bhi.
-        if role == "employee" and answer:
-            kept = []
-            for ln in answer.split("\n"):
-                low = ln.lower()
-                if "₹" in ln or re.search(r"\brevenue\b|\bturnover\b|type-wise", low):
-                    continue
-                kept.append(ln)
-            answer = "\n".join(kept).strip() or \
-                "This is quantity/stock info. Revenue is not available on employee accounts."
-
-        # smart follow-up suggestions
-        act_now = plan.get("action")
-        if act_now == "sku_lookup" and items:
-            s0 = items[0]["sku"]
-            suggestions = [f"{s0} sales in last 30 days", f"Forecast for {s0}", f"Top sellers in {items[0].get('taxon','this category')}"]
-        elif act_now == "filter_rank":
-            suggestions = ["Forecast for this month", "Which SKUs are out of stock?", "Daily briefing"]
-        elif act_now == "transactions":
-            suggestions = ["Compare with last month", "Top customers this month", "Forecast for this month"]
-        elif act_now == "forecast":
-            suggestions = ["Which fast sellers are low on stock?", "Top 10 best sellers", "Daily briefing"]
-        elif act_now == "briefing":
-            suggestions = ["Forecast for this month", "Show slow movers", "Top 10 best sellers"]
-        else:
-            suggestions = ["Daily briefing", "Top 10 best sellers", "Revenue this month"]
-        if role == "employee":
-            suggestions = [s for s in suggestions if not re.search(r"revenue|customers", s.lower())] or \
-                          ["Which SKUs are out of stock?", "Top 10 best sellers", "Daily briefing"]
-
-        new_ctx = [i["sku"] for i in items[:12]] if plan.get("action") == "sku_lookup" else context_skus
-        # SKU cards sirf tab dikhao jab user ne SKUs maange hon:
-        #  - specific SKU pucha (sku_lookup), ya
-        #  - list-intent words (dikhao/kaunse/top/which/list...) ke saath rank/txn/forecast
-        list_intent = re.search(
-            r"dikha|show|list|kaun|kon\s|konse|kya\s*kya|which|top\s*\d*|best|sabse|"
-            r"saare|sare\b|details|cards|photo|image|wale\s*sku|sku\s*batao", msg.lower())
-        act = plan.get("action")
-        show_cards = (act in ("sku_lookup", "briefing")) or (act in ("filter_rank", "transactions", "forecast") and bool(list_intent))
-        return jsonify({"answer": answer, "skus": (items[:24] if show_cards else []),
-                        "engine": engine, "context_skus": new_ctx,
-                        "suggestions": suggestions[:3]})
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
-
-# ── AI DESIGN GENERATOR ─────────────────────────────────────
-AI_IMAGE_MODELS = [
-    "gemini-3-pro-image-preview",        # Nano Banana Pro (Gemini 3) — best
-    "gemini-2.5-flash-image",            # Nano Banana
-    "gemini-2.5-flash-image-preview",
-    "gemini-2.0-flash-preview-image-generation",
-]
-
-def _ai_image_model_candidates(cli):
-    """Preferred models first, then ANY image-capable model the key actually
-    has access to (so naming changes kabhi break na karein)."""
-    models = list(AI_IMAGE_MODELS)
-    try:
-        for m in cli.models.list():
-            name = str(getattr(m, "name", "") or "")
-            short = name.split("/")[-1]
-            sl = short.lower()
-            if ("image" in sl and "embedding" not in sl and "veo" not in sl
-                    and "imagen" not in sl and short not in models):
-                models.append(short)
-    except Exception as e:
-        print("AI Design: model list failed:", e)
-    return models
-
-def _ai_fetch_ref_image(url, max_px=512):
-    """Download a catalog image and return small JPEG bytes (or None)."""
-    for cu in _img_url_candidates(url):
-        try:
-            r = requests.get(cu, timeout=15, allow_redirects=True, headers=_browser_headers(cu))
-            if not r.ok or len(r.content) < 400:
-                continue
-            img = Image.open(io.BytesIO(r.content)).convert("RGB")
-            img.thumbnail((max_px, max_px))
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=85)
-            return buf.getvalue()
-        except Exception:
-            continue
-    print("AI Design: ref image fetch failed:", str(url)[:80])
-    return None
-
-def _ai_pick_reference_items(comp, ref_skus, taxon_hint=""):
-    """Choose reference designs: user-given SKUs first, else best sellers
-    (optionally from a category) that have images."""
-    refs = []
-    if ref_skus:
-        wanted = [_ai_norm(s) for s in ref_skus]
-        for i in comp:
-            k = _ai_norm(i["sku"])
-            if any(k == w or k.startswith(w) for w in wanted if len(w) >= 3):
-                refs.append(i)
-    if not refs:
-        pool = [i for i in comp if str(i.get("image_url", "")).strip()
-                and str(i.get("image_url", "")).lower() != "nan"]
-        if taxon_hint:
-            tpool = [i for i in pool if taxon_hint.lower() in str(i.get("taxon", "")).lower()]
-            if tpool:
-                pool = tpool
-        pool.sort(key=lambda i: float(i.get("final_qty") or 0), reverse=True)
-        refs = pool[:3]
-    out = []
-    for i in refs[:3]:
-        url = str(i.get("image_url", "")).strip()
-        if not url or url.lower() == "nan":
-            continue
-        b = _ai_fetch_ref_image(url)
-        if b:
-            out.append((i["sku"], b))
-    return out
-
-def _ai_pollinations_design(prompt, size=1024, fast=False):
-    """100% FREE keyless image generation via Pollinations.ai.
-    Multiple attempts across models/URL variants so ek attempt fail ho to
-    bhi design ban jaye."""
-    import urllib.parse
-    q = urllib.parse.quote(prompt[:1200])
-    attempts = []
-    models = ["turbo", "flux"] if fast else ["flux", "turbo"]
-    for mdl in models:
-        attempts.append(f"https://image.pollinations.ai/prompt/{q}"
-                        f"?width={size}&height={size}&nologo=true&model={mdl}"
-                        f"&seed={int(time.time()*1000) % 999999}")
-    attempts.append(f"https://image.pollinations.ai/prompt/{q}")  # plain, defaults
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-               "Accept": "image/*,*/*"}
-    for url in attempts:
-        try:
-            r = requests.get(url, timeout=(15, 120), headers=headers, allow_redirects=True)
-            ct = r.headers.get("Content-Type", "").lower()
-            if r.ok and (ct.startswith("image") or (len(r.content) > 5000 and r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"\xff\xd8\xff\xee", b"RIFF"))):
-                return r.content
-            print("Pollinations attempt failed:", r.status_code, ct, url[:80])
-        except Exception as e:
-            print("Pollinations attempt error:", str(e)[:120])
-        time.sleep(1.5)
-    return None
-
-def _ai_cloudflare_design(prompt):
-    """FREE engine: Cloudflare Workers AI (FLUX-schnell) — fast & reliable.
-    Free tier: roughly 100+ images har din."""
-    if not (CF_ACCOUNT_ID and CF_API_TOKEN):
-        return None
-    base = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/ai/run/"
-    headers = {"Authorization": f"Bearer {CF_API_TOKEN}",
-               "Content-Type": "application/json"}
-    # model 1: FLUX schnell — JSON response with base64 image
-    try:
-        r = requests.post(base + "@cf/black-forest-labs/flux-1-schnell",
-                          headers=headers,
-                          json={"prompt": prompt[:2000], "steps": 8}, timeout=(15, 120))
-        if r.ok:
-            try:
-                j = r.json()
-                b64 = (j.get("result") or {}).get("image")
-                if b64:
-                    return base64.b64decode(b64)
-            except Exception:
-                pass
-        print("CF flux attempt:", r.status_code, str(r.text)[:140])
-    except Exception as e:
-        print("CF flux error:", str(e)[:120])
-    # model 2/3: SDXL variants — binary image response
-    for mdl in ("@cf/bytedance/stable-diffusion-xl-lightning",
-                "@cf/stabilityai/stable-diffusion-xl-base-1.0"):
-        try:
-            r = requests.post(base + mdl, headers=headers,
-                              json={"prompt": prompt[:2000]}, timeout=(15, 120))
-            ct = r.headers.get("Content-Type", "").lower()
-            if r.ok and (ct.startswith("image") or r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"RIFF")):
-                return r.content
-            print("CF attempt:", mdl, r.status_code, str(r.text)[:120])
-        except Exception as e:
-            print("CF error:", str(e)[:120])
-    return None
-
-def _ai_hf_design(prompt):
-    """FREE backup engine #2: Hugging Face (FLUX-schnell).
-    Naya router endpoint pehle, purana api-inference fallback mein."""
-    if not HF_TOKEN:
-        return None
-    models = ("black-forest-labs/FLUX.1-schnell",
-              "stabilityai/stable-diffusion-xl-base-1.0")
-    bases = ("https://router.huggingface.co/hf-inference/models/{m}",
-             "https://api-inference.huggingface.co/models/{m}")
-    for mdl in models:
-        for base in bases:
-            try:
-                r = requests.post(
-                    base.format(m=mdl),
-                    headers={"Authorization": f"Bearer {HF_TOKEN}",
-                             "Accept": "image/png"},
-                    json={"inputs": prompt[:1000],
-                          "parameters": {"width": 1024, "height": 1024}},
-                    timeout=(15, 180))
-                ct = r.headers.get("Content-Type", "").lower()
-                if r.ok and (ct.startswith("image") or r.content[:4] in (b"\x89PN", b"\xff\xd8\xff\xe0", b"\xff\xd8\xff\xe1", b"RIFF")):
-                    return r.content
-                print("HF attempt:", mdl, base.split("/")[2], r.status_code, str(r.text)[:100])
-                if r.status_code in (401, 403):
-                    print("HF token issue: token par 'Make calls to Inference Providers' "
-                          "permission tick honi chahiye (fine-grained token settings).")
-            except Exception as e:
-                print("HF error:", str(e)[:120])
-    return None
-
-def _ai_extract_image_and_text(resp):
-    """Pull generated image bytes + text from a Gemini response."""
-    img_bytes, text = None, []
-    try:
-        for cand in (getattr(resp, "candidates", None) or []):
-            content = getattr(cand, "content", None)
-            for part in (getattr(content, "parts", None) or []):
-                t = getattr(part, "text", None)
-                if t:
-                    text.append(t)
-                inline = getattr(part, "inline_data", None)
-                if inline is not None and getattr(inline, "data", None):
-                    data = inline.data
-                    if isinstance(data, str):
-                        data = base64.b64decode(data)
-                    if img_bytes is None:
-                        img_bytes = data
-    except Exception as e:
-        print("AI Design: parse response failed:", e)
-    return img_bytes, " ".join(text).strip()
-
-@app.route("/api/ai-design", methods=["POST"])
-def api_ai_design():
-    try:
-        payload  = request.get_json(silent=True) or {}
-        prompt   = (payload.get("prompt") or "").strip()
-        ref_skus = [s.strip() for s in re.split(r"[,\s]+", str(payload.get("ref_skus") or "")) if s.strip()]
-        if not prompt:
-            return jsonify({"error": "Please write a design prompt first."}), 400
-
-        cli = _gemini_client()
-
-        data = get_data()
-        comp, taxons = data[0], data[1]
-        taxon_hint = next((t for t in taxons if str(t).lower() in prompt.lower()), "")
-        refs = _ai_pick_reference_items(comp, ref_skus, taxon_hint) if cli else []
-
-        base_brief = (
-            "Premium men's brass jewellery product photo for COSA NOSTRAA (Jaipur luxury brand). "
-            "ONE single product, photorealistic studio render, clean light grey/white background, "
-            "centered, sharp macro details, professional e-commerce catalog style. Design: " + prompt
-        )
-
-        parts = []
-        for _, b in refs:
-            parts.append(types.Part.from_bytes(data=b, mime_type="image/jpeg"))
-        ref_note = (f"The {len(refs)} attached images are existing best-selling designs from the brand; "
-                    f"take style inspiration (finish, detailing level, premium brass aesthetic) from them, "
-                    f"but create a completely NEW original design. ") if refs else ""
-        parts.append(types.Part.from_text(text=(
-            "You are a senior jewellery designer for COSA NOSTRAA, a premium men's brass "
-            "jewellery & accessories brand from Jaipur, India. "
-            + ref_note +
-            "Generate ONE high-quality, photorealistic product render of the new design on a "
-            "clean studio background (light grey/white), professional e-commerce catalog style, "
-            "single product, centered, sharp details.\n\nDesign brief from the founder: " + prompt +
-            "\n\nAlso reply with 2-3 short lines (Hinglish is fine) describing the design "
-            "(style, plating suggestion, target MRP range)."
-        )))
-
-        last_err = None
-        if cli is None:
-            last_err = "GEMINI_KEY not set — using free engine"
-        for model in (_ai_image_model_candidates(cli) if cli else []):
-            try:
-                try:
-                    resp = cli.models.generate_content(
-                        model=model,
-                        contents=parts,
-                        config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
-                    )
-                except Exception as cfg_err:
-                    # some models reject response_modalities config — retry plain
-                    if "404" in str(cfg_err) or "NOT_FOUND" in str(cfg_err):
-                        raise
-                    resp = cli.models.generate_content(model=model, contents=parts)
-                img_bytes, text = _ai_extract_image_and_text(resp)
-                if img_bytes:
-                    b64 = base64.b64encode(img_bytes).decode()
-                    return jsonify({
-                        "image": "data:image/png;base64," + b64,
-                        "text": text or "Your new design is ready.",
-                        "refs_used": [s for s, _ in refs],
-                        "model": model,
-                    })
-                last_err = f"{model}: image nahi mili (text-only response)"
-            except Exception as e:
-                last_err = f"{model}: {e}"
-                print("AI Design:", last_err)
-                continue
-        # ── FREE FALLBACK 1: Cloudflare Workers AI (best free) ──
-        print("AI Design: Gemini unavailable/exhausted -> free engines. Last:", str(last_err)[:160])
-        img_bytes = _ai_cloudflare_design(base_brief)
-        engine_name = "cloudflare-flux (FREE)"
-        # ── FREE FALLBACK 2: Pollinations.ai (keyless) ──
-        if not img_bytes:
-            img_bytes = _ai_pollinations_design(base_brief)
-            engine_name = "pollinations-flux (FREE)"
-        # ── FREE FALLBACK 3: Hugging Face ──
-        if not img_bytes:
-            img_bytes = _ai_hf_design(base_brief)
-            engine_name = "huggingface-flux (FREE)"
-        if img_bytes:
-            b64 = base64.b64encode(img_bytes).decode()
-            return jsonify({
-                "image": "data:image/jpeg;base64," + b64,
-                "text": "Your new design is ready. (Generated by the free engine — reference images are used only by the Gemini engine.)",
-                "refs_used": [],
-                "model": engine_name,
-            })
-        cf_hint = "" if (CF_ACCOUNT_ID and CF_API_TOKEN) else (
-            " Fix: add your free Cloudflare CF_ACCOUNT_ID and CF_API_TOKEN at the top of this file.")
-        return jsonify({"error": "Design generation failed — all engines unavailable." + cf_hint +
-                                 " Detail: " + str(last_err or "")[:200]}), 500
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
-
 
 @app.route("/api/upload-report", methods=["POST"])
 def api_upload_report():
