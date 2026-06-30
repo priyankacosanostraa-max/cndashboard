@@ -679,6 +679,8 @@ def _refresh_data():
              or (inv.columns[12] if len(inv.columns) > 12 else None)   # fallback → M column
     I_TAX = find_col(inv.columns, "Taxon","category","collection")
     I_PLT = find_col(inv.columns, "Plating","finish","metal")
+    I_MOTIF = find_col(inv.columns, "Motif","motifs","design motif")
+    I_COLLECTION = find_col(inv.columns, "Collection","collections","collection name")
     I_DIM = find_col(inv.columns, "Product Dimensions","Dimensions","Dimension","Size")
     I_LNCH = find_col(inv.columns, "Launch Date","Launching Date","Launch","Launched")
     I_STONE = find_col(inv.columns, "Stone Details","Stone Detail","Remarks","Remark","combo","combo sku","combo skus","combo_skus","stone")
@@ -989,6 +991,8 @@ def _refresh_data():
 
         taxon = norm_taxon(r.get(I_TAX,"General")) if I_TAX else "General"
         plat  = clean(r.get(I_PLT,"N/A"),"N/A")        if I_PLT else "N/A"
+        motif_col = clean(r.get(I_MOTIF,""))            if I_MOTIF else ""
+        coll_col  = clean(r.get(I_COLLECTION,""))        if I_COLLECTION else ""
         dims  = clean(r.get(I_DIM,""))                  if I_DIM else ""
         # Launch Date — kisi bhi format mein ho, robust parse
         launch_key, launch_label, launch_iso = "", "", ""
@@ -1053,6 +1057,8 @@ def _refresh_data():
             "last_selling_price": last_sp,
             "taxon":       _si(taxon),
             "plating":     _si(plat),
+            "motif":       _si(motif_col),
+            "collection":  _si(coll_col),
             "dimensions":  _si(dims),
             "launch_date":  _si(launch_iso),
             "launch_key":   _si(launch_key),
@@ -1092,24 +1098,25 @@ def _refresh_data():
         taxons.add(taxon)
         if plat != "N/A": platings.add(plat)
 
-    # ── Motif / Collection tags (from Motif Tagger, if it has been run) ──
+    # ── Motif / Collection: sheet column value wins; agar sheet me yeh columns
+    #    nahi hain to AI auto-tagger (image-based, runs automatically in
+    #    background — see _build_motif_index_worker) ke results use hote hain. ──
     try:
         _motif_rows = _motif_load_results()
     except Exception:
         _motif_rows = None
-    motifs, collections = set(), set()
     if _motif_rows:
         _motif_map = {str(r.get("sku", "")).strip().upper(): r for r in _motif_rows}
         for it in compiled:
+            if it.get("motif") and it.get("collection"):
+                continue
             mrow = _motif_map.get(str(it["sku"]).strip().upper())
-            it["motif"] = mrow.get("motif", "") if mrow else ""
-            it["collection"] = mrow.get("collection", "") if mrow else ""
-            if it["motif"]: motifs.add(it["motif"])
-            if it["collection"]: collections.add(it["collection"])
-    else:
-        for it in compiled:
-            it["motif"] = ""
-            it["collection"] = ""
+            if not mrow:
+                continue
+            if not it.get("motif"):
+                it["motif"] = mrow.get("motif", "") or ""
+            if not it.get("collection"):
+                it["collection"] = mrow.get("collection", "") or ""
 
     # ── COMBO/GIFT-SET enrichment ──
     # Stone Details (combo_skus) me jo SKUs likhe hain, un sabki Inv Stock + WIP
@@ -4040,7 +4047,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
-  <button class="menu-item" id="m18" onclick="window.open('/admin/motif-tagger','_blank')">Motif Tagger</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
@@ -6488,9 +6494,6 @@ function applyRoleUI(){
   // Profit Margin SIRF admin ko (cost/margin sensitive).
   const pmBtn = document.getElementById('m14');
   if (pmBtn) pmBtn.style.display = isEmployee ? 'none' : '';
-  // Motif Tagger SIRF admin ko (CLIP batch tool — heavy/sensitive).
-  const motifBtn = document.getElementById('m18');
-  if (motifBtn) motifBtn.style.display = isEmployee ? 'none' : '';
   // Insights "Sort By" me revenue option employee ko na dikhe → sirf Qty.
   const iSort = document.getElementById('iSort');
   if (iSort) {
@@ -10450,6 +10453,16 @@ def _warmup_and_refresh_loop():
             print("prebuild admin failed:", str(e)[:100])
         _wstage("ready", "Ready")
         print("WARMUP: data ready ✔")
+        # Motif/Collection auto-tag: ek baar (jab tak motif_index.pkl already
+        # nahi bana) background mein khud-ba-khud chal jata hai — manual button
+        # ki zaroorat nahi. Naya data refresh hone par re-run nahi hota (one-time).
+        try:
+            if not os.path.exists(MOTIF_INDEX_FILE) and not _MOTIF["building"]:
+                _MOTIF["building"] = True
+                _MOTIF["progress"] = {"done": 0, "total": 0, "status": "building", "error": ""}
+                threading.Thread(target=_build_motif_index_worker, daemon=True).start()
+        except Exception as e:
+            print("motif auto-tag skip:", str(e)[:140])
         # vision init memory leta hai — Render 512MB par startup ke waqt skip.
         # SKU Finder pehli baar use hone par lazy load ho jayega (init_vision wahin call hota hai).
         if os.environ.get("EAGER_VISION") == "1":
