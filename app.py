@@ -272,10 +272,21 @@ PKL_FILE  = "sku_finder.pkl"
 # Render par env var PKL_URL set karo ya yahan paste kar do.
 PKL_URL   = os.environ.get("PKL_URL", "")
 
+_PKL_LAST_FAIL_TS = 0.0
+_PKL_FAIL_COOLDOWN = 300   # download fail hone ke baad 5 min tak dobara try na karo
+
 def _ensure_pkl():
-    """sku_finder.pkl missing ho to PKL_URL (Drive) se download karo."""
+    """sku_finder.pkl missing ho to PKL_URL (Drive) se download karo.
+    IMPORTANT: timeout (10,60)s rakha hai — gunicorn worker ka --timeout
+    (typically 120s) se kam, taaki agar download stuck/slow ho to ye function
+    khud cleanly fail ho jaye, worker SIGKILL se crash na ho (jo browser me
+    'Failed to fetch' deta hai). Fail hone par 5 min ka cooldown — taaki har
+    SKU Finder click pe poora slow download dobara try na ho."""
+    global _PKL_LAST_FAIL_TS
     if os.path.exists(PKL_FILE):
         return True
+    if _PKL_LAST_FAIL_TS and (time.time() - _PKL_LAST_FAIL_TS) < _PKL_FAIL_COOLDOWN:
+        return False   # recently fail hua — abhi dobara try mat karo
     url = (PKL_URL or "").strip()
     if not url:
         return False
@@ -289,7 +300,7 @@ def _ensure_pkl():
     for cu in cands:
         try:
             print("PKL download try:", cu[:90])
-            r = requests.get(cu, timeout=300, stream=True,
+            r = requests.get(cu, timeout=(10, 60), stream=True,
                              headers={"User-Agent": "Mozilla/5.0"})
             if not r.ok:
                 print("  -> HTTP", r.status_code); continue
@@ -305,9 +316,11 @@ def _ensure_pkl():
             print(f"PKL downloaded OK ({sz/1e6:.1f} MB)")
             if sz < 1e6:
                 os.remove(PKL_FILE); continue
+            _PKL_LAST_FAIL_TS = 0.0
             return True
         except Exception as e:
             print("  -> failed:", str(e)[:100])
+    _PKL_LAST_FAIL_TS = time.time()
     return False
 PORT      = int(os.environ.get("PORT", 5000))
 # Deploy/host detect (Render etc.) — yahan se data-load tez karte hain.
