@@ -487,15 +487,21 @@ def classify_status(item, current_month_key=""):
     return "Good Running"
 
 
-def _forecast_daily_rate(entries):
-    """Ek hi pass me trend-adjusted daily rate nikalta hai (cached use ke liye) —
-    simple_forecast() aur dual-horizon caller dono isi se compute karte hain,
-    taaki same entries par baar-baar pura kaam dobara na ho (CPU bachat)."""
+def simple_forecast(entries, days_ahead=30):
+    """Expected DEMAND (units) in the next `days_ahead` days.
+
+    Criteria (velocity-based, recent-weighted):
+      • Recent rate (last 60 din) ko 70% weight, lambe rate (last 180 din) ko
+        30% weight — taaki recent maang zyada bole par purana bhi count ho.
+      • Agar recent data nahi to overall avg daily rate.
+      • Trend (OLS slope) thoda upar/niche adjust karta hai (max ±25%).
+    Yeh "next 30 days me kitna bikega" batata hai (reorder iske upar banta hai).
+    """
     if not entries:
-        return 0.0
+        return 0
     dated = [(e["date"], e["qty"]) for e in entries if e.get("date") and e["date"] != "N/A"]
     if not dated:
-        return 0.0
+        return 0
     today = now_ist().date()
     def _d(iso):
         try: return date(int(iso[0:4]), int(iso[5:7]), int(iso[8:10]))
@@ -518,11 +524,14 @@ def _forecast_daily_rate(entries):
 
     rate60  = q60  / 60.0
     rate180 = q180 / 180.0
+    # blended daily rate (recent weighted)
     if q60 > 0 or q180 > 0:
         daily = 0.70 * rate60 + 0.30 * rate180
     else:
         span_days = max(1, (today - first).days) if first else 1
         daily = q_all / span_days
+
+    base = daily * days_ahead
 
     # Halka trend nudge (max ±25%): weekly OLS slope ka sign/strength.
     from collections import defaultdict
@@ -540,31 +549,9 @@ def _forecast_daily_rate(entries):
         slope = np.sum((xs - xm) * (ys - ym)) / (np.sum((xs - xm) ** 2) + 1e-9)
         if ym > 0:
             nudge = max(-0.25, min(0.25, (slope / ym)))
-            daily *= (1.0 + nudge)
+            base *= (1.0 + nudge)
 
-    return daily
-
-
-def simple_forecast(entries, days_ahead=30):
-    """Expected DEMAND (units) in the next `days_ahead` days.
-
-    Criteria (velocity-based, recent-weighted):
-      • Recent rate (last 60 din) ko 70% weight, lambe rate (last 180 din) ko
-        30% weight — taaki recent maang zyada bole par purana bhi count ho.
-      • Agar recent data nahi to overall avg daily rate.
-      • Trend (OLS slope) thoda upar/niche adjust karta hai (max ±25%).
-    Yeh "next 30 days me kitna bikega" batata hai (reorder iske upar banta hai).
-    """
-    daily = _forecast_daily_rate(entries)
-    return max(0, int(round(daily * days_ahead)))
-
-
-def forecast_30_60(entries):
-    """simple_forecast(30) aur simple_forecast(60) dono ek hi rate-computation
-    se derive karta hai — same entries par 2x kaam dobara hone se bachata hai
-    (10k SKUs x 2 calls = warmup ka bada hissa, ab aadha)."""
-    daily = _forecast_daily_rate(entries)
-    return max(0, int(round(daily * 30))), max(0, int(round(daily * 60)))
+    return max(0, int(round(base)))
 
 
 # ── Data Engine ──────────────────────────────────────────────
@@ -604,11 +591,6 @@ _WARMUP = {"stage": "idle", "detail": "", "done": 0, "total": 0}
 
 def _wstage(stage, detail="", done=0, total=0):
     _WARMUP.update({"stage": stage, "detail": detail, "done": done, "total": total})
-    try:
-        suffix = f" ({done}/{total})" if total else ""
-        print(f"WARMUP [{stage}] {detail}{suffix}", flush=True)
-    except Exception:
-        pass
 
 def _malloc_trim():
     """Linux par Python freed memory ko hamesha OS ko wapas nahi karta —
@@ -1083,13 +1065,13 @@ def _refresh_data():
             "dispatch_count": len(ent),
             "first_dispatch_date": A["first"],
             "last_dispatch_date":  A["last"],
+            "forecast_30d": simple_forecast(ent, 30),
             "status": "",
         }
-        _demand30, _demand60 = forecast_30_60(ent)
-        item["forecast_30d"] = _demand30
         # Reorder Qty = next 60 din ki expected demand (production lead-time cover)
         # minus jo already available hai (stock + WIP). 0 se neeche nahi.
         _avail = (item["inv_stock"] or 0) + (item["inv_wip"] or 0)
+        _demand60 = simple_forecast(ent, 60)
         item["forecast_60d"] = _demand60
         item["reorder_qty"]  = max(0, int(round(_demand60 - _avail)))
         item["status"] = classify_status(item, month_s)
@@ -4935,6 +4917,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
+    <button class="app-chip" onclick="showTab('ai')">✦ AI</button>
     <button class="app-chip" onclick="doLogout()" style="border-color:rgba(220,38,38,.4);color:#dc2626">Sign Out</button>
   </div>
 </div>
@@ -4952,6 +4935,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
+  <button class="menu-item" id="m8" onclick="showTab('ai')">AI Studio</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
 
@@ -11713,7 +11697,6 @@ def _warmup_and_refresh_loop():
     background mein fresh. MEMORY: sirf ek role ka response prebuild
     (dono ek saath 512MB par OOM -> Render restart loop kar deta tha).
     Baaki role pehli request par lazy ban jata hai."""
-    print("WARMUP: background thread started, fetching data…", flush=True)
     try:
         get_data(True)
         try:
@@ -11731,9 +11714,7 @@ def _warmup_and_refresh_loop():
             except Exception as e:
                 print("vision init skipped:", str(e)[:120])
     except Exception as e:
-        import traceback
-        print("WARMUP error:", str(e)[:300])
-        traceback.print_exc()
+        print("WARMUP error:", str(e)[:160])
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
