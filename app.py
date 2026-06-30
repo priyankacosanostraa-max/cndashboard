@@ -4114,7 +4114,8 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Motif</label>
-          <select class="fs" id="fMotif" onchange="applyF()"><option value="">All Motifs</option></select></div>
+          <select class="fs" id="fMotif" onchange="applyF()"><option value="">All Motifs</option></select>
+          <div class="small-note" id="fMotifNote" style="margin-top:4px"></div></div>
         <div class="fc"><label class="fl">Collection</label>
           <select class="fs" id="fCollection" onchange="applyF()"><option value="">All Collections</option></select></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
@@ -4203,7 +4204,8 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="rTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Motif</label>
-          <select class="fs" id="rMotif" onchange="applyRO()"><option value="">All Motifs</option></select></div>
+          <select class="fs" id="rMotif" onchange="applyRO()"><option value="">All Motifs</option></select>
+          <div class="small-note" id="rMotifNote" style="margin-top:4px"></div></div>
         <div class="fc"><label class="fl">Collection</label>
           <select class="fs" id="rCollection" onchange="applyRO()"><option value="">All Collections</option></select></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
@@ -4766,6 +4768,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc">
         <label class="fl">Motif</label>
         <select class="fs" id="iMotif" onchange="applyInsights()"><option value="">All Motifs</option></select>
+        <div class="small-note" id="iMotifNote" style="margin-top:4px"></div>
       </div>
       <div class="fc">
         <label class="fl">Collection</label>
@@ -4945,6 +4948,30 @@ function renderMotifCollectionSelects(){
   fill('fMotif', allMotifs, 'Motifs');       fill('fCollection', allCollections, 'Collections');
   fill('rMotif', allMotifs, 'Motifs');       fill('rCollection', allCollections, 'Collections');
   fill('iMotif', allMotifs, 'Motifs');       fill('iCollection', allCollections, 'Collections');
+}
+
+let _motifPollTimer = null;
+function pollMotifTagStatus(){
+  fetch('/api/motif-index-status', {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.json())
+    .then(d => {
+      const notes = ['fMotifNote','rMotifNote','iMotifNote'].map(id => document.getElementById(id)).filter(Boolean);
+      if (d.status === 'building'){
+        const pct = d.total ? Math.round((d.done/d.total)*100) : 0;
+        notes.forEach(n => n.textContent = `Auto-tagging in progress… ${d.done||0}/${d.total||0} (${pct}%)`);
+        clearTimeout(_motifPollTimer);
+        _motifPollTimer = setTimeout(pollMotifTagStatus, 6000);
+      } else if (d.status === 'error'){
+        notes.forEach(n => { n.textContent = 'Auto-tagging failed: ' + (d.error || 'unknown error'); n.style.color = '#dc2626'; });
+      } else if (d.status === 'ready'){
+        notes.forEach(n => n.textContent = '');
+        // tagging just finished — refresh data once so dropdowns pick up new tags
+        if (!allMotifs.length && !allCollections.length) loadData(false);
+      } else {
+        notes.forEach(n => n.textContent = '');
+      }
+    })
+    .catch(() => {});
 }
 
 let allPacks = [];
@@ -5444,6 +5471,7 @@ function loadData(force){
 
       renderTypeChecks();
       renderMotifCollectionSelects();
+      pollMotifTagStatus();
       renderPackChecks();
       ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = taxHtml; });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
@@ -9894,6 +9922,66 @@ def _classify_motif_collection(img_emb):
     collection = "Religious" if is_religious else "Non-Religious"
     return motif, motif_score, collection, relig_score if is_religious else motif_score
 
+def _hf_zero_shot_classify(pil_img, labels):
+    """Zero-shot image classification via HF Inference API (no torch needed —
+    works on lite/512MB servers). Returns list of (label, score) sorted desc,
+    or None on failure. Retries on 503 (model warm-up)."""
+    try:
+        buf = io.BytesIO()
+        pil_img.convert("RGB").save(buf, format="JPEG", quality=88)
+        img_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception as e:
+        print("hf zero-shot: image encode failed:", e)
+        return None
+    bases = ("https://router.huggingface.co/hf-inference/models/openai/clip-vit-base-patch32",
+             "https://api-inference.huggingface.co/models/openai/clip-vit-base-patch32")
+    payload = {"inputs": img_b64, "parameters": {"candidate_labels": labels}}
+    last = ""
+    for attempt in range(3):
+        for base in bases:
+            try:
+                r = requests.post(base, json=payload, timeout=(15, 90),
+                                  headers={"Authorization": f"Bearer {HF_TOKEN}",
+                                           "x-wait-for-model": "true",
+                                           "x-use-cache": "false"})
+                if r.ok:
+                    data = r.json()
+                    if isinstance(data, list) and data and "label" in data[0]:
+                        return [(d["label"], float(d.get("score", 0))) for d in data]
+                    last = f"unexpected response: {str(data)[:160]}"
+                    continue
+                last = f"HTTP {r.status_code}: {str(r.text)[:160]}"
+                if r.status_code not in (503, 429, 500, 502):
+                    print("hf zero-shot:", last)
+                    return None
+            except Exception as e:
+                last = f"{type(e).__name__}: {str(e)[:120]}"
+        time.sleep(5)
+    print("hf zero-shot failed:", last)
+    return None
+
+def _classify_motif_collection_hf(pil_img):
+    """Same output shape as _classify_motif_collection() but via HF API (no torch)."""
+    m_res = _hf_zero_shot_classify(pil_img, [f"a jewellery piece with a {lbl} design" for lbl in MOTIF_LABELS])
+    if not m_res:
+        return None
+    best_label, best_score = m_res[0]
+    # map back the verbose label to the short MOTIF_LABELS entry
+    motif = "Abstract"
+    for lbl in MOTIF_LABELS:
+        if f"a jewellery piece with a {lbl} design" == best_label:
+            motif = lbl.split(" or ")[0].title()
+            break
+    motif_score = round(best_score * 100, 1)
+
+    r_res = _hf_zero_shot_classify(pil_img, [f"a jewellery piece shaped like a {lbl}" for lbl in RELIGIOUS_MOTIF_LABELS])
+    relig_score = 0.0
+    if r_res:
+        relig_score = round(r_res[0][1] * 100, 1)
+    is_religious = relig_score >= max(motif_score, 22.0)
+    collection = "Religious" if is_religious else "Non-Religious"
+    return motif, motif_score, collection, relig_score if is_religious else motif_score
+
 def _build_motif_index_worker():
     """One-time background job: unique SKU images → CLIP embed → motif+collection tag."""
     from concurrent.futures import ThreadPoolExecutor
@@ -9916,42 +10004,76 @@ def _build_motif_index_worker():
             prog.update({"status": "error", "error": "No Image Link URLs found in the inventory sheet."})
             return
 
-        try:
-            _clip_load_model()
-            _motif_label_embeddings()
-        except Exception as e:
-            prog.update({"status": "error", "error": "AI encoder failed to start: " + str(e)[:220]})
-            return
-
         results = []
-        batch_imgs, batch_skus = [], []
 
-        def flush():
-            nonlocal batch_imgs, batch_skus
-            if not batch_imgs:
-                return
+        if ML_AVAILABLE:
+            # ── Local CLIP (torch installed) — fast batched path ──
             try:
-                vecs = _clip_image_embed_batch(batch_imgs)
-                for sku, vec in zip(batch_skus, vecs):
-                    motif, mscore, coll, cscore = _classify_motif_collection(vec)
-                    results.append({"sku": sku, "motif": motif, "motif_score": mscore,
-                                    "collection": coll, "collection_score": cscore})
+                _clip_load_model()
+                _motif_label_embeddings()
             except Exception as e:
-                print("motif batch encode failed:", e)
+                prog.update({"status": "error", "error": "AI encoder failed to start: " + str(e)[:220]})
+                return
+
             batch_imgs, batch_skus = [], []
 
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            for sku, img in zip([t[0] for t in targets],
-                                ex.map(lambda t: _fetch_catalog_image(t[1]), targets)):
-                prog["done"] += 1
-                if img is not None:
-                    prog["ok"] += 1
-                    batch_imgs.append(img); batch_skus.append(sku)
-                    if len(batch_imgs) >= 16:
-                        flush()
-                else:
-                    prog["fail"] += 1
-        flush()
+            def flush():
+                nonlocal batch_imgs, batch_skus
+                if not batch_imgs:
+                    return
+                try:
+                    vecs = _clip_image_embed_batch(batch_imgs)
+                    for sku, vec in zip(batch_skus, vecs):
+                        motif, mscore, coll, cscore = _classify_motif_collection(vec)
+                        results.append({"sku": sku, "motif": motif, "motif_score": mscore,
+                                        "collection": coll, "collection_score": cscore})
+                except Exception as e:
+                    print("motif batch encode failed:", e)
+                batch_imgs, batch_skus = [], []
+
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                for sku, img in zip([t[0] for t in targets],
+                                    ex.map(lambda t: _fetch_catalog_image(t[1]), targets)):
+                    prog["done"] += 1
+                    if img is not None:
+                        prog["ok"] += 1
+                        batch_imgs.append(img); batch_skus.append(sku)
+                        if len(batch_imgs) >= 16:
+                            flush()
+                    else:
+                        prog["fail"] += 1
+            flush()
+
+        elif HF_TOKEN:
+            # ── No torch on this server (lite/512MB host) — use HF Inference
+            #    API per-image (same approach the SKU Finder already uses). ──
+            def _tag_one(sku_url):
+                sku, url = sku_url
+                img = _fetch_catalog_image(url)
+                if img is None:
+                    return (sku, None)
+                try:
+                    out = _classify_motif_collection_hf(img)
+                except Exception as e:
+                    print("motif hf classify failed:", str(e)[:140])
+                    out = None
+                return (sku, out)
+
+            with ThreadPoolExecutor(max_workers=4) as ex:   # HF rate-limit friendly
+                for sku, out in ex.map(_tag_one, targets):
+                    prog["done"] += 1
+                    if out:
+                        motif, mscore, coll, cscore = out
+                        results.append({"sku": sku, "motif": motif, "motif_score": mscore,
+                                        "collection": coll, "collection_score": cscore})
+                        prog["ok"] += 1
+                    else:
+                        prog["fail"] += 1
+        else:
+            prog.update({"status": "error",
+                         "error": "Neither local AI (torch) nor HF_TOKEN is available on this server — "
+                                  "cannot auto-tag motifs. Set the HF_TOKEN env var or install torch/transformers."})
+            return
 
         if not results:
             prog.update({"status": "error",
