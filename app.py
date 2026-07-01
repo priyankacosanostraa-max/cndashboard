@@ -4477,13 +4477,13 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="payAgingTable" style="font-size:.78rem"></div>
     </div>
     <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month) — respects Tag/Search filters</div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
     </div>
   </div>
   <div style="margin-bottom:18px">
     <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Tag-wise Summary</div>
-    <div id="payTagSummaryTable" style="font-size:.78rem"></div>
+    <div id="payTagSummary" style="font-size:.8rem"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -5690,18 +5690,41 @@ function applyRO(){
     };
   });
 
+  // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
+  // uska use karke sort karo — warna galat lagta hai.
+  const roNoFilterSort = !(txt || typeSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const _singleTypeSort = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
+  const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
+  const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
+  function _roSortVal(it, key){
+    // channel-aware WIP
+    if (key === 'inv_wip'){
+      if (_singleTypeSort && _singleTypeSort.includes('website')) return Number(it.inv_wip_website)||0;
+      if (_singleTypeSort && (_singleTypeSort.includes('sor')||_singleTypeSort.includes('s.o.r'))) return Number(it.inv_wip_sor)||0;
+      if (_singleTypeSort && (_singleTypeSort.includes('purchase')||_singleTypeSort.includes('designer')||_singleTypeSort.includes('customer'))) return Number(it.inv_wip_designer)||0;
+      return Number(it.inv_wip)||0;
+    }
+    // channel-aware sale windows + sold qty (jab type filter active ho)
+    if (!roNoFilterSort && typeSel.length > 0 && (key==='qty_7d'||key==='qty_15d'||key==='qty_1m'||key==='final_qty')){
+      const fe = (it._fe && it._fe.length) ? it._fe : (it.sales_entries||[]).filter(e=>typeSel.includes(e.type));
+      if (key === 'final_qty') return Number(it._fQty ?? fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0))||0;
+      const since = key==='qty_7d'?_S7 : key==='qty_15d'?_S15 : _S30;
+      return fe.reduce((s,e)=> s + ((e.date!=='N/A' && since && e.date>=since) ? (parseFloat(e.qty)||0) : 0), 0);
+    }
+    // default: raw field
+    const v = it[key];
+    return (v === undefined || v === null || v === '') ? 0 : Number(v);
+  }
   filtered.sort((a,b) => {
     if (roSortKey === 'sku') {
       const sa = String(a.sku || '').toUpperCase();
       const sb = String(b.sku || '').toUpperCase();
-      // roSortDir === -1 means "desc" (Z→A / high→low), +1 means "asc" (A→Z / low→high)
-      return -roSortDir * (sa < sb ? 1 : sa > sb ? -1 : 0);
+      return roSortDir * (sa < sb ? 1 : sa > sb ? -1 : 0);
     }
-    const fb = drill ? '_fRev' : 'total_net_revenue';
-    const va = Number(a[roSortKey] ?? a[fb] ?? 0);
-    const vb = Number(b[roSortKey] ?? b[fb] ?? 0);
-    // roSortDir === -1 means "desc" (high→low), +1 means "asc" (low→high)
-    return -roSortDir * (vb - va);
+    const va = _roSortVal(a, roSortKey);
+    const vb = _roSortVal(b, roSortKey);
+    if (va === vb) return 0;
+    return roSortDir * (vb - va);
   });
 
   roFiltered = filtered;
@@ -7454,91 +7477,98 @@ function renderPayments(){
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
   }
-  // week-wise overdue tracker — ab CURRENT filters (Tag/Search/Show) ke hisaab se recompute hota hai
+  // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
   const wkHost = document.getElementById('payWeekTable');
   if (wkHost){
-    const bounds = d.week_bounds || [];
-    // sirf un customers ka data jo abhi filter ke baad dikh rahe hain
-    const custSet = new Set(rows.map(r => (r.customer||'').toUpperCase()));
-    const duePairs = (d.due_pairs_month || []).filter(p => custSet.has((p.customer||'').toUpperCase()));
-    const credPairs = (d.credits_month || []).filter(p => custSet.has((p.customer||'').toUpperCase()));
-
-    const wkOverdue = bounds.map(() => 0);
-    duePairs.forEach(p => {
-      const idx = bounds.findIndex(b => p.due_date >= b.start && p.due_date <= b.end);
-      if (idx >= 0) wkOverdue[idx] += (p.amt || 0);
+    const wm = d.week_meta || [];
+    // filtered customers ke week_due se overdue-becoming-due recompute
+    const wkOverdue = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.week_due || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkOverdue[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
     });
-    const wkPayment = bounds.map(() => 0);
-    credPairs.forEach(p => {
-      const idx = bounds.findIndex(b => p.date >= b.start && p.date <= b.end);
-      if (idx >= 0) wkPayment[idx] += (p.amt || 0);
-    });
-
-    // Frozen Month Target — currently selected tag ka frozen value (ya sab tags ka, agar koi tag filter nahi)
-    const mt = d.month_target || {};
-    const tBy = mt.target_by_tag || {};
-    const tagSel = (document.getElementById('payTag')?.value || '');
-    const frozenTarget = tagSel ? (tBy[tagSel] != null ? tBy[tagSel] : 0) : (tBy['ALL'] != null ? tBy['ALL'] : 0);
-
-    let cum = 0;
-    const body = bounds.map((b, i) => {
-      cum += wkPayment[i];
-      const balRemaining = sumBal - cum;
+    // payment received + balance filtered rows se
+    const filtCollected = rows.reduce((s,r)=>s+(r.collected_month||0),0);
+    const filtBalance = rows.reduce((s,r)=>s+(r.balance||0),0);
+    // frozen target (company-wide, fixed) — week_overdue me target field aata hai
+    const frozen = d.week_overdue || [];
+    const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
+    const payMap = {}; frozen.forEach(w => payMap[w.label] = w.payment || 0);
+    let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
+    const body = wm.map((w,wi) => {
+      const label = w.label;
+      const ov = Math.round(wkOverdue[wi]);
+      const pay = payMap[label] || 0;      // payment received (company-wide, month me)
+      const tgt = tgtMap[label] || 0;      // FROZEN target (month start)
+      cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
+      const balAfter = Math.round(filtBalance - cumPay);
       return `<tr>
-        <td style="padding:5px 8px">${escHtml(b.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(b.range)}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(wkOverdue[i])}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(wkPayment[i])}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balRemaining)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d1d">${fmt(frozenTarget)}</td>
+        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(pay)}</td>
+        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
       </tr>`;
     }).join('');
-    const totOverdueAll = wkOverdue.reduce((s,v)=>s+v,0);
-    const totPaymentAll = wkPayment.reduce((s,v)=>s+v,0);
-    const finalBalance = sumBal - totPaymentAll;
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
         <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
         <th style="text-align:right;padding:5px 8px">Payment Received</th>
         <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
-        <th style="text-align:right;padding:5px 8px">Month Target (Frozen on ${escHtml(mt.frozen_on||'—')})</th>
+        <th style="text-align:right;padding:5px 8px;background:#fdf6e3">Overdue Target<br><span style="font-weight:400;font-size:.85em">(month freeze)</span></th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td style="padding:5px 8px">Total</td>
-        <td style="text-align:right;padding:5px 8px;color:#c0392b">${fmt(totOverdueAll)}</td>
-        <td style="text-align:right;padding:5px 8px;color:#1f7a3a">${fmt(totPaymentAll)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(finalBalance)}</td>
-        <td style="text-align:right;padding:5px 8px;color:#8a6d1d">${fmt(frozenTarget)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
+        <td style="text-align:right;padding:5px 8px"></td>
+        <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. Week buckets fixed for the whole month. "Month Target" column shows the overdue-by-month-end figure frozen on the first refresh of this month (stays the same all month, for the currently selected Tag — or company-wide if no Tag selected).</p>`;
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Overdue Becoming Due, Payment & Balance ab filter (tag/customer) ke according. <b>Overdue Target</b> = month shuru me freeze hua (poore month fixed) — is month ka target reference. Week 1 = 1st–7th, and so on.</p>`;
   }
-  // tag-wise summary — company-wide (not affected by Tag/Search/Show filters, since it shows EVERY tag side by side)
-  const tagHost = document.getElementById('payTagSummaryTable');
+
+  // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
+  const tagHost = document.getElementById('payTagSummary');
   if (tagHost){
-    const ts = d.tag_summary || [];
-    const body = ts.map(t => `<tr>
-        <td style="padding:5px 8px;font-weight:700">${escHtml(t.tag)}</td>
-        <td class="${(t.due||0)>0?'green':'muted'}" style="text-align:right;padding:5px 8px">${fmt(t.due)}</td>
-        <td class="${(t.overdue||0)>0?'red':'muted'}" style="text-align:right;font-weight:700;padding:5px 8px">${fmt(t.overdue)}</td>
-        <td style="text-align:right;padding:5px 8px;color:#1f7a3a">${fmt(t.payment_month)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(t.balance)}</td>
-      </tr>`).join('');
-    const totDue = ts.reduce((s,t)=>s+(t.due||0),0);
-    const totOver = ts.reduce((s,t)=>s+(t.overdue||0),0);
-    const totPay = ts.reduce((s,t)=>s+(t.payment_month||0),0);
-    const totBal = ts.reduce((s,t)=>s+(t.balance||0),0);
-    tagHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem;max-width:760px"><thead><tr>
-        <th style="padding:5px 8px;text-align:left">Tag</th>
+    // filtered rows se tag-wise banao (search/show filter bhi lagey)
+    const tmap = {};
+    rows.forEach(r => {
+      const tg = r.tag || 'Unknown';
+      const s = tmap[tg] || (tmap[tg] = {tag:tg, due:0, overdue:0, collected_month:0, balance:0, customers:0});
+      s.due += r.due||0; s.overdue += r.overdue||0;
+      s.collected_month += r.collected_month||0; s.balance += r.balance||0; s.customers++;
+    });
+    const trows = Object.values(tmap).sort((a,b)=>b.balance-a.balance);
+    let tDue=0,tOv=0,tCol=0,tBal=0,tCust=0;
+    const tbody = trows.map(s => {
+      tDue+=s.due; tOv+=s.overdue; tCol+=s.collected_month; tBal+=s.balance; tCust+=s.customers;
+      return `<tr>
+        <td style="font-weight:700;padding:5px 8px">${escHtml(s.tag)}</td>
+        <td style="text-align:center;padding:5px 8px;color:var(--cn-mid)">${s.customers}</td>
+        <td style="text-align:right;padding:5px 8px;color:#1f7a3a">${fmt(s.due)}</td>
+        <td style="text-align:right;padding:5px 8px;color:#c0392b;font-weight:700">${fmt(s.overdue)}</td>
+        <td style="text-align:right;padding:5px 8px;color:#1f6f3a">${fmt(s.collected_month)}</td>
+        <td style="text-align:right;padding:5px 8px;font-weight:800">${fmt(s.balance)}</td>
+      </tr>`;
+    }).join('');
+    tagHost.innerHTML = `<table class="ro" style="width:100%;font-size:.8rem"><thead><tr>
+        <th style="padding:5px 8px">Tag / Type</th>
+        <th style="text-align:center;padding:5px 8px">Customers</th>
         <th style="text-align:right;padding:5px 8px">Due</th>
         <th style="text-align:right;padding:5px 8px">Overdue</th>
-        <th style="text-align:right;padding:5px 8px">Payment Received (This Month)</th>
+        <th style="text-align:right;padding:5px 8px">Collected (${escHtml(d.month_label||'this month')})</th>
         <th style="text-align:right;padding:5px 8px">Balance</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
+      </tr></thead><tbody>${tbody || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td style="padding:5px 8px">Total</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(totDue)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(totOver)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(totPay)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(totBal)}</td>
+        <td style="text-align:center;padding:5px 8px">${tCust}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tDue)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tOv)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tCol)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tBal)}</td>
       </tr></tfoot></table>`;
   }
 }
@@ -9080,22 +9110,9 @@ PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
 _PAY_RAW_LEDGER = {"data": None}
-MONTH_TARGET_FILE = "month_overdue_target.json"
-
-def _load_month_target():
-    try:
-        with open(MONTH_TARGET_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-def _save_month_target(d):
-    try:
-        with open(MONTH_TARGET_FILE + ".part", "w", encoding="utf-8") as f:
-            json.dump(d, f)
-        os.replace(MONTH_TARGET_FILE + ".part", MONTH_TARGET_FILE)
-    except Exception as e:
-        print("month target save failed:", str(e)[:120])
+# Month-start pe overdue target freeze hota hai (poore month fixed). Key = "YYYY-MM".
+# Ek baar set hone ke baad month bhar wahi rehta hai (target reference).
+_PAY_OVERDUE_TARGET = {}   # {"2026-07": {"total": 1873072, "weeks": {"Week 1": ..., ...}}}
 
 def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
@@ -9199,6 +9216,7 @@ def _build_payments():
         month_end = date(today.year, 12, 31)
     else:
         month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    month_start_g = date(today.year, today.month, 1)
 
     AG_LABELS = ["0 Days", "0-30 Days", "31-60 Days", "61-90 Days", "91-180 Days", ">180 Days"]
     def _ag_bucket(days):
@@ -9216,10 +9234,6 @@ def _build_payments():
     me_due = me_over = 0.0
     tags_set = set()
     all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
-    month_start = date(today.year, today.month, 1)
-    tag_agg = {}          # tag -> {due, overdue, balance, credit_month}
-    due_pairs_month = []  # {customer, tag, due_date(iso), amt} — sirf is mahine ki due dates (week tracker ke liye, frontend pe tag/search filter ho sakta hai)
-    credits_month = []    # {customer, tag, date(iso), amt} — sirf is mahine ke credit/payment entries
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -9230,10 +9244,14 @@ def _build_payments():
         ents = sorted(entries, key=lambda e: (e["date"] or date(1900,1,1)))
         open_inv = []   # list of {date, amt_remaining}
         credit_pool = 0.0
+        cust_collected_month = 0.0
         for e in ents:
             credit_pool += e["credit"]
             if e["debit"] > 0:
                 open_inv.append({"date": e["date"], "amt": e["debit"]})
+            # is month me aaya payment (credit) — "collected this month"
+            if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
+                cust_collected_month += e["credit"]
         # apply credit pool FIFO
         cp = credit_pool
         for inv in open_inv:
@@ -9253,11 +9271,6 @@ def _build_payments():
             idt = inv["date"]
             due_date = (idt + timedelta(days=term_days)) if idt else None
             all_due_pairs.append((due_date, rem))
-            if due_date and month_start <= due_date <= month_end:
-                due_pairs_month.append({
-                    "customer": nm.title(), "tag": tag,
-                    "due_date": due_date.isoformat(), "amt": rem,
-                })
             # as of TODAY
             if due_date and today > due_date:
                 cust_over += rem
@@ -9275,18 +9288,19 @@ def _build_payments():
             else:
                 cust_due_me += rem
 
-        # is mahine me is customer se aaya hua payment/credit (FIFO se independent — raw ledger se)
-        cust_credit_month = 0.0
-        for e in ents:
-            if e["credit"] > 0 and e["date"] and month_start <= e["date"] <= today:
-                cust_credit_month += e["credit"]
-                credits_month.append({
-                    "customer": nm.title(), "tag": tag,
-                    "date": e["date"].isoformat(), "amt": round(e["credit"], 2),
-                })
-
         if cust_bal <= 0.009:
             continue
+        # is customer ke is-month due-date pairs (week summary filter-aware ke liye)
+        _cust_week_due = []
+        for inv in open_inv:
+            rem2 = round(inv["amt"], 2)
+            if rem2 <= 0.009:
+                continue
+            idt2 = inv["date"]
+            dd2 = (idt2 + timedelta(days=term_days)) if idt2 else None
+            if dd2 and month_start_g <= dd2 <= month_end:
+                _cust_week_due.append([dd2.strftime("%Y-%m-%d"), rem2])
+        # is customer ne is month kitna pay kiya (collected this month)
         rows.append({
             "customer": nm.title(),
             "tag": tag,
@@ -9296,17 +9310,12 @@ def _build_payments():
             "balance": round(cust_bal, 0),
             "due_me": round(cust_due_me, 0),
             "overdue_me": round(cust_over_me, 0),
-            "payment_month": round(cust_credit_month, 0),
             "aging": {k: round(v, 0) for k, v in cust_aging.items()},
+            "collected_month": round(cust_collected_month, 0),
+            "week_due": _cust_week_due,
         })
         tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
         me_due += cust_due_me; me_over += cust_over_me
-
-        ta = tag_agg.setdefault(tag, {"due": 0.0, "overdue": 0.0, "balance": 0.0,
-                                       "due_me": 0.0, "overdue_me": 0.0, "payment_month": 0.0})
-        ta["due"] += cust_due; ta["overdue"] += cust_over; ta["balance"] += cust_bal
-        ta["due_me"] += cust_due_me; ta["overdue_me"] += cust_over_me
-        ta["payment_month"] += cust_credit_month
 
     rows.sort(key=lambda x: x["balance"], reverse=True)
 
@@ -9326,6 +9335,7 @@ def _build_payments():
                 last_pay_date = cd
 
     # ---- Week-wise overdue tracker for the CURRENT month (fixed buckets, whole month) ----
+    month_start = date(today.year, today.month, 1)
     week_bounds = []
     ws = month_start
     while ws <= month_end:
@@ -9370,39 +9380,44 @@ def _build_payments():
             "balance": round(bal_after, 0),
         })
 
-    # ---- Tag-wise summary table (Due / Overdue / Payment received this month / Balance, per Tag) ----
-    tag_summary = []
-    for t in sorted(tag_agg.keys()):
-        a = tag_agg[t]
-        tag_summary.append({
-            "tag": t,
-            "due": round(a["due"], 0),
-            "overdue": round(a["overdue"], 0),
-            "payment_month": round(a["payment_month"], 0),
-            "balance": round(a["balance"], 0),
-        })
-
-    # ---- Month Target: "Overdue by month-end" FROZEN on the 1st refresh of each month ----
-    # Ek baar frozen ho jaane ke baad poore mahine wahi target dikhega (file me persist hota hai),
-    # taaki mahine ke beech me agar naye invoices/payments aaye to bhi original target change na ho.
-    month_key = today.strftime("%Y-%m")
-    mt_store = _load_month_target()
-    if mt_store.get("month") != month_key:
-        target_by_tag = {"ALL": round(me_due + me_over, 0)}
-        for t, a in tag_agg.items():
-            target_by_tag[t] = round(a["due_me"] + a["overdue_me"], 0)
-        mt_store = {
-            "month": month_key,
-            "frozen_on": today.strftime("%d-%b-%y"),
-            "target_by_tag": target_by_tag,
+    # ---- FROZEN OVERDUE TARGET (month start pe freeze — poore month fixed) ----
+    # Pehli baar jab is month ka data banta hai, tab week-wise "overdue becoming due"
+    # ka snapshot le ke freeze kar dete hain. Fir month bhar wahi target dikhta hai.
+    mkey = f"{today.year}-{today.month:02d}"
+    if mkey not in _PAY_OVERDUE_TARGET:
+        _PAY_OVERDUE_TARGET[mkey] = {
+            "total": round(sum(week_overdue_amt), 0),
+            "weeks": {f"Week {wi+1}": round(week_overdue_amt[wi], 0) for wi in range(len(week_bounds))},
         }
-        _save_month_target(mt_store)
-    month_target = mt_store
+    frozen = _PAY_OVERDUE_TARGET[mkey]
+    # week rows me frozen target add karo
+    for wi, w in enumerate(week_overdue):
+        w["target"] = frozen["weeks"].get(w["label"], 0)
+
+    # week bounds (frontend filter-aware recompute ke liye)
+    week_meta = [{"label": f"Week {wi+1}",
+                  "start": ws_.strftime("%Y-%m-%d"),
+                  "end": we_.strftime("%Y-%m-%d")} for wi, (ws_, we_) in enumerate(week_bounds)]
+
+    # ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
+    tag_summary = {}
+    for r in rows:
+        tg = r.get("tag") or "Unknown"
+        s = tag_summary.setdefault(tg, {"tag": tg, "due": 0.0, "overdue": 0.0,
+                                        "collected_month": 0.0, "balance": 0.0, "customers": 0})
+        s["due"] += r["due"]; s["overdue"] += r["overdue"]
+        s["collected_month"] += r.get("collected_month", 0)
+        s["balance"] += r["balance"]; s["customers"] += 1
+    tag_summary_list = sorted(tag_summary.values(), key=lambda x: x["balance"], reverse=True)
+    for s in tag_summary_list:
+        for k in ("due", "overdue", "collected_month", "balance"):
+            s[k] = round(s[k], 0)
 
     data = {
         "rows": rows,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
+        "month_label": today.strftime("%b-%y"),
         "ledger_last_updated": last_pay_date.strftime("%d-%b-%y") if last_pay_date else None,
         "totals": {
             "due": round(tot_due, 0), "overdue": round(tot_over, 0), "balance": round(tot_bal, 0),
@@ -9411,13 +9426,9 @@ def _build_payments():
         "aging": [{"bucket": k, "amount": round(aging[k], 0)} for k in AG_LABELS],
         "aging_total": round(sum(aging.values()), 0),
         "week_overdue": week_overdue,
-        "week_bounds": [{"label": f"Week {i+1}", "range": f'{ws_.strftime("%d-%b")} to {we_.strftime("%d-%b")}',
-                          "start": ws_.isoformat(), "end": we_.isoformat()}
-                         for i, (ws_, we_) in enumerate(week_bounds)],
-        "due_pairs_month": due_pairs_month,
-        "credits_month": credits_month,
-        "tag_summary": tag_summary,
-        "month_target": month_target,
+        "week_meta": week_meta,
+        "overdue_target_total": frozen["total"],
+        "tag_summary": tag_summary_list,
         "tags": sorted([t for t in tags_set if t]),
     }
     _PAY_CACHE["data"] = data
