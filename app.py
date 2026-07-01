@@ -655,6 +655,23 @@ def calc_channel(customer, typ):
     if t == "bulk":       return "Bulk"
     return str(typ or "").strip() or "Other"
 
+# Sub-channel = Ecom ke andar KAUNSA marketplace (Myntra/Nykaa/AJIO/Amazon/
+# Flipkart/Tata). D2C/SOR/B2B ke liye abhi granular source data (Meta/Google/
+# Organic) available nahi hai — Type hi sub-channel ban jata hai.
+_MARKETPLACE_MAP = [
+    ("myntra", "Myntra"), ("nykaa", "Nykaa"), ("ajio", "AJIO"),
+    ("tata", "Tata CLiQ"), ("fnp", "FNP"), ("fern", "Fern"),
+    ("mirraw", "Mirraw"), ("amazon", "Amazon"), ("flipkart", "Flipkart"),
+]
+def calc_sub_channel(customer, channel, typ):
+    if channel == "Ecom":
+        c = str(customer or "").lower()
+        for tok, label in _MARKETPLACE_MAP:
+            if tok in c:
+                return label
+        return "Other Marketplace"
+    return channel  # D2C/SOR/B2B/Exhibition/Bulk: sub-channel = channel hi
+
 def find_col(cols, *cands):
     norm = {re.sub(r"[^a-z0-9]","", str(c).lower()): c for c in cols}
     for cand in cands:
@@ -725,6 +742,31 @@ def _compute_alerts_and_channel(item, today):
             flags.append({"code": "dormant_30d", "label": "💤 Zero Sale (30+ days)",
                            "detail": f"No sale in last 30 days despite {int(total_avail)} units available."})
 
+    # --- OOS (Out of Stock) — koi stock/WIP nahi ---
+    if total_avail <= 0:
+        flags.append({"code": "oos", "label": "🔴 Currently OOS",
+                       "detail": "Inventory stock + WIP dono 0 hain — replenish karna hoga."})
+    elif total_avail > 0 and item.get("reorder_qty", 0) > 0 and q30 >= 3:
+        flags.append({"code": "replenish_soon", "label": "🟠 Replenish Soon",
+                       "detail": f"Stock+WIP {int(total_avail)} units, expected demand isse zyada — reorder {int(item.get('reorder_qty',0))} units."})
+
+    # --- Growing / Declining trend: last 30d rate vs prior 90d avg rate ---
+    q90_rate30 = (q90 / 3.0) if q90 else 0.0     # per-30d average over last 90 days
+    trend = None
+    if q90_rate30 >= 2 or q30 >= 2:
+        if q90_rate30 > 0:
+            change_pct = round(((q30 - q90_rate30) / q90_rate30) * 100)
+        else:
+            change_pct = 100 if q30 > 0 else 0
+        if change_pct >= 20:
+            trend = "growing"
+            flags.append({"code": "growing", "label": f"📈 Growing (+{change_pct}%)",
+                           "detail": f"Last 30D sale {int(q30)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
+        elif change_pct <= -20:
+            trend = "declining"
+            flags.append({"code": "declining", "label": f"📉 Declining ({change_pct}%)",
+                           "detail": f"Last 30D sale {int(q30)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
+
     # --- Sudden Sales Drop: last 30d vs prior 30d (30-60 days ago) ---
     ents = item.get("sales_entries") or []
     prior_30_60 = 0.0
@@ -747,17 +789,26 @@ def _compute_alerts_and_channel(item, today):
     # --- Best Channel (highest revenue channel for this SKU) ---
     chan_rev = {}
     chan_qty = {}
+    sub_rev = {}   # marketplace-level (sub_channel) breakdown — sirf Ecom rows
     for e in ents:
         ch = e.get("channel") or "Other"
         chan_rev[ch] = chan_rev.get(ch, 0.0) + float(e.get("rev") or 0)
         chan_qty[ch] = chan_qty.get(ch, 0.0) + float(e.get("qty") or 0)
+        if ch == "Ecom":
+            sch = e.get("sub_channel") or "Other Marketplace"
+            sub_rev[sch] = sub_rev.get(sch, 0.0) + float(e.get("rev") or 0)
     best_channel = ""
     best_channel_rev = 0.0
     if chan_rev:
         best_channel = max(chan_rev, key=chan_rev.get)
         best_channel_rev = chan_rev[best_channel]
+    best_marketplace = ""
+    best_marketplace_rev = 0.0
+    if sub_rev:
+        best_marketplace = max(sub_rev, key=sub_rev.get)
+        best_marketplace_rev = sub_rev[best_marketplace]
 
-    return flags, best_channel, best_channel_rev, days_since_last
+    return flags, best_channel, best_channel_rev, days_since_last, best_marketplace, best_marketplace_rev, trend
 
 
 def simple_forecast(entries, days_ahead=30):
@@ -1014,6 +1065,7 @@ def _refresh_data():
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
     channels_ = set()
+    sub_channels_ = set()
     _TYPE_CANON.clear(); _TAXON_CANON.clear(); _CUST_CANON.clear()
 
     # Unified Grand Totals logic: Everything aggregates line-by-line
@@ -1118,6 +1170,7 @@ def _refresh_data():
         # Channel — customer name (original) + type se. (Website override se pehle
         # compute karo taaki Ecom platform naam detect ho sake.)
         channel = calc_channel(cust, typ)
+        sub_channel = calc_sub_channel(cust, channel, typ)   # marketplace-level
 
         # Type = Website ke orders me asli customer naam (D2C buyers) nahi dikhana —
         # uski jagah "Website" hi customer ke roop me aaye.
@@ -1125,12 +1178,13 @@ def _refresh_data():
             cust = "Website"
 
         custs.add(cust); types_.add(typ); channels_.add(channel)
+        sub_channels_.add(sub_channel)
         if fy != "N/A": fyears.add(fy)
 
         # Return amount = return qty × us transaction ki selling price (COSSA F × H)
         entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
                  "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),
-                 "channel":_si(channel),"fy":_si(fy)}
+                 "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
         sales_exact[mapped_sku]["entries"].append(entry)
@@ -1359,10 +1413,13 @@ def _refresh_data():
         item["forecast_60d"] = _demand60
         item["reorder_qty"]  = max(0, int(round(_demand60 - _avail)))
         item["status"] = classify_status(item, month_s)
-        _flags, _best_chan, _best_chan_rev, _days_since = _compute_alerts_and_channel(item, today)
+        _flags, _best_chan, _best_chan_rev, _days_since, _best_mkt, _best_mkt_rev, _trend = _compute_alerts_and_channel(item, today)
         item["alert_flags"] = _flags
         item["best_channel"] = _si(_best_chan)
         item["best_channel_revenue"] = round(_best_chan_rev, 0)
+        item["best_marketplace"] = _si(_best_mkt)
+        item["best_marketplace_revenue"] = round(_best_mkt_rev, 0)
+        item["trend"] = _trend or ""
         item["days_since_last_sale"] = _days_since if _days_since is not None else -1
         compiled.append(item)
         taxons.add(taxon)
@@ -1446,6 +1503,7 @@ def _refresh_data():
     )
     # channels list (Type filter ke saath Channel filter ke liye)
     CACHE["channels"] = sorted([c for c in channels_ if c])
+    CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
     CACHE["ts"]    = time.time()
     _COSTS_CACHE["rows"] = None   # profit margin cache bhi refresh karo
     CACHE["debug"] = dbg
@@ -4368,6 +4426,8 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Channel (tick one or more)</label>
           <div id="fChanChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
+          <div id="fSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">Product Type</label>
@@ -4461,6 +4521,8 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Channel (tick one or more)</label>
           <div id="rChanChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
+          <div id="rSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
         <div class="fc"><label class="fl">Product Type</label>
@@ -5072,6 +5134,20 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
       <div id="alertSalesDropList" class="insight-list"></div>
     </div>
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>🔴 Currently OOS</h3>
+        <span class="insight-pill warn">Stock + WIP = 0</span>
+      </div>
+      <div id="alertOosList" class="insight-list"></div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>🟠 Replenish Soon</h3>
+        <span class="insight-pill warn">Demand &gt; available</span>
+      </div>
+      <div id="alertReplenishList" class="insight-list"></div>
+    </div>
   </div>
 
   <div class="insight-toolbar">
@@ -5216,10 +5292,13 @@ function skuLabel(sku, name){
 }
 
 function skuInsightBadge(item){
-  // "Best on <Channel>" + alert flag chips — SKU ke neeche dikhte hain.
+  // "Best on <Channel>" + "Marketplace: X" + alert flag chips — SKU ke neeche.
   const parts = [];
   if (item.best_channel){
     parts.push(`<span class="insight-chip" style="background:#eef6ff;color:#1a5fb4;border:1px solid #cfe4ff;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏆 Best on ${escHtml(item.best_channel)}</span>`);
+  }
+  if (item.best_marketplace && item.best_channel === 'Ecom'){
+    parts.push(`<span class="insight-chip" style="background:#eef9f0;color:#1f7a3a;border:1px solid #c8e9d0;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🛒 ${escHtml(item.best_marketplace)}</span>`);
   }
   const colorMap = {
     low_stock_high_sale: {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
@@ -5227,6 +5306,10 @@ function skuInsightBadge(item){
     dormant_30d:           {bg:'#f1f0fb', fg:'#5b4fae', bd:'#d9d5f2'},
     dormant_90d:           {bg:'#f1f0fb', fg:'#5b4fae', bd:'#d9d5f2'},
     sales_drop:            {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
+    oos:                   {bg:'#fdecea', fg:'#b91c1c', bd:'#f6c6c0'},
+    replenish_soon:        {bg:'#fff4e0', fg:'#b45309', bd:'#f3d9a8'},
+    growing:                {bg:'#eafaf0', fg:'#1a7a3e', bd:'#c8f0d6'},
+    declining:              {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
   };
   (item.alert_flags || []).forEach(f => {
     const c = colorMap[f.code] || {bg:'#f3f4f6', fg:'#374151', bd:'#e5e7eb'};
@@ -5264,6 +5347,25 @@ function renderChannelChecks(){
       const safe = String(t).replace(/"/g, '&quot;');
       return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
     }).join('') || '<span class="small-note">No channels</span>';
+  });
+}
+
+let allSubChannels = [];
+function getSelectedSubChannels(id){
+  const containerId = id === 'fSubChan' ? 'fSubChanChecks' : id === 'rSubChan' ? 'rSubChanChecks' : id;
+  const box = document.getElementById(containerId);
+  if (!box) return [];
+  return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
+}
+function renderSubChannelChecks(){
+  ['fSubChanChecks','rSubChanChecks'].forEach(cid => {
+    const box = document.getElementById(cid);
+    if (!box) return;
+    const onChange = cid === 'fSubChanChecks' ? 'applyF()' : 'applyRO()';
+    box.innerHTML = (allSubChannels || []).map(t => {
+      const safe = String(t).replace(/"/g, '&quot;');
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
+    }).join('') || '<span class="small-note">No sub-channels</span>';
   });
 }
 
@@ -5763,6 +5865,7 @@ function loadData(force){
       allCusts = d.customers || [];
       allTypes = d.types || [];
       allChannels = d.channels || [];
+      allSubChannels = d.sub_channels || [];
       allPlatings = d.platings || [];
       allSkus = d.skus || [];
       allFYs = d.fys || [];
@@ -5788,6 +5891,7 @@ function loadData(force){
 
       renderTypeChecks();
       renderChannelChecks();
+      renderSubChannelChecks();
       renderPackChecks();
       ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = taxHtml; });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
@@ -5869,6 +5973,7 @@ function applyF(){
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
+  const subChanSel = getSelectedSubChannels('fSubChan');
   const taxonQ = document.getElementById('fTaxon')?.value || 'All';
   const cnTagQ = document.getElementById('fCnTag')?.value || 'All';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
@@ -5887,6 +5992,7 @@ function applyF(){
   const selected = Array.from(selectedSkuSet);
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
+  const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
   let ky=0, km=0, kf=0, kpf=0, kt=0;
   const cards = [];
@@ -5911,12 +6017,14 @@ function applyF(){
     if (launchQ !== 'All' && item.launch_key !== launchQ) return;
     if (typeSel.length > 0 && !(item.sales_entries || []).some(e => typeOk(e.type))) return;
     if (chanSel.length > 0 && !(item.sales_entries || []).some(e => chanOk(e.channel))) return;
+    if (subChanSel.length > 0 && !(item.sales_entries || []).some(e => subChanOk(e.sub_channel))) return;
     if (custQ && !(item.sales_entries || []).some(e => e.cust.toLowerCase().includes(custQ))) return;
 
     const fe = (item.sales_entries || []).filter(e => {
       if (custQ && !e.cust.toLowerCase().includes(custQ)) return false;
       if (!typeOk(e.type)) return false;
       if (!chanOk(e.channel)) return false;
+      if (!subChanOk(e.sub_channel)) return false;
       if (fyQ !== 'All FYs' && e.fy !== fyQ) return false;
       if (d1 || d2) {
         if (e.date === 'N/A') return false;
@@ -5933,7 +6041,7 @@ function applyF(){
     const feRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
 
     ky += yRev; km += mRev; kf += fRev; kpf += pfRev;
-    const anyEntryFilter = !!(custQ || (d1 || d2) || typeSel.length > 0 || chanSel.length > 0 || fyQ !== 'All FYs');
+    const anyEntryFilter = !!(custQ || (d1 || d2) || typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || fyQ !== 'All FYs');
     const feQty = fe.reduce((s,e)=>s + (parseFloat(e.qty)||0), 0);
     kt += anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
 
@@ -6041,6 +6149,7 @@ function applyRO(){
   const txt = (document.getElementById('rSearch')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('rType');
   const chanSel = getSelectedChannels('rChan');
+  const subChanSel = getSelectedSubChannels('rSubChan');
   const taxQ = document.getElementById('rTaxon')?.value || 'All';
   const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
@@ -6050,12 +6159,14 @@ function applyRO(){
   const packSel = getSelectedPacks();
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
+  const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
   const drill = !!(custQ || d1 || d2);
 
   const entOk = e => {
     if (!typeOk(e.type)) return false;
     if (!chanOk(e.channel)) return false;
+    if (!subChanOk(e.sub_channel)) return false;
     if (custQ && !String(e.cust).toLowerCase().includes(custQ)) return false;
     if (d1 || d2) {
       if (e.date === 'N/A') return false;
@@ -6084,6 +6195,7 @@ function applyRO(){
     const ents = item.sales_entries || [];
     if (typeSel.length > 0 && !ents.some(e => typeOk(e.type))) return false;
     if (chanSel.length > 0 && !ents.some(e => chanOk(e.channel))) return false;
+    if (subChanSel.length > 0 && !ents.some(e => subChanOk(e.sub_channel))) return false;
     if (custQ && !ents.some(e => String(e.cust).toLowerCase().includes(custQ))) return false;
     if (d1 || d2) { if (!ents.some(entOk)) return false; }
     return true;
@@ -6104,7 +6216,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _singleTypeSort = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
@@ -6141,7 +6253,7 @@ function applyRO(){
 
   roFiltered = filtered;
 
-  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -8489,6 +8601,21 @@ function renderInsights(){
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='sales_drop')||{})).join('')
       : '<div class="insight-empty">No sudden sales drops detected</div>';
   }
+  const oosAlertList = document.getElementById('alertOosList');
+  if (oosAlertList){
+    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='oos')).slice(0,10);
+    oosAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='oos')||{})).join('')
+      : '<div class="insight-empty">No OOS products right now 🎉</div>';
+  }
+  const replenishAlertList = document.getElementById('alertReplenishList');
+  if (replenishAlertList){
+    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='replenish_soon'))
+      .sort((a,b)=>(b.reorder_qty||0)-(a.reorder_qty||0)).slice(0,10);
+    replenishAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='replenish_soon')||{})).join('')
+      : '<div class="insight-empty">Nothing needs replenishing right now</div>';
+  }
 
   // Top Returns — COSSA F column (Return Qty); amount = return × selling price.
   const returnsList = document.getElementById('returnsList');
@@ -9111,6 +9238,7 @@ def _build_role_gz(role, force=False):
         "taxons":        tx,
         "types":         ty,
         "channels":      CACHE.get("channels", []),
+        "sub_channels":  CACHE.get("sub_channels", []),
         "customers":     cu,
         "platings":      pl,
         "skus":          sk,
