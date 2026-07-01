@@ -5098,6 +5098,41 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insight-summary" id="insightSummary" style="display:none"></div>
 
+  <div class="insight-toolbar">
+    <div class="insight-toolbar-head">
+      <div>
+        <div class="title">Insights Filters</div>
+        <div class="sub">Use these controls to narrow the analysis and keep exports aligned with what you see.</div>
+      </div>
+    </div>
+    <div class="fg">
+      <div class="fc">
+        <label class="fl">Type</label>
+        <div id="iTypeChecks" class="type-checks"></div>
+      </div>
+      <div class="fc">
+        <label class="fl">Taxon / Category</label>
+        <select class="fs" id="iTaxon" onchange="applyInsights()"></select>
+      </div>
+      <div class="fc">
+        <label class="fl">Sort By</label>
+        <select class="fs" id="iSort" onchange="applyInsights()">
+          <option value="revenue">By Revenue (high → low)</option>
+          <option value="qty">By Quantity (high → low)</option>
+        </select>
+      </div>
+      <div class="fc">
+        <label class="fl">Dispatch Date From</label>
+        <input class="fi" type="date" id="iD1" onchange="applyInsights()" style="margin-bottom:8px">
+        <label class="fl">Dispatch Date To</label>
+        <input class="fi" type="date" id="iD2" onchange="applyInsights()">
+      </div>
+      <div class="fc" style="align-self:end">
+        <button class="go-btn" style="width:100%;letter-spacing:2px;padding:10px" onclick="applyInsights()">Apply Filters</button>
+      </div>
+    </div>
+  </div>
+
   <div class="insights-grid" style="margin-bottom:18px">
     <div class="insight-card">
       <div class="insight-card-head">
@@ -5143,98 +5178,13 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
 
-  <div class="insight-toolbar">
-    <div class="insight-toolbar-head">
-      <div>
-        <div class="title">Insights Filters</div>
-        <div class="sub">Use these controls to narrow the analysis and keep exports aligned with what you see.</div>
-      </div>
-
-    <div class="fg">
-      <div class="fc">
-        <label class="fl">Type</label>
-        <div id="iTypeChecks" class="type-checks"></div>
-      </div>
-      <div class="fc">
-        <label class="fl">Taxon / Category</label>
-        <select class="fs" id="iTaxon" onchange="applyInsights()"></select>
-      </div>
-      <div class="fc">
-        <label class="fl">Sort By</label>
-        <select class="fs" id="iSort" onchange="applyInsights()">
-          <option value="revenue">By Revenue (high → low)</option>
-          <option value="qty">By Quantity (high → low)</option>
-        </select>
-      </div>
-      <div class="fc">
-        <label class="fl">Dispatch Date From</label>
-        <input class="fi" type="date" id="iD1" onchange="applyInsights()" style="margin-bottom:8px">
-        <label class="fl">Dispatch Date To</label>
-        <input class="fi" type="date" id="iD2" onchange="applyInsights()">
-      </div>
-      <div class="fc" style="align-self:end">
-        <button class="go-btn" style="width:100%;letter-spacing:2px;padding:10px" onclick="applyInsights()">Apply Filters</button>
-      </div>
-    </div>
-  </div>
-
   <div class="insights-grid">
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Top Revenue SKUs</h3>
-        <span class="insight-pill">Top 10</span>
-      </div>
-      <div id="topRevenueList" class="insight-list"></div>
-    </div>
-
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Low Stock Alerts</h3>
-        <span class="insight-pill warn">Need attention</span>
-      </div>
-      <div id="lowStockList" class="insight-list"></div>
-    </div>
-
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Category Mix</h3>
-        <span class="insight-pill">By revenue</span>
-      </div>
-      <div id="categoryList" class="insight-list"></div>
-    </div>
-  </div>
-
-  <div class="insights-grid" style="margin-top:18px">
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Inventory Health</h3>
-        <span class="insight-pill ok">Quick view</span>
-      </div>
-      <div id="healthList" class="insight-list"></div>
-    </div>
-
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Top Customers</h3>
-        <span class="insight-pill">By final qty</span>
-      </div>
-      <div id="customerList" class="insight-list"></div>
-    </div>
-
     <div class="insight-card">
       <div class="insight-card-head">
         <h3>Top Returns</h3>
         <span class="insight-pill warn">Return qty &amp; amount</span>
       </div>
       <div id="returnsList" class="insight-list"></div>
-    </div>
-
-    <div class="insight-card">
-      <div class="insight-card-head">
-        <h3>Filtered Summary</h3>
-        <span class="insight-pill ok">Live</span>
-      </div>
-      <div class="insight-list" id="insightMiniSummary"></div>
     </div>
   </div>
 </div>
@@ -8449,7 +8399,11 @@ function renderInsights(){
   const healthList = document.getElementById('healthList');
   const customerList = document.getElementById('customerList');
   const summaryEl = document.getElementById('insightSummary');
-  if (!topRevenueList && !lowStockList && !categoryList && !healthList && !customerList && !summaryEl) return;
+  const returnsList = document.getElementById('returnsList');
+  const alertAny = document.getElementById('alertLowStockList') || document.getElementById('alertHighStockList')
+    || document.getElementById('alertDormantList') || document.getElementById('alertSalesDropList')
+    || document.getElementById('alertOosList') || document.getElementById('alertReplenishList');
+  if (!topRevenueList && !lowStockList && !categoryList && !healthList && !customerList && !summaryEl && !returnsList && !alertAny) return;
 
   const typeSel = getSelectedTypes('iType');
   const taxonQ = document.getElementById('iTaxon')?.value || 'All';
@@ -8613,7 +8567,6 @@ function renderInsights(){
   }
 
   // Top Returns — COSSA F column (Return Qty); amount = return × selling price.
-  const returnsList = document.getElementById('returnsList');
   if (returnsList) {
     const retRows = insightRows.filter(i => (parseFloat(i._iRet) || 0) > 0)
       .sort((a,b) => (parseFloat(b._iRet) || 0) - (parseFloat(a._iRet) || 0)).slice(0, 10);
