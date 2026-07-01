@@ -558,6 +558,48 @@ def cn_sku_label(sku):
     name = cn_display_name(sku)
     return name if name else (str(sku) if sku is not None else "")
 
+# ════════════════════════════════════════════════════════════════
+#  🕉️ RELIGIOUS / SEASONAL SKU CLASSIFICATION
+#  Product naam (cosanostraa.com se mila hua, ya SKU khud) me keywords
+#  dhoondh ke tag lagate hain — Religious ya Seasonal, dono bhi ho
+#  sakte hain, ya koi nahi. Purely naam-based hai (koi manual sheet
+#  nahi chahiye).
+# ════════════════════════════════════════════════════════════════
+CN_RELIGIOUS_KEYWORDS = [
+    "ram ", "shri ram", "ramdhanush", "ram dhanush", "ram darbar", "sita", "lakshman",
+    "hanuman", "krishna", "radha", "radha-krishna", "radha krishna", "ganesh", "ganpati",
+    "shiv", "shiva", "shivling", "trishul", "nandi", "durga", "kali", "lakshmi", "laxmi",
+    "saraswati", "vishnu", "brahma", "garuda", "kamdhenu", "airavat", "buddha", "buddh",
+    "jesus", "christ", " cross", "allah", "mecca", "guru nanak", "khanda", "om ", " om",
+    "shankh", "conch", "rudraksha", "swastik", "mandir", "temple", "divine", "vedic",
+    "yagna", "tulsi", "devi", "mata ", "bhagwan", "puja", "aarti", "tilak", "kalash",
+    "murti", "sadhu", "sanatan", "gita", "ramayan", "mahabharat", "peacock feather brahma",
+    "shri ganesh", "ganesh chaturthi", "janmashtami", "shivratri", "navratri devi",
+]
+CN_SEASONAL_KEYWORDS = [
+    "diwali", "deepavali", "holi", "rakhi", "raksha bandhan", "navratri", "durga puja",
+    "ganesh chaturthi", "christmas", "new year", "eid", "pongal", "onam", "baisakhi",
+    "lohri", "makar sankranti", "dussehra", "dassehra", "karva chauth", "teej", "wedding",
+    "groom", "bridal", "bandhgala", "sherwani special", "monsoon", "summer collection",
+    "winter collection", "festive", "festival", "season", "valentine", "republic day",
+    "independence day", "ram navami", "janmashtami", "shivratri", "friendship day",
+]
+
+def _cn_kw_match(text, keywords):
+    t = f" {text.lower()} "
+    return any(kw in t for kw in keywords)
+
+def cn_classify_tags(name_or_sku):
+    """Product naam me keywords dekh ke Religious / Seasonal tag deta hai.
+    Returns: {"religious": bool, "seasonal": bool}"""
+    if not name_or_sku:
+        return {"religious": False, "seasonal": False}
+    t = str(name_or_sku)
+    return {
+        "religious": _cn_kw_match(t, CN_RELIGIOUS_KEYWORDS),
+        "seasonal":  _cn_kw_match(t, CN_SEASONAL_KEYWORDS),
+    }
+
 _TYPE_CANON = {}
 _TAXON_CANON = {}
 _CUST_CANON = {}
@@ -1177,10 +1219,14 @@ def _refresh_data():
             last_sp = _sps[-1]
 
         A = _agg_entries(ent)   # ek hi pass me saare numbers
+        _cn_name_for_item = cn_display_name(raw) or raw
+        _cn_tags_for_item = cn_classify_tags(_cn_name_for_item)
 
         item = {
             "sku":         raw,
             "sku_name":    cn_sku_label(raw),
+            "is_religious": _cn_tags_for_item["religious"],
+            "is_seasonal":  _cn_tags_for_item["seasonal"],
             "image_url":   img,
             "inv_stock":   stk,
             "inv_wip":     wip,
@@ -4236,6 +4282,12 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="fChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
+        <div class="fc"><label class="fl">Product Type</label>
+          <select class="fs" id="fCnTag" onchange="applyF()">
+            <option value="All">All</option>
+            <option value="Religious">🕉️ Religious</option>
+            <option value="Seasonal">🎉 Seasonal</option>
+          </select></div>
         <div class="fc"><label class="fl">Status</label>
           <select class="fs" id="fStatus" onchange="applyF()">
             <option value="All">All</option>
@@ -4323,6 +4375,12 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
+        <div class="fc"><label class="fl">Product Type</label>
+          <select class="fs" id="rCnTag" onchange="applyRO()">
+            <option value="All">All</option>
+            <option value="Religious">🕉️ Religious</option>
+            <option value="Seasonal">🎉 Seasonal</option>
+          </select></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
           <div id="rPackChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Customer Name</label>
@@ -5646,6 +5704,7 @@ function applyF(){
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
   const taxonQ = document.getElementById('fTaxon')?.value || 'All';
+  const cnTagQ = document.getElementById('fCnTag')?.value || 'All';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
   const fyQ = document.getElementById('fFY')?.value || 'All FYs';
   const plat = document.getElementById('fPlat')?.value || 'All';
@@ -5674,6 +5733,8 @@ function applyF(){
     if (txt && !hay.includes(txt)) return;
     if (selected.length > 0 && !selected.includes(item.sku)) return;
     if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
+    if (cnTagQ === 'Religious' && !item.is_religious) return;
+    if (cnTagQ === 'Seasonal' && !item.is_seasonal) return;
     if (statusQ !== 'All' && item.status !== statusQ) return;
     if (fyQ !== 'All FYs' && !(item.sales_entries || []).some(e => e.fy === fyQ)) return;
     if (plat !== 'All' && item.plating !== plat) return;
@@ -5779,7 +5840,7 @@ function applyF(){
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
-  ['fTaxon','fStatus','fFY','fPlat','fLaunch'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
+  ['fTaxon','fStatus','fFY','fPlat','fLaunch','fCnTag'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
   document.querySelectorAll('#fTypeChecks input:checked').forEach(c => c.checked = false);
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
   selectedSkuSet.clear();
@@ -5815,6 +5876,7 @@ function applyRO(){
   const typeSel = getSelectedTypes('rType');
   const chanSel = getSelectedChannels('rChan');
   const taxQ = document.getElementById('rTaxon')?.value || 'All';
+  const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const d1 = document.getElementById('rD1')?.value || '';
   const d2 = document.getElementById('rD2')?.value || '';
@@ -5841,6 +5903,8 @@ function applyRO(){
     if (pastedSkuSet) return pastedSkuSet.has(String(item.sku).toUpperCase());
     if (txt && !item.sku.toLowerCase().includes(txt)) return false;
     if (taxQ !== 'All' && item.taxon !== taxQ) return false;
+    if (cnTagQ === 'Religious' && !item.is_religious) return false;
+    if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
     // Hide SKUs where Stone Details/Remarks (combo_skus) contains the word "customer"
     if ((item.combo_skus || '').toLowerCase().includes('customer')) return false;
@@ -5874,7 +5938,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _singleTypeSort = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
@@ -6306,6 +6370,7 @@ function resetRO(){
   document.querySelectorAll('#rTypeChecks input:checked').forEach(c => c.checked = false);
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   const rx = document.getElementById('rTaxon'); if (rx) rx.value='All';
+  const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
   const pinfo = document.getElementById('rPasteInfo'); if (pinfo) pinfo.textContent = '';
