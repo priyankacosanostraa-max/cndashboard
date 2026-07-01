@@ -477,6 +477,25 @@ def norm_taxon(v):
 
 def norm_cust(v):  return _canon(v, _CUST_CANON,  "Unknown", title=False)
 
+# Channel = Customer Name + Type se (user formula):
+#  Customer me Myntra/Nykaa/AJIO/Tata/FNP/Fern/Mirraw/Amazon/Flipkart -> Ecom
+#  Type: SOR->SOR, Website/Online->D2C, Purchase->B2B, Exhibition->Exhibition,
+#  Bulk->Bulk, warna Type hi.
+_ECOM_TOKENS = ("myntra", "nykaa", "ajio", "tata", "fnp", "fern",
+                "mirraw", "amazon", "flipkart")
+def calc_channel(customer, typ):
+    c = str(customer or "").lower()
+    if any(tok in c for tok in _ECOM_TOKENS):
+        return "Ecom"
+    t = str(typ or "").strip().lower()
+    if t == "sor":        return "SOR"
+    if t == "website":    return "D2C"
+    if t == "online":     return "D2C"
+    if t == "purchase":   return "B2B"
+    if t == "exhibition": return "Exhibition"
+    if t == "bulk":       return "Bulk"
+    return str(typ or "").strip() or "Other"
+
 def find_col(cols, *cands):
     norm = {re.sub(r"[^a-z0-9]","", str(c).lower()): c for c in cols}
     for cand in cands:
@@ -753,6 +772,7 @@ def _refresh_data():
 
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
+    channels_ = set()
     _TYPE_CANON.clear(); _TAXON_CANON.clear(); _CUST_CANON.clear()
 
     # Unified Grand Totals logic: Everything aggregates line-by-line
@@ -854,17 +874,22 @@ def _refresh_data():
         cust = norm_cust(r.get(C_CUST,"Unknown")) if C_CUST else "Unknown"
         typ  = norm_type(r.get(C_TYPE,"Regular")) if C_TYPE else "Regular"
 
+        # Channel — customer name (original) + type se. (Website override se pehle
+        # compute karo taaki Ecom platform naam detect ho sake.)
+        channel = calc_channel(cust, typ)
+
         # Type = Website ke orders me asli customer naam (D2C buyers) nahi dikhana —
         # uski jagah "Website" hi customer ke roop me aaye.
         if str(typ).strip().lower() == "website":
             cust = "Website"
 
-        custs.add(cust); types_.add(typ)
+        custs.add(cust); types_.add(typ); channels_.add(channel)
         if fy != "N/A": fyears.add(fy)
 
         # Return amount = return qty × us transaction ki selling price (COSSA F × H)
         entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
-                 "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),"fy":_si(fy)}
+                 "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),
+                 "channel":_si(channel),"fy":_si(fy)}
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
         sales_exact[mapped_sku]["entries"].append(entry)
@@ -1168,6 +1193,8 @@ def _refresh_data():
         grand_final_qty,
         period_kpis,
     )
+    # channels list (Type filter ke saath Channel filter ke liye)
+    CACHE["channels"] = sorted([c for c in channels_ if c])
     CACHE["ts"]    = time.time()
     _COSTS_CACHE["rows"] = None   # profit margin cache bhi refresh karo
     CACHE["debug"] = dbg
@@ -4087,6 +4114,8 @@ select.lg-in option{background:#fff;color:#1a1610}
           <datalist id="custList"></datalist></div>
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Channel (tick one or more)</label>
+          <div id="fChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">Status</label>
@@ -4172,6 +4201,8 @@ select.lg-in option{background:#fff;color:#1a1610}
         </div>
         <div class="fc"><label class="fl">Type (tick one or more)</label>
           <div id="rTypeChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Channel (tick one or more)</label>
+          <div id="rChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
@@ -4871,6 +4902,25 @@ function getSelectedTypes(id){
   return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
 }
 
+let allChannels = [];
+function getSelectedChannels(id){
+  const containerId = id === 'fChan' ? 'fChanChecks' : id === 'rChan' ? 'rChanChecks' : id;
+  const box = document.getElementById(containerId);
+  if (!box) return [];
+  return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
+}
+function renderChannelChecks(){
+  ['fChanChecks','rChanChecks'].forEach(cid => {
+    const box = document.getElementById(cid);
+    if (!box) return;
+    const onChange = cid === 'fChanChecks' ? 'applyF()' : 'applyRO()';
+    box.innerHTML = (allChannels || []).map(t => {
+      const safe = String(t).replace(/"/g, '&quot;');
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
+    }).join('') || '<span class="small-note">No channels</span>';
+  });
+}
+
 /* ── Debounce: typing par har keystroke pe heavy re-filter (10k+ SKU) nahi
    chalega — user ke rukne ke ~280ms baad ek hi baar chalega. Isse customer
    name / search box me type karte waqt hang nahi hoga. ── */
@@ -5366,6 +5416,7 @@ function loadData(force){
       _masterSkuMap = {}; master.forEach(it => { if(it&&it.sku) _masterSkuMap[String(it.sku).toUpperCase()] = it; });
       allCusts = d.customers || [];
       allTypes = d.types || [];
+      allChannels = d.channels || [];
       allPlatings = d.platings || [];
       allSkus = d.skus || [];
       allFYs = d.fys || [];
@@ -5390,6 +5441,7 @@ function loadData(force){
       const fyHtml = '<option value="All FYs">All FYs</option>' + allFYs.map(f => `<option value="${f}">${f}</option>`).join('');
 
       renderTypeChecks();
+      renderChannelChecks();
       renderPackChecks();
       ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = taxHtml; });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
@@ -5470,6 +5522,7 @@ function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('fType');
+  const chanSel = getSelectedChannels('fChan');
   const taxonQ = document.getElementById('fTaxon')?.value || 'All';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
   const fyQ = document.getElementById('fFY')?.value || 'All FYs';
@@ -5486,6 +5539,7 @@ function applyF(){
   const d2 = document.getElementById('fD2')?.value || '';
   const selected = Array.from(selectedSkuSet);
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
+  const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
 
   let ky=0, km=0, kf=0, kpf=0, kt=0;
   const cards = [];
@@ -5507,11 +5561,13 @@ function applyF(){
     }
     if (launchQ !== 'All' && item.launch_key !== launchQ) return;
     if (typeSel.length > 0 && !(item.sales_entries || []).some(e => typeOk(e.type))) return;
+    if (chanSel.length > 0 && !(item.sales_entries || []).some(e => chanOk(e.channel))) return;
     if (custQ && !(item.sales_entries || []).some(e => e.cust.toLowerCase().includes(custQ))) return;
 
     const fe = (item.sales_entries || []).filter(e => {
       if (custQ && !e.cust.toLowerCase().includes(custQ)) return false;
       if (!typeOk(e.type)) return false;
+      if (!chanOk(e.channel)) return false;
       if (fyQ !== 'All FYs' && e.fy !== fyQ) return false;
       if (d1 || d2) {
         if (e.date === 'N/A') return false;
@@ -5528,7 +5584,7 @@ function applyF(){
     const feRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
 
     ky += yRev; km += mRev; kf += fRev; kpf += pfRev;
-    const anyEntryFilter = !!(custQ || (d1 || d2) || typeSel.length > 0 || fyQ !== 'All FYs');
+    const anyEntryFilter = !!(custQ || (d1 || d2) || typeSel.length > 0 || chanSel.length > 0 || fyQ !== 'All FYs');
     const feQty = fe.reduce((s,e)=>s + (parseFloat(e.qty)||0), 0);
     kt += anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
 
@@ -5635,6 +5691,7 @@ function smSrch(q){
 function applyRO(){
   const txt = (document.getElementById('rSearch')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('rType');
+  const chanSel = getSelectedChannels('rChan');
   const taxQ = document.getElementById('rTaxon')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const d1 = document.getElementById('rD1')?.value || '';
@@ -5642,11 +5699,13 @@ function applyRO(){
   const ticked = Array.from(selectedSkuSet);
   const packSel = getSelectedPacks();
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
+  const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
 
   const drill = !!(custQ || d1 || d2);
 
   const entOk = e => {
     if (!typeOk(e.type)) return false;
+    if (!chanOk(e.channel)) return false;
     if (custQ && !String(e.cust).toLowerCase().includes(custQ)) return false;
     if (d1 || d2) {
       if (e.date === 'N/A') return false;
@@ -5672,6 +5731,7 @@ function applyRO(){
     if (!skuOk(item)) return false;
     const ents = item.sales_entries || [];
     if (typeSel.length > 0 && !ents.some(e => typeOk(e.type))) return false;
+    if (chanSel.length > 0 && !ents.some(e => chanOk(e.channel))) return false;
     if (custQ && !ents.some(e => String(e.cust).toLowerCase().includes(custQ))) return false;
     if (d1 || d2) { if (!ents.some(entOk)) return false; }
     return true;
@@ -5692,7 +5752,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || typeSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _singleTypeSort = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
@@ -5729,7 +5789,7 @@ function applyRO(){
 
   roFiltered = filtered;
 
-  const roNoFilter = !(txt || typeSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -8479,6 +8539,7 @@ def _build_role_gz(role, force=False):
         "inventory":     comp,
         "taxons":        tx,
         "types":         ty,
+        "channels":      CACHE.get("channels", []),
         "customers":     cu,
         "platings":      pl,
         "skus":          sk,
