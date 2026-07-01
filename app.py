@@ -473,7 +473,10 @@ def _cn_base_code(s):
 
 def _cn_fetch_all_products():
     """cosanostraa.com ke public /products.json se saare products
-    (title + variant SKUs) paginate karke khींchta hai."""
+    (title + variant SKUs) paginate karke khींchta hai. Tight timeouts
+    taaki cosanostraa.com slow/unreachable ho to bhi app kabhi atke
+    nahi — chahe naam na milein, dashboard ka asli data hamesha turant
+    aata rahega."""
     out = []
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -481,10 +484,10 @@ def _cn_fetch_all_products():
         "Accept": "application/json",
     }
     page = 1
-    while page <= 80:   # safety cap (~20,000 products)
+    while page <= 60:   # safety cap (~15,000 products)
         url = f"{CN_STORE_URL}/products.json?limit=250&page={page}"
         try:
-            r = requests.get(url, headers=headers, timeout=25)
+            r = requests.get(url, headers=headers, timeout=(5, 12))  # (connect, read) — kabhi hang nahi hoga
             if not r.ok:
                 break
             products = (r.json() or {}).get("products") or []
@@ -5003,6 +5006,10 @@ let roSortDir = -1;
 
 function fmt(n){ return '₹' + Math.round(n || 0).toLocaleString('en-IN'); }
 function safeText(v){ return (v === null || v === undefined) ? '' : String(v); }
+function skuLabel(sku, name){
+  // cosanostraa.com par mila to "Product Name (SKU)", warna sirf SKU code.
+  return (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
+}
 
 function roThumb(url){
   return (url && String(url).trim() && String(url).toLowerCase() !== 'nan')
@@ -5231,7 +5238,7 @@ function renderSkuDetails(sku){
       : `<div class="img-ph">💎</div>`;
   }
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
-  setT('sdSku', item.sku_name || item.sku);
+  setT('sdSku', skuLabel(item.sku, item.sku_name));
   const metaEl = document.getElementById('sdMeta');
   if (metaEl) metaEl.innerHTML =
     `<span>Category: <b>${safeText(item.taxon)}</b></span>` +
@@ -5614,7 +5621,7 @@ function mkCard(item, rev, conf, slow){
     <div class="row rev-only"><span>This FY</span><span>${fmt(item.rev_fy || 0)}</span></div>
     <div class="row rev-only"><span>Previous FY</span><span>${fmt(item.rev_prev_fy || 0)}</span></div>`;
   return `<div class="card"><div class="img-box">${img}${statusB}${confB}${invB}</div><div class="cb">
-    <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="SKU: ${String(item.sku).replace(/"/g,'&quot;')} — view full details">${item.sku_name || item.sku}</div>
+    <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="View full SKU details">${skuLabel(item.sku, item.sku_name)}</div>
     ${revRows}
     <div class="row"><span>Final Qty</span><span>${item.final_qty || 0}</span></div>
     <div class="row"><span>MRP</span><span>₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</span></div>
@@ -5733,7 +5740,7 @@ function applyF(){
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
           return `<tr>
             <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku_name || t.sku}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku, t.sku_name)}</button></div></td>
             <td>${safeText(t.cust)}</td>
             <td>${safeText(t.type)}</td>
             <td class="gold">${parseFloat(t.qty) || 0}</td>
@@ -6007,7 +6014,7 @@ function applyRO(){
       return `<tr>
         <td style="text-align:center"><input type="checkbox" ${ck} onchange="roToggleTxn('${skuEsc}', this.checked)"></td>
         <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-        <td><div class="sku-cell">${roThumb(t.image_url)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku_name || t.sku}</button></div></td>
+        <td><div class="sku-cell">${roThumb(t.image_url)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku, t.sku_name)}</button></div></td>
         <td>${safeText(t.dimensions || '—')}</td>
         <td>${safeText(t.cust)}</td>
         <td>${safeText(t.type)}</td>
@@ -6099,7 +6106,7 @@ function applyRO(){
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku_name || item.sku}</button>
+          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(item.sku, item.sku_name)}</button>
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -6264,7 +6271,7 @@ function applyColFilters(){
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku_name || item.sku}</button>
+          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(item.sku, item.sku_name)}</button>
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -7158,7 +7165,7 @@ function renderDiscount(){
     const img = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan')
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">` : '';
     return `<tr>
-      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku_name || r.sku)}</button></div></td>
+      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
       <td>${escHtml(r.taxon||'')}</td>
       <td>${fmt(r.mrp)}</td>
       <td>${fmt(r.avg_sp)}</td>
@@ -7253,7 +7260,7 @@ function renderProduction(){
     return `<tr>
       <td class="gold">${escHtml(r.date_disp || '—')}</td>
       <td style="font-weight:800">${escHtml(r.order_no || '—')}</td>
-      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku_name || r.sku)}</button></div></td>
+      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
@@ -8308,7 +8315,7 @@ mkCard = function(item, rev, conf, slow){
   const s = {m1:item.qty_1m||0,m3:item.qty_3m||0,m6:item.qty_6m||0,y1:item.qty_1y||0};
   const r = rev !== undefined ? rev : (item.total_net_revenue || 0);
   const low = (parseFloat(item.total_inv) || 0) <= 10 ? ' style="color:#d97706"' : '';
-  const code = escHtml(item.sku_name || item.sku);
+  const code = escHtml(skuLabel(item.sku, item.sku_name));
   return `<div class="card">
     <div class="img-box">${img}${statusB}${confB}${invB}</div>
     <div class="cb">
@@ -10425,12 +10432,11 @@ def _warmup_and_refresh_loop():
     """Server start hote hi data taiyaar; phir har REFRESH_INTERVAL par
     background mein fresh. MEMORY: sirf ek role ka response prebuild
     (dono ek saath 512MB par OOM -> Render restart loop kar deta tha).
-    Baaki role pehli request par lazy ban jata hai."""
+    Baaki role pehli request par lazy ban jata hai.
+    NOTE: cosanostraa.com naam-catalog iska hissa NAHI hai — wo apne
+    alag thread (_cn_catalog_loop) me chalta hai taaki cosanostraa.com
+    slow/unreachable ho to bhi ye asli dashboard data kabhi na atke."""
     try:
-        try:
-            cn_build_catalog(force=True)     # cosanostraa.com SKU->name map (pehle, taaki naam turant dikhein)
-        except Exception as e:
-            print("CN catalog initial build failed:", str(e)[:120])
         get_data(True)
         try:
             _build_role_gz("admin")          # sirf admin prebuild (RAM bachat)
@@ -10451,10 +10457,6 @@ def _warmup_and_refresh_loop():
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
-            try:
-                cn_build_catalog()           # sirf stale hone par refresh hota hai (6h)
-            except Exception as e:
-                print("CN catalog refresh failed:", str(e)[:120])
             get_data(True)
             _build_role_gz("admin")          # background me bhi sirf admin
             try:
@@ -10465,6 +10467,28 @@ def _warmup_and_refresh_loop():
                 print("BG refresh done")
         except Exception as e:
             print("BG refresh error:", str(e)[:140])
+
+def _cn_catalog_loop():
+    """cosanostraa.com SKU->name catalog apne bilkul alag thread me
+    build/refresh hota hai — iska asli data-loading (_warmup_and_refresh_loop)
+    se koi lena-dena nahi, isliye ye kabhi bhi dashboard ko slow/stuck
+    nahi kar sakta, chahe cosanostraa.com down/slow ho."""
+    try:
+        cn_build_catalog(force=True)
+        try:
+            get_data(True)      # ek extra refresh — taaki naam turant cards me aa jaayein,
+            _build_role_gz("admin")   # 10-min cycle ka wait na karna pade
+            print("CN catalog applied to data ✔")
+        except Exception as e:
+            print("post-CN data refresh failed:", str(e)[:120])
+    except Exception as e:
+        print("CN catalog initial build failed:", str(e)[:120])
+    while True:
+        time.sleep(CN_REFRESH_INTERVAL)
+        try:
+            cn_build_catalog(force=True)
+        except Exception as e:
+            print("CN catalog refresh failed:", str(e)[:120])
 
 # ── Launch ───────────────────────────────────────────────────
 IS_DEPLOY = bool(os.environ.get("DEPLOY") or os.environ.get("RENDER")
@@ -10482,6 +10506,10 @@ def _start_background_threads():
         return
     _LAUNCHED = True
     threading.Thread(target=_warmup_and_refresh_loop, daemon=True).start()
+    try:
+        threading.Thread(target=_cn_catalog_loop, daemon=True).start()
+    except Exception as e:
+        print("CN catalog thread skip:", str(e)[:80])
     try:
         threading.Thread(target=_keepalive_loop, daemon=True).start()
     except Exception as e:
