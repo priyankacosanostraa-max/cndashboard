@@ -5599,7 +5599,7 @@ function loadData(force){
       if (r.status === 202) {
         clearTimeout(timer);
         _warmRetries = (_warmRetries || 0) + 1;
-        if (_warmRetries > 60) {   // ~2.5 min: data load nahi hua, stop looping
+        if (_warmRetries > 120) {   // ~5 min: data load nahi hua, stop looping
           if (L) L.innerHTML = 'Server is still preparing the data (large dataset). '
             + 'Please <button class="go-btn" style="width:auto;padding:9px 16px;display:inline-block" onclick="_warmRetries=0;loadData(false)">Retry</button> in a moment.';
           return null;
@@ -6061,6 +6061,15 @@ function applyRO(){
   const thead = document.querySelector('#roTable thead tr');
   const tbody = document.getElementById('roBody');
   const empty = document.getElementById('roEmpty');
+
+  // Agar data abhi load nahi hua (master khali) — clear message do, confusing
+  // zero-row nahi.
+  if (!master || master.length === 0){
+    const tb = document.getElementById('roBody');
+    if (tb) tb.innerHTML = '<tr><td colspan="11" class="tno-data" style="padding:24px;text-align:center">Data still loading… please wait a moment. <button class="go-btn" style="width:auto;padding:6px 14px;margin-left:10px" onclick="loadData(true)">Retry</button></td></tr>';
+    if (empty) empty.style.display = 'none';
+    return;
+  }
 
   const vt = document.getElementById('roViewToggle');
   if (vt) vt.style.display = drill ? 'flex' : 'none';
@@ -10715,35 +10724,43 @@ def _keepalive_loop():
 
 def _warmup_and_refresh_loop():
     """Server start hote hi data taiyaar; phir har REFRESH_INTERVAL par
-    background mein fresh. MEMORY: sirf ek role ka response prebuild
-    (dono ek saath 512MB par OOM -> Render restart loop kar deta tha).
-    Baaki role pehli request par lazy ban jata hai.
-    NOTE: cosanostraa.com naam-catalog iska hissa NAHI hai — wo apne
-    alag thread (_cn_catalog_loop) me chalta hai taaki cosanostraa.com
-    slow/unreachable ho to bhi ye asli dashboard data kabhi na atke."""
-    try:
-        get_data(True)
+    background mein fresh. MEMORY: sirf ek role ka response prebuild.
+    Agar pehli baar fail ho (sheet fetch slow/timeout), to jaldi retry karo
+    — 10 min tak "loading" pe atkne mat do."""
+    # Initial load — fail ho to jaldi-jaldi retry (10 min wait nahi)
+    ok = False
+    for attempt in range(6):   # ~6 quick tries
+        try:
+            _wstage("loading", f"Loading data (try {attempt+1})…")
+            get_data(True)
+            ok = True
+            break
+        except Exception as e:
+            print(f"WARMUP try {attempt+1} failed:", str(e)[:160])
+            time.sleep(8)      # 8s baad phir try
+    if ok:
         try:
             _build_role_gz("admin")          # sirf admin prebuild (RAM bachat)
         except Exception as e:
             print("prebuild admin failed:", str(e)[:100])
         _wstage("ready", "Ready")
         print("WARMUP: data ready ✔")
-        # vision init memory leta hai — Render 512MB par startup ke waqt skip.
-        # SKU Finder pehli baar use hone par lazy load ho jayega (init_vision wahin call hota hai).
         if os.environ.get("EAGER_VISION") == "1":
             try:
-                init_vision()
-                _vision_self_test()
+                init_vision(); _vision_self_test()
             except Exception as e:
                 print("vision init skipped:", str(e)[:120])
-    except Exception as e:
-        print("WARMUP error:", str(e)[:160])
+    else:
+        print("WARMUP: initial load failed after retries — will keep trying in loop")
     while True:
-        time.sleep(REFRESH_INTERVAL)
+        # data ready hai to normal interval; nahi to jaldi retry (60s)
+        time.sleep(REFRESH_INTERVAL if CACHE.get("data") is not None else 60)
         try:
             get_data(True)
-            _build_role_gz("admin")          # background me bhi sirf admin
+            if CACHE.get("data") is not None and _WARMUP.get("stage") != "ready":
+                _wstage("ready", "Ready")
+                print("WARMUP: data ready ✔ (recovered)")
+            _build_role_gz("admin")
             try:
                 import resource
                 _mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
