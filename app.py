@@ -441,6 +441,120 @@ def parse_date_any(v):
 
 def base_sku(s): return str(s).strip().upper().split("_")[0]
 
+# ════════════════════════════════════════════════════════════════
+#  🏷️ COSANOSTRAA.COM SKU → PRODUCT NAME
+#  cosanostraa.com ek Shopify store hai — uska public /products.json
+#  endpoint (koi API key nahi chahiye) saare products + variant SKUs
+#  deta hai. Isse SKU -> asli product naam ka map banta hai.
+#  Jis SKU ka match cosanostraa.com par mil jaye uska ORIGINAL NAME
+#  dikhega; jo SKU wahan nahi hai uska SKU code jaisa hai waisa hi
+#  (bina chhede) dikhega.
+# ════════════════════════════════════════════════════════════════
+CN_STORE_URL = "https://cosanostraa.com"
+CN_CATALOG = {"exact": {}, "base": {}, "ts": 0.0, "count": 0}
+CN_REFRESH_INTERVAL = 6 * 3600  # 6 ghante — catalog kam badalta hai
+
+def _cn_normalize(s):
+    return re.sub(r"[\s_]+", "-", str(s or "").strip().upper())
+
+def _cn_base_code(s):
+    """'BH-1382-CELB' -> 'BH-1382' jaisa core code nikalta hai taaki
+    suffix (-CELB, -SET, wagera) waale variants bhi match ho jaayein."""
+    ns = _cn_normalize(s)
+    m = re.match(r"^([A-Z]{1,5}-?\d{2,6})", ns)
+    if not m:
+        return ""
+    b = m.group(1)
+    if "-" not in b:
+        mm = re.match(r"^([A-Za-z]+)(\d.*)$", b)
+        if mm:
+            b = mm.group(1) + "-" + mm.group(2)
+    return b
+
+def _cn_fetch_all_products():
+    """cosanostraa.com ke public /products.json se saare products
+    (title + variant SKUs) paginate karke khींchta hai."""
+    out = []
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+    page = 1
+    while page <= 80:   # safety cap (~20,000 products)
+        url = f"{CN_STORE_URL}/products.json?limit=250&page={page}"
+        try:
+            r = requests.get(url, headers=headers, timeout=25)
+            if not r.ok:
+                break
+            products = (r.json() or {}).get("products") or []
+        except Exception as e:
+            print("cosanostraa.com catalog fetch failed:", str(e)[:120])
+            break
+        if not products:
+            break
+        out.extend(products)
+        if len(products) < 250:
+            break
+        page += 1
+    return out
+
+def cn_catalog_is_stale():
+    return (time.time() - CN_CATALOG["ts"]) > CN_REFRESH_INTERVAL or CN_CATALOG["count"] == 0
+
+def cn_build_catalog(force=False):
+    """SKU -> product name map (re)build karta hai. Sirf background
+    thread se call hota hai isliye race condition ka practical risk
+    nahi (worst case ek refresh cycle purana data)."""
+    if not force and not cn_catalog_is_stale():
+        return
+    try:
+        products = _cn_fetch_all_products()
+        exact, base = {}, {}
+        for p in products:
+            title = clean(p.get("title", ""))
+            if not title:
+                continue
+            for v in (p.get("variants") or []):
+                sku = clean(v.get("sku", ""))
+                if not sku:
+                    continue
+                ns = _cn_normalize(sku)
+                if ns and ns not in exact:
+                    exact[ns] = title
+                b = _cn_base_code(ns)
+                if b and b not in base:
+                    base[b] = title
+        if exact:
+            CN_CATALOG["exact"] = exact
+            CN_CATALOG["base"] = base
+            CN_CATALOG["count"] = len(exact)
+        CN_CATALOG["ts"] = time.time()
+        print(f"cosanostraa.com catalog loaded: {CN_CATALOG['count']} SKUs")
+    except Exception as e:
+        print("cosanostraa.com catalog build failed:", str(e)[:160])
+        CN_CATALOG["ts"] = time.time()  # avoid hammering on repeated failures
+
+def cn_display_name(sku):
+    """SKU ke liye cosanostraa.com ka original product naam. Match nahi
+    mila to None (SKU code as-is rehne dena caller ki zimmedari)."""
+    if not sku:
+        return None
+    ns = _cn_normalize(sku)
+    name = CN_CATALOG["exact"].get(ns)
+    if name:
+        return name
+    b = _cn_base_code(ns)
+    if b:
+        return CN_CATALOG["base"].get(b)
+    return None
+
+def cn_sku_label(sku):
+    """Display label: cosanostraa.com par mila to Product Name, warna
+    SKU code bilkul waisa hi jaisa hai."""
+    name = cn_display_name(sku)
+    return name if name else (str(sku) if sku is not None else "")
+
 _TYPE_CANON = {}
 _TAXON_CANON = {}
 _CUST_CANON = {}
@@ -1063,6 +1177,7 @@ def _refresh_data():
 
         item = {
             "sku":         raw,
+            "sku_name":    cn_sku_label(raw),
             "image_url":   img,
             "inv_stock":   stk,
             "inv_wip":     wip,
@@ -5116,7 +5231,7 @@ function renderSkuDetails(sku){
       : `<div class="img-ph">💎</div>`;
   }
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
-  setT('sdSku', item.sku);
+  setT('sdSku', item.sku_name || item.sku);
   const metaEl = document.getElementById('sdMeta');
   if (metaEl) metaEl.innerHTML =
     `<span>Category: <b>${safeText(item.taxon)}</b></span>` +
@@ -5499,7 +5614,7 @@ function mkCard(item, rev, conf, slow){
     <div class="row rev-only"><span>This FY</span><span>${fmt(item.rev_fy || 0)}</span></div>
     <div class="row rev-only"><span>Previous FY</span><span>${fmt(item.rev_prev_fy || 0)}</span></div>`;
   return `<div class="card"><div class="img-box">${img}${statusB}${confB}${invB}</div><div class="cb">
-    <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="View full SKU details">${item.sku}</div>
+    <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="SKU: ${String(item.sku).replace(/"/g,'&quot;')} — view full details">${item.sku_name || item.sku}</div>
     ${revRows}
     <div class="row"><span>Final Qty</span><span>${item.final_qty || 0}</span></div>
     <div class="row"><span>MRP</span><span>₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</span></div>
@@ -5548,7 +5663,7 @@ function applyF(){
   const txns = [];
 
   master.forEach(item => {
-    const hay = `${item.sku} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
+    const hay = `${item.sku} ${item.sku_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
     if (txt && !hay.includes(txt)) return;
     if (selected.length > 0 && !selected.includes(item.sku)) return;
     if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
@@ -5589,7 +5704,7 @@ function applyF(){
     kt += anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
 
     if (drill) {
-      fe.forEach(e => txns.push({ ...e, sku: item.sku }));
+      fe.forEach(e => txns.push({ ...e, sku: item.sku, sku_name: item.sku_name }));
     } else if (cards.length < CAP) {
       cards.push({ mrp: parseFloat(item.mrp) || 0, html: mkCard({
         ...item,
@@ -5618,7 +5733,7 @@ function applyF(){
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
           return `<tr>
             <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku_name || t.sku}</button></div></td>
             <td>${safeText(t.cust)}</td>
             <td>${safeText(t.type)}</td>
             <td class="gold">${parseFloat(t.qty) || 0}</td>
@@ -5856,7 +5971,7 @@ function applyRO(){
     if (colFiltersBar) colFiltersBar.style.display = 'none';
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
-      ...e, sku: item.sku, inv_stock: item.inv_stock, inv_wip: item.inv_wip,
+      ...e, sku: item.sku, sku_name: item.sku_name, inv_stock: item.inv_stock, inv_wip: item.inv_wip,
       image_url: item.image_url, dimensions: item.dimensions || ''
     })));
     txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -5892,7 +6007,7 @@ function applyRO(){
       return `<tr>
         <td style="text-align:center"><input type="checkbox" ${ck} onchange="roToggleTxn('${skuEsc}', this.checked)"></td>
         <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-        <td><div class="sku-cell">${roThumb(t.image_url)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku}</button></div></td>
+        <td><div class="sku-cell">${roThumb(t.image_url)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${t.sku_name || t.sku}</button></div></td>
         <td>${safeText(t.dimensions || '—')}</td>
         <td>${safeText(t.cust)}</td>
         <td>${safeText(t.type)}</td>
@@ -5984,7 +6099,7 @@ function applyRO(){
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku}</button>
+          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku_name || item.sku}</button>
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -6149,7 +6264,7 @@ function applyColFilters(){
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
-          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku}</button>
+          <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${item.sku_name || item.sku}</button>
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -7043,7 +7158,7 @@ function renderDiscount(){
     const img = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan')
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">` : '';
     return `<tr>
-      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku)}</button></div></td>
+      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku_name || r.sku)}</button></div></td>
       <td>${escHtml(r.taxon||'')}</td>
       <td>${fmt(r.mrp)}</td>
       <td>${fmt(r.avg_sp)}</td>
@@ -7138,7 +7253,7 @@ function renderProduction(){
     return `<tr>
       <td class="gold">${escHtml(r.date_disp || '—')}</td>
       <td style="font-weight:800">${escHtml(r.order_no || '—')}</td>
-      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku)}</button></div></td>
+      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(r.sku_name || r.sku)}</button></div></td>
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
@@ -8193,11 +8308,11 @@ mkCard = function(item, rev, conf, slow){
   const s = {m1:item.qty_1m||0,m3:item.qty_3m||0,m6:item.qty_6m||0,y1:item.qty_1y||0};
   const r = rev !== undefined ? rev : (item.total_net_revenue || 0);
   const low = (parseFloat(item.total_inv) || 0) <= 10 ? ' style="color:#d97706"' : '';
-  const code = escHtml(item.sku);
+  const code = escHtml(item.sku_name || item.sku);
   return `<div class="card">
     <div class="img-box">${img}${statusB}${confB}${invB}</div>
     <div class="cb">
-      <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="View full SKU details">${code}</div>
+      <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="SKU: ${escHtml(item.sku)} — view full details">${code}</div>
       <div class="card-meta">
         <span class="meta-tag"${low}>${escHtml(item.taxon || 'General')}</span>
         <span class="meta-tag">MRP ₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</span>
@@ -8757,6 +8872,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["image_url"] = img_map.get(r["sku"], "")
         rr["all_orders"] = sku_orders.get(r["sku"], [])
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
+        rr["sku_name"] = cn_sku_label(r["sku"])
         rows.append(rr)
 
     # KPIs
@@ -9005,6 +9121,7 @@ def _build_sku_costs():
             # agar compiled me cost nahi mila (purana cache) to sheet se try karo
             out.append({
                 "sku":         sk,
+                "sku_name":    it.get("sku_name") or cn_sku_label(sk),
                 "image_url":   it.get("image_url", "") or "",
                 "mrp":         mrp_val,
                 "cost":        cost_val,
@@ -9055,6 +9172,7 @@ def _build_sku_costs():
                     seen.add(ku)
                     out.append({
                         "sku":         sku,
+                        "sku_name":    cn_sku_label(sku),
                         "image_url":   clean(r.get(C_IMG2, "")) if C_IMG2 else "",
                         "mrp":         to_num(r.get(C_MRP,  0)) if C_MRP  else 0,
                         "cost":        to_num(r.get(C_COST, 0)) if C_COST else 0,
@@ -10309,6 +10427,10 @@ def _warmup_and_refresh_loop():
     (dono ek saath 512MB par OOM -> Render restart loop kar deta tha).
     Baaki role pehli request par lazy ban jata hai."""
     try:
+        try:
+            cn_build_catalog(force=True)     # cosanostraa.com SKU->name map (pehle, taaki naam turant dikhein)
+        except Exception as e:
+            print("CN catalog initial build failed:", str(e)[:120])
         get_data(True)
         try:
             _build_role_gz("admin")          # sirf admin prebuild (RAM bachat)
@@ -10329,6 +10451,10 @@ def _warmup_and_refresh_loop():
     while True:
         time.sleep(REFRESH_INTERVAL)
         try:
+            try:
+                cn_build_catalog()           # sirf stale hone par refresh hota hai (6h)
+            except Exception as e:
+                print("CN catalog refresh failed:", str(e)[:120])
             get_data(True)
             _build_role_gz("admin")          # background me bhi sirf admin
             try:
