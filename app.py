@@ -4211,6 +4211,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m13" onclick="showTab('production')">Production</button>
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
+  <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -4648,6 +4649,29 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="arContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:70vh"></div>
   </div>
 
+  <div id="vTaxon" style="display:none">
+  <div class="insights-head">
+    <div><div class="insights-title">Taxon Details</div>
+      <div style="color:var(--cn-mid);font-size:.8rem">Har taxon ka total Net Revenue &amp; Final Qty</div></div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadTaxon()">Apply / Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportTaxon()">Export CSV</button>
+    </div>
+  </div>
+  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Date From</label>
+      <input class="fi" type="date" id="txD1"></div>
+    <div class="fc"><label class="fl">Date To</label>
+      <input class="fi" type="date" id="txD2"></div>
+    <div class="fc"><label class="fl">Type (tick one or more)</label>
+      <div id="txTypeChecks" class="type-checks"></div></div>
+    <div class="fc" style="align-self:flex-end">
+      <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetTaxonFilters()">Reset</button></div>
+  </div>
+  <div id="txSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
+  <div id="txContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
+  </div>
+
   <div id="vPayments" style="display:none">
   <div class="insights-head">
     <div><div class="insights-title">Payments</div>
@@ -4826,6 +4850,11 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="">All</option>
         <option value="yes">Yes (pending only)</option>
         <option value="no">No (completed)</option>
+      </select></div>
+    <div class="fc"><label class="fl">Sort By</label>
+      <select class="fs" id="prodSort" onchange="loadProduction()">
+        <option value="">Default</option>
+        <option value="top_repeat">Top Repeat Order (by Qty)</option>
       </select></div>
     <div class="fc"><label class="fl">Type</label>
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
@@ -7273,7 +7302,7 @@ function loadProduction(){
   const url = '/api/production?channel=' + q('prodChannel') + '&balance=' + q('prodBalance') + '&type=' + q('prodType')
     + '&taxon=' + q('prodTaxon') + '&sku=' + q('prodSku') + '&order_no=' + q('prodOrderNo')
     + '&od1=' + q('prodOD1') + '&od2=' + q('prodOD2')
-    + '&dd1=' + q('prodDD1') + '&dd2=' + q('prodDD2');
+    + '&dd1=' + q('prodDD1') + '&dd2=' + q('prodDD2') + '&sort=' + q('prodSort');
   fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
@@ -7313,6 +7342,7 @@ function renderProduction(){
   }
   const head = `<tr>
     <th>Order Date</th><th>Order No.</th><th>SKU</th><th>Taxon</th><th>Type</th><th>Channel</th><th>All Order Nos.</th>
+    <th title="Kitni baar (distinct orders) me ye SKU aaya">Times Ordered</th>
     <th>Order Qty</th><th>Recv Qty</th><th>Balance Qty</th><th title="Iss SKU ki saare orders ki Balance Qty jodkar (total)">Total Balance (All Orders)</th><th>Delivery Date</th><th>Receiving Date</th></tr>`;
   const body = d.rows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
@@ -7329,6 +7359,7 @@ function renderProduction(){
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
       <td class="prod-order-list" title="This SKU appears in these order numbers">${escHtml(allOrders)}</td>
+      <td class="prod-num" style="font-weight:800;color:#8a4fce">${(r.repeat_count||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.order_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.recv_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num ${balCls}" style="font-weight:800">${Math.round(r.bal_qty||0).toLocaleString('en-IN')}</td>
@@ -7337,27 +7368,27 @@ function renderProduction(){
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
   }).join('') + (d.count > d.rows.length
-    ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
+    ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
     : '');
   const colgroup = `<colgroup>
-    <col style="width:7%"><col style="width:8%"><col style="width:15%"><col style="width:8%">
-    <col style="width:7%"><col style="width:7%"><col style="width:11%">
+    <col style="width:7%"><col style="width:8%"><col style="width:14%"><col style="width:7%">
+    <col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:6%">
     <col style="width:6%"><col style="width:6%"><col style="width:6%">
-    <col style="width:8%"><col style="width:6%"><col style="width:5%">
+    <col style="width:7%"><col style="width:6%"><col style="width:5%">
   </colgroup>`;
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
-  ['prodChannel','prodType','prodTaxon','prodBalance'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  ['prodChannel','prodType','prodTaxon','prodBalance','prodSort'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   loadProduction();
 }
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','Taxon','Type','Channel','All Order Nos.','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
+  const headers = ['Order Date','Order No.','SKU','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
   const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
-    Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
+    (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -7595,6 +7626,95 @@ function exportAtRisk(){
   _dlCsv(headers, rows, 'at_risk_customers');
 }
 window.loadAtRisk = loadAtRisk; window.renderAtRisk = renderAtRisk; window.exportAtRisk = exportAtRisk;
+
+/* ── TAXON DETAILS ── */
+let _taxonData = null; let _txTypesFilled = false;
+function initTaxonTypeChecks(){
+  if (_txTypesFilled) return;
+  const box = document.getElementById('txTypeChecks');
+  if (!box) return;
+  box.innerHTML = (allTypes || []).map(t => {
+    const safe = String(t).replace(/"/g, '&quot;');
+    return `<label class="type-opt"><input type="checkbox" value="${safe}"><span>${t}</span></label>`;
+  }).join('') || '<span class="small-note">No types</span>';
+  _txTypesFilled = true;
+}
+function resetTaxonFilters(){
+  const a = document.getElementById('txD1'); if (a) a.value = '';
+  const b = document.getElementById('txD2'); if (b) b.value = '';
+  document.querySelectorAll('#txTypeChecks input:checked').forEach(c => c.checked = false);
+  loadTaxon();
+}
+function loadTaxon(){
+  const host = document.getElementById('txContent');
+  if (host) host.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
+  const d1 = document.getElementById('txD1')?.value || '';
+  const d2 = document.getElementById('txD2')?.value || '';
+  const types = Array.from(document.querySelectorAll('#txTypeChecks input:checked')).map(c => c.value);
+  const qs = '?d1=' + encodeURIComponent(d1) + '&d2=' + encodeURIComponent(d2) + '&types=' + encodeURIComponent(types.join(','));
+  fetch('/api/taxon-details' + qs, {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.json().then(j => ({ok:r.ok, j})))
+    .then(({ok, j}) => {
+      if (!ok || j.error){ if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(j.error || 'Failed') + '</div>'; return; }
+      _taxonData = j;
+      renderTaxon();
+    })
+    .catch(err => { if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
+}
+function renderTaxon(){
+  const d = _taxonData; if (!d) return;
+  const emp = (LOGIN_ROLE === 'employee');
+  const rows = d.rows || [];
+  const sumHost = document.getElementById('txSummary');
+  if (sumHost){
+    sumHost.innerHTML =
+      `<div class="yoy-card"><div class="yc-label">Total Taxons</div><div class="yc-val">${rows.length}</div></div>
+       <div class="yoy-card"><div class="yc-label">Total Final Qty</div><div class="yc-val">${Math.round(d.total_qty||0).toLocaleString('en-IN')}</div></div>
+       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(d.total_rev)}</div></div>`}`;
+  }
+  const host = document.getElementById('txContent');
+  if (host){
+    const body = rows.map(r => `<tr>
+        <td style="font-weight:700">${escHtml(r.taxon)}</td>
+        <td style="text-align:center;color:var(--cn-mid)">${r.sku_count}</td>
+        <td style="text-align:right;font-weight:700">${Math.round(r.final_qty||0).toLocaleString('en-IN')}</td>
+        ${emp ? '' : `<td style="text-align:right;font-weight:800">${fmt(r.net_revenue)}</td>`}
+      </tr>`).join('');
+    host.innerHTML = `<table class="ro" style="width:100%;min-width:420px"><thead><tr>
+        <th onclick="sortTaxon('taxon')" style="cursor:pointer">Taxon ⇅</th>
+        <th style="text-align:center">SKUs</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortTaxon('final_qty')">Final Qty ⇅</th>
+        ${emp ? '' : '<th style="text-align:right;cursor:pointer" onclick="sortTaxon(\'net_revenue\')">Net Revenue ⇅</th>'}
+      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+        <td>Total</td><td></td>
+        <td style="text-align:right">${Math.round(d.total_qty||0).toLocaleString('en-IN')}</td>
+        ${emp ? '' : `<td style="text-align:right">${fmt(d.total_rev)}</td>`}
+      </tr></tfoot></table>`;
+  }
+}
+let _txSortKey = 'net_revenue', _txSortDir = -1;
+function sortTaxon(key){
+  if (!_taxonData) return;
+  if (_txSortKey === key) _txSortDir *= -1; else { _txSortKey = key; _txSortDir = (key === 'taxon') ? 1 : -1; }
+  _taxonData.rows.sort((a,b) => {
+    if (key === 'taxon'){
+      const sa = String(a.taxon||'').toUpperCase(), sb = String(b.taxon||'').toUpperCase();
+      return _txSortDir * (sa < sb ? -1 : sa > sb ? 1 : 0);
+    }
+    return _txSortDir * ((b[key]||0) - (a[key]||0));
+  });
+  renderTaxon();
+}
+function exportTaxon(){
+  const d = _taxonData; if (!d || !d.rows.length){ alert('No data to export'); return; }
+  const emp = (LOGIN_ROLE === 'employee');
+  const headers = emp ? ['Taxon','SKU Count','Final Qty'] : ['Taxon','SKU Count','Final Qty','Net Revenue'];
+  const data = d.rows.map(r => emp ? [r.taxon, r.sku_count, r.final_qty] : [r.taxon, r.sku_count, r.final_qty, r.net_revenue]);
+  _dlCsv(headers, data, 'taxon_details');
+}
+window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTaxon = exportTaxon;
+window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; window.initTaxonTypeChecks = initTaxonTypeChecks;
 
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
@@ -8303,6 +8423,7 @@ showTab = function(t){
     production: {id: 'vProduction', btn: 'm13'},
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
+    taxon: {id: 'vTaxon', btn: 'm18'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -8342,6 +8463,7 @@ showTab = function(t){
       production: 'PRODUCTION',
       profit: 'PROFIT MARGIN',
       atrisk: 'AT-RISK CUSTOMERS',
+      taxon: 'TAXON DETAILS',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -8364,6 +8486,7 @@ showTab = function(t){
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
+  if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
@@ -8824,7 +8947,7 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
-def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query=""):
+def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode=""):
     # SKU -> image + taxon map (compiled data se, jisme inv image+taxon already hai)
     img_map = {}; tax_map = {}
     try:
@@ -8944,7 +9067,12 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["all_orders"] = sku_orders.get(r["sku"], [])
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
+        rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
         rows.append(rr)
+
+    # SORT: "top_repeat" = sabse zyada baar order hue SKU pehle (zyada -> kam)
+    if (sort_mode or "").strip().lower() == "top_repeat":
+        rows.sort(key=lambda r: (r.get("repeat_count", 0), r.get("order_qty", 0)), reverse=True)
 
     # KPIs
     pending = sum(1 for r in rows if (r["bal_qty"] or 0) > 0)
@@ -9158,8 +9286,9 @@ def api_production():
     txf = request.args.get("taxon", "").strip()
     tyf = request.args.get("type", "").strip()
     bo  = request.args.get("balance", "").strip()
+    sm  = request.args.get("sort", "").strip()
     try:
-        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf, bo, oq))
+        return jsonify(_build_production(cf, sq, od1, od2, dd1, dd2, txf, tyf, bo, oq, sm))
     except Exception as e:
         return jsonify({"error": f"production build failed: {e}"}), 500
 
@@ -9350,6 +9479,63 @@ def api_at_risk():
         return jsonify(_build_at_risk(gap))
     except Exception as e:
         return jsonify({"error": f"at-risk failed: {e}"}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  📊 TAXON DETAILS — har taxon ka total net revenue + final qty
+#  (date + type filter ke saath)
+# ════════════════════════════════════════════════════════════════
+def _build_taxon_details(d1="", d2="", types=None):
+    comp = get_data()[0]
+    types = [t for t in (types or []) if t]
+    types_lc = set(t.lower() for t in types)
+    agg = {}   # taxon -> {rev, qty, skus:set}
+    for it in comp:
+        tax = (it.get("taxon") or "Other") or "Other"
+        for e in it.get("sales_entries", []):
+            # type filter
+            if types_lc and (str(e.get("type") or "").lower() not in types_lc):
+                continue
+            # date filter
+            dt = e.get("date")
+            if d1 or d2:
+                if not dt or dt == "N/A":
+                    continue
+                if d1 and dt < d1:
+                    continue
+                if d2 and dt > d2:
+                    continue
+            a = agg.setdefault(tax, {"rev": 0.0, "qty": 0.0, "skus": set()})
+            # entry["qty"] already Final Qty hai (total - return) — dobara subtract mat karo
+            a["rev"] += float(e.get("rev") or 0)
+            a["qty"] += float(e.get("qty") or 0)
+            a["skus"].add(it.get("sku"))
+
+    rows = []
+    for tax, a in agg.items():
+        rows.append({
+            "taxon": tax,
+            "net_revenue": round(a["rev"], 0),
+            "final_qty": int(round(a["qty"])),
+            "sku_count": len(a["skus"]),
+        })
+    rows.sort(key=lambda x: x["net_revenue"], reverse=True)
+    total_rev = round(sum(r["net_revenue"] for r in rows), 0)
+    total_qty = int(round(sum(r["final_qty"] for r in rows)))
+    agg.clear()
+    _gc.collect(); _malloc_trim()
+    return {"rows": rows, "total_rev": total_rev, "total_qty": total_qty}
+
+@app.route("/api/taxon-details")
+def api_taxon_details():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        d1 = (request.args.get("d1", "") or "").strip()
+        d2 = (request.args.get("d2", "") or "").strip()
+        types = [t for t in (request.args.get("types", "") or "").split(",") if t.strip()]
+        return jsonify(_build_taxon_details(d1, d2, types))
+    except Exception as e:
+        return jsonify({"error": f"taxon-details failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
 #  💰 PAYMENTS — Ledger + Payment Terms se Due / Overdue (FIFO aging)
