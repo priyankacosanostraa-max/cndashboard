@@ -5096,13 +5096,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
 
-  <div id="insightKpiLock" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:18px 0 8px">
-    <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#8c7a42;font-weight:700">🔒 Insight KPIs are locked</span>
-    <input id="iKpiPass" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')unlockKpis('insights')"
-      style="padding:9px 12px;border:1px solid #d8dee9;border-radius:8px;font-size:12px;outline:none;background:#fff;color:#111;width:160px">
-    <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px" onclick="unlockKpis('insights')">Unlock</button>
-    <span id="iKpiErr" style="color:#dc2626;font-size:11px;font-weight:700"></span>
-  </div>
   <div class="insight-summary" id="insightSummary" style="display:none"></div>
 
   <div class="insights-grid" style="margin-bottom:18px">
@@ -6990,9 +6983,7 @@ function applyRoleUI(){
 
 const KPI_PASS = "Mayuresh";
 function unlockKpis(section='matrix'){
-  const cfg = section === 'insights'
-    ? {passId:'iKpiPass', lockId:'insightKpiLock', boxId:'insightSummary', errId:'iKpiErr', display:'grid'}
-    : {passId:'kpiPass', lockId:'kpiLock', boxId:'kpiBox', errId:'kpiErr', display:'flex'};
+  const cfg = {passId:'kpiPass', lockId:'kpiLock', boxId:'kpiBox', errId:'kpiErr', display:'flex'};
   const v = (document.getElementById(cfg.passId)?.value || '');
   const err = document.getElementById(cfg.errId);
   if (v === KPI_PASS) {
@@ -8360,6 +8351,10 @@ function printCustomerLedger(){
   w.document.write('<html><head><title>Customer Ledger</title><style>' +
     'body{font-family:Arial,sans-serif;padding:20px} table{width:100%;border-collapse:collapse;font-size:12px}' +
     'th,td{border:1px solid #333;padding:6px 8px} th{background:#f0f0f0} caption{font-weight:800;padding:10px}' +
+    // tfoot browsers me default "table-footer-group" hota hai jo HAR printed page
+    // pe repeat hota hai. display:table-row-group karne se ye normal row-group ban
+    // jata hai — sirf table ke end me (last page) ek hi baar print hota hai.
+    'tfoot{display:table-row-group}' +
     '</style></head><body>' + tbl.outerHTML + '</body></html>');
   w.document.close(); w.focus(); w.print();
 }
