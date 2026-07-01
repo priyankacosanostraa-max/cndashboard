@@ -678,6 +678,88 @@ def classify_status(item, current_month_key=""):
     return "Good Running"
 
 
+# ════════════════════════════════════════════════════════════════
+# 🚨 SMART ALERTS + BEST CHANNEL — har product ke liye
+#   - High Sale / Low Stock (stockout risk)
+#   - High Stock / Low Sale (overstock, slow mover)
+#   - Dormant 30d / 90d (active product par recent koi sale nahi)
+#   - Sudden Sales Drop (last 30d vs previous 30d)
+#   - Best Channel (jis channel par sabse zyada revenue aaya)
+# ════════════════════════════════════════════════════════════════
+def _compute_alerts_and_channel(item, today):
+    if isinstance(today, datetime):
+        today = today.date()
+    flags = []
+    stock = item.get("inv_stock") or 0
+    wip = item.get("inv_wip") or 0
+    total_avail = stock + wip
+    q30 = item.get("qty_1m") or 0
+    q90 = item.get("qty_3m") or 0
+    q6m = item.get("qty_6m") or 0
+    dispatch_count = item.get("dispatch_count") or 0
+    last_dt_s = item.get("last_dispatch_date") or "N/A"
+
+    # --- High Sale + Low Stock (stockout risk) ---
+    # 30-din me achhi bikri (>=5 units) par available stock+wip usse kam
+    if q30 >= 5 and total_avail < q30:
+        flags.append({"code": "low_stock_high_sale", "label": "⚠️ High Sale, Low Stock",
+                       "detail": f"30D sale {int(q30)} units, but only {int(total_avail)} available (stock+WIP)."})
+
+    # --- High Stock + Low Sale (overstock / slow mover) ---
+    if total_avail >= 20 and q90 <= 1:
+        flags.append({"code": "high_stock_low_sale", "label": "📦 High Stock, Low Sale",
+                       "detail": f"{int(total_avail)} units available (stock+WIP), only {int(q90)} sold in last 90 days."})
+
+    # --- Dormant: active product (has stock) but zero sale in 30/90 days ---
+    days_since_last = None
+    if last_dt_s and last_dt_s != "N/A":
+        try:
+            days_since_last = (today - datetime.strptime(last_dt_s, "%Y-%m-%d").date()).days
+        except Exception:
+            days_since_last = None
+    if dispatch_count > 0 and total_avail > 0:
+        if q90 == 0 and (days_since_last is None or days_since_last >= 90):
+            flags.append({"code": "dormant_90d", "label": "💤 Zero Sale (90+ days)",
+                           "detail": f"No sale in last 90 days despite {int(total_avail)} units available."})
+        elif q30 == 0 and (days_since_last is None or days_since_last >= 30):
+            flags.append({"code": "dormant_30d", "label": "💤 Zero Sale (30+ days)",
+                           "detail": f"No sale in last 30 days despite {int(total_avail)} units available."})
+
+    # --- Sudden Sales Drop: last 30d vs prior 30d (30-60 days ago) ---
+    ents = item.get("sales_entries") or []
+    prior_30_60 = 0.0
+    for e in ents:
+        ds = e.get("date")
+        if not ds or ds == "N/A":
+            continue
+        try:
+            d = datetime.strptime(ds, "%Y-%m-%d").date()
+        except Exception:
+            continue
+        delta = (today - d).days
+        if 30 < delta <= 60:
+            prior_30_60 += float(e.get("qty") or 0)
+    if prior_30_60 >= 5 and q30 <= prior_30_60 * 0.4:
+        drop_pct = round((1 - (q30 / prior_30_60)) * 100) if prior_30_60 else 0
+        flags.append({"code": "sales_drop", "label": f"📉 Sudden Sales Drop ({drop_pct}%)",
+                       "detail": f"Sold {int(prior_30_60)} units in the previous 30 days, only {int(q30)} in the last 30 days."})
+
+    # --- Best Channel (highest revenue channel for this SKU) ---
+    chan_rev = {}
+    chan_qty = {}
+    for e in ents:
+        ch = e.get("channel") or "Other"
+        chan_rev[ch] = chan_rev.get(ch, 0.0) + float(e.get("rev") or 0)
+        chan_qty[ch] = chan_qty.get(ch, 0.0) + float(e.get("qty") or 0)
+    best_channel = ""
+    best_channel_rev = 0.0
+    if chan_rev:
+        best_channel = max(chan_rev, key=chan_rev.get)
+        best_channel_rev = chan_rev[best_channel]
+
+    return flags, best_channel, best_channel_rev, days_since_last
+
+
 def simple_forecast(entries, days_ahead=30):
     """Expected DEMAND (units) in the next `days_ahead` days.
 
@@ -1277,6 +1359,11 @@ def _refresh_data():
         item["forecast_60d"] = _demand60
         item["reorder_qty"]  = max(0, int(round(_demand60 - _avail)))
         item["status"] = classify_status(item, month_s)
+        _flags, _best_chan, _best_chan_rev, _days_since = _compute_alerts_and_channel(item, today)
+        item["alert_flags"] = _flags
+        item["best_channel"] = _si(_best_chan)
+        item["best_channel_revenue"] = round(_best_chan_rev, 0)
+        item["days_since_last_sale"] = _days_since if _days_since is not None else -1
         compiled.append(item)
         taxons.add(taxon)
         if plat != "N/A": platings.add(plat)
@@ -4956,6 +5043,37 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="insight-summary" id="insightSummary" style="display:none"></div>
 
+  <div class="insights-grid" style="margin-bottom:18px">
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>⚠️ High Sale, Low Stock</h3>
+        <span class="insight-pill warn">Stockout risk</span>
+      </div>
+      <div id="alertLowStockList" class="insight-list"></div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>📦 High Stock, Low Sale</h3>
+        <span class="insight-pill warn">Overstock</span>
+      </div>
+      <div id="alertHighStockList" class="insight-list"></div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>💤 Dormant (No Sale 30–90d)</h3>
+        <span class="insight-pill warn">Needs attention</span>
+      </div>
+      <div id="alertDormantList" class="insight-list"></div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-card-head">
+        <h3>📉 Sudden Sales Drop</h3>
+        <span class="insight-pill warn">Last 30d vs prior 30d</span>
+      </div>
+      <div id="alertSalesDropList" class="insight-list"></div>
+    </div>
+  </div>
+
   <div class="insight-toolbar">
     <div class="insight-toolbar-head">
       <div>
@@ -5095,6 +5213,26 @@ function safeText(v){ return (v === null || v === undefined) ? '' : String(v); }
 function skuLabel(sku, name){
   // cosanostraa.com par mila to "Product Name (SKU)", warna sirf SKU code.
   return (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
+}
+
+function skuInsightBadge(item){
+  // "Best on <Channel>" + alert flag chips — SKU ke neeche dikhte hain.
+  const parts = [];
+  if (item.best_channel){
+    parts.push(`<span class="insight-chip" style="background:#eef6ff;color:#1a5fb4;border:1px solid #cfe4ff;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏆 Best on ${escHtml(item.best_channel)}</span>`);
+  }
+  const colorMap = {
+    low_stock_high_sale: {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
+    high_stock_low_sale:  {bg:'#fff4e0', fg:'#b45309', bd:'#f3d9a8'},
+    dormant_30d:           {bg:'#f1f0fb', fg:'#5b4fae', bd:'#d9d5f2'},
+    dormant_90d:           {bg:'#f1f0fb', fg:'#5b4fae', bd:'#d9d5f2'},
+    sales_drop:            {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
+  };
+  (item.alert_flags || []).forEach(f => {
+    const c = colorMap[f.code] || {bg:'#f3f4f6', fg:'#374151', bd:'#e5e7eb'};
+    parts.push(`<span class="insight-chip" title="${escHtml(f.detail||'')}" style="background:${c.bg};color:${c.fg};border:1px solid ${c.bd};font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">${escHtml(f.label)}</span>`);
+  });
+  return parts.length ? `<span style="display:flex;flex-wrap:wrap;gap:4px;max-width:220px">${parts.join('')}</span>` : '';
 }
 
 function roThumb(url){
@@ -6208,6 +6346,7 @@ function applyRO(){
       <td><div class="sku-cell">${img}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
           <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(item.sku, item.sku_name)}</button>
+          ${skuInsightBadge(item)}
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -6373,6 +6512,7 @@ function applyColFilters(){
       <td><div class="sku-cell">${imgTag}
         <span style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
           <button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(item.sku, item.sku_name)}</button>
+          ${skuInsightBadge(item)}
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
@@ -7298,6 +7438,27 @@ window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
+let _prodSortKey = 'order_qty', _prodSortDir = -1;
+function sortProd(key){
+  if (!_prodData || !_prodData.rows) return;
+  if (_prodSortKey === key) _prodSortDir *= -1; else { _prodSortDir = -1; _prodSortKey = key; }
+  const isStr = ['sku','order_no','taxon','order_type','channel','date','delivery_iso'].includes(key);
+  _prodData.rows.sort((a,b) => {
+    let va = a[key], vb = b[key];
+    if (isStr){
+      va = String(va || ''); vb = String(vb || '');
+      if (va === '' && vb === '') return 0;
+      if (va === '') return 1;   // khali values hamesha neeche
+      if (vb === '') return -1;
+      return _prodSortDir * (va < vb ? 1 : va > vb ? -1 : 0);
+    }
+    va = Number(va) || 0; vb = Number(vb) || 0;
+    if (va === vb) return 0;
+    return _prodSortDir * (vb - va);
+  });
+  renderProduction();
+}
+window.sortProd = sortProd;
 let _prodFilled = false;
 let _prodSearchTimer = null;
 function prodSearchDebounced(){ clearTimeout(_prodSearchTimer); _prodSearchTimer = setTimeout(loadProduction, 300); }
@@ -7338,6 +7499,20 @@ function renderProduction(){
   const sumHost = document.getElementById('prodSummary');
   const d = _prodData;
   if (!host || !d) return;
+  if (d.rows && d.rows.length && !d._sorted){
+    const isStr = ['sku','order_no','taxon','order_type','channel','date','delivery_iso'].includes(_prodSortKey);
+    d.rows.sort((a,b) => {
+      let va = a[_prodSortKey], vb = b[_prodSortKey];
+      if (isStr){
+        va = String(va||''); vb = String(vb||'');
+        if (va==='' && vb==='') return 0; if (va==='') return 1; if (vb==='') return -1;
+        return _prodSortDir * (va < vb ? 1 : va > vb ? -1 : 0);
+      }
+      va = Number(va)||0; vb = Number(vb)||0;
+      return va===vb ? 0 : _prodSortDir * (vb - va);
+    });
+    d._sorted = true;
+  }
   if (sumHost){
     sumHost.style.gridTemplateColumns = 'repeat(3,1fr)';
     sumHost.innerHTML = `
@@ -7350,9 +7525,20 @@ function renderProduction(){
     return;
   }
   const head = `<tr>
-    <th>Order Date</th><th>Order No.</th><th>SKU</th><th>Taxon</th><th>Type</th><th>Channel</th><th>All Order Nos.</th>
-    <th title="Kitni baar (distinct orders) me ye SKU aaya">Times Ordered</th>
-    <th>Order Qty</th><th>Recv Qty</th><th>Balance Qty</th><th title="Iss SKU ki saare orders ki Balance Qty jodkar (total)">Total Balance (All Orders)</th><th>Delivery Date</th><th>Receiving Date</th></tr>`;
+    <th class="sort-arrow" onclick="sortProd('date')">Order Date ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('order_no')">Order No. ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('sku')">SKU ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('taxon')">Taxon ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('order_type')">Type ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
+    <th>All Order Nos.</th>
+    <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Kitni baar (distinct orders) me ye SKU aaya">Times Ordered ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('recv_qty')">Recv Qty ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('bal_qty')">Balance Qty ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Iss SKU ki saare orders ki Balance Qty jodkar (total)">Total Balance (All Orders) ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
+    <th>Receiving Date</th></tr>`;
   const body = d.rows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
     const img = hasImg
@@ -7727,6 +7913,26 @@ window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; wind
 
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
+let _paySortKey = 'balance', _paySortDir = -1;
+function sortPay(key){
+  if (_paySortKey === key) _paySortDir *= -1; else { _paySortDir = -1; _paySortKey = key; }
+  renderPayments();
+}
+function _applyPaySort(rows){
+  const key = _paySortKey, dir = _paySortDir;
+  const isStr = (key === 'customer' || key === 'tag');
+  rows.sort((a,b) => {
+    let va = a[key], vb = b[key];
+    if (isStr){
+      va = String(va || ''); vb = String(vb || '');
+      return dir * (va < vb ? 1 : va > vb ? -1 : 0);
+    }
+    va = Number(va) || 0; vb = Number(vb) || 0;
+    if (va === vb) return 0;
+    return dir * (vb - va);
+  });
+  return rows;
+}
 function loadPayments(force){
   const todayHost = document.getElementById('payTodayTable');
   if (todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
@@ -7775,6 +7981,7 @@ function _payFiltered(){
 function renderPayments(){
   const d = _payData; if (!d) return;
   const rows = _payFiltered();
+  _applyPaySort(rows);
   // summary cards
   const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
   const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
@@ -7800,8 +8007,12 @@ function renderPayments(){
         <td style="text-align:right;font-weight:800">${fmt(r.balance)}</td>
       </tr>`).join('');
     todayHost.innerHTML = `<table class="ro" style="width:100%;min-width:560px"><thead><tr>
-        <th>Customer Name</th><th style="text-align:center">Tag</th><th style="text-align:center">Term</th>
-        <th style="text-align:right">Due</th><th style="text-align:right">Overdue</th><th style="text-align:right">Balance</th>
+        <th class="sort-arrow" onclick="sortPay('customer')">Customer Name ⇅</th>
+        <th style="text-align:center;cursor:pointer" onclick="sortPay('tag')" class="sort-arrow">Tag ⇅</th>
+        <th style="text-align:center;cursor:pointer" onclick="sortPay('term_days')" class="sort-arrow">Term ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPay('due')" class="sort-arrow">Due ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPay('overdue')" class="sort-arrow">Overdue ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPay('balance')" class="sort-arrow">Balance ⇅</th>
       </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
         <td>Total</td><td></td><td></td>
@@ -8235,6 +8446,48 @@ function renderInsights(){
       ((parseFloat(i.total_inv) || 0) / maxLow) * 100,
       'units', i.sku
     )).join('') : '<div class="insight-empty">No items available</div>';
+  }
+
+  // ── SMART ALERTS — item.alert_flags (backend se) use karte hain ──
+  const alertRow = (i, flag) => `
+    <div class="insight-row">
+      <div>
+        <div class="name" style="cursor:pointer" onclick="openSkuDetails('${String(i.sku).replace(/'/g,"\\'")}')" title="View SKU details">${escHtml(skuLabel(i.sku, i.sku_name))}</div>
+        <div class="sub">${escHtml(flag.detail || '')}</div>
+      </div>
+      <div class="insight-val" style="font-size:.75rem">${i.best_channel ? '🏆 ' + escHtml(i.best_channel) : ''}</div>
+    </div>`;
+  const byFlag = (code) => (master || []).filter(i => (i.alert_flags||[]).some(f => f.code === code));
+
+  const lowStockAlertList = document.getElementById('alertLowStockList');
+  if (lowStockAlertList){
+    const items = byFlag('low_stock_high_sale').sort((a,b)=>(b.qty_1m||0)-(a.qty_1m||0)).slice(0,10);
+    lowStockAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='low_stock_high_sale')||{})).join('')
+      : '<div class="insight-empty">No stockout risks right now 🎉</div>';
+  }
+  const highStockAlertList = document.getElementById('alertHighStockList');
+  if (highStockAlertList){
+    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='high_stock_low_sale'))
+      .sort((a,b)=>((b.inv_stock||0)+(b.inv_wip||0))-((a.inv_stock||0)+(a.inv_wip||0))).slice(0,10);
+    highStockAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='high_stock_low_sale')||{})).join('')
+      : '<div class="insight-empty">No overstock items right now</div>';
+  }
+  const dormantAlertList = document.getElementById('alertDormantList');
+  if (dormantAlertList){
+    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='dormant_30d'||f.code==='dormant_90d'))
+      .sort((a,b)=>(b.days_since_last_sale||0)-(a.days_since_last_sale||0)).slice(0,10);
+    dormantAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='dormant_90d'||f.code==='dormant_30d')||{})).join('')
+      : '<div class="insight-empty">No dormant products right now</div>';
+  }
+  const salesDropAlertList = document.getElementById('alertSalesDropList');
+  if (salesDropAlertList){
+    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='sales_drop')).slice(0,10);
+    salesDropAlertList.innerHTML = items.length
+      ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='sales_drop')||{})).join('')
+      : '<div class="insight-empty">No sudden sales drops detected</div>';
   }
 
   // Top Returns — COSSA F column (Return Qty); amount = return × selling price.
