@@ -745,10 +745,10 @@ def _compute_alerts_and_channel(item, today):
     # --- OOS (Out of Stock) — koi stock/WIP nahi ---
     if total_avail <= 0:
         flags.append({"code": "oos", "label": "🔴 Currently OOS",
-                       "detail": "Inventory stock + WIP dono 0 hain — replenish karna hoga."})
+                       "detail": "Inventory stock and WIP are both 0 — replenishment required."})
     elif total_avail > 0 and item.get("reorder_qty", 0) > 0 and q30 >= 3:
         flags.append({"code": "replenish_soon", "label": "🟠 Replenish Soon",
-                       "detail": f"Stock+WIP {int(total_avail)} units, expected demand isse zyada — reorder {int(item.get('reorder_qty',0))} units."})
+                       "detail": f"Stock+WIP {int(total_avail)} units, expected demand exceeds this — reorder {int(item.get('reorder_qty',0))} units."})
 
     # --- Growing / Declining trend: last 30d rate vs prior 90d avg rate ---
     q90_rate30 = (q90 / 3.0) if q90 else 0.0     # per-30d average over last 90 days
@@ -1576,7 +1576,7 @@ def _space_dinov2_embedding(path):
     try:
         from gradio_client import Client, handle_file
     except Exception as e:
-        _HF_LAST_ERROR["msg"] = "gradio_client installed nahi hai: " + str(e)[:80]
+        _HF_LAST_ERROR["msg"] = "gradio_client is not installed: " + str(e)[:80]
         return None
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
     CONNECT_TIMEOUT = 25   # Space cold-start/connect ke liye max wait
@@ -1598,7 +1598,7 @@ def _space_dinov2_embedding(path):
                     try:
                         cli = fut.result(timeout=CONNECT_TIMEOUT)
                     except _FutTimeout:
-                        last = f"HF Space connect timed out after {CONNECT_TIMEOUT}s — Space so raha hai shayad, dobara try karo (cold-start me 30-60s lagta hai)"
+                        last = f"HF Space connect timed out after {CONNECT_TIMEOUT}s — the Space may be asleep, try again (cold-start takes 30-60s)"
                         print("Space embed:", last)
                         time.sleep(3)
                         continue
@@ -7644,7 +7644,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('order_type')">Type ⇅</th>
     <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
     <th>All Order Nos.</th>
-    <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Kitni baar (distinct orders) me ye SKU aaya">Times Ordered ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Number of distinct orders this SKU appears in">Times Ordered ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('recv_qty')">Recv Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('bal_qty')">Balance Qty ⇅</th>
@@ -10017,7 +10017,7 @@ def _build_payments():
     L_CMP  = find_col(led_df.columns, "Company Details", "company")
 
     if not L_CUST:
-        raise ValueError(f"Ledger me 'Customer Name' column nahi mila. Columns: {lcols[:12]}")
+        raise ValueError(f"'Customer Name' column not found in Ledger. Columns: {lcols[:12]}")
 
     by_cust = {}
     raw_by_cust = {}
@@ -10450,7 +10450,7 @@ def search():
             except Exception as _e:
                 print("lazy init_vision failed:", str(_e)[:140])
         if not AI_READY:
-            return jsonify({"error": "AI model not loaded — sku_finder.pkl missing. Render me PKL_URL env var set karo (Google Drive link) ya pkl file repo me daalo."}), 500
+            return jsonify({"error": "AI model not loaded — sku_finder.pkl is missing. Set the PKL_URL env var (Google Drive link) or add the pkl file to the repo."}), 500
         image_data = request.json["image"]
         img_bytes  = base64.b64decode(image_data.split(",")[1])
         comp       = get_data()[0]
@@ -10460,13 +10460,13 @@ def search():
             if EMBED_MODE == "space":
                 why = _HF_LAST_ERROR.get("msg", "")
                 if why:
-                    why += " — Space chal raha hai ya nahi check karo: huggingface.co par apna Space kholo."
+                    why += " — check whether the Space is running: open your Space on huggingface.co."
             elif EMBED_MODE == "hf":
                 why = _HF_LAST_ERROR.get("msg", "")
                 if "404" in why:
-                    why += " — HF par yeh model serverless available nahi hai; Render Standard (2GB) par upgrade karke full requirements use karo."
+                    why += " — this model isn't available as serverless on HF; upgrade to a standard tier and use full requirements."
                 elif "401" in why or "403" in why:
-                    why += " — HF_TOKEN invalid/expired hai; huggingface.co se naya token banao."
+                    why += " — HF_TOKEN is invalid/expired; generate a new token on huggingface.co."
             return jsonify({"error": ("Embedding failed" + (": " + why if why else ""))[:400]}), 500
         return jsonify({"results": results})
     except Exception as e:
