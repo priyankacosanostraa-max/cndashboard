@@ -5086,52 +5086,16 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head">
     <div>
       <div class="insights-title">Performance Insights</div>
-      <div class="insights-sub">Filter by type, taxon and dispatch date range. Export the visible result set in one click.</div>
+      <div class="insights-sub">Automated alerts across your full catalog — stockouts, overstock, dormant SKUs, sudden drops, OOS and replenishment needs.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="applyInsights()">Refresh Insights</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetInsights()">Reset</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportInsights('csv')">Export CSV</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportInsights('xls')">Export Excel</button>
     </div>
   </div>
 
   <div class="insight-summary" id="insightSummary" style="display:none"></div>
-
-  <div class="insight-toolbar">
-    <div class="insight-toolbar-head">
-      <div>
-        <div class="title">Insights Filters</div>
-        <div class="sub">Use these controls to narrow the analysis and keep exports aligned with what you see.</div>
-      </div>
-    </div>
-    <div class="fg">
-      <div class="fc">
-        <label class="fl">Type</label>
-        <div id="iTypeChecks" class="type-checks"></div>
-      </div>
-      <div class="fc">
-        <label class="fl">Taxon / Category</label>
-        <select class="fs" id="iTaxon" onchange="applyInsights()"></select>
-      </div>
-      <div class="fc">
-        <label class="fl">Sort By</label>
-        <select class="fs" id="iSort" onchange="applyInsights()">
-          <option value="revenue">By Revenue (high → low)</option>
-          <option value="qty">By Quantity (high → low)</option>
-        </select>
-      </div>
-      <div class="fc">
-        <label class="fl">Dispatch Date From</label>
-        <input class="fi" type="date" id="iD1" onchange="applyInsights()" style="margin-bottom:8px">
-        <label class="fl">Dispatch Date To</label>
-        <input class="fi" type="date" id="iD2" onchange="applyInsights()">
-      </div>
-      <div class="fc" style="align-self:end">
-        <button class="go-btn" style="width:100%;letter-spacing:2px;padding:10px" onclick="applyInsights()">Apply Filters</button>
-      </div>
-    </div>
-  </div>
 
   <div class="insights-grid" style="margin-bottom:18px">
     <div class="insight-card">
@@ -8518,7 +8482,7 @@ function renderInsights(){
       </div>
       <div class="insight-val" style="font-size:.75rem">${i.best_channel ? '🏆 ' + escHtml(i.best_channel) : ''}</div>
     </div>`;
-  const byFlag = (code) => (master || []).filter(i => (i.alert_flags||[]).some(f => f.code === code));
+  const byFlag = (code) => (insightRows || []).filter(i => (i.alert_flags||[]).some(f => f.code === code));
 
   const lowStockAlertList = document.getElementById('alertLowStockList');
   if (lowStockAlertList){
@@ -8529,7 +8493,7 @@ function renderInsights(){
   }
   const highStockAlertList = document.getElementById('alertHighStockList');
   if (highStockAlertList){
-    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='high_stock_low_sale'))
+    const items = byFlag('high_stock_low_sale')
       .sort((a,b)=>((b.inv_stock||0)+(b.inv_wip||0))-((a.inv_stock||0)+(a.inv_wip||0))).slice(0,10);
     highStockAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='high_stock_low_sale')||{})).join('')
@@ -8537,7 +8501,7 @@ function renderInsights(){
   }
   const dormantAlertList = document.getElementById('alertDormantList');
   if (dormantAlertList){
-    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='dormant_30d'||f.code==='dormant_90d'))
+    const items = (insightRows || []).filter(i => (i.alert_flags||[]).some(f=>f.code==='dormant_30d'||f.code==='dormant_90d'))
       .sort((a,b)=>(b.days_since_last_sale||0)-(a.days_since_last_sale||0)).slice(0,10);
     dormantAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='dormant_90d'||f.code==='dormant_30d')||{})).join('')
@@ -8545,21 +8509,21 @@ function renderInsights(){
   }
   const salesDropAlertList = document.getElementById('alertSalesDropList');
   if (salesDropAlertList){
-    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='sales_drop')).slice(0,10);
+    const items = byFlag('sales_drop').slice(0,10);
     salesDropAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='sales_drop')||{})).join('')
       : '<div class="insight-empty">No sudden sales drops detected</div>';
   }
   const oosAlertList = document.getElementById('alertOosList');
   if (oosAlertList){
-    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='oos')).slice(0,10);
+    const items = byFlag('oos').slice(0,10);
     oosAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='oos')||{})).join('')
       : '<div class="insight-empty">No OOS products right now 🎉</div>';
   }
   const replenishAlertList = document.getElementById('alertReplenishList');
   if (replenishAlertList){
-    const items = master.filter(i => (i.alert_flags||[]).some(f=>f.code==='replenish_soon'))
+    const items = byFlag('replenish_soon')
       .sort((a,b)=>(b.reorder_qty||0)-(a.reorder_qty||0)).slice(0,10);
     replenishAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='replenish_soon')||{})).join('')
