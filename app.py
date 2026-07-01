@@ -8661,11 +8661,7 @@ function renderInsights(){
   }
 
   if (summaryEl) {
-    summaryEl.innerHTML = `
-      <div class="insight-summary-card"><div class="label">Filtered SKUs</div><div class="value">${insightRows.length.toLocaleString('en-IN')}</div></div>
-      <div class="insight-summary-card"><div class="label">Filtered Net Revenue</div><div class="value">${fmt(insightRows.reduce((s,i)=>s + (parseFloat(i._iRev)||0),0))}</div></div>
-      <div class="insight-summary-card"><div class="label">Filtered Qty</div><div class="value">${Math.round(insightRows.reduce((s,i)=>s + (parseFloat(i._iQty)||0),0)).toLocaleString('en-IN')}</div></div>
-      <div class="insight-summary-card"><div class="label">Low Stock SKUs</div><div class="value">${invLow.toLocaleString('en-IN')}</div></div>`;
+    summaryEl.innerHTML = '';
   }
 
   const mini = document.getElementById('insightMiniSummary');
