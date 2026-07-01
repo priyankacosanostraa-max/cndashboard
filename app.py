@@ -4660,9 +4660,9 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">Date From</label>
-      <input class="fi" type="date" id="txD1"></div>
+      <input class="fi" type="date" id="txD1" onchange="loadTaxon()"></div>
     <div class="fc"><label class="fl">Date To</label>
-      <input class="fi" type="date" id="txD2"></div>
+      <input class="fi" type="date" id="txD2" onchange="loadTaxon()"></div>
     <div class="fc"><label class="fl">Type (tick one or more)</label>
       <div id="txTypeChecks" class="type-checks"></div></div>
     <div class="fc" style="align-self:flex-end">
@@ -7635,7 +7635,7 @@ function initTaxonTypeChecks(){
   if (!box) return;
   box.innerHTML = (allTypes || []).map(t => {
     const safe = String(t).replace(/"/g, '&quot;');
-    return `<label class="type-opt"><input type="checkbox" value="${safe}"><span>${t}</span></label>`;
+    return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="loadTaxon()"><span>${t}</span></label>`;
   }).join('') || '<span class="small-note">No types</span>';
   _txTypesFilled = true;
 }
@@ -9070,17 +9070,52 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
         rows.append(rr)
 
-    # SORT: "top_repeat" = sabse zyada baar order hue SKU pehle (zyada -> kam)
+    # SORT / GROUP: "top_repeat" = SKU-wise group (ek SKU ek row), uske totals,
+    # sabse zyada baar order hue SKU pehle (zyada -> kam).
     if (sort_mode or "").strip().lower() == "top_repeat":
-        rows.sort(key=lambda r: (r.get("repeat_count", 0), r.get("order_qty", 0)), reverse=True)
+        grp = {}
+        for r in rows:
+            sk = r["sku"]
+            if not sk:
+                continue
+            g = grp.get(sk)
+            if g is None:
+                g = grp[sk] = {
+                    "sku": sk,
+                    "sku_name": r.get("sku_name", ""),
+                    "image_url": r.get("image_url", ""),
+                    "taxon": r.get("taxon", ""),
+                    "order_type": r.get("order_type", ""),
+                    "channel": r.get("channel", ""),
+                    "order_qty": 0.0, "recv_qty": 0.0, "bal_qty": 0.0,
+                    "all_orders": r.get("all_orders", []),
+                    "sku_total_balance": r.get("sku_total_balance", 0),
+                    "repeat_count": r.get("repeat_count", 0),
+                    "date_disp": "", "order_no": "", "delivery_date": "", "receiving_date": "",
+                    "_dates": [],
+                }
+            g["order_qty"] += r.get("order_qty", 0) or 0
+            g["recv_qty"]  += r.get("recv_qty", 0) or 0
+            g["bal_qty"]   += r.get("bal_qty", 0) or 0
+            if r.get("date"):
+                g["_dates"].append((r["date"], r.get("date_disp", "")))
+        grouped = list(grp.values())
+        for g in grouped:
+            ds = sorted([x for x in g.pop("_dates", []) if x[0]])
+            g["date_disp"] = ds[0][1] if ds else ""   # earliest order date (display)
+            g["order_no"] = f'{g["repeat_count"]} orders'
+        grouped.sort(key=lambda r: (r.get("repeat_count", 0), r.get("order_qty", 0)), reverse=True)
+        rows = grouped
 
     # KPIs
+    grouped_mode = (sort_mode or "").strip().lower() == "top_repeat"
     pending = sum(1 for r in rows if (r["bal_qty"] or 0) > 0)
-    uniq_orders = len({r["order_no"] for r in rows if r["order_no"]})
     uniq_skus = len({r["sku"] for r in rows if r["sku"]})
+    uniq_orders = uniq_skus if grouped_mode else len({r["order_no"] for r in rows if r["order_no"]})
     return {
         "rows": rows[:1000],
         "count": len(rows),
+        "grouped": grouped_mode,
         "channels": channels, "types": types, "taxons": taxons,
         "total_order_qty": int(round(sum(r["order_qty"] for r in rows))),
         "total_recv_qty":  int(round(sum(r["recv_qty"] for r in rows))),
