@@ -4379,7 +4379,6 @@ select.lg-in option{background:#fff;color:#1a1610}
           <select class="fs" id="rCnTag" onchange="applyRO()">
             <option value="All">All</option>
             <option value="Religious">🕉️ Religious</option>
-            <option value="Seasonal">🎉 Seasonal</option>
           </select></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
           <div id="rPackChecks" class="type-checks"></div></div>
