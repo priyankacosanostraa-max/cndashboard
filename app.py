@@ -4704,6 +4704,21 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div style="display:flex;justify-content:flex-start;margin:8px 0 10px">
         <button id="sdBackBtn" class="home-back" onclick="goBackFromDetails()">← Back</button>
       </div>
+
+      <!-- ALL FILTERS TOGETHER, AT THE TOP -->
+      <div class="filter-box" id="sdFilterBox" style="margin:6px 0 16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+            <div class="fc"><label class="fl">From</label><input class="fi" type="date" id="sdD1" onchange="renderSdAll()"></div>
+            <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdAll()"></div>
+            <div class="fc"><label class="fl">Type (tick one or more)</label>
+              <div id="sdTypeChecks" class="type-checks"></div></div>
+          </div>
+          <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetSdFilters()">Reset Filters</button>
+        </div>
+        <div class="small-note" style="margin-top:8px">Applies to the trend chart, channel &amp; marketplace charts, KPIs and the transaction table below.</div>
+      </div>
+
       <div class="sd-head">
         <div class="sd-head-img" id="sdImg"></div>
         <div class="sd-head-info">
@@ -4728,17 +4743,10 @@ select.lg-in option{background:#fff;color:#1a1610}
         <table class="sd-vtable" id="sdSnapshotTable"><tbody></tbody></table>
       </div>
 
-      <!-- TREND + DATE RANGE -->
+      <!-- TREND -->
       <div class="filter-box" style="margin:14px 0">
-        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:12px">
-          <label class="fl" style="margin:0">Sales Trend (Qty over time) — date range also applies to Channel &amp; Marketplace charts below</label>
-          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-            <div class="fc"><label class="fl">From</label><input class="fi" type="date" id="sdD1" onchange="renderSdTrend();renderSdChannel()"></div>
-            <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdTrend();renderSdChannel()"></div>
-            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="document.getElementById('sdD1').value='';document.getElementById('sdD2').value='';renderSdTrend();renderSdChannel()">Reset</button>
-          </div>
-        </div>
-        <div id="sdTrendChart"></div>
+        <label class="fl" style="margin-bottom:10px;display:block">Sales Trend (Qty over time) — click a point to see that day's sale</label>
+        <div id="sdTrendChart" style="position:relative"></div>
       </div>
 
       <!-- CHANNEL PERFORMANCE: bar chart + best/worst summary -->
@@ -4757,9 +4765,8 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="filter-box" style="margin:6px 0 14px">
         <label class="fl" style="margin-bottom:10px;display:block">Sales by Type</label>
         <div id="sdTypeBreakdown" class="type-breakdown"></div>
-        <label class="fl" style="margin:14px 0 8px;display:block">Filter by Type (tick to see only those)</label>
-        <div id="sdTypeChecks" class="type-checks"></div>
       </div>
+
 
       <div class="ro-tools">
         <div class="small-note">Every dispatch recorded in COSSA for this SKU — customer, date, type, final qty and net revenue.</div>
@@ -5616,7 +5623,7 @@ function renderSkuDetails(sku){
   if (tc) {
     tc.innerHTML = types.length ? types.map(t => {
       const safe = String(t).replace(/"/g,'&quot;');
-      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="renderSdTable()"><span>${t}</span></label>`;
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="renderSdAll()"><span>${t}</span></label>`;
     }).join('') : '<span class="small-note">No types</span>';
   }
 
@@ -5626,9 +5633,7 @@ function renderSkuDetails(sku){
 function renderSdTable(){
   const item = (master || []).find(i => i.sku === currentSdSku);
   if (!item) return;
-  const picked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
-  let ents = (item.sales_entries || []).slice();
-  if (picked.length) ents = ents.filter(e => picked.includes(e.type || 'Regular'));
+  let ents = _sdFilteredEntries(item).slice();
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
@@ -5663,56 +5668,13 @@ function renderSdTable(){
   }
 }
 
-/* ── Sales Trend (Qty over time) — simple SVG line chart, date-range filterable ── */
-function renderSdTrend(){
-  const item = (master || []).find(i => i.sku === currentSdSku);
-  const host = document.getElementById('sdTrendChart');
-  if (!item || !host) return;
+/* ── Shared: date + type filtered entries (used by trend/channel/marketplace) ── */
+function _sdFilteredEntries(item){
   const d1 = document.getElementById('sdD1')?.value || '';
   const d2 = document.getElementById('sdD2')?.value || '';
-  let ents = (item.sales_entries || []).filter(e => e.date && e.date !== 'N/A');
-  if (d1) ents = ents.filter(e => e.date >= d1);
-  if (d2) ents = ents.filter(e => e.date <= d2);
-  if (!ents.length){ host.innerHTML = '<div class="insight-empty">No dated sales in this range</div>'; return; }
-
-  // group by day, sum qty
-  const byDay = {};
-  ents.forEach(e => { byDay[e.date] = (byDay[e.date]||0) + (parseFloat(e.qty)||0); });
-  const days = Object.keys(byDay).sort();
-  const vals = days.map(d => byDay[d]);
-  const maxV = Math.max(1, ...vals);
-  const W = 760, H = 180, PAD = 30;
-  const stepX = days.length > 1 ? (W - PAD*2) / (days.length - 1) : 0;
-  const pts = vals.map((v,i) => {
-    const x = PAD + i*stepX;
-    const y = H - PAD - (v / maxV) * (H - PAD*2 - 10);
-    return [x,y];
-  });
-  const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-  const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${H-PAD} L${pts[0][0].toFixed(1)},${H-PAD} Z`;
-  const dots = pts.map((p,i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#b8933f"><title>${days[i]}: ${vals[i]} units</title></circle>`).join('');
-  const firstLbl = days[0], lastLbl = days[days.length-1];
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
-    <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
-    <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
-    ${dots}
-    <text x="${PAD}" y="${H-8}" font-size="10" fill="#8c7a42">${firstLbl}</text>
-    <text x="${W-PAD}" y="${H-8}" font-size="10" fill="#8c7a42" text-anchor="end">${lastLbl}</text>
-    <text x="${PAD}" y="14" font-size="10" fill="#8c7a42">Peak: ${maxV} units/day</text>
-  </svg>`;
-}
-
-/* ── Channel-wise Qty bar chart + best/worst channel + AOV/discount% per channel ── */
-function renderSdChannel(){
-  const item = (master || []).find(i => i.sku === currentSdSku);
-  const chartHost = document.getElementById('sdChannelChart');
-  const sumHost = document.getElementById('sdChannelSummary');
-  if (!item || !chartHost) return;
-  // Same date range filter as the trend chart (sdD1/sdD2) — "date range filter jo
-  // kaam kre" — channel chart ab uss range ke sales se banta hai.
-  const d1 = document.getElementById('sdD1')?.value || '';
-  const d2 = document.getElementById('sdD2')?.value || '';
+  const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
   let ents = (item.sales_entries || []);
+  if (typesPicked.length) ents = ents.filter(e => typesPicked.includes(e.type || 'Regular'));
   if (d1 || d2) {
     ents = ents.filter(e => {
       if (!e.date || e.date === 'N/A') return false;
@@ -5721,6 +5683,108 @@ function renderSdChannel(){
       return true;
     });
   }
+  return ents;
+}
+function renderSdAll(){
+  renderSdTable();
+  renderSdTrend();
+  renderSdChannel();
+}
+function resetSdFilters(){
+  const d1 = document.getElementById('sdD1'); if (d1) d1.value = '';
+  const d2 = document.getElementById('sdD2'); if (d2) d2.value = '';
+  document.querySelectorAll('#sdTypeChecks input:checked').forEach(c => c.checked = false);
+  renderSdAll();
+}
+window.renderSdAll = renderSdAll; window.resetSdFilters = resetSdFilters;
+
+/* ── Sales Trend (Qty over time) — month labels on x-axis + click-to-see popup ── */
+function renderSdTrend(){
+  const item = (master || []).find(i => i.sku === currentSdSku);
+  const host = document.getElementById('sdTrendChart');
+  if (!item || !host) return;
+  const ents = _sdFilteredEntries(item).filter(e => e.date && e.date !== 'N/A');
+  if (!ents.length){ host.innerHTML = '<div class="insight-empty">No dated sales in this range</div>'; return; }
+
+  // group by day, sum qty + rev (rev needed for the click popup)
+  const byDay = {};
+  ents.forEach(e => {
+    const d = byDay[e.date] || (byDay[e.date] = {qty:0, rev:0});
+    d.qty += parseFloat(e.qty) || 0;
+    d.rev += parseFloat(e.rev) || 0;
+  });
+  const days = Object.keys(byDay).sort();
+  const vals = days.map(d => byDay[d].qty);
+  const maxV = Math.max(1, ...vals);
+  const W = 760, H = 200, PAD_L = 34, PAD_R = 20, PAD_T = 26, PAD_B = 34;
+  const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
+  const stepX = days.length > 1 ? plotW / (days.length - 1) : 0;
+  const pts = vals.map((v,i) => {
+    const x = PAD_L + i*stepX;
+    const y = PAD_T + plotH - (v / maxV) * plotH;
+    return [x,y];
+  });
+  const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${PAD_T+plotH} L${pts[0][0].toFixed(1)},${PAD_T+plotH} Z`;
+
+  // Month tick labels — one label per distinct calendar month present, placed at
+  // the x-position of that month's first data point.
+  const seenMonths = {};
+  const monthTicks = [];
+  days.forEach((d,i) => {
+    const mk = d.slice(0,7); // YYYY-MM
+    if (!seenMonths[mk]) {
+      seenMonths[mk] = true;
+      const mLabel = new Date(d+'T00:00:00').toLocaleDateString('en-GB', {month:'short', year:'2-digit'});
+      monthTicks.push({x: pts[i][0], label: mLabel});
+    }
+  });
+  const monthLabelsSvg = monthTicks.map(m =>
+    `<text x="${m.x.toFixed(1)}" y="${H-10}" font-size="10" fill="#8c7a42" text-anchor="middle">${m.label}</text>
+     <line x1="${m.x.toFixed(1)}" y1="${PAD_T}" x2="${m.x.toFixed(1)}" y2="${PAD_T+plotH}" stroke="#e8dfc8" stroke-width="1"></line>`
+  ).join('');
+
+  // Click points -> show popup with date, qty, revenue.
+  const dots = pts.map((p,i) => {
+    const d = days[i], v = byDay[d];
+    const payload = JSON.stringify({d, qty:v.qty, rev:v.rev}).replace(/"/g,'&quot;');
+    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="5" fill="#b8933f" style="cursor:pointer" onclick='sdTrendPointClick(${JSON.stringify({d,qty:v.qty,rev:v.rev})})'><title>${d}: ${v.qty} units</title></circle>`;
+  }).join('');
+
+  const emp0 = (LOGIN_ROLE === 'employee');
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    ${monthLabelsSvg}
+    <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
+    <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
+    ${dots}
+    <text x="${PAD_L}" y="16" font-size="10" fill="#8c7a42">Peak: ${maxV} units/day</text>
+  </svg>
+  <div id="sdTrendPopup" style="display:none;position:absolute;background:#1f2430;color:#fff;padding:10px 14px;border-radius:8px;font-size:.78rem;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:20;pointer-events:none"></div>`;
+  window._sdTrendEmp = emp0;
+}
+function sdTrendPointClick(data){
+  const host = document.getElementById('sdTrendChart');
+  const popup = document.getElementById('sdTrendPopup');
+  if (!popup || !host) return;
+  const emp0 = window._sdTrendEmp;
+  popup.innerHTML = `<b>${data.d}</b><br>Qty sold: <b>${data.qty}</b>` + (emp0 ? '' : `<br>Revenue: <b>${fmt(data.rev)}</b>`);
+  popup.style.display = 'block';
+  popup.style.left = '50%';
+  popup.style.top = '4px';
+  popup.style.transform = 'translateX(-50%)';
+  clearTimeout(window._sdPopupTimer);
+  window._sdPopupTimer = setTimeout(() => { popup.style.display = 'none'; }, 4000);
+}
+window.sdTrendPointClick = sdTrendPointClick;
+
+/* ── Channel-wise Qty bar chart + best/worst channel + AOV/discount% per channel ── */
+function renderSdChannel(){
+  const item = (master || []).find(i => i.sku === currentSdSku);
+  const chartHost = document.getElementById('sdChannelChart');
+  const sumHost = document.getElementById('sdChannelSummary');
+  if (!item || !chartHost) return;
+  // Date range + Type filter (top filter bar) — both apply here now.
+  const ents = _sdFilteredEntries(item);
   const byChan = {};
   ents.forEach(e => {
     const ch = e.channel || 'Other';
