@@ -4697,8 +4697,17 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
   <div id="vSkudetails" style="display:none">
+    <div class="filter-box" style="margin:8px 0 16px">
+      <label class="fl" style="margin-bottom:8px;display:block">Search SKU</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:relative">
+        <input class="fi" id="sdSearchBox" list="sdSearchList" placeholder="Type a SKU code to view its details…"
+          oninput="sdSearchInput()" onkeydown="if(event.key==='Enter')sdSearchGo()" style="min-width:280px;max-width:420px">
+        <datalist id="sdSearchList"></datalist>
+        <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px" onclick="sdSearchGo()">Go</button>
+      </div>
+    </div>
     <div id="sdEmpty" class="tno-data" style="padding:60px 20px">
-      Click any SKU (or its <b>Details</b> button) in the Overall Details or Repeat Orders tab to see its full transaction history here.
+      Click any SKU (or its <b>Details</b> button) in the Overall Details or Repeat Orders tab — or search for a SKU above — to see its full transaction history here.
     </div>
     <div id="sdContent" style="display:none">
       <div style="display:flex;justify-content:flex-start;margin:8px 0 10px">
@@ -4873,7 +4882,30 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetTaxonFilters()">Reset</button></div>
   </div>
   <div id="txSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
-  <div id="txContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
+  <div id="txListWrap">
+    <div id="txContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
+    <p class="small-note" style="margin-top:8px">Click a taxon name to see its Top 50 SKUs.</p>
+  </div>
+
+  <!-- TOP 50 SKUs for a clicked taxon -->
+  <div id="txDrilldown" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin:8px 0 14px">
+      <div>
+        <button class="home-back" onclick="backToTaxonList()">← Back to Taxons</button>
+        <span style="font-weight:800;font-size:1.05rem;margin-left:12px" id="txDrillTitle"></span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <label class="fl" style="margin:0">Sort by</label>
+        <select class="fs" id="txDrillSort" onchange="renderTaxonTop50()" style="width:auto">
+          <option value="revenue">Net Revenue (high → low)</option>
+          <option value="qty">Final Qty (high → low)</option>
+        </select>
+        <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportTaxonTop50()">Export CSV</button>
+      </div>
+    </div>
+    <div id="txDrillSummary" class="yoy-grid" style="margin-bottom:14px;grid-template-columns:repeat(5,1fr)"></div>
+    <div id="txDrillContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
+  </div>
   </div>
 
   <div id="vStockStatus" style="display:none">
@@ -5527,6 +5559,27 @@ function openSkuDetails(sku){
   renderSkuDetails(sku);
   showTab('skudetails');
 }
+
+/* ── SKU Details: search box (type/select any SKU, jump straight to its details) ── */
+let _sdSearchListFilled = false;
+function _sdFillSearchList(){
+  const dl = document.getElementById('sdSearchList');
+  if (!dl) return;
+  dl.innerHTML = (allSkus || []).slice(0, 3000).map(s => `<option value="${escHtml(s)}">`).join('');
+  _sdSearchListFilled = true;
+}
+function sdSearchInput(){
+  if (!_sdSearchListFilled) _sdFillSearchList();
+}
+function sdSearchGo(){
+  const v = (document.getElementById('sdSearchBox')?.value || '').trim();
+  if (!v) return;
+  const exact = (master || []).find(i => String(i.sku).toLowerCase() === v.toLowerCase());
+  const item = exact || (master || []).find(i => String(i.sku).toLowerCase().includes(v.toLowerCase()));
+  if (!item){ alert('No SKU found matching "' + v + '"'); return; }
+  openSkuDetails(item.sku);
+}
+window.sdSearchInput = sdSearchInput; window.sdSearchGo = sdSearchGo;
 
 function toggleNavMenu(force){
   const menu = document.getElementById('navMenu');
@@ -8202,6 +8255,10 @@ function loadTaxon(){
 }
 function renderTaxon(){
   const d = _taxonData; if (!d) return;
+  const listWrap = document.getElementById('txListWrap');
+  const drill = document.getElementById('txDrilldown');
+  if (listWrap) listWrap.style.display = 'block';
+  if (drill) drill.style.display = 'none';
   const emp = (LOGIN_ROLE === 'employee');
   const rows = d.rows || [];
   const sumHost = document.getElementById('txSummary');
@@ -8217,7 +8274,7 @@ function renderTaxon(){
   const host = document.getElementById('txContent');
   if (host){
     const body = rows.map(r => `<tr>
-        <td style="font-weight:700">${escHtml(r.taxon)}</td>
+        <td style="font-weight:700;cursor:pointer;color:var(--cn-gold);text-decoration:underline" onclick="showTaxonTop50('${String(r.taxon).replace(/'/g,"\\'")}')">${escHtml(r.taxon)}</td>
         <td style="text-align:center;color:var(--cn-mid)">${r.sku_count}</td>
         <td style="text-align:right;font-weight:700">${Math.round(r.final_qty||0).toLocaleString('en-IN')}</td>
         ${emp ? '' : `<td style="text-align:right;font-weight:800">${fmt(r.net_revenue)}</td>`}
@@ -8256,6 +8313,92 @@ function exportTaxon(){
   _dlCsv(headers, data, 'taxon_details');
 }
 window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTaxon = exportTaxon;
+
+/* ── TAXON → TOP 50 SKUs drilldown (client-side, uses master which is already loaded) ── */
+let _txDrillTaxon = null, _txDrillRows = [];
+function showTaxonTop50(taxonName){
+  _txDrillTaxon = taxonName;
+  _txDrillRows = (master || []).filter(i => String(i.taxon||'') === taxonName);
+  const listWrap = document.getElementById('txListWrap');
+  const drill = document.getElementById('txDrilldown');
+  if (listWrap) listWrap.style.display = 'none';
+  if (drill) drill.style.display = 'block';
+  const title = document.getElementById('txDrillTitle');
+  if (title) title.textContent = `${taxonName} — Top 50 SKUs (of ${_txDrillRows.length.toLocaleString('en-IN')} total)`;
+  renderTaxonTop50();
+}
+function backToTaxonList(){
+  const listWrap = document.getElementById('txListWrap');
+  const drill = document.getElementById('txDrilldown');
+  if (listWrap) listWrap.style.display = 'block';
+  if (drill) drill.style.display = 'none';
+}
+function renderTaxonTop50(){
+  const host = document.getElementById('txDrillContent');
+  if (!host) return;
+  const emp = (LOGIN_ROLE === 'employee');
+  const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
+  const sorted = _txDrillRows.slice().sort((a,b) => {
+    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
+    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
+  }).slice(0, 50);
+
+  // Extra: quick taxon-level summary strip (all SKUs in this taxon, not just top 50)
+  const sumHost = document.getElementById('txDrillSummary');
+  if (sumHost){
+    const totQty = _txDrillRows.reduce((s,i)=>s+(i.final_qty||0),0);
+    const totRev = _txDrillRows.reduce((s,i)=>s+(i.total_net_revenue||0),0);
+    const avgRev = _txDrillRows.length ? totRev/_txDrillRows.length : 0;
+    const oosCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='oos')).length;
+    const replenishCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='replenish_soon')).length;
+    sumHost.innerHTML =
+      `<div class="yoy-card"><div class="yc-label">Total SKUs</div><div class="yc-val">${_txDrillRows.length.toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Total Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
+       ${emp?'':`<div class="yoy-card"><div class="yc-label">Total Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>
+       <div class="yoy-card"><div class="yc-label">Avg Revenue / SKU</div><div class="yc-val">${fmt(avgRev)}</div></div>`}
+       <div class="yoy-card"><div class="yc-label">OOS / Replenish Soon</div><div class="yc-val" style="color:#c0392b">${oosCt} / ${replenishCt}</div></div>`;
+  }
+
+  const body = sorted.map(it => {
+    const flags = (it.alert_flags||[]);
+    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap">${escHtml(f.label)}</span>`).join(' ') : '';
+    return `<tr>
+      <td>${roThumb(it.image_url)}</td>
+      <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td style="text-align:right;font-weight:700">${Math.round(it.final_qty||0).toLocaleString('en-IN')}</td>
+      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td>`}
+      <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:center">${escHtml(it.status||'')}</td>
+      <td>${escHtml(it.best_channel||'—')}</td>
+      <td style="max-width:220px">${flagChips}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
+      <th>Image</th><th>SKU</th><th style="text-align:right">Final Qty</th>
+      ${emp?'':'<th style="text-align:right">Net Revenue</th>'}
+      <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
+      <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
+    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>'}</tbody></table>`;
+}
+function exportTaxonTop50(){
+  const emp = (LOGIN_ROLE === 'employee');
+  const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
+  const sorted = _txDrillRows.slice().sort((a,b) => {
+    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
+    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
+  }).slice(0, 50);
+  if (!sorted.length){ alert('No rows to export'); return; }
+  const headers = emp
+    ? ['SKU','Final Qty','Stock','WIP','Status','Best Channel']
+    : ['SKU','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
+  const data = sorted.map(it => emp
+    ? [it.sku, Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
+    : [it.sku, Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
+  _dlCsv(headers, data, `taxon_${String(_txDrillTaxon||'top50').replace(/[^A-Za-z0-9_-]/g,'_')}_top50`);
+}
+window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
+window.renderTaxonTop50 = renderTaxonTop50; window.exportTaxonTop50 = exportTaxonTop50;
 
 /* ── STOCK STATUS — client-side (all fields already in master) ── */
 function loadStockStatus(){
