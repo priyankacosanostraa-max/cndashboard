@@ -2568,6 +2568,17 @@ table.ro td{padding:12px 14px}
 .details-btn:hover{opacity:.88}
 
 .sd-head{display:flex;align-items:center;gap:20px;padding:22px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;margin:18px 0;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+.sd-vtable{width:100%;border-collapse:collapse}
+.sd-vtable tr{border-bottom:1px solid #eef0f3}
+.sd-vtable tr:last-child{border-bottom:none}
+.sd-vtable td{padding:9px 10px;font-size:.85rem}
+.sd-vtable td:first-child{color:var(--cn-mid);font-weight:700;width:38%}
+.sd-vtable td:last-child{font-weight:800;color:var(--cn-dark)}
+.sd-chan-row{display:flex;align-items:center;gap:10px;padding:6px 0}
+.sd-chan-row .cname{width:110px;font-weight:700;font-size:.8rem;flex:0 0 auto}
+.sd-chan-row .cbar-wrap{flex:1;background:#f0f0f0;border-radius:6px;height:16px;overflow:hidden}
+.sd-chan-row .cbar{height:100%;background:linear-gradient(90deg,#d4af5a,#b8933f);border-radius:6px}
+.sd-chan-row .cval{width:90px;text-align:right;font-weight:800;font-size:.8rem;flex:0 0 auto}
 .sd-head-img img{width:120px;height:120px;object-fit:cover;border-radius:10px;border:1px solid #e5e7eb}
 .sd-head-img .img-ph{width:120px;height:120px;display:flex;align-items:center;justify-content:center;font-size:48px;background:#f3f4f6;border-radius:10px;color:#d1d5db}
 .sd-sku{font-size:26px;font-weight:900;letter-spacing:1px;color:#b8860b}
@@ -4357,6 +4368,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
+  <button class="menu-item" id="m19" onclick="showTab('stockstatus')">Stock Status</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -4697,13 +4709,43 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="sd-head-info">
           <div class="sd-sku" id="sdSku">—</div>
           <div class="sd-meta" id="sdMeta"></div>
+          <div id="sdFlags" style="margin-top:8px"></div>
         </div>
       </div>
       <div class="kpis" style="justify-content:flex-start">
         <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div></div>
         <div class="kpi"><div class="kpi-t">Total Final Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
-        <div class="kpi"><div class="kpi-t">Unique Customers</div><div class="kpi-v" id="sdCust" style="color:#2ecc71">0</div></div>
+        <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
+        <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
+        <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
+        <div class="kpi"><div class="kpi-t">Available (Stock+WIP)</div><div class="kpi-v" id="sdAvail" style="color:#2ecc71">0</div></div>
+      </div>
+
+      <!-- PRODUCT SNAPSHOT — vertical key:value table -->
+      <div class="filter-box" style="margin:14px 0">
+        <label class="fl" style="margin-bottom:10px;display:block">Product Snapshot</label>
+        <table class="sd-vtable" id="sdSnapshotTable"><tbody></tbody></table>
+      </div>
+
+      <!-- TREND + DATE RANGE -->
+      <div class="filter-box" style="margin:14px 0">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:12px">
+          <label class="fl" style="margin:0">Sales Trend (Qty over time)</label>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div class="fc"><label class="fl">From</label><input class="fi" type="date" id="sdD1" onchange="renderSdTrend()"></div>
+            <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdTrend()"></div>
+            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="document.getElementById('sdD1').value='';document.getElementById('sdD2').value='';renderSdTrend()">Reset</button>
+          </div>
+        </div>
+        <div id="sdTrendChart"></div>
+      </div>
+
+      <!-- CHANNEL PERFORMANCE: bar chart + best/worst summary -->
+      <div class="filter-box" style="margin:14px 0">
+        <label class="fl" style="margin-bottom:10px;display:block">Channel-wise Qty &amp; Performance</label>
+        <div id="sdChannelSummary" style="margin-bottom:12px"></div>
+        <div id="sdChannelChart"></div>
       </div>
 
       <div class="filter-box" style="margin:6px 0 14px">
@@ -4819,6 +4861,38 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="txSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div id="txContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
+  </div>
+
+  <div id="vStockStatus" style="display:none">
+  <div class="insights-head">
+    <div><div class="insights-title">Stock Status</div>
+      <div style="color:var(--cn-mid);font-size:.8rem">Fast / Slow / Dead movers, OOS &amp; Replenish-soon products, current stock position</div></div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadStockStatus()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportStockStatus()">Export CSV</button>
+    </div>
+  </div>
+  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">SKU / Category Search</label>
+      <input class="fi" id="ssSearch" placeholder="SKU or taxon…" oninput="renderStockStatus()" style="min-width:200px"></div>
+    <div class="fc"><label class="fl">Movement Status</label>
+      <select class="fs" id="ssStatus" onchange="renderStockStatus()">
+        <option value="">All</option>
+        <option value="Good Running">Fast Moving (Good Running)</option>
+        <option value="Slow Movers">Slow Moving</option>
+        <option value="No Record">Dead (No Record)</option>
+        <option value="New Launch">New Launch</option>
+      </select></div>
+    <div class="fc"><label class="fl">Stock Condition</label>
+      <select class="fs" id="ssStock" onchange="renderStockStatus()">
+        <option value="">All</option>
+        <option value="oos">Currently OOS</option>
+        <option value="replenish">Replenish Soon</option>
+        <option value="healthy">Healthy Stock</option>
+      </select></div>
+  </div>
+  <div id="ssSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
+  <div id="ssContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
   </div>
 
   <div id="vPayments" style="display:none">
@@ -5482,6 +5556,34 @@ function renderSkuDetails(sku){
     `<span>Inv Stock: <b>${item.inv_stock || 0}</b></span>` +
     `<span>Inv WIP: <b>${item.inv_wip || 0}</b></span>` +
     `<span>MRP: <b>₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</b></span>`;
+  const flagsEl = document.getElementById('sdFlags');
+  if (flagsEl) flagsEl.innerHTML = skuInsightBadge(item);
+
+  // PRODUCT SNAPSHOT — vertical key:value table
+  const snapBody = document.querySelector('#sdSnapshotTable tbody');
+  if (snapBody) {
+    const emp0 = (LOGIN_ROLE === 'employee');
+    const stock = parseFloat(item.inv_stock) || 0;
+    const wip = parseFloat(item.inv_wip) || 0;
+    const avail = stock + wip;
+    const launchDisp = item.launch_date || '—';
+    const rows = [
+      ['Launch Date', launchDisp],
+      ['Current Stock', stock.toLocaleString('en-IN')],
+      ['WIP', wip.toLocaleString('en-IN')],
+      ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
+      ['Reorder Qty (60D forecast)', (item.reorder_qty||0).toLocaleString('en-IN')],
+      ['Days Since Last Sale', item.days_since_last_sale >= 0 ? item.days_since_last_sale + ' days' : '—'],
+      ['Best Performing Channel', item.best_channel || '—'],
+      ['Best Marketplace', item.best_marketplace || '—'],
+      ['Product Status', item.status || '—'],
+    ];
+    if (!emp0) rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
+    snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  }
+  const setStockT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
+  setStockT('sdStock', Math.round(parseFloat(item.inv_stock)||0).toLocaleString('en-IN'));
+  setStockT('sdAvail', Math.round((parseFloat(item.inv_stock)||0)+(parseFloat(item.inv_wip)||0)).toLocaleString('en-IN'));
 
   const ents = (item.sales_entries || []);
 
@@ -5525,11 +5627,22 @@ function renderSdTable(){
 
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+  const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
+  const totalRetAmt = ents.reduce((s,e) => {
+    const r = parseFloat(e.ret) || 0;
+    if (!r) return s;
+    const sp = parseFloat(e.sp) || (parseFloat(e.qty) ? (parseFloat(e.rev)||0)/parseFloat(e.qty) : 0);
+    return s + r * sp;
+  }, 0);
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
   setT('sdOrders', ents.length);
   setT('sdQty', totalQty);
   setT('sdRev', fmt(totalRev));
-  setT('sdCust', new Set(ents.map(e => e.cust)).size);
+  setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
+  setT('sdRetAmt', fmt(totalRetAmt));
+
+  renderSdTrend();
+  renderSdChannel();
 
   const body = document.getElementById('sdBody');
   if (body) {
@@ -5541,6 +5654,108 @@ function renderSdTable(){
       ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(parseFloat(e.rev) || 0)}</td>`}
     </tr>`).join('')
     : '<tr><td colspan="5" class="tno-data" style="padding:30px">No transactions for the selected type(s).</td></tr>';
+  }
+}
+
+/* ── Sales Trend (Qty over time) — simple SVG line chart, date-range filterable ── */
+function renderSdTrend(){
+  const item = (master || []).find(i => i.sku === currentSdSku);
+  const host = document.getElementById('sdTrendChart');
+  if (!item || !host) return;
+  const d1 = document.getElementById('sdD1')?.value || '';
+  const d2 = document.getElementById('sdD2')?.value || '';
+  let ents = (item.sales_entries || []).filter(e => e.date && e.date !== 'N/A');
+  if (d1) ents = ents.filter(e => e.date >= d1);
+  if (d2) ents = ents.filter(e => e.date <= d2);
+  if (!ents.length){ host.innerHTML = '<div class="insight-empty">No dated sales in this range</div>'; return; }
+
+  // group by day, sum qty
+  const byDay = {};
+  ents.forEach(e => { byDay[e.date] = (byDay[e.date]||0) + (parseFloat(e.qty)||0); });
+  const days = Object.keys(byDay).sort();
+  const vals = days.map(d => byDay[d]);
+  const maxV = Math.max(1, ...vals);
+  const W = 760, H = 180, PAD = 30;
+  const stepX = days.length > 1 ? (W - PAD*2) / (days.length - 1) : 0;
+  const pts = vals.map((v,i) => {
+    const x = PAD + i*stepX;
+    const y = H - PAD - (v / maxV) * (H - PAD*2 - 10);
+    return [x,y];
+  });
+  const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${H-PAD} L${pts[0][0].toFixed(1)},${H-PAD} Z`;
+  const dots = pts.map((p,i) => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#b8933f"><title>${days[i]}: ${vals[i]} units</title></circle>`).join('');
+  const firstLbl = days[0], lastLbl = days[days.length-1];
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+    <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
+    <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
+    ${dots}
+    <text x="${PAD}" y="${H-8}" font-size="10" fill="#8c7a42">${firstLbl}</text>
+    <text x="${W-PAD}" y="${H-8}" font-size="10" fill="#8c7a42" text-anchor="end">${lastLbl}</text>
+    <text x="${PAD}" y="14" font-size="10" fill="#8c7a42">Peak: ${maxV} units/day</text>
+  </svg>`;
+}
+
+/* ── Channel-wise Qty bar chart + best/worst channel + AOV/discount% per channel ── */
+function renderSdChannel(){
+  const item = (master || []).find(i => i.sku === currentSdSku);
+  const chartHost = document.getElementById('sdChannelChart');
+  const sumHost = document.getElementById('sdChannelSummary');
+  if (!item || !chartHost) return;
+  const ents = (item.sales_entries || []);
+  const byChan = {};
+  ents.forEach(e => {
+    const ch = e.channel || 'Other';
+    if (!byChan[ch]) byChan[ch] = {qty:0, rev:0, orders:0, mrpSum:0};
+    byChan[ch].qty += parseFloat(e.qty) || 0;
+    byChan[ch].rev += parseFloat(e.rev) || 0;
+    byChan[ch].orders += 1;
+    byChan[ch].mrpSum += parseFloat(item.mrp) || 0;
+  });
+  const chans = Object.keys(byChan);
+  if (!chans.length){
+    chartHost.innerHTML = '<div class="insight-empty">No channel data yet</div>';
+    if (sumHost) sumHost.innerHTML = '';
+    return;
+  }
+  chans.sort((a,b) => byChan[b].qty - byChan[a].qty);
+  const maxQty = Math.max(1, ...chans.map(c => byChan[c].qty));
+  const emp0 = (LOGIN_ROLE === 'employee');
+
+  chartHost.innerHTML = chans.map(c => {
+    const v = byChan[c];
+    const pct = (v.qty / maxQty) * 100;
+    return `<div class="sd-chan-row">
+      <div class="cname">${escHtml(c)}</div>
+      <div class="cbar-wrap"><div class="cbar" style="width:${pct}%"></div></div>
+      <div class="cval">${Math.round(v.qty).toLocaleString('en-IN')} units</div>
+    </div>`;
+  }).join('');
+
+  if (sumHost){
+    const best = chans[0];
+    const worst = chans[chans.length - 1];
+    const rows = chans.map(c => {
+      const v = byChan[c];
+      const aov = v.orders ? (v.rev / v.orders) : 0;
+      const avgSp = v.qty ? (v.rev / v.qty) : 0;
+      const mrp = parseFloat(item.mrp) || 0;
+      const discPct = mrp > 0 ? Math.max(0, Math.round((1 - avgSp/mrp) * 100)) : 0;
+      return {c, qty:v.qty, rev:v.rev, aov, discPct};
+    });
+    sumHost.innerHTML =
+      `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+         <span class="insight-chip" style="background:#eafaf0;color:#1a7a3e;border:1px solid #c8f0d6;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:20px">🏆 Best: ${escHtml(best)} (${Math.round(byChan[best].qty).toLocaleString('en-IN')} units)</span>
+         ${chans.length>1 ? `<span class="insight-chip" style="background:#fdecea;color:#c0392b;border:1px solid #f6c6c0;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:20px">⬇ Weakest: ${escHtml(worst)} (${Math.round(byChan[worst].qty).toLocaleString('en-IN')} units)</span>` : ''}
+       </div>
+       <table class="sd-vtable"><thead><tr>
+         <td style="font-weight:800;color:var(--cn-dark)">Channel</td>
+         <td style="font-weight:800;color:var(--cn-dark)">Qty</td>
+         ${emp0?'':'<td style="font-weight:800;color:var(--cn-dark)">AOV</td><td style="font-weight:800;color:var(--cn-dark)">Discount %</td>'}
+       </tr></thead><tbody>
+       ${rows.map(r => `<tr><td>${escHtml(r.c)}</td><td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+         ${emp0?'':`<td>${fmt(r.aov)}</td><td>${r.discPct}%</td>`}</tr>`).join('')}
+       </tbody></table>`;
   }
 }
 
@@ -7879,10 +8094,13 @@ function renderTaxon(){
   const rows = d.rows || [];
   const sumHost = document.getElementById('txSummary');
   if (sumHost){
+    // KPI cards ab EXACT overall totals dikhate hain (Overall Details page jaise
+    // hi values — allTaxons/grandFinalQty/grandNetRevenue) — filter se independent,
+    // taaki filtered vs unfiltered confusion na ho. Neeche table filter se update hoti hai.
     sumHost.innerHTML =
-      `<div class="yoy-card"><div class="yc-label">Total Taxons</div><div class="yc-val">${rows.length}</div></div>
-       <div class="yoy-card"><div class="yc-label">Total Final Qty</div><div class="yc-val">${Math.round(d.total_qty||0).toLocaleString('en-IN')}</div></div>
-       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(d.total_rev)}</div></div>`}`;
+      `<div class="yoy-card"><div class="yc-label">Total Taxons</div><div class="yc-val">${(allTaxons||[]).length}</div></div>
+       <div class="yoy-card"><div class="yc-label">Total Final Qty</div><div class="yc-val">${Math.round(grandFinalQty||0).toLocaleString('en-IN')}</div></div>
+       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(grandNetRevenue)}</div></div>`}`;
   }
   const host = document.getElementById('txContent');
   if (host){
@@ -7926,6 +8144,84 @@ function exportTaxon(){
   _dlCsv(headers, data, 'taxon_details');
 }
 window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTaxon = exportTaxon;
+
+/* ── STOCK STATUS — client-side (all fields already in master) ── */
+function loadStockStatus(){
+  renderStockStatus();
+}
+function _ssFiltered(){
+  const q = (document.getElementById('ssSearch')?.value || '').trim().toLowerCase();
+  const statusF = document.getElementById('ssStatus')?.value || '';
+  const stockF = document.getElementById('ssStock')?.value || '';
+  return (master || []).filter(it => {
+    if (q && !String(it.sku||'').toLowerCase().includes(q) && !String(it.taxon||'').toLowerCase().includes(q)) return false;
+    if (statusF && it.status !== statusF) return false;
+    if (stockF){
+      const flags = (it.alert_flags||[]).map(f=>f.code);
+      if (stockF === 'oos' && !flags.includes('oos')) return false;
+      if (stockF === 'replenish' && !flags.includes('replenish_soon')) return false;
+      if (stockF === 'healthy' && (flags.includes('oos') || flags.includes('replenish_soon'))) return false;
+    }
+    return true;
+  });
+}
+function renderStockStatus(){
+  const rows = _ssFiltered();
+  const emp = (LOGIN_ROLE === 'employee');
+  // summary counts
+  const fast = rows.filter(i=>i.status==='Good Running').length;
+  const slow = rows.filter(i=>i.status==='Slow Movers').length;
+  const dead = rows.filter(i=>i.status==='No Record').length;
+  const oosCount = rows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='oos')).length;
+  const sumHost = document.getElementById('ssSummary');
+  if (sumHost){
+    sumHost.innerHTML =
+      `<div class="yoy-card"><div class="yc-label">Fast Moving</div><div class="yc-val" style="color:#1a7a3e">${fast.toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Slow Moving</div><div class="yc-val" style="color:#b45309">${slow.toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Dead Stock</div><div class="yc-val" style="color:#5b4fae">${dead.toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Currently OOS</div><div class="yc-val" style="color:#c0392b">${oosCount.toLocaleString('en-IN')}</div></div>`;
+  }
+  const host = document.getElementById('ssContent');
+  if (!host) return;
+  const sorted = rows.slice().sort((a,b) => (b.reorder_qty||0) - (a.reorder_qty||0));
+  const body = sorted.slice(0, 500).map(it => {
+    const stock = Math.round(parseFloat(it.inv_stock)||0);
+    const wip = Math.round(parseFloat(it.inv_wip)||0);
+    const avail = stock + wip;
+    const flags = (it.alert_flags||[]);
+    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap">${escHtml(f.label)}</span>`).join(' ') : '<span class="small-note">—</span>';
+    return `<tr>
+      <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td>${escHtml(it.taxon||'')}</td>
+      <td style="text-align:center">${escHtml(it.status||'')}</td>
+      <td style="text-align:right">${stock.toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${wip.toLocaleString('en-IN')}</td>
+      <td style="text-align:right;font-weight:700">${avail.toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${Math.round(it.reorder_qty||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${it.days_since_last_sale >= 0 ? it.days_since_last_sale : '—'}</td>
+      <td style="max-width:260px">${flagChips}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:820px"><thead><tr>
+      <th>SKU</th><th>Category</th><th style="text-align:center">Movement Status</th>
+      <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
+      <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
+      <th style="text-align:right">Days Since Sale</th><th>Flags</th>
+    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>'}</tbody></table>
+    ${sorted.length > 500 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 500 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters.</p>` : ''}`;
+}
+function exportStockStatus(){
+  const rows = _ssFiltered();
+  if (!rows.length){ alert('No rows to export'); return; }
+  const headers = ['SKU','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
+  const data = rows.map(it => [it.sku, it.taxon||'', it.status||'',
+    Math.round(it.inv_stock||0), Math.round(it.inv_wip||0),
+    Math.round((it.inv_stock||0)+(it.inv_wip||0)), Math.round(it.reorder_qty||0),
+    it.days_since_last_sale >= 0 ? it.days_since_last_sale : '',
+    (it.alert_flags||[]).map(f=>f.label).join('; ')]);
+  _dlCsv(headers, data, 'stock_status');
+}
+window.loadStockStatus = loadStockStatus; window.renderStockStatus = renderStockStatus; window.exportStockStatus = exportStockStatus;
 window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; window.initTaxonTypeChecks = initTaxonTypeChecks;
 
 /* ── PAYMENTS ── */
@@ -8721,6 +9017,7 @@ showTab = function(t){
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
+    stockstatus: {id: 'vStockStatus', btn: 'm19'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -8761,6 +9058,7 @@ showTab = function(t){
       profit: 'PROFIT MARGIN',
       atrisk: 'AT-RISK CUSTOMERS',
       taxon: 'TAXON DETAILS',
+      stockstatus: 'STOCK STATUS',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -8784,6 +9082,7 @@ showTab = function(t){
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
+  if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
