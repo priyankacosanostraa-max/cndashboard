@@ -8446,26 +8446,26 @@ function renderTaxonTop50(){
 
   const body = sorted.map(it => {
     const flags = (it.alert_flags||[]);
-    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap;display:inline-block;margin:1px 0">${escHtml(f.label)}</span>`).join(' ') : '<span class="small-note" style="font-size:.65rem">—</span>';
+    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap;display:inline-block;margin:2px 2px 0 0">${escHtml(f.label)}</span>`).join('') : '<span class="small-note" style="font-size:.65rem">—</span>';
     return `<tr>
-      <td>${roThumb(it.image_url)}</td>
-      <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
-      <td style="text-align:right;font-weight:700">${Math.round(it._f_final_qty||0).toLocaleString('en-IN')}</td>
-      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it._f_net_revenue||0)}</td>`}
-      <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
-      <td style="text-align:right">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
-      <td style="text-align:center">${escHtml(it.status||'')}</td>
-      <td>${escHtml(it.best_channel||'—')}</td>
-      <td style="max-width:190px;word-break:break-word">${flagChips}</td>
-      <td style="text-align:center;padding:4px 6px">${_txMiniTrend(it._f_entries)}</td>
+      <td style="white-space:normal">${roThumb(it.image_url)}</td>
+      <td style="font-weight:700;white-space:normal;word-break:break-word;overflow-wrap:anywhere"><button class="sku-link" style="white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;display:block;width:100%" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td style="text-align:right;font-weight:700;white-space:normal">${Math.round(it._f_final_qty||0).toLocaleString('en-IN')}</td>
+      ${emp?'':`<td style="text-align:right;font-weight:800;white-space:normal">${fmt(it._f_net_revenue||0)}</td>`}
+      <td style="text-align:right;white-space:normal">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:right;white-space:normal">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:center;white-space:normal;word-break:break-word">${escHtml(it.status||'')}</td>
+      <td style="white-space:normal;word-break:break-word">${escHtml(it.best_channel||'—')}</td>
+      <td style="width:190px;max-width:190px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.6">${flagChips}</td>
+      <td style="text-align:center;padding:4px 6px;white-space:normal">${_txMiniTrend(it._f_entries)}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:1040px;table-layout:fixed"><thead><tr>
-      <th style="width:56px">Image</th><th style="width:150px">SKU</th><th style="text-align:right;width:90px">Final Qty</th>
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:1120px;table-layout:fixed;border-collapse:collapse"><thead><tr>
+      <th style="width:56px">Image</th><th style="width:190px">SKU</th><th style="text-align:right;width:85px">Final Qty</th>
       ${emp?'':'<th style="text-align:right;width:110px">Net Revenue</th>'}
-      <th style="text-align:right;width:70px">Stock</th><th style="text-align:right;width:65px">WIP</th>
-      <th style="text-align:center;width:90px">Status</th><th style="width:110px">Best Channel</th>
-      <th style="width:190px">Flags</th><th style="width:110px">Trend</th>
+      <th style="text-align:right;width:65px">Stock</th><th style="text-align:right;width:60px">WIP</th>
+      <th style="text-align:center;width:95px">Status</th><th style="width:100px">Best Channel</th>
+      <th style="width:190px">Flags</th><th style="width:120px">Trend</th>
     </tr></thead><tbody>${body || '<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon for the selected filter</td></tr>'}</tbody></table>`;
 }
 function exportTaxonTop50(){
