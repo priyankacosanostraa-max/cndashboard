@@ -4731,11 +4731,11 @@ select.lg-in option{background:#fff;color:#1a1610}
       <!-- TREND + DATE RANGE -->
       <div class="filter-box" style="margin:14px 0">
         <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;margin-bottom:12px">
-          <label class="fl" style="margin:0">Sales Trend (Qty over time)</label>
+          <label class="fl" style="margin:0">Sales Trend (Qty over time) — date range also applies to Channel &amp; Marketplace charts below</label>
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
-            <div class="fc"><label class="fl">From</label><input class="fi" type="date" id="sdD1" onchange="renderSdTrend()"></div>
-            <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdTrend()"></div>
-            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="document.getElementById('sdD1').value='';document.getElementById('sdD2').value='';renderSdTrend()">Reset</button>
+            <div class="fc"><label class="fl">From</label><input class="fi" type="date" id="sdD1" onchange="renderSdTrend();renderSdChannel()"></div>
+            <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdTrend();renderSdChannel()"></div>
+            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="document.getElementById('sdD1').value='';document.getElementById('sdD2').value='';renderSdTrend();renderSdChannel()">Reset</button>
           </div>
         </div>
         <div id="sdTrendChart"></div>
@@ -4746,6 +4746,12 @@ select.lg-in option{background:#fff;color:#1a1610}
         <label class="fl" style="margin-bottom:10px;display:block">Channel-wise Qty &amp; Performance</label>
         <div id="sdChannelSummary" style="margin-bottom:12px"></div>
         <div id="sdChannelChart"></div>
+      </div>
+
+      <!-- MARKETPLACE PERFORMANCE (Myntra/Nykaa/AJIO/Amazon/Flipkart/Tata etc.) -->
+      <div class="filter-box" style="margin:14px 0">
+        <label class="fl" style="margin-bottom:10px;display:block">Marketplace-wise Qty (within Ecom)</label>
+        <div id="sdMarketplaceChart"></div>
       </div>
 
       <div class="filter-box" style="margin:6px 0 14px">
@@ -5702,7 +5708,19 @@ function renderSdChannel(){
   const chartHost = document.getElementById('sdChannelChart');
   const sumHost = document.getElementById('sdChannelSummary');
   if (!item || !chartHost) return;
-  const ents = (item.sales_entries || []);
+  // Same date range filter as the trend chart (sdD1/sdD2) — "date range filter jo
+  // kaam kre" — channel chart ab uss range ke sales se banta hai.
+  const d1 = document.getElementById('sdD1')?.value || '';
+  const d2 = document.getElementById('sdD2')?.value || '';
+  let ents = (item.sales_entries || []);
+  if (d1 || d2) {
+    ents = ents.filter(e => {
+      if (!e.date || e.date === 'N/A') return false;
+      if (d1 && e.date < d1) return false;
+      if (d2 && e.date > d2) return false;
+      return true;
+    });
+  }
   const byChan = {};
   ents.forEach(e => {
     const ch = e.channel || 'Other';
@@ -5731,6 +5749,36 @@ function renderSdChannel(){
       <div class="cval">${Math.round(v.qty).toLocaleString('en-IN')} units</div>
     </div>`;
   }).join('');
+
+  // MARKETPLACE-level breakdown (Myntra/Nykaa/AJIO/Amazon/Flipkart/Tata etc.)
+  // — sirf Ecom orders me sub_channel granular hota hai.
+  const bySub = {};
+  ents.forEach(e => {
+    if ((e.channel || '') !== 'Ecom') return;
+    const sc = e.sub_channel || 'Other Marketplace';
+    if (!bySub[sc]) bySub[sc] = {qty:0, rev:0, orders:0};
+    bySub[sc].qty += parseFloat(e.qty) || 0;
+    bySub[sc].rev += parseFloat(e.rev) || 0;
+    bySub[sc].orders += 1;
+  });
+  const subs = Object.keys(bySub).sort((a,b)=>bySub[b].qty-bySub[a].qty);
+  const mktHost = document.getElementById('sdMarketplaceChart');
+  if (mktHost){
+    if (!subs.length){
+      mktHost.innerHTML = '<div class="insight-empty">No marketplace (Ecom) sales in this range</div>';
+    } else {
+      const maxSub = Math.max(1, ...subs.map(s=>bySub[s].qty));
+      mktHost.innerHTML = subs.map(s => {
+        const v = bySub[s];
+        const pct = (v.qty / maxSub) * 100;
+        return `<div class="sd-chan-row">
+          <div class="cname">${escHtml(s)}</div>
+          <div class="cbar-wrap"><div class="cbar" style="width:${pct}%;background:linear-gradient(90deg,#7c9fd4,#5478b0)"></div></div>
+          <div class="cval">${Math.round(v.qty).toLocaleString('en-IN')} units</div>
+        </div>`;
+      }).join('');
+    }
+  }
 
   if (sumHost){
     const best = chans[0];
@@ -8191,6 +8239,7 @@ function renderStockStatus(){
     const flags = (it.alert_flags||[]);
     const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap">${escHtml(f.label)}</span>`).join(' ') : '<span class="small-note">—</span>';
     return `<tr>
+      <td>${roThumb(it.image_url)}</td>
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
       <td>${escHtml(it.taxon||'')}</td>
       <td style="text-align:center">${escHtml(it.status||'')}</td>
@@ -8202,12 +8251,12 @@ function renderStockStatus(){
       <td style="max-width:260px">${flagChips}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:820px"><thead><tr>
-      <th>SKU</th><th>Category</th><th style="text-align:center">Movement Status</th>
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:880px"><thead><tr>
+      <th>Image</th><th>SKU</th><th>Category</th><th style="text-align:center">Movement Status</th>
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
       <th style="text-align:right">Days Since Sale</th><th>Flags</th>
-    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>'}</tbody></table>
+    </tr></thead><tbody>${body || '<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>'}</tbody></table>
     ${sorted.length > 500 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 500 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters.</p>` : ''}`;
 }
 function exportStockStatus(){
