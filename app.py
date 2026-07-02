@@ -5554,11 +5554,25 @@ function updateExportHint(){
     : 'Exporting: all filtered rows';
 }
 
-function openSkuDetails(sku){
+function openSkuDetails(sku, presetFilter){
   currentSdSku = sku;
   lastTab = currentTab || 'home';
   renderSkuDetails(sku);
   showTab('skudetails');
+  // Agar Taxon Details ke Top-50 se aaya hai (filter ke saath), to SKU Details page ka
+  // apna Date/Type filter + Sales Trend graph bhi usi range/type se turant match ho jaaye.
+  if (presetFilter && (presetFilter.d1 || presetFilter.d2 || (presetFilter.types && presetFilter.types.length))){
+    setTimeout(() => {
+      const d1El = document.getElementById('sdD1'); if (d1El) d1El.value = presetFilter.d1 || '';
+      const d2El = document.getElementById('sdD2'); if (d2El) d2El.value = presetFilter.d2 || '';
+      if (presetFilter.types && presetFilter.types.length){
+        document.querySelectorAll('#sdTypeChecks input').forEach(c => {
+          c.checked = presetFilter.types.includes(c.value);
+        });
+      }
+      renderSdAll();
+    }, 0);
+  }
 }
 
 /* ── SKU Details: search box (type/select any SKU, jump straight to its details) ── */
@@ -5634,6 +5648,14 @@ function renderSkuDetails(sku){
     const wip = parseFloat(item.inv_wip) || 0;
     const avail = stock + wip;
     const launchDisp = item.launch_date || '—';
+    // AOV (Average Order Value) — total net revenue / number of sale entries (transactions) for this SKU.
+    const entsForSnap = (item.sales_entries || []);
+    const saleTxns = entsForSnap.filter(e => (parseFloat(e.qty)||0) > 0 || (parseFloat(e.rev)||0) !== 0).length;
+    const aov = saleTxns ? (parseFloat(item.total_net_revenue)||0) / saleTxns : 0;
+    // Avg Discount % — MRP vs average actual selling price for this SKU.
+    const mrpV = parseFloat(item.mrp) || 0;
+    const avgSpV = parseFloat(item.avg_selling_price) || 0;
+    const avgDiscPct = (mrpV > 0 && avgSpV > 0) ? Math.max(0, ((mrpV - avgSpV) / mrpV) * 100) : 0;
     const rows = [
       ['Launch Date', launchDisp],
       ['Current Stock', stock.toLocaleString('en-IN')],
@@ -5645,7 +5667,11 @@ function renderSkuDetails(sku){
       ['Best Marketplace', item.best_marketplace || '—'],
       ['Product Status', item.status || '—'],
     ];
-    if (!emp0) rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
+    if (!emp0) {
+      rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
+      rows.push(['AOV (Avg Order Value)', saleTxns ? fmt(aov) : '—']);
+      rows.push(['Avg Discount %', avgSpV ? avgDiscPct.toFixed(1) + '%' : '—']);
+    }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
   const setStockT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
@@ -8325,7 +8351,7 @@ window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTax
    Ab drilldown Taxon Details tab par selected Date Range + Type filter ko HONOR karta
    hai — jaise 1-30 June select karke "Brooch" type tick karo, taxon pe click karo, to
    sirf usi range/type ka data (Final Qty / Net Revenue / Trend) top 50 mein aayega. */
-let _txDrillTaxon = null, _txDrillRows = [], _txDrillFilterLabel = '';
+let _txDrillTaxon = null, _txDrillRows = [], _txDrillFilterLabel = '', _txDrillFilterObj = null;
 
 // Kisi bhi item ke sales_entries ko diye gaye date-range + type list se filter karta hai
 // (Sales Details tab ke _sdFilteredEntries jaisa hi logic, par generic — kisi bhi item par).
@@ -8343,19 +8369,45 @@ function _txEntriesInRange(item, d1, d2, types){
   return ents;
 }
 
+// Sparkline point pe click karne se us DIN ki sale (qty + revenue) ek chhota popup mein
+// dikhti hai — bilkul SKU Details page ke bade trend chart jaisa hi behaviour.
+function txSparkPointClick(ev, d, qty, rev){
+  let popup = document.getElementById('txSparkPopup');
+  if (!popup){
+    popup = document.createElement('div');
+    popup.id = 'txSparkPopup';
+    popup.style.cssText = 'position:fixed;background:#1f2430;color:#fff;padding:8px 12px;border-radius:8px;font-size:.75rem;line-height:1.5;box-shadow:0 8px 20px rgba(0,0,0,.3);z-index:9999;pointer-events:none;white-space:nowrap';
+    document.body.appendChild(popup);
+  }
+  const emp0 = (LOGIN_ROLE === 'employee');
+  popup.innerHTML = `<b>${d}</b><br>Qty sold: <b>${qty}</b>` + (emp0 ? '' : `<br>Revenue: <b>${fmt(rev)}</b>`);
+  popup.style.display = 'block';
+  const px = Math.min((ev.clientX||0) + 12, window.innerWidth - 190);
+  const py = Math.max((ev.clientY||0) - 44, 8);
+  popup.style.left = px + 'px';
+  popup.style.top = py + 'px';
+  clearTimeout(window._txSparkPopupTimer);
+  window._txSparkPopupTimer = setTimeout(() => { popup.style.display = 'none'; }, 4000);
+  if (ev.stopPropagation) ev.stopPropagation();
+}
+window.txSparkPointClick = txSparkPointClick;
+
 // Chhoti si inline SVG sparkline — ek SKU ka trend, table cell ke andar fit ho jaaye
-// itni compact (koi page layout todti nahi, scroll/overflow nahi karti).
+// itni compact (koi page layout todti nahi, scroll/overflow nahi karti). Har point
+// clickable hai — click karne par us din ki exact sale dikhti hai.
 function _txMiniTrend(ents){
   const W = 92, H = 28, PAD = 3;
   if (!ents || !ents.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
   const byDay = {};
   ents.forEach(e => {
     if (!e.date || e.date === 'N/A') return;
-    byDay[e.date] = (byDay[e.date] || 0) + (parseFloat(e.qty) || 0);
+    const d = byDay[e.date] || (byDay[e.date] = {qty:0, rev:0});
+    d.qty += parseFloat(e.qty) || 0;
+    d.rev += parseFloat(e.rev) || 0;
   });
   const days = Object.keys(byDay).sort();
   if (!days.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
-  const vals = days.map(d => byDay[d]);
+  const vals = days.map(d => byDay[d].qty);
   const maxV = Math.max(1, ...vals);
   const stepX = days.length > 1 ? (W - PAD*2) / (days.length - 1) : 0;
   const pts = vals.map((v,i) => {
@@ -8366,9 +8418,14 @@ function _txMiniTrend(ents){
   const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${H-PAD} L${pts[0][0].toFixed(1)},${H-PAD} Z`;
   const totQty = Math.round(vals.reduce((s,v)=>s+v,0));
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:${W}px;height:${H}px;display:block;flex:none">
+  const dots = pts.map((p,i) => {
+    const d = days[i], v = byDay[d];
+    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#b8933f" style="cursor:pointer" onclick='txSparkPointClick(event,"${d}",${Math.round(v.qty*100)/100},${Math.round(v.rev)})'><title>${d}: ${v.qty} units</title></circle>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:${W}px;height:${H}px;display:block;flex:none;overflow:visible">
       <path d="${areaD}" fill="rgba(184,147,63,.18)" stroke="none"></path>
       <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="1.6"></path>
+      ${dots}
     </svg>
     <div style="font-size:.6rem;color:var(--cn-mid);text-align:center;white-space:nowrap">${totQty} units</div>`;
 }
@@ -8379,6 +8436,7 @@ function showTaxonTop50(taxonName){
   const d2 = document.getElementById('txD2')?.value || '';
   const types = Array.from(document.querySelectorAll('#txTypeChecks input:checked')).map(c => c.value);
   const filterActive = !!(d1 || d2 || types.length);
+  _txDrillFilterObj = {d1, d2, types};
 
   const taxonItems = (master || []).filter(i => String(i.taxon||'') === taxonName);
   let rows = taxonItems.map(it => {
@@ -8449,7 +8507,7 @@ function renderTaxonTop50(){
     const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap;display:inline-block;margin:2px 2px 0 0">${escHtml(f.label)}</span>`).join('') : '<span class="small-note" style="font-size:.65rem">—</span>';
     return `<tr>
       <td style="white-space:normal">${roThumb(it.image_url)}</td>
-      <td style="font-weight:700;white-space:normal;word-break:break-word;overflow-wrap:anywhere"><button class="sku-link" style="white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;display:block;width:100%" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td style="font-weight:700;white-space:normal;word-break:break-word;overflow-wrap:anywhere"><button class="sku-link" style="white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;display:block;width:100%" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}', _txDrillFilterObj)">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
       <td style="text-align:right;font-weight:700;white-space:normal">${Math.round(it._f_final_qty||0).toLocaleString('en-IN')}</td>
       ${emp?'':`<td style="text-align:right;font-weight:800;white-space:normal">${fmt(it._f_net_revenue||0)}</td>`}
       <td style="text-align:right;white-space:normal">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
