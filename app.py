@@ -4893,6 +4893,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <button class="home-back" onclick="backToTaxonList()">← Back to Taxons</button>
         <span style="font-weight:800;font-size:1.05rem;margin-left:12px" id="txDrillTitle"></span>
+        <div id="txDrillFilterNote" style="margin-left:12px;margin-top:4px;font-size:.72rem;color:var(--cn-mid)"></div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
         <label class="fl" style="margin:0">Sort by</label>
@@ -8250,6 +8251,12 @@ function loadTaxon(){
       if (!ok || j.error){ if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(j.error || 'Failed') + '</div>'; return; }
       _taxonData = j;
       renderTaxon();
+      // Agar drilldown (Top 50) already khula hai usi taxon ke liye, to use bhi
+      // naye filter (date range / type) ke hisaab se turant refresh kar do.
+      const drillEl = document.getElementById('txDrilldown');
+      if (drillEl && drillEl.style.display !== 'none' && _txDrillTaxon){
+        showTaxonTop50(_txDrillTaxon);
+      }
     })
     .catch(err => { if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
 }
@@ -8314,17 +8321,91 @@ function exportTaxon(){
 }
 window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTaxon = exportTaxon;
 
-/* ── TAXON → TOP 50 SKUs drilldown (client-side, uses master which is already loaded) ── */
-let _txDrillTaxon = null, _txDrillRows = [];
+/* ── TAXON → TOP 50 SKUs drilldown (client-side, uses master which is already loaded) ──
+   Ab drilldown Taxon Details tab par selected Date Range + Type filter ko HONOR karta
+   hai — jaise 1-30 June select karke "Brooch" type tick karo, taxon pe click karo, to
+   sirf usi range/type ka data (Final Qty / Net Revenue / Trend) top 50 mein aayega. */
+let _txDrillTaxon = null, _txDrillRows = [], _txDrillFilterLabel = '';
+
+// Kisi bhi item ke sales_entries ko diye gaye date-range + type list se filter karta hai
+// (Sales Details tab ke _sdFilteredEntries jaisa hi logic, par generic — kisi bhi item par).
+function _txEntriesInRange(item, d1, d2, types){
+  let ents = (item.sales_entries || []);
+  if (types && types.length) ents = ents.filter(e => types.includes(e.type || 'Regular'));
+  if (d1 || d2){
+    ents = ents.filter(e => {
+      if (!e.date || e.date === 'N/A') return false;
+      if (d1 && e.date < d1) return false;
+      if (d2 && e.date > d2) return false;
+      return true;
+    });
+  }
+  return ents;
+}
+
+// Chhoti si inline SVG sparkline — ek SKU ka trend, table cell ke andar fit ho jaaye
+// itni compact (koi page layout todti nahi, scroll/overflow nahi karti).
+function _txMiniTrend(ents){
+  const W = 92, H = 28, PAD = 3;
+  if (!ents || !ents.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
+  const byDay = {};
+  ents.forEach(e => {
+    if (!e.date || e.date === 'N/A') return;
+    byDay[e.date] = (byDay[e.date] || 0) + (parseFloat(e.qty) || 0);
+  });
+  const days = Object.keys(byDay).sort();
+  if (!days.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
+  const vals = days.map(d => byDay[d]);
+  const maxV = Math.max(1, ...vals);
+  const stepX = days.length > 1 ? (W - PAD*2) / (days.length - 1) : 0;
+  const pts = vals.map((v,i) => {
+    const x = PAD + i*stepX;
+    const y = H - PAD - (v / maxV) * (H - PAD*2);
+    return [x,y];
+  });
+  const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${H-PAD} L${pts[0][0].toFixed(1)},${H-PAD} Z`;
+  const totQty = Math.round(vals.reduce((s,v)=>s+v,0));
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:${W}px;height:${H}px;display:block;flex:none">
+      <path d="${areaD}" fill="rgba(184,147,63,.18)" stroke="none"></path>
+      <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="1.6"></path>
+    </svg>
+    <div style="font-size:.6rem;color:var(--cn-mid);text-align:center;white-space:nowrap">${totQty} units</div>`;
+}
+
 function showTaxonTop50(taxonName){
   _txDrillTaxon = taxonName;
-  _txDrillRows = (master || []).filter(i => String(i.taxon||'') === taxonName);
+  const d1 = document.getElementById('txD1')?.value || '';
+  const d2 = document.getElementById('txD2')?.value || '';
+  const types = Array.from(document.querySelectorAll('#txTypeChecks input:checked')).map(c => c.value);
+  const filterActive = !!(d1 || d2 || types.length);
+
+  const taxonItems = (master || []).filter(i => String(i.taxon||'') === taxonName);
+  let rows = taxonItems.map(it => {
+    const ents = _txEntriesInRange(it, d1, d2, types);
+    const fQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
+    const fRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+    return Object.assign({}, it, {
+      _f_final_qty: fQty,
+      _f_net_revenue: fRev,
+      _f_entries: ents
+    });
+  });
+  // Filter lagaya ho to sirf wahi SKUs jinki us range/type me sale hui hai
+  // (0-sale SKUs "top 50 in this range" mein dikhana galat hoga).
+  if (filterActive) rows = rows.filter(it => it._f_entries.length > 0);
+  _txDrillRows = rows;
+
+  _txDrillFilterLabel = filterActive
+    ? `Filtered: ${d1 || '…'} → ${d2 || '…'}${types.length ? ' • Type: ' + types.join(', ') : ''}`
+    : 'Showing all-time totals (no date/type filter applied)';
+
   const listWrap = document.getElementById('txListWrap');
   const drill = document.getElementById('txDrilldown');
   if (listWrap) listWrap.style.display = 'none';
   if (drill) drill.style.display = 'block';
   const title = document.getElementById('txDrillTitle');
-  if (title) title.textContent = `${taxonName} — Top 50 SKUs (of ${_txDrillRows.length.toLocaleString('en-IN')} total)`;
+  if (title) title.textContent = `${taxonName} — Top 50 SKUs (of ${_txDrillRows.length.toLocaleString('en-IN')} matching total)`;
   renderTaxonTop50();
 }
 function backToTaxonList(){
@@ -8339,15 +8420,16 @@ function renderTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
   const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
   const sorted = _txDrillRows.slice().sort((a,b) => {
-    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
-    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
+    if (sortMode === 'qty') return (b._f_final_qty||0) - (a._f_final_qty||0);
+    return (b._f_net_revenue||0) - (a._f_net_revenue||0);
   }).slice(0, 50);
 
-  // Extra: quick taxon-level summary strip (all SKUs in this taxon, not just top 50)
+  // Extra: quick taxon-level summary strip (selected filter ke hisaab se — all SKUs
+  // in this taxon that match the filter, not just top 50)
   const sumHost = document.getElementById('txDrillSummary');
   if (sumHost){
-    const totQty = _txDrillRows.reduce((s,i)=>s+(i.final_qty||0),0);
-    const totRev = _txDrillRows.reduce((s,i)=>s+(i.total_net_revenue||0),0);
+    const totQty = _txDrillRows.reduce((s,i)=>s+(i._f_final_qty||0),0);
+    const totRev = _txDrillRows.reduce((s,i)=>s+(i._f_net_revenue||0),0);
     const avgRev = _txDrillRows.length ? totRev/_txDrillRows.length : 0;
     const oosCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='oos')).length;
     const replenishCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='replenish_soon')).length;
@@ -8359,42 +8441,47 @@ function renderTaxonTop50(){
        <div class="yoy-card"><div class="yc-label">OOS / Replenish Soon</div><div class="yc-val" style="color:#c0392b">${oosCt} / ${replenishCt}</div></div>`;
   }
 
+  const filterNote = document.getElementById('txDrillFilterNote');
+  if (filterNote) filterNote.textContent = _txDrillFilterLabel || '';
+
   const body = sorted.map(it => {
     const flags = (it.alert_flags||[]);
-    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap">${escHtml(f.label)}</span>`).join(' ') : '';
+    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap;display:inline-block;margin:1px 0">${escHtml(f.label)}</span>`).join(' ') : '<span class="small-note" style="font-size:.65rem">—</span>';
     return `<tr>
       <td>${roThumb(it.image_url)}</td>
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
-      <td style="text-align:right;font-weight:700">${Math.round(it.final_qty||0).toLocaleString('en-IN')}</td>
-      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td>`}
+      <td style="text-align:right;font-weight:700">${Math.round(it._f_final_qty||0).toLocaleString('en-IN')}</td>
+      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it._f_net_revenue||0)}</td>`}
       <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
       <td style="text-align:right">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
       <td style="text-align:center">${escHtml(it.status||'')}</td>
       <td>${escHtml(it.best_channel||'—')}</td>
-      <td style="max-width:220px">${flagChips}</td>
+      <td style="max-width:190px;word-break:break-word">${flagChips}</td>
+      <td style="text-align:center;padding:4px 6px">${_txMiniTrend(it._f_entries)}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
-      <th>Image</th><th>SKU</th><th style="text-align:right">Final Qty</th>
-      ${emp?'':'<th style="text-align:right">Net Revenue</th>'}
-      <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
-      <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
-    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>'}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:1040px;table-layout:fixed"><thead><tr>
+      <th style="width:56px">Image</th><th style="width:150px">SKU</th><th style="text-align:right;width:90px">Final Qty</th>
+      ${emp?'':'<th style="text-align:right;width:110px">Net Revenue</th>'}
+      <th style="text-align:right;width:70px">Stock</th><th style="text-align:right;width:65px">WIP</th>
+      <th style="text-align:center;width:90px">Status</th><th style="width:110px">Best Channel</th>
+      <th style="width:190px">Flags</th><th style="width:110px">Trend</th>
+    </tr></thead><tbody>${body || '<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon for the selected filter</td></tr>'}</tbody></table>`;
 }
 function exportTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
   const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
   const sorted = _txDrillRows.slice().sort((a,b) => {
-    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
-    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
+    if (sortMode === 'qty') return (b._f_final_qty||0) - (a._f_final_qty||0);
+    return (b._f_net_revenue||0) - (a._f_net_revenue||0);
   }).slice(0, 50);
   if (!sorted.length){ alert('No rows to export'); return; }
   const headers = emp
-    ? ['SKU','Final Qty','Stock','WIP','Status','Best Channel']
-    : ['SKU','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
+    ? ['SKU','Final Qty (filtered)','Stock','WIP','Status','Best Channel','Flags']
+    : ['SKU','Final Qty (filtered)','Net Revenue (filtered)','Stock','WIP','Status','Best Channel','Flags'];
   const data = sorted.map(it => emp
-    ? [it.sku, Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
-    : [it.sku, Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
+    ? [it.sku, Math.round(it._f_final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'', (it.alert_flags||[]).map(f=>f.label).join('; ')]
+    : [it.sku, Math.round(it._f_final_qty||0), Math.round(it._f_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'', (it.alert_flags||[]).map(f=>f.label).join('; ')]);
   _dlCsv(headers, data, `taxon_${String(_txDrillTaxon||'top50').replace(/[^A-Za-z0-9_-]/g,'_')}_top50`);
 }
 window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
