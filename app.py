@@ -4965,23 +4965,33 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
-    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
+    <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="insights-title" style="font-size:1rem">Outstanding till today</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayToday()">⬇ Export CSV</button></div>
       <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
-    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
+    <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div class="insights-title" style="font-size:1rem" id="payMeTitle">Outstanding till month-end</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayMe()">⬇ Export CSV</button></div>
       <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
   </div>
   <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
     <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="insights-title" style="font-size:.85rem">Aging Bucket</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayAging()">⬇ Export CSV</button></div>
       <div id="payAgingTable" style="font-size:.78rem"></div>
     </div>
     <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">⬇ Export CSV</button></div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
     </div>
   </div>
   <div style="margin-bottom:18px">
-    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Tag-wise Summary</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="insights-title" style="font-size:.85rem">Tag-wise Summary</div>
+      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayTag()">⬇ Export CSV</button></div>
     <div id="payTagSummary" style="font-size:.8rem"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
@@ -5652,10 +5662,12 @@ function renderSkuDetails(sku){
     const entsForSnap = (item.sales_entries || []);
     const saleTxns = entsForSnap.filter(e => (parseFloat(e.qty)||0) > 0 || (parseFloat(e.rev)||0) !== 0).length;
     const aov = saleTxns ? (parseFloat(item.total_net_revenue)||0) / saleTxns : 0;
-    // Avg Discount % — MRP vs average actual selling price for this SKU.
+    // Avg Discount % — EXACT same formula as the Discount Leakage tab:
+    // sp = last_selling_price (fallback avg_selling_price); discount only counts if sp < mrp.
     const mrpV = parseFloat(item.mrp) || 0;
-    const avgSpV = parseFloat(item.avg_selling_price) || 0;
-    const avgDiscPct = (mrpV > 0 && avgSpV > 0) ? Math.max(0, ((mrpV - avgSpV) / mrpV) * 100) : 0;
+    const spForDisc = (parseFloat(item.last_selling_price) || 0) || (parseFloat(item.avg_selling_price) || 0);
+    const hasDiscount = mrpV > 0 && spForDisc > 0 && spForDisc < mrpV;
+    const avgDiscPct = hasDiscount ? Math.round((mrpV - spForDisc) / mrpV * 1000) / 10 : 0;
     const rows = [
       ['Launch Date', launchDisp],
       ['Current Stock', stock.toLocaleString('en-IN')],
@@ -5670,7 +5682,7 @@ function renderSkuDetails(sku){
     if (!emp0) {
       rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
       rows.push(['AOV (Avg Order Value)', saleTxns ? fmt(aov) : '—']);
-      rows.push(['Avg Discount %', avgSpV ? avgDiscPct.toFixed(1) + '%' : '—']);
+      rows.push(['Avg Discount %', hasDiscount ? avgDiscPct.toFixed(1) + '%' : (spForDisc > 0 ? 'No discount' : '—')]);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
@@ -5954,11 +5966,11 @@ function renderSdChannel(){
 function exportSD(fmtType){
   const item = (master || []).find(i => i.sku === currentSdSku);
   if (!item) { alert('Open a SKU first.'); return; }
-  const picked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
-  let ents = (item.sales_entries || []).slice();
-  if (picked.length) ents = ents.filter(e => picked.includes(e.type || 'Regular'));
+  // Pehle sirf Type filter use hota tha — ab Date Range (sdD1/sdD2) bhi honor hota hai,
+  // taaki jo filter screen par lagaya hai wahi export mein bhi reflect ho.
+  let ents = _sdFilteredEntries(item).slice();
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  if (!ents.length) { alert('No transactions to export.'); return; }
+  if (!ents.length) { alert('No transactions to export for the selected filter.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const headers = ['Dispatch Date','SKU','Product Dimensions','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Net Revenue']), 'Image Link'];
   const data = ents.map(e => ({
@@ -8696,6 +8708,7 @@ function renderPayments(){
   const d = _payData; if (!d) return;
   const rows = _payFiltered();
   _applyPaySort(rows);
+  _payLastRows = rows;   // filtered rows — used by exportPayToday() and exportPayMe()
   // summary cards
   const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
   const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
@@ -8765,6 +8778,7 @@ function renderPayments(){
     const agTotals = {}; AG_LABELS.forEach(k => agTotals[k] = 0);
     rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
     const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
+    _payLastAging = {labels: AG_LABELS.slice(), totals: Object.assign({}, agTotals), grand};
     const body = AG_LABELS.map(k => `<tr>
         <td style="padding:5px 8px">${escHtml(k)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(agTotals[k])}</td>
@@ -8798,6 +8812,7 @@ function renderPayments(){
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
     const payMap = {}; frozen.forEach(w => payMap[w.label] = w.payment || 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
+    const weekRowsData = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
@@ -8805,6 +8820,7 @@ function renderPayments(){
       const tgt = tgtMap[label] || 0;      // FROZEN target (month start)
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       const balAfter = Math.round(filtBalance - cumPay);
+      weekRowsData.push({label, start: w.start, end: w.end, ov, pay, balAfter, tgt});
       return `<tr>
         <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
@@ -8828,6 +8844,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Overdue Becoming Due, Payment & Balance ab filter (tag/customer) ke according. <b>Overdue Target</b> = month shuru me freeze hua (poore month fixed) — is month ka target reference. Week 1 = 1st–7th, and so on.</p>`;
+    _payLastWeek = {rows: weekRowsData, ovTotal, payTotal, tgtTotal};
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
@@ -8870,6 +8887,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(tCol)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tBal)}</td>
       </tr></tfoot></table>`;
+    _payLastTag = {rows: trows, tCust, tDue, tOv, tCol, tBal};
   }
 }
 // Single delegated click handler for customer rows (today + month-end tables)
@@ -8978,7 +8996,51 @@ function exportPayments(){
   const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, r.due||0, r.overdue||0, r.balance||0, r.due_me||0, r.overdue_me||0]);
   _dlCsv(headers, data, 'payments_outstanding');
 }
+/* ── Per-table exports — Payments tab (har table apne currently-applied filter
+   (Tag / Search / Show) ke hisaab se hi export hoti hai, kyunki ye saara data
+   renderPayments() ke andar filtered rows se hi banaya + store kiya jaata hai) ── */
+let _payLastRows = [], _payLastAging = null, _payLastWeek = null, _payLastTag = null;
+function exportPayToday(){
+  const rows = _payLastRows;
+  if (!rows || !rows.length){ alert('No rows to export'); return; }
+  const headers = ['Customer Name','Tag','Payment Term (days)','Due','Overdue','Balance'];
+  const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, Math.round(r.due||0), Math.round(r.overdue||0), Math.round(r.balance||0)]);
+  _dlCsv(headers, data, 'payments_outstanding_today');
+}
+function exportPayMe(){
+  const rows = _payLastRows;
+  if (!rows || !rows.length){ alert('No rows to export'); return; }
+  const headers = ['Customer Name','Tag','Due (till month-end)','Overdue (till month-end)','Balance'];
+  const data = rows.map(r => [r.customer, r.tag||'', Math.round(r.due_me||0), Math.round(r.overdue_me||0), Math.round(r.balance||0)]);
+  _dlCsv(headers, data, 'payments_outstanding_month_end');
+}
+function exportPayAging(){
+  const a = _payLastAging;
+  if (!a || !a.labels || !a.labels.length){ alert('No data to export'); return; }
+  const headers = ['Aging Bucket','Sum of Balance'];
+  const data = a.labels.map(k => [k, Math.round(a.totals[k]||0)]);
+  data.push(['Total', Math.round(a.grand||0)]);
+  _dlCsv(headers, data, 'payments_aging_bucket');
+}
+function exportPayWeek(){
+  const w = _payLastWeek;
+  if (!w || !w.rows || !w.rows.length){ alert('No data to export'); return; }
+  const headers = ['Week','Start Date','End Date','Overdue Becoming Due','Payment Received','Balance Remaining','Overdue Target (frozen)'];
+  const data = w.rows.map(r => [r.label, r.start, r.end, Math.round(r.ov||0), Math.round(r.pay||0), Math.round(r.balAfter||0), Math.round(r.tgt||0)]);
+  data.push(['Total','','', Math.round(w.ovTotal||0), Math.round(w.payTotal||0), '', Math.round(w.tgtTotal||0)]);
+  _dlCsv(headers, data, 'payments_week_wise_tracker');
+}
+function exportPayTag(){
+  const t = _payLastTag;
+  if (!t || !t.rows || !t.rows.length){ alert('No data to export'); return; }
+  const headers = ['Tag / Type','Customers','Due','Overdue','Collected (this month)','Balance'];
+  const data = t.rows.map(s => [s.tag, s.customers, Math.round(s.due||0), Math.round(s.overdue||0), Math.round(s.collected_month||0), Math.round(s.balance||0)]);
+  data.push(['Total', t.tCust, Math.round(t.tDue||0), Math.round(t.tOv||0), Math.round(t.tCol||0), Math.round(t.tBal||0)]);
+  _dlCsv(headers, data, 'payments_tag_wise_summary');
+}
 window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
+window.exportPayToday = exportPayToday; window.exportPayMe = exportPayMe; window.exportPayAging = exportPayAging;
+window.exportPayWeek = exportPayWeek; window.exportPayTag = exportPayTag;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
