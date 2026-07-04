@@ -4974,19 +4974,36 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
     <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="insights-title" style="font-size:.85rem">Aging Bucket</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayAging()">Export CSV</button>
+      </div>
       <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:4px">Click a bucket to see its customers</div>
       <div id="payAgingTable" style="font-size:.78rem"></div>
       <div id="payAgingDrill" style="margin-top:10px;display:none"></div>
     </div>
     <div>
-      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
+        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">Export CSV</button>
+      </div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
     </div>
   </div>
   <div style="margin-bottom:18px">
-    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Tag-wise Summary</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="insights-title" style="font-size:.85rem">Tag-wise Summary</div>
+      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayTagSummary()">Export CSV</button>
+    </div>
     <div id="payTagSummary" style="font-size:.8rem"></div>
+  </div>
+  <div style="margin-bottom:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="insights-title" style="font-size:.85rem">Payment Received</div>
+      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPaymentsReceived()">Export CSV</button>
+    </div>
+    <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:4px">Respects Tag / Search Customer filters above</div>
+    <div id="payReceivedTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -8487,6 +8504,7 @@ window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; wind
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
 let _payAgingRows = [];
+let _payAgingExport = [], _payWeekExport = [], _payTagExport = [];
 let _paySortKey = 'balance', _paySortDir = -1;
 function sortPay(key){
   if (_paySortKey === key) _paySortDir *= -1; else { _paySortDir = -1; _paySortKey = key; }
@@ -8549,6 +8567,16 @@ function _payFiltered(){
     if (q && !(r.customer||'').toLowerCase().includes(q)) return false;
     if (view === 'overdue' && (r.overdue||0) <= 0) return false;
     if (view === 'due' && (r.due||0) <= 0) return false;
+    return true;
+  });
+}
+function _payReceivedFiltered(){
+  const d = _payData; if (!d) return [];
+  const tag = (document.getElementById('payTag')?.value || '').toLowerCase();
+  const q = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
+  return (d.payments_received || []).filter(r => {
+    if (tag && (r.tag||'').toLowerCase() !== tag) return false;
+    if (q && !(r.customer||'').toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -8637,6 +8665,8 @@ function renderPayments(){
         <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
+    _payAgingExport = AG_LABELS.map(k => ({bucket:k, amount: agTotals[k]}));
+    _payAgingExport.push({bucket:'Total', amount: grand});
   }
   // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
   const wkHost = document.getElementById('payWeekTable');
@@ -8670,6 +8700,7 @@ function renderPayments(){
     const frozen = d.week_overdue || [];
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
+    const _wkExport = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
@@ -8677,14 +8708,18 @@ function renderPayments(){
       const tgt = tgtMap[label] || 0;          // FROZEN target (month start)
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       const balAfter = Math.round(filtBalance - cumPay);
+      const range = escHtml(w.start.slice(8)+'-'+w.start.slice(5,7)) + ' to ' + escHtml(w.end.slice(8)+'-'+w.end.slice(5,7));
+      _wkExport.push({label, range, overdue:ov, payment:pay, balAfter, target:tgt});
       return `<tr>
-        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
+        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${range}</span></td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(pay)}</td>
         <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
       </tr>`;
     }).join('');
+    _wkExport.push({label:'Total', range:'', overdue:ovTotal, payment:payTotal, balAfter:'', target:tgtTotal});
+    _payWeekExport = _wkExport;
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
         <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
@@ -8741,6 +8776,30 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(tOv)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tCol)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tBal)}</td>
+      </tr></tfoot></table>`;
+    _payTagExport = trows.concat([{tag:'Total', customers:tCust, due:tDue, overdue:tOv, collected_month:tCol, balance:tBal}]);
+  }
+
+  // ---- PAYMENT RECEIVED (individual credit entries; Tag/Search-filter aware) ----
+  const recvHost = document.getElementById('payReceivedTable');
+  if (recvHost){
+    const recvRows = _payReceivedFiltered();
+    const sumCredit = recvRows.reduce((s,r)=>s+(r.credit||0),0);
+    const body = recvRows.map(r => `<tr>
+        <td style="padding:5px 8px;font-weight:700;color:#1a5fb4">${escHtml(r.customer)}</td>
+        <td style="padding:5px 8px;text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
+        <td style="padding:5px 8px;text-align:center">${escHtml(r.date||'')}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#1f7a3a">${fmt(r.credit)}</td>
+      </tr>`).join('');
+    recvHost.innerHTML = `<table class="ro" style="width:100%;min-width:480px;font-size:.8rem"><thead><tr>
+        <th style="padding:5px 8px">Customer</th>
+        <th style="text-align:center;padding:5px 8px">Tag</th>
+        <th style="text-align:center;padding:5px 8px">Date</th>
+        <th style="text-align:right;padding:5px 8px">Credit Amount</th>
+      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No payments found</td></tr>'}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
+        <td colspan="3" style="padding:5px 8px">Total (${recvRows.length} entries)</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(sumCredit)}</td>
       </tr></tfoot></table>`;
   }
 }
@@ -8884,7 +8943,37 @@ function exportPayments(){
   const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, r.due||0, r.overdue||0, r.balance||0, r.due_me||0, r.overdue_me||0]);
   _dlCsv(headers, data, 'payments_outstanding');
 }
+function exportPayAging(){
+  const rows = _payAgingExport || [];
+  if (!rows.length){ alert('No data to export'); return; }
+  const headers = ['Aging Bucket','Sum of Balance'];
+  const data = rows.map(r => [r.bucket, r.amount||0]);
+  _dlCsv(headers, data, 'payments_aging_bucket');
+}
+function exportPayWeek(){
+  const rows = _payWeekExport || [];
+  if (!rows.length){ alert('No data to export'); return; }
+  const headers = ['Week','Range','Overdue Becoming Due','Payment Received','Balance Remaining','Overdue Target'];
+  const data = rows.map(r => [r.label, r.range||'', r.overdue||0, r.payment||0, r.balAfter===''?'':(r.balAfter||0), r.target||0]);
+  _dlCsv(headers, data, 'payments_weekwise_tracker');
+}
+function exportPayTagSummary(){
+  const rows = _payTagExport || [];
+  if (!rows.length){ alert('No data to export'); return; }
+  const headers = ['Tag / Type','Customers','Due','Overdue','Collected','Balance'];
+  const data = rows.map(r => [r.tag, r.customers||0, r.due||0, r.overdue||0, r.collected_month||0, r.balance||0]);
+  _dlCsv(headers, data, 'payments_tag_summary');
+}
+function exportPaymentsReceived(){
+  const rows = _payReceivedFiltered();
+  if (!rows.length){ alert('No rows to export'); return; }
+  const headers = ['Customer Name','Tag','Date','Credit Amount'];
+  const data = rows.map(r => [r.customer, r.tag||'', r.date||'', r.credit||0]);
+  _dlCsv(headers, data, 'payment_received');
+}
 window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
+window.exportPayAging = exportPayAging; window.exportPayWeek = exportPayWeek;
+window.exportPayTagSummary = exportPayTagSummary; window.exportPaymentsReceived = exportPaymentsReceived;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -10609,6 +10698,7 @@ def _build_payments():
     me_due = me_over = 0.0
     tags_set = set()
     all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
+    payments_received = []   # individual credit/payment entries — Customer, Tag, Date, Credit Amount
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -10627,6 +10717,15 @@ def _build_payments():
             # is month me aaya payment (credit) — "collected this month"
             if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
                 cust_collected_month += e["credit"]
+            # ---- PAYMENT RECEIVED table: har credit/payment entry (customer/tag/date/amount) ----
+            if e["credit"] > 0:
+                payments_received.append({
+                    "customer": nm.title(),
+                    "tag": tag,
+                    "date": e["date"].strftime("%d-%b-%y") if e["date"] else "",
+                    "date_iso": e["date"].strftime("%Y-%m-%d") if e["date"] else "",
+                    "credit": round(e["credit"], 2),
+                })
         # apply credit pool FIFO
         cp = credit_pool
         for inv in open_inv:
@@ -10797,8 +10896,12 @@ def _build_payments():
         for k in ("due", "overdue", "collected_month", "balance"):
             s[k] = round(s[k], 0)
 
+    # newest payment first
+    payments_received.sort(key=lambda p: p["date_iso"], reverse=True)
+
     data = {
         "rows": rows,
+        "payments_received": payments_received,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
         "month_label": today.strftime("%b-%y"),
