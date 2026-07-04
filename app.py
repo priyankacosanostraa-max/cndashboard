@@ -4975,7 +4975,9 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
     <div>
       <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
+      <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:4px">Click a bucket to see its customers</div>
       <div id="payAgingTable" style="font-size:.78rem"></div>
+      <div id="payAgingDrill" style="margin-top:10px;display:none"></div>
     </div>
     <div>
       <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
@@ -5772,7 +5774,9 @@ function renderSdTrend(){
   const days = Object.keys(byDay).sort();
   const vals = days.map(d => byDay[d].qty);
   const maxV = Math.max(1, ...vals);
-  const W = 760, H = 200, PAD_L = 34, PAD_R = 20, PAD_T = 26, PAD_B = 34;
+  // Chart ko data-density ke hisaab se wide banao — bahut saare din/months ek
+  // saath crowd karke overlap na ho, har point ko saans lene ki jagah mile.
+  const W = Math.max(900, days.length * 16), H = 260, PAD_L = 40, PAD_R = 24, PAD_T = 30, PAD_B = 40;
   const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
   const stepX = days.length > 1 ? plotW / (days.length - 1) : 0;
   const pts = vals.map((v,i) => {
@@ -5796,7 +5800,7 @@ function renderSdTrend(){
     }
   });
   const monthLabelsSvg = monthTicks.map(m =>
-    `<text x="${m.x.toFixed(1)}" y="${H-10}" font-size="10" fill="#8c7a42" text-anchor="middle">${m.label}</text>
+    `<text x="${m.x.toFixed(1)}" y="${H-12}" font-size="13" fill="#8c7a42" text-anchor="middle">${m.label}</text>
      <line x1="${m.x.toFixed(1)}" y1="${PAD_T}" x2="${m.x.toFixed(1)}" y2="${PAD_T+plotH}" stroke="#e8dfc8" stroke-width="1"></line>`
   ).join('');
 
@@ -5804,17 +5808,19 @@ function renderSdTrend(){
   const dots = pts.map((p,i) => {
     const d = days[i], v = byDay[d];
     const payload = JSON.stringify({d, qty:v.qty, rev:v.rev}).replace(/"/g,'&quot;');
-    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="5" fill="#b8933f" style="cursor:pointer" onclick='sdTrendPointClick(${JSON.stringify({d,qty:v.qty,rev:v.rev})})'><title>${d}: ${v.qty} units</title></circle>`;
+    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="6" fill="#b8933f" style="cursor:pointer" onclick='sdTrendPointClick(${JSON.stringify({d,qty:v.qty,rev:v.rev})})'><title>${d}: ${v.qty} units</title></circle>`;
   }).join('');
 
   const emp0 = (LOGIN_ROLE === 'employee');
-  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
-    ${monthLabelsSvg}
-    <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
-    <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
-    ${dots}
-    <text x="${PAD_L}" y="16" font-size="10" fill="#8c7a42">Peak: ${maxV} units/day</text>
-  </svg>
+  host.innerHTML = `<div style="overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch">
+    <svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none;height:${H}px;display:block">
+      ${monthLabelsSvg}
+      <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
+      <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
+      ${dots}
+      <text x="${PAD_L}" y="18" font-size="12" fill="#8c7a42">Peak: ${maxV} units/day</text>
+    </svg>
+  </div>
   <div id="sdTrendPopup" style="display:none;position:absolute;background:#1f2430;color:#fff;padding:10px 14px;border-radius:8px;font-size:.78rem;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:20;pointer-events:none"></div>`;
   window._sdTrendEmp = emp0;
 }
@@ -8480,6 +8486,7 @@ window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; wind
 
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
+let _payAgingRows = [];
 let _paySortKey = 'balance', _paySortDir = -1;
 function sortPay(key){
   if (_paySortKey === key) _paySortDir *= -1; else { _paySortDir = -1; _paySortKey = key; }
@@ -8618,8 +8625,9 @@ function renderPayments(){
     const agTotals = {}; AG_LABELS.forEach(k => agTotals[k] = 0);
     rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
     const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
-    const body = AG_LABELS.map(k => `<tr>
-        <td style="padding:5px 8px">${escHtml(k)}</td>
+    _payAgingRows = rows;   // click-through ke liye — jo customers is filter me hain
+    const body = AG_LABELS.map(k => `<tr class="ag-bucket-row" data-bucket="${escHtml(k)}" style="cursor:pointer">
+        <td style="padding:5px 8px;color:#1a5fb4;text-decoration:underline">${escHtml(k)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(agTotals[k])}</td>
       </tr>`).join('');
     agHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
@@ -8643,19 +8651,30 @@ function renderPayments(){
         }
       });
     });
-    // payment received + balance filtered rows se
-    const filtCollected = rows.reduce((s,r)=>s+(r.collected_month||0),0);
+    // FIX: payment received ab bhi FILTERED rows ke week_paid se (pehle company-wide
+    // frozen "d.week_overdue[].payment" use hota tha, jo filtered balance ke saath
+    // mix ho ke galat "Balance Remaining" deta tha — jaise Designer filter lagane
+    // par bhi Myntra/SOR ka payment ghat jata tha). Ab sirf isi filter ke
+    // customers ka is-hafte-mila payment count hota hai.
+    const wkPayment = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.week_paid || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkPayment[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
+    });
     const filtBalance = rows.reduce((s,r)=>s+(r.balance||0),0);
-    // frozen target (company-wide, fixed) — week_overdue me target field aata hai
+    // frozen target (company-wide, fixed — target hamesha waisa hi rehta hai
+    // poore month, filter se independent, kyunki ye "reference" hai)
     const frozen = d.week_overdue || [];
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
-    const payMap = {}; frozen.forEach(w => payMap[w.label] = w.payment || 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
-      const pay = payMap[label] || 0;      // payment received (company-wide, month me)
-      const tgt = tgtMap[label] || 0;      // FROZEN target (month start)
+      const pay = Math.round(wkPayment[wi]);   // ab FILTERED payment (bug fix)
+      const tgt = tgtMap[label] || 0;          // FROZEN target (month start)
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       const balAfter = Math.round(filtBalance - cumPay);
       return `<tr>
@@ -8729,7 +8748,41 @@ function renderPayments(){
 document.addEventListener('click', function(ev){
   const tr = ev.target.closest && ev.target.closest('.pay-row');
   if (tr && tr.dataset && tr.dataset.customer) loadCustomerLedger(tr.dataset.customer);
+  const agTr = ev.target.closest && ev.target.closest('.ag-bucket-row');
+  if (agTr && agTr.dataset && agTr.dataset.bucket) showAgingBucketCustomers(agTr.dataset.bucket);
 });
+function showAgingBucketCustomers(bucket){
+  const host = document.getElementById('payAgingDrill');
+  if (!host) return;
+  const custs = (_payAgingRows || [])
+    .map(r => ({customer: r.customer, tag: r.tag, amount: (r.aging || {})[bucket] || 0}))
+    .filter(x => x.amount > 0.5)
+    .sort((a,b) => b.amount - a.amount);
+  if (!custs.length){
+    host.style.display = 'block';
+    host.innerHTML = `<div class="small-note" style="padding:8px 0">No customers in "${escHtml(bucket)}" for the current filter.</div>`;
+    return;
+  }
+  const total = custs.reduce((s,c)=>s+c.amount,0);
+  const body = custs.map(c => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(c.customer)}">
+      <td style="padding:5px 8px;font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(c.customer)}</td>
+      <td style="padding:5px 8px;text-align:center;color:var(--cn-mid)">${escHtml(c.tag||'Unknown')}</td>
+      <td style="padding:5px 8px;text-align:right;font-weight:700">${fmt(c.amount)}</td>
+    </tr>`).join('');
+  host.style.display = 'block';
+  host.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div class="insights-title" style="font-size:.8rem">Customers in "${escHtml(bucket)}" (${custs.length})</div>
+      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="document.getElementById('payAgingDrill').style.display='none'">✕ Close</button>
+    </div>
+    <table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
+      <th style="padding:5px 8px">Customer</th><th style="text-align:center;padding:5px 8px">Tag</th><th style="text-align:right;padding:5px 8px">Balance</th>
+    </tr></thead><tbody>${body}</tbody>
+    <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+      <td style="padding:5px 8px">Total</td><td></td><td style="text-align:right;padding:5px 8px">${fmt(total)}</td>
+    </tr></tfoot></table>
+    <p style="color:var(--cn-mid);font-size:.68rem;margin-top:6px">Click a customer to open their ledger.</p>`;
+}
+window.showAgingBucketCustomers = showAgingBucketCustomers;
 let _custLedgerData = null;
 function loadCustomerLedger(name){
   const wrap = document.getElementById('payLedgerWrap');
@@ -10622,6 +10675,14 @@ def _build_payments():
             dd2 = (idt2 + timedelta(days=term_days)) if idt2 else None
             if dd2 and month_start_g <= dd2 <= month_end:
                 _cust_week_due.append([dd2.strftime("%Y-%m-%d"), rem2])
+        # is customer ke is-month payment (credit) date-wise — week-wise "Payment
+        # Received" ko FILTER-AWARE banane ke liye (pehle company-wide payment
+        # frozen data use hota tha, filtered balance ke saath mix ho ke galat
+        # "Balance Remaining" deta tha).
+        _cust_week_paid = []
+        for e in ents:
+            if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
+                _cust_week_paid.append([e["date"].strftime("%Y-%m-%d"), round(e["credit"], 2)])
         # is customer ne is month kitna pay kiya (collected this month)
         rows.append({
             "customer": nm.title(),
@@ -10635,6 +10696,7 @@ def _build_payments():
             "aging": {k: round(v, 0) for k, v in cust_aging.items()},
             "collected_month": round(cust_collected_month, 0),
             "week_due": _cust_week_due,
+            "week_paid": _cust_week_paid,
         })
         tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
         me_due += cust_due_me; me_over += cust_over_me
