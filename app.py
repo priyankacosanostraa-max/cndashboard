@@ -169,7 +169,7 @@
 # COSA NOSTRAA — V2 (Overall Details + SKU Finder + Repeat Orders)
 # Changes from V1:
 #   1. Taxon filter added in Overall Details (from inventory sheet)
-#   2. Net Revenue ONLY from COSSA "Net Revenue" column — no calc
+#   2. Net Revenue ONLY from COSA "Net Revenue" column — no calc
 #   3. Dispatch Date = primary date
 #   4. New "Repeat Orders" tab with 7d/15d/30d qty, forecast
 # FIXES: Bulletproof Qty/Rev Parsing + Fuzzy SKU Matching + Unified Grand Totals
@@ -258,7 +258,7 @@ from flask import Flask, request, jsonify, render_template_string, session
 
 # ── Config ───────────────────────────────────────────────────
 INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv"
-COSSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
+COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
 # Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
@@ -684,7 +684,7 @@ def find_col(cols, *cands):
     return None
 
 def classify_status(item, current_month_key=""):
-    # Koi dispatch hi nahi hui (COSSA me record nahi) → "No Record"
+    # Koi dispatch hi nahi hui (COSA me record nahi) → "No Record"
     if item["dispatch_count"] == 0:
         return "No Record"
     # "New Launch" = sirf wahi jo IS MAHINE launch hua (launch date se).
@@ -970,17 +970,17 @@ def _refresh_data():
         _wstage("fetching", "Downloading inventory sheet…")
         inv   = _fetch_csv_fresh(INV_URL)
         _wstage("fetching", "Downloading sales sheet (54k rows)…")
-        cossa = _fetch_csv_fresh(COSSA_URL)
-        _DF_REFS["inv"] = inv; _DF_REFS["cossa"] = cossa
+        cosa = _fetch_csv_fresh(COSA_URL)
+        _DF_REFS["inv"] = inv; _DF_REFS["cosa"] = cosa
         inv.columns   = [str(c).strip() for c in inv.columns]
-        cossa.columns = [str(c).strip() for c in cossa.columns]
+        cosa.columns = [str(c).strip() for c in cosa.columns]
     except Exception as e:
         dbg["errors"].append(f"load: {e}")
         CACHE["debug"] = dbg
         return [], [], [], [], [], [], [], "", "", "", "", "", 0.0, 0.0, {"total":0,"yesterday":0,"this_month":0,"this_fy":0,"prev_fy":0}
 
     dbg["inv_cols"]   = list(inv.columns)
-    dbg["cossa_cols"] = list(cossa.columns)
+    dbg["cosa_cols"] = list(cosa.columns)
 
     # ── Inventory columns ────────────────────────────────────
     I_SKU = find_col(inv.columns, "SKU") or inv.columns[0]
@@ -1026,29 +1026,29 @@ def _refresh_data():
     I_BLOCKED = (find_col(inv.columns, "Blocked Qty", "blocked qty", "blocked", "block qty")
                  or _inv_at(20))
 
-    # ── COSSA columns ────────────────────────────────────────
-    cols = list(cossa.columns)
+    # ── COSA columns ────────────────────────────────────────
+    cols = list(cosa.columns)
     def _at(idx): return cols[idx] if len(cols) > idx else None
 
-    C_DATE  = _at(0)  or find_col(cossa.columns, "Dispatch Date","date")
-    C_FY    = _at(1)  or find_col(cossa.columns, "FY Year","fy","financial year")
-    C_SKU   = _at(2)  or find_col(cossa.columns, "SKU","item code") or cols[0]
+    C_DATE  = _at(0)  or find_col(cosa.columns, "Dispatch Date","date")
+    C_FY    = _at(1)  or find_col(cosa.columns, "FY Year","fy","financial year")
+    C_SKU   = _at(2)  or find_col(cosa.columns, "SKU","item code") or cols[0]
     # G (index 6) = Final Qty (confirmed layout). Header-match pehle "Final Qty"
     # par exact, warna column G. (Sirf "qty" match karne se "Total Qty"=E pakad
     # leta tha — isliye exact "Final Qty" + fixed index G hi bharosemand hai.)
-    C_QTY   = (find_col(cossa.columns, "Final Qty","final quantity","final_qty")
-               or _at(6) or find_col(cossa.columns, "qty","quantity") or _at(5))
+    C_QTY   = (find_col(cosa.columns, "Final Qty","final quantity","final_qty")
+               or _at(6) or find_col(cosa.columns, "qty","quantity") or _at(5))
     # F = Return Qty (index 5)
-    C_RET   = find_col(cossa.columns, "Return Qty","return qty","returns","returned qty") or _at(5)
-    # H = Selling Price (per-unit SP recorded in COSSA), I = Net Revenue
-    C_SP    = find_col(cossa.columns, "Selling Price","selling price","sp","unit price") or _at(7)
-    C_REV   = _at(8)  or find_col(cossa.columns, "Net Revenue","net rev","revenue")
-    C_CUST  = _at(9)  or find_col(cossa.columns, "Customer Name","customer","client","party")
-    C_TYPE  = _at(10) or find_col(cossa.columns, "Type","channel","mode")
+    C_RET   = find_col(cosa.columns, "Return Qty","return qty","returns","returned qty") or _at(5)
+    # H = Selling Price (per-unit SP recorded in COSA), I = Net Revenue
+    C_SP    = find_col(cosa.columns, "Selling Price","selling price","sp","unit price") or _at(7)
+    C_REV   = _at(8)  or find_col(cosa.columns, "Net Revenue","net rev","revenue")
+    C_CUST  = _at(9)  or find_col(cosa.columns, "Customer Name","customer","client","party")
+    C_TYPE  = _at(10) or find_col(cosa.columns, "Type","channel","mode")
 
     dbg["resolved"] = {
         "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE},
-        "cossa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
+        "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
     }
 
     # Extract all valid known Inventory SKUs for fuzzy matching fallback
@@ -1096,14 +1096,14 @@ def _refresh_data():
     _prefix_buckets = {}
     for _k in inv_skus_map.keys():
         _prefix_buckets.setdefault(_k[:4], []).append(_k)
-    _n_rows = len(cossa)
-    for _ri, r in enumerate(_df_chunks(cossa)):
+    _n_rows = len(cosa)
+    for _ri, r in enumerate(_df_chunks(cosa)):
         if (_ri % 2500) == 0:
             _wstage("processing", "Matching sales records…", _ri, _n_rows)
         qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
-        sp  = to_num(r.get(C_SP, 0))  if C_SP  else 0.0   # per-unit Selling Price (COSSA col H)
-        ret = to_num(r.get(C_RET, 0)) if C_RET else 0.0   # Return Qty (COSSA col F)
+        sp  = to_num(r.get(C_SP, 0))  if C_SP  else 0.0   # per-unit Selling Price (COSA col H)
+        ret = to_num(r.get(C_RET, 0)) if C_RET else 0.0   # Return Qty (COSA col F)
 
         # SANITY: ek order ki qty itni badi nahi ho sakti. Agar koi cell me galti
         # se bada number/ID/date aa gaya (galat column), to use 0 maan lo — warna
@@ -1181,7 +1181,7 @@ def _refresh_data():
         sub_channels_.add(sub_channel)
         if fy != "N/A": fyears.add(fy)
 
-        # Return amount = return qty × us transaction ki selling price (COSSA F × H)
+        # Return amount = return qty × us transaction ki selling price (COSA F × H)
         entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
                  "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
@@ -1192,8 +1192,8 @@ def _refresh_data():
 
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
     try:
-        del cossa
-        _DF_REFS.pop("cossa", None)
+        del cosa
+        _DF_REFS.pop("cosa", None)
         _gc.collect()
     except Exception:
         pass
@@ -1341,7 +1341,7 @@ def _refresh_data():
         sd  = sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
         ent = sd["entries"]
 
-        # Selling Price = COSSA col H ka ACTUAL value (latest dated non-zero).
+        # Selling Price = COSA col H ka ACTUAL value (latest dated non-zero).
         _sps = [float(e.get("sp") or 0) for e in ent if float(e.get("sp") or 0) > 0]
         avg_sp  = round(sum(_sps) / len(_sps), 2) if _sps else 0.0
         last_sp = 0.0
@@ -4482,7 +4482,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="filter-box" style="margin-top:-10px">
-      <span class="small-note"><b>New Launch</b> = launched this month (launch date) &nbsp;|&nbsp; <b>Slow Movers</b> = stock+WIP ≥ 20 &amp; no dispatch last 6 months &nbsp;|&nbsp; <b>No Record</b> = no dispatch in COSSA &nbsp;|&nbsp; <b>Good Running</b> = all others</span>
+      <span class="small-note"><b>New Launch</b> = launched this month (launch date) &nbsp;|&nbsp; <b>Slow Movers</b> = stock+WIP ≥ 20 &amp; no dispatch last 6 months &nbsp;|&nbsp; <b>No Record</b> = no dispatch in COSA &nbsp;|&nbsp; <b>Good Running</b> = all others</span>
     </div>
     <div class="grid" id="gMatrix"></div>
   </div>
@@ -4739,7 +4739,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="kpis" style="justify-content:flex-start">
         <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div></div>
         <div class="kpi"><div class="kpi-t">Total Final Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
-        <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
+        <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
@@ -4778,7 +4778,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 
       <div class="ro-tools">
-        <div class="small-note">Every dispatch recorded in COSSA for this SKU — customer, date, type, final qty and net revenue.</div>
+        <div class="small-note">Every dispatch recorded in COSA for this SKU — customer, date, type, final qty and net revenue.</div>
         <div class="ro-export">
           <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:2px" onclick="exportSD('csv')">Export CSV</button>
           <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportSD('xls')">Export Excel</button>
@@ -4893,7 +4893,6 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <button class="home-back" onclick="backToTaxonList()">← Back to Taxons</button>
         <span style="font-weight:800;font-size:1.05rem;margin-left:12px" id="txDrillTitle"></span>
-        <div id="txDrillFilterNote" style="margin-left:12px;margin-top:4px;font-size:.72rem;color:var(--cn-mid)"></div>
       </div>
       <div style="display:flex;gap:10px;align-items:center">
         <label class="fl" style="margin:0">Sort by</label>
@@ -4929,6 +4928,10 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="No Record">Dead (No Record)</option>
         <option value="New Launch">New Launch</option>
       </select></div>
+    <div class="fc"><label class="fl">Taxon / Category</label>
+      <select class="fs" id="ssTaxon" onchange="renderStockStatus()">
+        <option value="All">All Categories</option>
+      </select></div>
     <div class="fc"><label class="fl">Stock Condition</label>
       <select class="fs" id="ssStock" onchange="renderStockStatus()">
         <option value="">All</option>
@@ -4937,7 +4940,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="healthy">Healthy Stock</option>
       </select></div>
   </div>
-  <div id="ssSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="ssContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:66vh"></div>
   </div>
 
@@ -4965,33 +4967,23 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
-    <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="insights-title" style="font-size:1rem">Outstanding till today</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayToday()">⬇ Export CSV</button></div>
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px">Outstanding till today</div>
       <div id="payTodayTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
-    <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-        <div class="insights-title" style="font-size:1rem" id="payMeTitle">Outstanding till month-end</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayMe()">⬇ Export CSV</button></div>
+    <div><div class="insights-title" style="font-size:1rem;margin-bottom:8px" id="payMeTitle">Outstanding till month-end</div>
       <div id="payMeTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div></div>
   </div>
   <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Aging Bucket</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayAging()">⬇ Export CSV</button></div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
       <div id="payAgingTable" style="font-size:.78rem"></div>
     </div>
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">⬇ Export CSV</button></div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
     </div>
   </div>
   <div style="margin-bottom:18px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div class="insights-title" style="font-size:.85rem">Tag-wise Summary</div>
-      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayTag()">⬇ Export CSV</button></div>
+    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Tag-wise Summary</div>
     <div id="payTagSummary" style="font-size:.8rem"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
@@ -5048,7 +5040,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
       <div class="pm-two">
         <div class="fc"><label class="fl">Final Qty (for total)</label><input type="number" class="fi pm-num" id="pmQty" placeholder="1" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Net Revenue (COSSA)</label><input type="number" class="fi pm-num" id="pmNetRev" placeholder="0" min="0" readonly style="background:#f5f0e6"></div>
+        <div class="fc"><label class="fl">Net Revenue (COSA)</label><input type="number" class="fi pm-num" id="pmNetRev" placeholder="0" min="0" readonly style="background:#f5f0e6"></div>
       </div>
 
       <div class="pm-seclabel"><span>Deductions</span><span class="ln"></span></div>
@@ -5564,25 +5556,11 @@ function updateExportHint(){
     : 'Exporting: all filtered rows';
 }
 
-function openSkuDetails(sku, presetFilter){
+function openSkuDetails(sku){
   currentSdSku = sku;
   lastTab = currentTab || 'home';
   renderSkuDetails(sku);
   showTab('skudetails');
-  // Agar Taxon Details ke Top-50 se aaya hai (filter ke saath), to SKU Details page ka
-  // apna Date/Type filter + Sales Trend graph bhi usi range/type se turant match ho jaaye.
-  if (presetFilter && (presetFilter.d1 || presetFilter.d2 || (presetFilter.types && presetFilter.types.length))){
-    setTimeout(() => {
-      const d1El = document.getElementById('sdD1'); if (d1El) d1El.value = presetFilter.d1 || '';
-      const d2El = document.getElementById('sdD2'); if (d2El) d2El.value = presetFilter.d2 || '';
-      if (presetFilter.types && presetFilter.types.length){
-        document.querySelectorAll('#sdTypeChecks input').forEach(c => {
-          c.checked = presetFilter.types.includes(c.value);
-        });
-      }
-      renderSdAll();
-    }, 0);
-  }
 }
 
 /* ── SKU Details: search box (type/select any SKU, jump straight to its details) ── */
@@ -5658,16 +5636,6 @@ function renderSkuDetails(sku){
     const wip = parseFloat(item.inv_wip) || 0;
     const avail = stock + wip;
     const launchDisp = item.launch_date || '—';
-    // AOV (Average Order Value) — total net revenue / number of sale entries (transactions) for this SKU.
-    const entsForSnap = (item.sales_entries || []);
-    const saleTxns = entsForSnap.filter(e => (parseFloat(e.qty)||0) > 0 || (parseFloat(e.rev)||0) !== 0).length;
-    const aov = saleTxns ? (parseFloat(item.total_net_revenue)||0) / saleTxns : 0;
-    // Avg Discount % — EXACT same formula as the Discount Leakage tab:
-    // sp = last_selling_price (fallback avg_selling_price); discount only counts if sp < mrp.
-    const mrpV = parseFloat(item.mrp) || 0;
-    const spForDisc = (parseFloat(item.last_selling_price) || 0) || (parseFloat(item.avg_selling_price) || 0);
-    const hasDiscount = mrpV > 0 && spForDisc > 0 && spForDisc < mrpV;
-    const avgDiscPct = hasDiscount ? Math.round((mrpV - spForDisc) / mrpV * 1000) / 10 : 0;
     const rows = [
       ['Launch Date', launchDisp],
       ['Current Stock', stock.toLocaleString('en-IN')],
@@ -5679,11 +5647,7 @@ function renderSkuDetails(sku){
       ['Best Marketplace', item.best_marketplace || '—'],
       ['Product Status', item.status || '—'],
     ];
-    if (!emp0) {
-      rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
-      rows.push(['AOV (Avg Order Value)', saleTxns ? fmt(aov) : '—']);
-      rows.push(['Avg Discount %', hasDiscount ? avgDiscPct.toFixed(1) + '%' : (spForDisc > 0 ? 'No discount' : '—')]);
-    }
+    if (!emp0) rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
   const setStockT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
@@ -5966,11 +5930,11 @@ function renderSdChannel(){
 function exportSD(fmtType){
   const item = (master || []).find(i => i.sku === currentSdSku);
   if (!item) { alert('Open a SKU first.'); return; }
-  // Pehle sirf Type filter use hota tha — ab Date Range (sdD1/sdD2) bhi honor hota hai,
-  // taaki jo filter screen par lagaya hai wahi export mein bhi reflect ho.
-  let ents = _sdFilteredEntries(item).slice();
+  const picked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
+  let ents = (item.sales_entries || []).slice();
+  if (picked.length) ents = ents.filter(e => picked.includes(e.type || 'Regular'));
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  if (!ents.length) { alert('No transactions to export for the selected filter.'); return; }
+  if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const headers = ['Dispatch Date','SKU','Product Dimensions','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Net Revenue']), 'Image Link'];
   const data = ents.map(e => ({
@@ -8289,12 +8253,6 @@ function loadTaxon(){
       if (!ok || j.error){ if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">' + escHtml(j.error || 'Failed') + '</div>'; return; }
       _taxonData = j;
       renderTaxon();
-      // Agar drilldown (Top 50) already khula hai usi taxon ke liye, to use bhi
-      // naye filter (date range / type) ke hisaab se turant refresh kar do.
-      const drillEl = document.getElementById('txDrilldown');
-      if (drillEl && drillEl.style.display !== 'none' && _txDrillTaxon){
-        showTaxonTop50(_txDrillTaxon);
-      }
     })
     .catch(err => { if(host) host.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
 }
@@ -8359,123 +8317,17 @@ function exportTaxon(){
 }
 window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTaxon = exportTaxon;
 
-/* ── TAXON → TOP 50 SKUs drilldown (client-side, uses master which is already loaded) ──
-   Ab drilldown Taxon Details tab par selected Date Range + Type filter ko HONOR karta
-   hai — jaise 1-30 June select karke "Brooch" type tick karo, taxon pe click karo, to
-   sirf usi range/type ka data (Final Qty / Net Revenue / Trend) top 50 mein aayega. */
-let _txDrillTaxon = null, _txDrillRows = [], _txDrillFilterLabel = '', _txDrillFilterObj = null;
-
-// Kisi bhi item ke sales_entries ko diye gaye date-range + type list se filter karta hai
-// (Sales Details tab ke _sdFilteredEntries jaisa hi logic, par generic — kisi bhi item par).
-function _txEntriesInRange(item, d1, d2, types){
-  let ents = (item.sales_entries || []);
-  if (types && types.length) ents = ents.filter(e => types.includes(e.type || 'Regular'));
-  if (d1 || d2){
-    ents = ents.filter(e => {
-      if (!e.date || e.date === 'N/A') return false;
-      if (d1 && e.date < d1) return false;
-      if (d2 && e.date > d2) return false;
-      return true;
-    });
-  }
-  return ents;
-}
-
-// Sparkline point pe click karne se us DIN ki sale (qty + revenue) ek chhota popup mein
-// dikhti hai — bilkul SKU Details page ke bade trend chart jaisa hi behaviour.
-function txSparkPointClick(ev, d, qty, rev){
-  let popup = document.getElementById('txSparkPopup');
-  if (!popup){
-    popup = document.createElement('div');
-    popup.id = 'txSparkPopup';
-    popup.style.cssText = 'position:fixed;background:#1f2430;color:#fff;padding:8px 12px;border-radius:8px;font-size:.75rem;line-height:1.5;box-shadow:0 8px 20px rgba(0,0,0,.3);z-index:9999;pointer-events:none;white-space:nowrap';
-    document.body.appendChild(popup);
-  }
-  const emp0 = (LOGIN_ROLE === 'employee');
-  popup.innerHTML = `<b>${d}</b><br>Qty sold: <b>${qty}</b>` + (emp0 ? '' : `<br>Revenue: <b>${fmt(rev)}</b>`);
-  popup.style.display = 'block';
-  const px = Math.min((ev.clientX||0) + 12, window.innerWidth - 190);
-  const py = Math.max((ev.clientY||0) - 44, 8);
-  popup.style.left = px + 'px';
-  popup.style.top = py + 'px';
-  clearTimeout(window._txSparkPopupTimer);
-  window._txSparkPopupTimer = setTimeout(() => { popup.style.display = 'none'; }, 4000);
-  if (ev.stopPropagation) ev.stopPropagation();
-}
-window.txSparkPointClick = txSparkPointClick;
-
-// Chhoti si inline SVG sparkline — ek SKU ka trend, table cell ke andar fit ho jaaye
-// itni compact (koi page layout todti nahi, scroll/overflow nahi karti). Har point
-// clickable hai — click karne par us din ki exact sale dikhti hai.
-function _txMiniTrend(ents){
-  const W = 92, H = 28, PAD = 3;
-  if (!ents || !ents.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
-  const byDay = {};
-  ents.forEach(e => {
-    if (!e.date || e.date === 'N/A') return;
-    const d = byDay[e.date] || (byDay[e.date] = {qty:0, rev:0});
-    d.qty += parseFloat(e.qty) || 0;
-    d.rev += parseFloat(e.rev) || 0;
-  });
-  const days = Object.keys(byDay).sort();
-  if (!days.length) return '<span class="small-note" style="font-size:.62rem">No trend</span>';
-  const vals = days.map(d => byDay[d].qty);
-  const maxV = Math.max(1, ...vals);
-  const stepX = days.length > 1 ? (W - PAD*2) / (days.length - 1) : 0;
-  const pts = vals.map((v,i) => {
-    const x = PAD + i*stepX;
-    const y = H - PAD - (v / maxV) * (H - PAD*2);
-    return [x,y];
-  });
-  const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-  const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${H-PAD} L${pts[0][0].toFixed(1)},${H-PAD} Z`;
-  const totQty = Math.round(vals.reduce((s,v)=>s+v,0));
-  const dots = pts.map((p,i) => {
-    const d = days[i], v = byDay[d];
-    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="#b8933f" style="cursor:pointer" onclick='txSparkPointClick(event,"${d}",${Math.round(v.qty*100)/100},${Math.round(v.rev)})'><title>${d}: ${v.qty} units</title></circle>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:${W}px;height:${H}px;display:block;flex:none;overflow:visible">
-      <path d="${areaD}" fill="rgba(184,147,63,.18)" stroke="none"></path>
-      <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="1.6"></path>
-      ${dots}
-    </svg>
-    <div style="font-size:.6rem;color:var(--cn-mid);text-align:center;white-space:nowrap">${totQty} units</div>`;
-}
-
+/* ── TAXON → TOP 50 SKUs drilldown (client-side, uses master which is already loaded) ── */
+let _txDrillTaxon = null, _txDrillRows = [];
 function showTaxonTop50(taxonName){
   _txDrillTaxon = taxonName;
-  const d1 = document.getElementById('txD1')?.value || '';
-  const d2 = document.getElementById('txD2')?.value || '';
-  const types = Array.from(document.querySelectorAll('#txTypeChecks input:checked')).map(c => c.value);
-  const filterActive = !!(d1 || d2 || types.length);
-  _txDrillFilterObj = {d1, d2, types};
-
-  const taxonItems = (master || []).filter(i => String(i.taxon||'') === taxonName);
-  let rows = taxonItems.map(it => {
-    const ents = _txEntriesInRange(it, d1, d2, types);
-    const fQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
-    const fRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-    return Object.assign({}, it, {
-      _f_final_qty: fQty,
-      _f_net_revenue: fRev,
-      _f_entries: ents
-    });
-  });
-  // Filter lagaya ho to sirf wahi SKUs jinki us range/type me sale hui hai
-  // (0-sale SKUs "top 50 in this range" mein dikhana galat hoga).
-  if (filterActive) rows = rows.filter(it => it._f_entries.length > 0);
-  _txDrillRows = rows;
-
-  _txDrillFilterLabel = filterActive
-    ? `Filtered: ${d1 || '…'} → ${d2 || '…'}${types.length ? ' • Type: ' + types.join(', ') : ''}`
-    : 'Showing all-time totals (no date/type filter applied)';
-
+  _txDrillRows = (master || []).filter(i => String(i.taxon||'') === taxonName);
   const listWrap = document.getElementById('txListWrap');
   const drill = document.getElementById('txDrilldown');
   if (listWrap) listWrap.style.display = 'none';
   if (drill) drill.style.display = 'block';
   const title = document.getElementById('txDrillTitle');
-  if (title) title.textContent = `${taxonName} — Top 50 SKUs (of ${_txDrillRows.length.toLocaleString('en-IN')} matching total)`;
+  if (title) title.textContent = `${taxonName} — Top 50 SKUs (of ${_txDrillRows.length.toLocaleString('en-IN')} total)`;
   renderTaxonTop50();
 }
 function backToTaxonList(){
@@ -8490,16 +8342,15 @@ function renderTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
   const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
   const sorted = _txDrillRows.slice().sort((a,b) => {
-    if (sortMode === 'qty') return (b._f_final_qty||0) - (a._f_final_qty||0);
-    return (b._f_net_revenue||0) - (a._f_net_revenue||0);
+    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
+    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
   }).slice(0, 50);
 
-  // Extra: quick taxon-level summary strip (selected filter ke hisaab se — all SKUs
-  // in this taxon that match the filter, not just top 50)
+  // Extra: quick taxon-level summary strip (all SKUs in this taxon, not just top 50)
   const sumHost = document.getElementById('txDrillSummary');
   if (sumHost){
-    const totQty = _txDrillRows.reduce((s,i)=>s+(i._f_final_qty||0),0);
-    const totRev = _txDrillRows.reduce((s,i)=>s+(i._f_net_revenue||0),0);
+    const totQty = _txDrillRows.reduce((s,i)=>s+(i.final_qty||0),0);
+    const totRev = _txDrillRows.reduce((s,i)=>s+(i.total_net_revenue||0),0);
     const avgRev = _txDrillRows.length ? totRev/_txDrillRows.length : 0;
     const oosCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='oos')).length;
     const replenishCt = _txDrillRows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='replenish_soon')).length;
@@ -8511,47 +8362,42 @@ function renderTaxonTop50(){
        <div class="yoy-card"><div class="yc-label">OOS / Replenish Soon</div><div class="yc-val" style="color:#c0392b">${oosCt} / ${replenishCt}</div></div>`;
   }
 
-  const filterNote = document.getElementById('txDrillFilterNote');
-  if (filterNote) filterNote.textContent = _txDrillFilterLabel || '';
-
   const body = sorted.map(it => {
     const flags = (it.alert_flags||[]);
-    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap;display:inline-block;margin:2px 2px 0 0">${escHtml(f.label)}</span>`).join('') : '<span class="small-note" style="font-size:.65rem">—</span>';
+    const flagChips = flags.length ? flags.map(f => `<span class="insight-chip" title="${escHtml(f.detail||'')}" style="font-size:.63rem;font-weight:700;padding:1px 6px;border-radius:14px;background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;white-space:nowrap">${escHtml(f.label)}</span>`).join(' ') : '';
     return `<tr>
-      <td style="white-space:normal">${roThumb(it.image_url)}</td>
-      <td style="font-weight:700;white-space:normal;word-break:break-word;overflow-wrap:anywhere"><button class="sku-link" style="white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;display:block;width:100%" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}', _txDrillFilterObj)">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
-      <td style="text-align:right;font-weight:700;white-space:normal">${Math.round(it._f_final_qty||0).toLocaleString('en-IN')}</td>
-      ${emp?'':`<td style="text-align:right;font-weight:800;white-space:normal">${fmt(it._f_net_revenue||0)}</td>`}
-      <td style="text-align:right;white-space:normal">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
-      <td style="text-align:right;white-space:normal">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
-      <td style="text-align:center;white-space:normal;word-break:break-word">${escHtml(it.status||'')}</td>
-      <td style="white-space:normal;word-break:break-word">${escHtml(it.best_channel||'—')}</td>
-      <td style="width:190px;max-width:190px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;line-height:1.6">${flagChips}</td>
-      <td style="text-align:center;padding:4px 6px;white-space:normal">${_txMiniTrend(it._f_entries)}</td>
+      <td>${roThumb(it.image_url)}</td>
+      <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td style="text-align:right;font-weight:700">${Math.round(it.final_qty||0).toLocaleString('en-IN')}</td>
+      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td>`}
+      <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
+      <td style="text-align:center">${escHtml(it.status||'')}</td>
+      <td>${escHtml(it.best_channel||'—')}</td>
+      <td style="max-width:220px">${flagChips}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:1120px;table-layout:fixed;border-collapse:collapse"><thead><tr>
-      <th style="width:56px">Image</th><th style="width:190px">SKU</th><th style="text-align:right;width:85px">Final Qty</th>
-      ${emp?'':'<th style="text-align:right;width:110px">Net Revenue</th>'}
-      <th style="text-align:right;width:65px">Stock</th><th style="text-align:right;width:60px">WIP</th>
-      <th style="text-align:center;width:95px">Status</th><th style="width:100px">Best Channel</th>
-      <th style="width:190px">Flags</th><th style="width:120px">Trend</th>
-    </tr></thead><tbody>${body || '<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon for the selected filter</td></tr>'}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
+      <th>Image</th><th>SKU</th><th style="text-align:right">Final Qty</th>
+      ${emp?'':'<th style="text-align:right">Net Revenue</th>'}
+      <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
+      <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
+    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>'}</tbody></table>`;
 }
 function exportTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
   const sortMode = document.getElementById('txDrillSort')?.value || 'revenue';
   const sorted = _txDrillRows.slice().sort((a,b) => {
-    if (sortMode === 'qty') return (b._f_final_qty||0) - (a._f_final_qty||0);
-    return (b._f_net_revenue||0) - (a._f_net_revenue||0);
+    if (sortMode === 'qty') return (b.final_qty||0) - (a.final_qty||0);
+    return (b.total_net_revenue||0) - (a.total_net_revenue||0);
   }).slice(0, 50);
   if (!sorted.length){ alert('No rows to export'); return; }
   const headers = emp
-    ? ['SKU','Final Qty (filtered)','Stock','WIP','Status','Best Channel','Flags']
-    : ['SKU','Final Qty (filtered)','Net Revenue (filtered)','Stock','WIP','Status','Best Channel','Flags'];
+    ? ['SKU','Final Qty','Stock','WIP','Status','Best Channel']
+    : ['SKU','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
   const data = sorted.map(it => emp
-    ? [it.sku, Math.round(it._f_final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'', (it.alert_flags||[]).map(f=>f.label).join('; ')]
-    : [it.sku, Math.round(it._f_final_qty||0), Math.round(it._f_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'', (it.alert_flags||[]).map(f=>f.label).join('; ')]);
+    ? [it.sku, Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
+    : [it.sku, Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
   _dlCsv(headers, data, `taxon_${String(_txDrillTaxon||'top50').replace(/[^A-Za-z0-9_-]/g,'_')}_top50`);
 }
 window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
@@ -8559,15 +8405,23 @@ window.renderTaxonTop50 = renderTaxonTop50; window.exportTaxonTop50 = exportTaxo
 
 /* ── STOCK STATUS — client-side (all fields already in master) ── */
 function loadStockStatus(){
+  const sel = document.getElementById('ssTaxon');
+  if (sel && sel.options.length <= 1){
+    const opts = (allTaxons || []).slice().sort((a,b)=>String(a).localeCompare(String(b)));
+    sel.innerHTML = '<option value="All">All Categories</option>' +
+      opts.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  }
   renderStockStatus();
 }
 function _ssFiltered(){
   const q = (document.getElementById('ssSearch')?.value || '').trim().toLowerCase();
   const statusF = document.getElementById('ssStatus')?.value || '';
+  const taxonF = document.getElementById('ssTaxon')?.value || 'All';
   const stockF = document.getElementById('ssStock')?.value || '';
   return (master || []).filter(it => {
     if (q && !String(it.sku||'').toLowerCase().includes(q) && !String(it.taxon||'').toLowerCase().includes(q)) return false;
     if (statusF && it.status !== statusF) return false;
+    if (taxonF !== 'All' && (it.taxon||'') !== taxonF) return false;
     if (stockF){
       const flags = (it.alert_flags||[]).map(f=>f.code);
       if (stockF === 'oos' && !flags.includes('oos')) return false;
@@ -8580,19 +8434,6 @@ function _ssFiltered(){
 function renderStockStatus(){
   const rows = _ssFiltered();
   const emp = (LOGIN_ROLE === 'employee');
-  // summary counts
-  const fast = rows.filter(i=>i.status==='Good Running').length;
-  const slow = rows.filter(i=>i.status==='Slow Movers').length;
-  const dead = rows.filter(i=>i.status==='No Record').length;
-  const oosCount = rows.filter(i=>(i.alert_flags||[]).some(f=>f.code==='oos')).length;
-  const sumHost = document.getElementById('ssSummary');
-  if (sumHost){
-    sumHost.innerHTML =
-      `<div class="yoy-card"><div class="yc-label">Fast Moving</div><div class="yc-val" style="color:#1a7a3e">${fast.toLocaleString('en-IN')}</div></div>
-       <div class="yoy-card"><div class="yc-label">Slow Moving</div><div class="yc-val" style="color:#b45309">${slow.toLocaleString('en-IN')}</div></div>
-       <div class="yoy-card"><div class="yc-label">Dead Stock</div><div class="yc-val" style="color:#5b4fae">${dead.toLocaleString('en-IN')}</div></div>
-       <div class="yoy-card"><div class="yc-label">Currently OOS</div><div class="yc-val" style="color:#c0392b">${oosCount.toLocaleString('en-IN')}</div></div>`;
-  }
   const host = document.getElementById('ssContent');
   if (!host) return;
   const sorted = rows.slice().sort((a,b) => (b.reorder_qty||0) - (a.reorder_qty||0));
@@ -8708,7 +8549,6 @@ function renderPayments(){
   const d = _payData; if (!d) return;
   const rows = _payFiltered();
   _applyPaySort(rows);
-  _payLastRows = rows;   // filtered rows — used by exportPayToday() and exportPayMe()
   // summary cards
   const sumDue = rows.reduce((s,r)=>s+(r.due||0),0);
   const sumOver = rows.reduce((s,r)=>s+(r.overdue||0),0);
@@ -8778,7 +8618,6 @@ function renderPayments(){
     const agTotals = {}; AG_LABELS.forEach(k => agTotals[k] = 0);
     rows.forEach(r => { const a = r.aging || {}; AG_LABELS.forEach(k => agTotals[k] += (a[k]||0)); });
     const grand = AG_LABELS.reduce((s,k)=>s+agTotals[k],0);
-    _payLastAging = {labels: AG_LABELS.slice(), totals: Object.assign({}, agTotals), grand};
     const body = AG_LABELS.map(k => `<tr>
         <td style="padding:5px 8px">${escHtml(k)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(agTotals[k])}</td>
@@ -8812,7 +8651,6 @@ function renderPayments(){
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
     const payMap = {}; frozen.forEach(w => payMap[w.label] = w.payment || 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
-    const weekRowsData = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
@@ -8820,7 +8658,6 @@ function renderPayments(){
       const tgt = tgtMap[label] || 0;      // FROZEN target (month start)
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       const balAfter = Math.round(filtBalance - cumPay);
-      weekRowsData.push({label, start: w.start, end: w.end, ov, pay, balAfter, tgt});
       return `<tr>
         <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
@@ -8844,7 +8681,6 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Overdue Becoming Due, Payment & Balance ab filter (tag/customer) ke according. <b>Overdue Target</b> = month shuru me freeze hua (poore month fixed) — is month ka target reference. Week 1 = 1st–7th, and so on.</p>`;
-    _payLastWeek = {rows: weekRowsData, ovTotal, payTotal, tgtTotal};
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
@@ -8887,7 +8723,6 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(tCol)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tBal)}</td>
       </tr></tfoot></table>`;
-    _payLastTag = {rows: trows, tCust, tDue, tOv, tCol, tBal};
   }
 }
 // Single delegated click handler for customer rows (today + month-end tables)
@@ -8996,51 +8831,7 @@ function exportPayments(){
   const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, r.due||0, r.overdue||0, r.balance||0, r.due_me||0, r.overdue_me||0]);
   _dlCsv(headers, data, 'payments_outstanding');
 }
-/* ── Per-table exports — Payments tab (har table apne currently-applied filter
-   (Tag / Search / Show) ke hisaab se hi export hoti hai, kyunki ye saara data
-   renderPayments() ke andar filtered rows se hi banaya + store kiya jaata hai) ── */
-let _payLastRows = [], _payLastAging = null, _payLastWeek = null, _payLastTag = null;
-function exportPayToday(){
-  const rows = _payLastRows;
-  if (!rows || !rows.length){ alert('No rows to export'); return; }
-  const headers = ['Customer Name','Tag','Payment Term (days)','Due','Overdue','Balance'];
-  const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, Math.round(r.due||0), Math.round(r.overdue||0), Math.round(r.balance||0)]);
-  _dlCsv(headers, data, 'payments_outstanding_today');
-}
-function exportPayMe(){
-  const rows = _payLastRows;
-  if (!rows || !rows.length){ alert('No rows to export'); return; }
-  const headers = ['Customer Name','Tag','Due (till month-end)','Overdue (till month-end)','Balance'];
-  const data = rows.map(r => [r.customer, r.tag||'', Math.round(r.due_me||0), Math.round(r.overdue_me||0), Math.round(r.balance||0)]);
-  _dlCsv(headers, data, 'payments_outstanding_month_end');
-}
-function exportPayAging(){
-  const a = _payLastAging;
-  if (!a || !a.labels || !a.labels.length){ alert('No data to export'); return; }
-  const headers = ['Aging Bucket','Sum of Balance'];
-  const data = a.labels.map(k => [k, Math.round(a.totals[k]||0)]);
-  data.push(['Total', Math.round(a.grand||0)]);
-  _dlCsv(headers, data, 'payments_aging_bucket');
-}
-function exportPayWeek(){
-  const w = _payLastWeek;
-  if (!w || !w.rows || !w.rows.length){ alert('No data to export'); return; }
-  const headers = ['Week','Start Date','End Date','Overdue Becoming Due','Payment Received','Balance Remaining','Overdue Target (frozen)'];
-  const data = w.rows.map(r => [r.label, r.start, r.end, Math.round(r.ov||0), Math.round(r.pay||0), Math.round(r.balAfter||0), Math.round(r.tgt||0)]);
-  data.push(['Total','','', Math.round(w.ovTotal||0), Math.round(w.payTotal||0), '', Math.round(w.tgtTotal||0)]);
-  _dlCsv(headers, data, 'payments_week_wise_tracker');
-}
-function exportPayTag(){
-  const t = _payLastTag;
-  if (!t || !t.rows || !t.rows.length){ alert('No data to export'); return; }
-  const headers = ['Tag / Type','Customers','Due','Overdue','Collected (this month)','Balance'];
-  const data = t.rows.map(s => [s.tag, s.customers, Math.round(s.due||0), Math.round(s.overdue||0), Math.round(s.collected_month||0), Math.round(s.balance||0)]);
-  data.push(['Total', t.tCust, Math.round(t.tDue||0), Math.round(t.tOv||0), Math.round(t.tCol||0), Math.round(t.tBal||0)]);
-  _dlCsv(headers, data, 'payments_tag_wise_summary');
-}
 window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
-window.exportPayToday = exportPayToday; window.exportPayMe = exportPayMe; window.exportPayAging = exportPayAging;
-window.exportPayWeek = exportPayWeek; window.exportPayTag = exportPayTag;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -9289,7 +9080,7 @@ function renderInsights(){
       : '<div class="insight-empty">Nothing needs replenishing right now</div>';
   }
 
-  // Top Returns — COSSA F column (Return Qty); amount = return × selling price.
+  // Top Returns — COSA F column (Return Qty); amount = return × selling price.
   if (returnsList) {
     const retRows = insightRows.filter(i => (parseFloat(i._iRet) || 0) > 0)
       .sort((a,b) => (parseFloat(b._iRet) || 0) - (parseFloat(a._iRet) || 0)).slice(0, 10);
@@ -9344,7 +9135,7 @@ function renderInsights(){
     const isEmp = (LOGIN_ROLE === 'employee');
     mini.innerHTML = `
       <div class="insight-row"><div><div class="name">Top customer</div><div class="sub">${escHtml(topCust)}</div></div><div class="insight-val">${topQty}</div></div>
-      <div class="insight-row"><div><div class="name">Total Returns (Qty)</div><div class="sub">COSSA Return Qty (col F)</div></div><div class="insight-val">${Math.round(totRetQty).toLocaleString('en-IN')}</div></div>
+      <div class="insight-row"><div><div class="name">Total Returns (Qty)</div><div class="sub">COSA Return Qty (col F)</div></div><div class="insight-val">${Math.round(totRetQty).toLocaleString('en-IN')}</div></div>
       ${isEmp ? '' : `<div class="insight-row"><div><div class="name">Return Amount</div><div class="sub">Return qty × selling price</div></div><div class="insight-val">${fmt(totRetAmt)}</div></div>`}
       <div class="insight-row"><div><div class="name">Filtered items</div><div class="sub">After type / taxon / date filters</div></div><div class="insight-val">${insightRows.length.toLocaleString('en-IN')}</div></div>
       <div class="insight-row"><div><div class="name">Combo SKUs</div><div class="sub">Rows carrying stone details / remarks</div></div><div class="insight-val">${insightRows.filter(i => (i.combo_skus || '').trim()).length.toLocaleString('en-IN')}</div></div>`;
@@ -9963,7 +9754,7 @@ def api_warmup_status():
 # ════════════════════════════════════════════════════════════════
 #  🎯 TARGET vs ACTUAL  (admin only)
 #  Target sheet: Date, Stake Holder, Channel Type, Qty Target, SP Target
-#  Actual: COSSA se (month + stakeholder[customer] + channel[type] wise)
+#  Actual: COSA se (month + stakeholder[customer] + channel[type] wise)
 # ════════════════════════════════════════════════════════════════
 _TARGET_CACHE = {"rows": None, "ts": 0}
 
@@ -10187,7 +9978,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     """Target vs Actual + Achievement Forecast + Stakeholder Leaderboard.
-    Default: present month. Stake Holder ↔ COSSA Customer, Channel ↔ COSSA Type."""
+    Default: present month. Stake Holder ↔ COSA Customer, Channel ↔ COSA Type."""
     targets = _fetch_target_rows()
     data = get_data()
     comp = data[0]
@@ -10216,7 +10007,7 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     pace = (days_in_month / day_elapsed) if day_elapsed > 0 else 0.0
 
     # Actual ko (month, channel/type) par aggregate karo.
-    # Target ka "Channel Type" (SOR, Website, Purchase…) = COSSA ka "Type".
+    # Target ka "Channel Type" (SOR, Website, Purchase…) = COSA ka "Type".
     # Stake Holder sirf us channel ka naam/owner hai (e.g. Sarthak → SOR).
     act = {}
     for it in comp:
@@ -10457,7 +10248,7 @@ def _build_sku_costs():
                         row["mrp"] = patch_mrp[ku]
                     if not row["image_url"] and patch_img.get(ku):
                         row["image_url"] = patch_img[ku]
-            # add sheet-only SKUs (not in COSSA)
+            # add sheet-only SKUs (not in COSA)
             for _, r in df.iterrows():
                 sku = clean(r.get(C_SKU, "")) if C_SKU else ""
                 if not sku:
