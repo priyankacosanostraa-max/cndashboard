@@ -1465,6 +1465,7 @@ def _refresh_data():
             ci = _item_map.get(cand)   # combo SKU ka full item (saari details ke liye)
             it["combo_details"].append({
                 "sku": cand,
+                "sku_name": (ci.get("sku_name") if ci else ""),
                 "image_url": (ci.get("image_url") if ci else ""),
                 "inv_stock": info["stock"] if info else 0,
                 "inv_wip":   info["wip"] if info else 0,
@@ -4974,36 +4975,19 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div style="display:grid;grid-template-columns:420px 1fr;gap:18px;margin-bottom:18px;align-items:start">
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Aging Bucket</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayAging()">Export CSV</button>
-      </div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Aging Bucket</div>
       <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:4px">Click a bucket to see its customers</div>
       <div id="payAgingTable" style="font-size:.78rem"></div>
       <div id="payAgingDrill" style="margin-top:10px;display:none"></div>
     </div>
     <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
-        <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">Export CSV</button>
-      </div>
+      <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Week-wise Overdue Tracker (Current Month)</div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
     </div>
   </div>
   <div style="margin-bottom:18px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div class="insights-title" style="font-size:.85rem">Tag-wise Summary</div>
-      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayTagSummary()">Export CSV</button>
-    </div>
+    <div class="insights-title" style="font-size:.85rem;margin-bottom:6px">Tag-wise Summary</div>
     <div id="payTagSummary" style="font-size:.8rem"></div>
-  </div>
-  <div style="margin-bottom:18px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <div class="insights-title" style="font-size:.85rem">Payment Received</div>
-      <button class="go-btn" style="width:auto;padding:4px 10px;font-size:.62rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPaymentsReceived()">Export CSV</button>
-    </div>
-    <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:4px">Respects Tag / Search Customer filters above</div>
-    <div id="payReceivedTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -5338,6 +5322,19 @@ function skuLabel(sku, name){
   // cosanostraa.com par mila to "Product Name (SKU)", warna sirf SKU code.
   return (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
 }
+
+// Export ke liye "SKU Name" column — sirf tabhi jab REAL naam mila ho
+// (cosanostraa.com se). Agar naam nahi mila to backend fallback me SKU code
+// hi wapas aata hai — usse blank dikhana zaroori hai, warna SKU column jaisa
+// hi repeat hota (jo user ne mana kiya hai).
+function exportSkuName(sku, name){
+  const s = String(sku || '').trim().toUpperCase();
+  const n = String(name || '').trim();
+  if (!n) return '';
+  if (n.toUpperCase() === s) return '';   // naam == SKU code -> koi real naam nahi mila
+  return n;
+}
+window.exportSkuName = exportSkuName;
 
 function skuInsightBadge(item){
   // "Best on <Channel>" + "Marketplace: X" + alert flag chips — SKU ke neeche.
@@ -5959,10 +5956,11 @@ function exportSD(fmtType){
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
-  const headers = ['Dispatch Date','SKU','Product Dimensions','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Net Revenue']), 'Image Link'];
+  const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Net Revenue']), 'Image Link'];
   const data = ents.map(e => ({
     'Dispatch Date': e.date === 'N/A' ? '' : e.date,
     SKU: item.sku,
+    'SKU Name': exportSkuName(item.sku, item.sku_name),
     'Product Dimensions': item.dimensions || '',
     Customer: e.cust,
     Type: e.type,
@@ -6990,13 +6988,14 @@ function exportRO(fmtType){
       const narrowed = roTxns.filter(t => selectedSkuSet.has(t.sku));
       if (narrowed.length) txns = narrowed;
     }
-    const dimMap = {}, mrpMap = {}, packMap = {};
-    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; } });
+    const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {};
+    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = txns.map(t => ({
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
+      'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[t.sku]),
       'Product Dimensions': (t.dimensions || dimMap[t.sku] || ''),
       'Pack Details': packMap[t.sku] || '',
       Customer: t.cust,
@@ -7044,7 +7043,7 @@ function exportRO(fmtType){
     if (singleType && (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer'))) return o.inv_wip_designer || 0;
     return o.inv_wip || 0;
   };
-  const headers = ['Row Type','SKU','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','SKU Name','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row: filter ke according 7D/15D/30D/Sold + channel WIP
@@ -7060,6 +7059,7 @@ function exportRO(fmtType){
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
+      'SKU Name': exportSkuName(item.sku, item.sku_name),
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
       'Pack Details': item.pack_details || '',
@@ -7104,6 +7104,7 @@ function exportRO(fmtType){
       data.push({
         'Row Type': '— Set Item',
         SKU: c.sku,
+        'SKU Name': exportSkuName(c.sku, c.sku_name),
         'Set Item Of': item.sku,
         'Product Dimensions': '',
         'Pack Details': '',
@@ -7846,8 +7847,8 @@ function renderDiscount(){
 function exportDiscount(){
   const d = _discData;
   if (!d || !d.rows || !d.rows.length){ alert('No discount data to export.'); return; }
-  const headers = ['SKU','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
-  const rows = d.rows.map(r => [r.sku, r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
+  const headers = ['SKU','SKU Name','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
+  const rows = d.rows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
     Math.round(r.last_sp), r.disc_pct, Math.round(r.per_unit_gap), r.qty, Math.round(r.leakage), Math.round(r.net_revenue)]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -8004,8 +8005,8 @@ function resetProduction(){
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
-  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
+  const headers = ['Order Date','Order No.','SKU','SKU Name','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
+  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
     (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -8168,7 +8169,9 @@ function exportProfit(){
   const margin = sp>0 ? (profit/sp*100) : 0;
   const qty = Math.max(0, g('pmQty')) || 1;
   const sku = (document.getElementById('pmSkuSearch')?.value || '').trim();
-  const rows = [['SKU', sku || '(manual)']];
+  const pmMatch = (PM_CATALOG || []).find(c => c.sku === sku);
+  const pmName = pmMatch ? exportSkuName(sku, pmMatch.sku_name) : '';
+  const rows = [['SKU', sku || '(manual)'], ['SKU Name', pmName]];
   ded.forEach(d => rows.push(d));
   rows.push(['Total Deductions (per unit)', Math.round(totalDed)]);
   rows.push(['Profit Amount (per unit)', Math.round(profit)]);
@@ -8416,11 +8419,11 @@ function exportTaxonTop50(){
   }).slice(0, 50);
   if (!sorted.length){ alert('No rows to export'); return; }
   const headers = emp
-    ? ['SKU','Final Qty','Stock','WIP','Status','Best Channel']
-    : ['SKU','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
+    ? ['SKU','SKU Name','Final Qty','Stock','WIP','Status','Best Channel']
+    : ['SKU','SKU Name','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
   const data = sorted.map(it => emp
-    ? [it.sku, Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
-    : [it.sku, Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
+    ? [it.sku, exportSkuName(it.sku, it.sku_name), Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
+    : [it.sku, exportSkuName(it.sku, it.sku_name), Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
   _dlCsv(headers, data, `taxon_${String(_txDrillTaxon||'top50').replace(/[^A-Za-z0-9_-]/g,'_')}_top50`);
 }
 window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
@@ -8490,8 +8493,8 @@ function renderStockStatus(){
 function exportStockStatus(){
   const rows = _ssFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
-  const headers = ['SKU','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
-  const data = rows.map(it => [it.sku, it.taxon||'', it.status||'',
+  const headers = ['SKU','SKU Name','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
+  const data = rows.map(it => [it.sku, exportSkuName(it.sku, it.sku_name), it.taxon||'', it.status||'',
     Math.round(it.inv_stock||0), Math.round(it.inv_wip||0),
     Math.round((it.inv_stock||0)+(it.inv_wip||0)), Math.round(it.reorder_qty||0),
     it.days_since_last_sale >= 0 ? it.days_since_last_sale : '',
@@ -8504,7 +8507,6 @@ window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; wind
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
 let _payAgingRows = [];
-let _payAgingExport = [], _payWeekExport = [], _payTagExport = [];
 let _paySortKey = 'balance', _paySortDir = -1;
 function sortPay(key){
   if (_paySortKey === key) _paySortDir *= -1; else { _paySortDir = -1; _paySortKey = key; }
@@ -8567,16 +8569,6 @@ function _payFiltered(){
     if (q && !(r.customer||'').toLowerCase().includes(q)) return false;
     if (view === 'overdue' && (r.overdue||0) <= 0) return false;
     if (view === 'due' && (r.due||0) <= 0) return false;
-    return true;
-  });
-}
-function _payReceivedFiltered(){
-  const d = _payData; if (!d) return [];
-  const tag = (document.getElementById('payTag')?.value || '').toLowerCase();
-  const q = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
-  return (d.payments_received || []).filter(r => {
-    if (tag && (r.tag||'').toLowerCase() !== tag) return false;
-    if (q && !(r.customer||'').toLowerCase().includes(q)) return false;
     return true;
   });
 }
@@ -8665,8 +8657,6 @@ function renderPayments(){
         <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(grand)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
-    _payAgingExport = AG_LABELS.map(k => ({bucket:k, amount: agTotals[k]}));
-    _payAgingExport.push({bucket:'Total', amount: grand});
   }
   // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
   const wkHost = document.getElementById('payWeekTable');
@@ -8700,7 +8690,6 @@ function renderPayments(){
     const frozen = d.week_overdue || [];
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
-    const _wkExport = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
@@ -8708,18 +8697,14 @@ function renderPayments(){
       const tgt = tgtMap[label] || 0;          // FROZEN target (month start)
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       const balAfter = Math.round(filtBalance - cumPay);
-      const range = escHtml(w.start.slice(8)+'-'+w.start.slice(5,7)) + ' to ' + escHtml(w.end.slice(8)+'-'+w.end.slice(5,7));
-      _wkExport.push({label, range, overdue:ov, payment:pay, balAfter, target:tgt});
       return `<tr>
-        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${range}</span></td>
+        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(pay)}</td>
         <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
       </tr>`;
     }).join('');
-    _wkExport.push({label:'Total', range:'', overdue:ovTotal, payment:payTotal, balAfter:'', target:tgtTotal});
-    _payWeekExport = _wkExport;
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
         <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
@@ -8776,30 +8761,6 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(tOv)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tCol)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(tBal)}</td>
-      </tr></tfoot></table>`;
-    _payTagExport = trows.concat([{tag:'Total', customers:tCust, due:tDue, overdue:tOv, collected_month:tCol, balance:tBal}]);
-  }
-
-  // ---- PAYMENT RECEIVED (individual credit entries; Tag/Search-filter aware) ----
-  const recvHost = document.getElementById('payReceivedTable');
-  if (recvHost){
-    const recvRows = _payReceivedFiltered();
-    const sumCredit = recvRows.reduce((s,r)=>s+(r.credit||0),0);
-    const body = recvRows.map(r => `<tr>
-        <td style="padding:5px 8px;font-weight:700;color:#1a5fb4">${escHtml(r.customer)}</td>
-        <td style="padding:5px 8px;text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
-        <td style="padding:5px 8px;text-align:center">${escHtml(r.date||'')}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#1f7a3a">${fmt(r.credit)}</td>
-      </tr>`).join('');
-    recvHost.innerHTML = `<table class="ro" style="width:100%;min-width:480px;font-size:.8rem"><thead><tr>
-        <th style="padding:5px 8px">Customer</th>
-        <th style="text-align:center;padding:5px 8px">Tag</th>
-        <th style="text-align:center;padding:5px 8px">Date</th>
-        <th style="text-align:right;padding:5px 8px">Credit Amount</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No payments found</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
-        <td colspan="3" style="padding:5px 8px">Total (${recvRows.length} entries)</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(sumCredit)}</td>
       </tr></tfoot></table>`;
   }
 }
@@ -8943,37 +8904,7 @@ function exportPayments(){
   const data = rows.map(r => [r.customer, r.tag||'', r.term_days||0, r.due||0, r.overdue||0, r.balance||0, r.due_me||0, r.overdue_me||0]);
   _dlCsv(headers, data, 'payments_outstanding');
 }
-function exportPayAging(){
-  const rows = _payAgingExport || [];
-  if (!rows.length){ alert('No data to export'); return; }
-  const headers = ['Aging Bucket','Sum of Balance'];
-  const data = rows.map(r => [r.bucket, r.amount||0]);
-  _dlCsv(headers, data, 'payments_aging_bucket');
-}
-function exportPayWeek(){
-  const rows = _payWeekExport || [];
-  if (!rows.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue Becoming Due','Payment Received','Balance Remaining','Overdue Target'];
-  const data = rows.map(r => [r.label, r.range||'', r.overdue||0, r.payment||0, r.balAfter===''?'':(r.balAfter||0), r.target||0]);
-  _dlCsv(headers, data, 'payments_weekwise_tracker');
-}
-function exportPayTagSummary(){
-  const rows = _payTagExport || [];
-  if (!rows.length){ alert('No data to export'); return; }
-  const headers = ['Tag / Type','Customers','Due','Overdue','Collected','Balance'];
-  const data = rows.map(r => [r.tag, r.customers||0, r.due||0, r.overdue||0, r.collected_month||0, r.balance||0]);
-  _dlCsv(headers, data, 'payments_tag_summary');
-}
-function exportPaymentsReceived(){
-  const rows = _payReceivedFiltered();
-  if (!rows.length){ alert('No rows to export'); return; }
-  const headers = ['Customer Name','Tag','Date','Credit Amount'];
-  const data = rows.map(r => [r.customer, r.tag||'', r.date||'', r.credit||0]);
-  _dlCsv(headers, data, 'payment_received');
-}
 window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
-window.exportPayAging = exportPayAging; window.exportPayWeek = exportPayWeek;
-window.exportPayTagSummary = exportPayTagSummary; window.exportPaymentsReceived = exportPaymentsReceived;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -9298,9 +9229,10 @@ function resetInsights(){
 
 function exportInsights(fmtType){
   if (!insightRows || !insightRows.length) { alert('No insights rows to export'); return; }
-  const headers = ['SKU','MRP','Selling Price','Net Revenue','Final Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
+  const headers = ['SKU','SKU Name','MRP','Selling Price','Net Revenue','Final Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
   const data = insightRows.map(i => ({
     SKU: i.sku,
+    'SKU Name': exportSkuName(i.sku, i.sku_name),
     'MRP': parseFloat(i.mrp) || 0,
     'Selling Price': parseFloat(i.last_selling_price) || 0,
     'Net Revenue': Math.round(i._iRev || 0),
@@ -10269,7 +10201,7 @@ def _build_discount_leakage(min_disc=0.0, sort_key="leakage"):
         tot_leak += leakage
         tot_units += qty
         rows.append({
-            "sku": it.get("sku"), "image_url": it.get("image_url", ""),
+            "sku": it.get("sku"), "sku_name": it.get("sku_name", ""), "image_url": it.get("image_url", ""),
             "taxon": it.get("taxon", ""), "plating": it.get("plating", ""),
             "mrp": mrp, "avg_sp": round(float(it.get("avg_selling_price") or 0), 2),
             "last_sp": round(sp, 2), "disc_pct": disc_pct,
@@ -10698,7 +10630,6 @@ def _build_payments():
     me_due = me_over = 0.0
     tags_set = set()
     all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
-    payments_received = []   # individual credit/payment entries — Customer, Tag, Date, Credit Amount
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -10717,15 +10648,6 @@ def _build_payments():
             # is month me aaya payment (credit) — "collected this month"
             if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
                 cust_collected_month += e["credit"]
-            # ---- PAYMENT RECEIVED table: har credit/payment entry (customer/tag/date/amount) ----
-            if e["credit"] > 0:
-                payments_received.append({
-                    "customer": nm.title(),
-                    "tag": tag,
-                    "date": e["date"].strftime("%d-%b-%y") if e["date"] else "",
-                    "date_iso": e["date"].strftime("%Y-%m-%d") if e["date"] else "",
-                    "credit": round(e["credit"], 2),
-                })
         # apply credit pool FIFO
         cp = credit_pool
         for inv in open_inv:
@@ -10896,12 +10818,8 @@ def _build_payments():
         for k in ("due", "overdue", "collected_month", "balance"):
             s[k] = round(s[k], 0)
 
-    # newest payment first
-    payments_received.sort(key=lambda p: p["date_iso"], reverse=True)
-
     data = {
         "rows": rows,
-        "payments_received": payments_received,
         "today": today.strftime("%d-%b-%y"),
         "month_end": month_end.strftime("%d-%b-%y"),
         "month_label": today.strftime("%b-%y"),
