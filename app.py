@@ -1354,6 +1354,14 @@ def _refresh_data():
         elif _sps:
             last_sp = _sps[-1]
 
+        # Discount % — EXACT same method as the Discount Leakage tab, taaki SKU
+        # ke saath jahan bhi discount % dikhaya jaye, wahi number match kare.
+        _disc_sp = last_sp or avg_sp
+        if mrp > 0 and _disc_sp > 0 and _disc_sp < mrp:
+            discount_pct = round((mrp - _disc_sp) / mrp * 100, 1)
+        else:
+            discount_pct = 0.0
+
         A = _agg_entries(ent)   # ek hi pass me saare numbers
         _cn_name_for_item = cn_display_name(raw) or raw
         _cn_tags_for_item = cn_classify_tags(_cn_name_for_item)
@@ -1376,6 +1384,8 @@ def _refresh_data():
             "cost":        cost,
             "avg_selling_price":  avg_sp,
             "last_selling_price": last_sp,
+            "aov_per_piece":      avg_sp,       # per-piece average order value (avg selling price/unit)
+            "discount_pct":       discount_pct, # MRP se discount % (Discount Leakage tab jaisa hi method)
             "taxon":       _si(taxon),
             "plating":     _si(plat),
             "dimensions":  _si(dims),
@@ -5360,13 +5370,27 @@ function exportSkuName(sku, name){
 window.exportSkuName = exportSkuName;
 
 function skuInsightBadge(item){
-  // "Best on <Channel>" + "Marketplace: X" + alert flag chips — SKU ke neeche.
+  // "Best on <Channel>" + "Marketplace: X" + AOV/Discount + alert flag chips —
+  // SKU ke neeche, har jagah jahan bhi SKU dikhta hai (RO, Overall Details,
+  // Stock Status, Taxon Top 50, SKU Details) — kyunki sab yahi function use
+  // karte hain.
   const parts = [];
   if (item.best_channel){
     parts.push(`<span class="insight-chip" style="background:#eef6ff;color:#1a5fb4;border:1px solid #cfe4ff;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏆 Best on ${escHtml(item.best_channel)}</span>`);
   }
   if (item.best_marketplace && item.best_channel === 'Ecom'){
     parts.push(`<span class="insight-chip" style="background:#eef9f0;color:#1f7a3a;border:1px solid #c8e9d0;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🛒 ${escHtml(item.best_marketplace)}</span>`);
+  }
+  // AOV per piece (average selling price per unit sold) — LOGIN_ROLE employee
+  // ke liye backend se hi 0 aata hai (revenue-sensitive), isliye >0 check kaafi hai.
+  const aov = parseFloat(item.aov_per_piece) || 0;
+  if (aov > 0){
+    parts.push(`<span class="insight-chip" title="Average selling price per piece sold" style="background:#fdf6e3;color:#8a6d3b;border:1px solid #f0e0b8;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">💰 AOV ${fmt(aov)}/pc</span>`);
+  }
+  const dpct = parseFloat(item.discount_pct) || 0;
+  if (dpct > 0){
+    const dCls = dpct >= 40 ? {bg:'#fdecea',fg:'#c0392b',bd:'#f6c6c0'} : dpct >= 20 ? {bg:'#fff4e0',fg:'#b45309',bd:'#f3d9a8'} : {bg:'#fdf6e3',fg:'#8a6d3b',bd:'#f0e0b8'};
+    parts.push(`<span class="insight-chip" title="Discount vs MRP (₹${Math.round(item.mrp||0).toLocaleString('en-IN')} → ₹${Math.round(aov||item.last_selling_price||0).toLocaleString('en-IN')})" style="background:${dCls.bg};color:${dCls.fg};border:1px solid ${dCls.bd};font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏷️ ${dpct}% off MRP</span>`);
   }
   const colorMap = {
     low_stock_high_sale: {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
@@ -5383,7 +5407,7 @@ function skuInsightBadge(item){
     const c = colorMap[f.code] || {bg:'#f3f4f6', fg:'#374151', bd:'#e5e7eb'};
     parts.push(`<span class="insight-chip" title="${escHtml(f.detail||'')}" style="background:${c.bg};color:${c.fg};border:1px solid ${c.bd};font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">${escHtml(f.label)}</span>`);
   });
-  return parts.length ? `<span style="display:flex;flex-wrap:wrap;gap:4px;max-width:220px">${parts.join('')}</span>` : '';
+  return parts.length ? `<span style="display:flex;flex-wrap:wrap;gap:4px;max-width:320px">${parts.join('')}</span>` : '';
 }
 
 function roThumb(url){
@@ -5686,7 +5710,11 @@ function renderSkuDetails(sku){
       ['Best Marketplace', item.best_marketplace || '—'],
       ['Product Status', item.status || '—'],
     ];
-    if (!emp0) rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
+    if (!emp0) {
+      rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
+      rows.splice(1, 0, ['AOV (per piece)', fmt(item.aov_per_piece||0)]);
+      rows.splice(2, 0, ['Discount % (vs MRP)', (item.discount_pct||0) + '%']);
+    }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
   const setStockT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
@@ -5801,21 +5829,47 @@ function renderSdTrend(){
   const ents = _sdFilteredEntries(item).filter(e => e.date && e.date !== 'N/A');
   if (!ents.length){ host.innerHTML = '<div class="insight-empty">No dated sales in this range</div>'; return; }
 
-  // group by day, sum qty + rev (rev needed for the click popup)
-  const byDay = {};
+  // ── Bucket the data so the chart ALWAYS fits in one clear view (no swipe/scroll):
+  //    short range -> daily buckets, medium range -> weekly, long range -> monthly.
+  const allDates = ents.map(e => e.date).sort();
+  const first = allDates[0], last = allDates[allDates.length-1];
+  const spanDays = Math.max(1, Math.round((new Date(last) - new Date(first)) / 86400000));
+  let granularity = 'day';
+  if (spanDays > 400) granularity = 'month';
+  else if (spanDays > 60) granularity = 'week';
+
+  function isoWeekStart(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = (d.getDay() + 6) % 7;   // Mon=0 ... Sun=6
+    d.setDate(d.getDate() - day);
+    return d.toISOString().slice(0,10);
+  }
+  function bucketKey(dateStr){
+    if (granularity === 'month') return dateStr.slice(0,7);          // YYYY-MM
+    if (granularity === 'week')  return isoWeekStart(dateStr);       // Monday of that week
+    return dateStr;                                                  // exact day
+  }
+  function bucketLabel(key){
+    if (granularity === 'month') return new Date(key+'-01T00:00:00').toLocaleDateString('en-GB', {month:'short', year:'2-digit'});
+    if (granularity === 'week')  return new Date(key+'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+    return new Date(key+'T00:00:00').toLocaleDateString('en-GB', {day:'2-digit', month:'short'});
+  }
+
+  const buckets = {};
   ents.forEach(e => {
-    const d = byDay[e.date] || (byDay[e.date] = {qty:0, rev:0});
-    d.qty += parseFloat(e.qty) || 0;
-    d.rev += parseFloat(e.rev) || 0;
+    const k = bucketKey(e.date);
+    const b = buckets[k] || (buckets[k] = {qty:0, rev:0});
+    b.qty += parseFloat(e.qty) || 0;
+    b.rev += parseFloat(e.rev) || 0;
   });
-  const days = Object.keys(byDay).sort();
-  const vals = days.map(d => byDay[d].qty);
+  const keys = Object.keys(buckets).sort();
+  const vals = keys.map(k => buckets[k].qty);
   const maxV = Math.max(1, ...vals);
-  // Chart ko data-density ke hisaab se wide banao — bahut saare din/months ek
-  // saath crowd karke overlap na ho, har point ko saans lene ki jagah mile.
-  const W = Math.max(900, days.length * 16), H = 260, PAD_L = 40, PAD_R = 24, PAD_T = 30, PAD_B = 40;
+
+  // Fixed canvas — ALWAYS one clean view, width:100% (no horizontal scroll needed).
+  const W = 900, H = 260, PAD_L = 40, PAD_R = 24, PAD_T = 30, PAD_B = 40;
   const plotW = W - PAD_L - PAD_R, plotH = H - PAD_T - PAD_B;
-  const stepX = days.length > 1 ? plotW / (days.length - 1) : 0;
+  const stepX = keys.length > 1 ? plotW / (keys.length - 1) : 0;
   const pts = vals.map((v,i) => {
     const x = PAD_L + i*stepX;
     const y = PAD_T + plotH - (v / maxV) * plotH;
@@ -5824,40 +5878,30 @@ function renderSdTrend(){
   const pathD = pts.map((p,i) => (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   const areaD = pathD + ` L${pts[pts.length-1][0].toFixed(1)},${PAD_T+plotH} L${pts[0][0].toFixed(1)},${PAD_T+plotH} Z`;
 
-  // Month tick labels — one label per distinct calendar month present, placed at
-  // the x-position of that month's first data point.
-  const seenMonths = {};
-  const monthTicks = [];
-  days.forEach((d,i) => {
-    const mk = d.slice(0,7); // YYYY-MM
-    if (!seenMonths[mk]) {
-      seenMonths[mk] = true;
-      const mLabel = new Date(d+'T00:00:00').toLocaleDateString('en-GB', {month:'short', year:'2-digit'});
-      monthTicks.push({x: pts[i][0], label: mLabel});
-    }
-  });
-  const monthLabelsSvg = monthTicks.map(m =>
-    `<text x="${m.x.toFixed(1)}" y="${H-12}" font-size="13" fill="#8c7a42" text-anchor="middle">${m.label}</text>
-     <line x1="${m.x.toFixed(1)}" y1="${PAD_T}" x2="${m.x.toFixed(1)}" y2="${PAD_T+plotH}" stroke="#e8dfc8" stroke-width="1"></line>`
-  ).join('');
+  // X-axis labels — thin out if too many points would overlap as text.
+  const maxLabels = 10;
+  const labelEvery = Math.max(1, Math.ceil(keys.length / maxLabels));
+  const axisLabelsSvg = keys.map((k,i) => {
+    if (i % labelEvery !== 0 && i !== keys.length-1) return '';
+    return `<text x="${pts[i][0].toFixed(1)}" y="${H-12}" font-size="11" fill="#8c7a42" text-anchor="middle">${bucketLabel(k)}</text>`;
+  }).join('');
 
-  // Click points -> show popup with date, qty, revenue.
+  // Click points -> show popup with the bucket's date range/label, qty, revenue.
   const dots = pts.map((p,i) => {
-    const d = days[i], v = byDay[d];
-    const payload = JSON.stringify({d, qty:v.qty, rev:v.rev}).replace(/"/g,'&quot;');
-    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="6" fill="#b8933f" style="cursor:pointer" onclick='sdTrendPointClick(${JSON.stringify({d,qty:v.qty,rev:v.rev})})'><title>${d}: ${v.qty} units</title></circle>`;
+    const k = keys[i], v = buckets[k];
+    const lbl = granularity === 'day' ? k : (granularity === 'week' ? ('Week of ' + bucketLabel(k)) : bucketLabel(k));
+    return `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="6" fill="#b8933f" style="cursor:pointer" onclick='sdTrendPointClick(${JSON.stringify({d:lbl,qty:v.qty,rev:v.rev})})'><title>${lbl}: ${v.qty} units</title></circle>`;
   }).join('');
 
   const emp0 = (LOGIN_ROLE === 'employee');
-  host.innerHTML = `<div style="overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch">
-    <svg viewBox="0 0 ${W} ${H}" style="width:${W}px;max-width:none;height:${H}px;display:block">
-      ${monthLabelsSvg}
+  const granLabel = granularity === 'day' ? 'Daily' : granularity === 'week' ? 'Weekly' : 'Monthly';
+  host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;display:block;margin:0 auto">
+      ${axisLabelsSvg}
       <path d="${areaD}" fill="rgba(212,175,90,.12)" stroke="none"></path>
       <path d="${pathD}" fill="none" stroke="#b8933f" stroke-width="2"></path>
       ${dots}
-      <text x="${PAD_L}" y="18" font-size="12" fill="#8c7a42">Peak: ${maxV} units/day</text>
+      <text x="${PAD_L}" y="18" font-size="12" fill="#8c7a42">Peak: ${maxV} units/${granularity} (${granLabel} view)</text>
     </svg>
-  </div>
   <div id="sdTrendPopup" style="display:none;position:absolute;background:#1f2430;color:#fff;padding:10px 14px;border-radius:8px;font-size:.78rem;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:20;pointer-events:none"></div>`;
   window._sdTrendEmp = emp0;
 }
@@ -9855,7 +9899,8 @@ def home():
     return render_template_string(HTML)
 
 REV_ITEM_KEYS = ("total_net_revenue", "rev_yesterday", "rev_month", "rev_fy", "rev_prev_fy",
-                 "avg_selling_price", "last_selling_price", "return_amount")
+                 "avg_selling_price", "last_selling_price", "return_amount",
+                 "aov_per_piece", "discount_pct")
 
 def _employee_view(comp, period_kpis):
     """Employee role: revenue + selling-price data server se nikalta hi nahi.
