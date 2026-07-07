@@ -8015,6 +8015,7 @@ function renderProduction(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No production rows for this filter.</div>';
     return;
   }
+  const empProd = (LOGIN_ROLE === 'employee');
   const head = `<tr>
     <th class="sort-arrow" onclick="sortProd('date')">Order Date ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_no')">Order No. ⇅</th>
@@ -8022,6 +8023,8 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('taxon')">Taxon ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_type')">Type ⇅</th>
     <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
+    ${empProd ? '' : `<th class="sort-arrow" onclick="sortProd('aov_per_piece')" title="Average selling price per piece sold">AOV/pc ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('discount_pct')" title="Discount vs MRP">Disc % ⇅</th>`}
     <th>All Order Nos.</th>
     <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Number of distinct orders this SKU appears in">Times Ordered ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
@@ -8044,6 +8047,7 @@ function renderProduction(){
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
+      ${empProd ? '' : `<td class="prod-num">${fmt(r.aov_per_piece||0)}</td><td class="prod-num">${r.discount_pct||0}%</td>`}
       <td class="prod-order-list" title="This SKU appears in these order numbers">${escHtml(allOrders)}</td>
       <td class="prod-num" style="font-weight:800;color:#8a4fce">${(r.repeat_count||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.order_qty||0).toLocaleString('en-IN')}</td>
@@ -8054,15 +8058,9 @@ function renderProduction(){
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
   }).join('') + (d.count > d.rows.length
-    ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
+    ? `<tr><td colspan="${empProd?14:16}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
     : '');
-  const colgroup = `<colgroup>
-    <col style="width:7%"><col style="width:8%"><col style="width:14%"><col style="width:7%">
-    <col style="width:6%"><col style="width:6%"><col style="width:10%"><col style="width:6%">
-    <col style="width:6%"><col style="width:6%"><col style="width:6%">
-    <col style="width:7%"><col style="width:6%"><col style="width:5%">
-  </colgroup>`;
-  host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro prod-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
@@ -8462,7 +8460,7 @@ function renderTaxonTop50(){
       <td>${roThumb(it.image_url)}</td>
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
       <td style="text-align:right;font-weight:700">${Math.round(it.final_qty||0).toLocaleString('en-IN')}</td>
-      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td>`}
+      ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td><td style="text-align:right">${fmt(it.aov_per_piece||0)}</td><td style="text-align:right">${it.discount_pct||0}%</td>`}
       <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
       <td style="text-align:right">${Math.round(it.inv_wip||0).toLocaleString('en-IN')}</td>
       <td style="text-align:center">${escHtml(it.status||'')}</td>
@@ -8472,10 +8470,10 @@ function renderTaxonTop50(){
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
       <th>Image</th><th>SKU</th><th style="text-align:right">Final Qty</th>
-      ${emp?'':'<th style="text-align:right">Net Revenue</th>'}
+      ${emp?'':'<th style="text-align:right">Net Revenue</th><th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
-    </tr></thead><tbody>${body || '<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>'}</tbody></table>`;
+    </tr></thead><tbody>${body || `<tr><td colspan="${emp?9:11}" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>`}</tbody></table>`;
 }
 function exportTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
@@ -8541,6 +8539,7 @@ function renderStockStatus(){
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
       <td>${escHtml(it.taxon||'')}</td>
       <td style="text-align:center">${escHtml(it.status||'')}</td>
+      ${emp ? '' : `<td style="text-align:right">${fmt(it.aov_per_piece||0)}</td><td style="text-align:right">${it.discount_pct||0}%</td>`}
       <td style="text-align:right">${stock.toLocaleString('en-IN')}</td>
       <td style="text-align:right">${wip.toLocaleString('en-IN')}</td>
       <td style="text-align:right;font-weight:700">${avail.toLocaleString('en-IN')}</td>
@@ -8551,10 +8550,11 @@ function renderStockStatus(){
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:880px"><thead><tr>
       <th>Image</th><th>SKU</th><th>Category</th><th style="text-align:center">Movement Status</th>
+      ${emp ? '' : '<th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
       <th style="text-align:right">Days Since Sale</th><th>Flags</th>
-    </tr></thead><tbody>${body || '<tr><td colspan="10" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>'}</tbody></table>
+    </tr></thead><tbody>${body || `<tr><td colspan="${emp?10:12}" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>`}</tbody></table>
     ${sorted.length > 500 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 500 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters.</p>` : ''}`;
 }
 function exportStockStatus(){
@@ -9261,7 +9261,10 @@ function renderInsights(){
         <div class="name" style="cursor:pointer" onclick="openSkuDetails('${String(i.sku).replace(/'/g,"\\'")}')" title="View SKU details">${escHtml(skuLabel(i.sku, i.sku_name))}</div>
         <div class="sub">${escHtml(flag.detail || '')}</div>
       </div>
-      <div class="insight-val" style="font-size:.75rem">${i.best_channel ? '🏆 ' + escHtml(i.best_channel) : ''}</div>
+      <div class="insight-val" style="font-size:.75rem;text-align:right">
+        ${i.best_channel ? '🏆 ' + escHtml(i.best_channel) + '<br>' : ''}
+        ${(LOGIN_ROLE!=='employee' && (i.aov_per_piece||0)>0) ? `<span style="color:var(--cn-mid)">AOV ${fmt(i.aov_per_piece)}/pc${(i.discount_pct||0)>0 ? ' · '+i.discount_pct+'% off' : ''}</span>` : ''}
+      </div>
     </div>`;
   const byFlag = (code) => (insightRows || []).filter(i => (i.alert_flags||[]).some(f => f.code === code));
 
@@ -10032,8 +10035,8 @@ def _fetch_target_rows():
 _PROD_CACHE = {"rows": None, "ts": 0}
 
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode=""):
-    # SKU -> image + taxon map (compiled data se, jisme inv image+taxon already hai)
-    img_map = {}; tax_map = {}
+    # SKU -> image + taxon + AOV/discount map (compiled data se)
+    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}
     try:
         comp = get_data()[0]
         for it in comp:
@@ -10044,6 +10047,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 img_map[sk] = it["image_url"]
             if it.get("taxon"):
                 tax_map[sk] = it["taxon"]
+            aov_map[sk] = it.get("aov_per_piece", 0) or 0
+            disc_map[sk] = it.get("discount_pct", 0) or 0
     except Exception:
         pass
 
@@ -10152,6 +10157,13 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
+        # AOV/Discount% — revenue-sensitive, employee ko 0 (jaisa baaki app me hai)
+        if session.get("role") == "employee":
+            rr["aov_per_piece"] = 0
+            rr["discount_pct"] = 0
+        else:
+            rr["aov_per_piece"] = aov_map.get(r["sku"], 0)
+            rr["discount_pct"] = disc_map.get(r["sku"], 0)
         rows.append(rr)
 
     # SORT / GROUP: "top_repeat" = SKU-wise group (ek SKU ek row), uske totals,
