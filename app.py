@@ -4173,13 +4173,13 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
 
 
 /* Production table: compact rows, wrapped text, clearer SKU images */
-#prodContent table.prod-table{width:100%;min-width:960px;table-layout:fixed;font-size:10.5px}
+#prodContent table.prod-table{width:max-content;min-width:1720px;table-layout:fixed;font-size:10.5px}
 #prodContent table.prod-table th,
 #prodContent table.prod-table td{
   padding:7px 8px !important;
   white-space:normal !important;
-  overflow-wrap:anywhere;
-  word-break:break-word;
+  overflow-wrap:break-word;
+  word-break:normal;
   line-height:1.25;
   vertical-align:top;
 }
@@ -4198,8 +4198,8 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
 }
 .prod-img{object-fit:contain}
 .prod-ph{display:flex;align-items:center;justify-content:center;color:#b8a06a;font-size:24px}
-.prod-sku-text{font-size:11px !important;line-height:1.2;min-width:0;white-space:normal !important}
-.prod-order-list{font-size:.76rem;color:var(--cn-mid);max-width:120px}
+.prod-sku-text{font-size:11px !important;line-height:1.2;min-width:0;white-space:normal !important;overflow-wrap:break-word;word-break:normal}
+.prod-order-list{font-size:.76rem;color:var(--cn-mid);overflow-wrap:break-word;word-break:normal}
 .prod-num{white-space:nowrap !important;text-align:right}
 
 
@@ -8089,6 +8089,23 @@ function renderProduction(){
     return;
   }
   const empProd = (LOGIN_ROLE === 'employee');
+  const colgroup = `<colgroup>
+    <col style="width:90px">
+    <col style="width:80px">
+    <col style="width:230px">
+    <col style="width:150px">
+    <col style="width:120px">
+    <col style="width:100px">
+    ${empProd ? '' : `<col style="width:80px"><col style="width:70px">`}
+    <col style="width:160px">
+    <col style="width:90px">
+    <col style="width:80px">
+    <col style="width:80px">
+    <col style="width:90px">
+    <col style="width:110px">
+    <col style="width:90px">
+    <col style="width:100px">
+  </colgroup>`;
   const head = `<tr>
     <th class="sort-arrow" onclick="sortProd('date')">Order Date ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_no')">Order No. ⇅</th>
@@ -8133,7 +8150,7 @@ function renderProduction(){
   }).join('') + (d.count > d.rows.length
     ? `<tr><td colspan="${empProd?14:16}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
     : '');
-  host.innerHTML = `<table class="ro prod-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
