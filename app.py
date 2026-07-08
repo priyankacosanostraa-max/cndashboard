@@ -4751,6 +4751,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div></div>
         <div class="kpi"><div class="kpi-t">Total Final Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
+        <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
@@ -4801,8 +4802,10 @@ select.lg-in option{background:#fff;color:#1a1610}
             <th>Dispatch Date</th>
             <th>Customer</th>
             <th>Type</th>
+            <th>Channel</th>
             <th>Final Qty</th>
-            <th>Net Revenue</th>
+            <th class="rev-only">Discount %</th>
+            <th class="rev-only">Net Revenue</th>
           </tr></thead>
           <tbody id="sdBody"></tbody>
         </table>
@@ -5732,15 +5735,22 @@ function renderSkuDetails(sku){
     byType[t].rev += parseFloat(e.rev) || 0;
   });
   const types = Object.keys(byType).sort();
+  const _mrp0 = parseFloat(item.mrp) || 0;
   const bd = document.getElementById('sdTypeBreakdown');
   if (bd) {
-    bd.innerHTML = types.length ? types.map(t => `
+    bd.innerHTML = types.length ? types.map(t => {
+      const v = byType[t];
+      const avgSp0 = v.qty ? (v.rev / v.qty) : 0;
+      const dPct0 = (_mrp0 > 0 && avgSp0 > 0 && avgSp0 < _mrp0) ? Math.round((_mrp0 - avgSp0) / _mrp0 * 100 * 10) / 10 : 0;
+      return `
       <div class="td-card">
         <div class="td-type">${t}</div>
-        <div class="td-row"><span>Orders</span><b>${byType[t].orders}</b></div>
-        <div class="td-row"><span>Qty</span><b>${byType[t].qty}</b></div>
-        <div class="td-row"><span>Net Rev</span><b class="green">${fmt(byType[t].rev)}</b></div>
-      </div>`).join('') : '<span class="small-note">No sales yet</span>';
+        <div class="td-row"><span>Orders</span><b>${v.orders}</b></div>
+        <div class="td-row"><span>Qty</span><b>${v.qty}</b></div>
+        <div class="td-row rev-only"><span>Net Rev</span><b class="green">${fmt(v.rev)}</b></div>
+        <div class="td-row rev-only"><span>Discount %</span><b>${dPct0}%</b></div>
+      </div>`;
+    }).join('') : '<span class="small-note">No sales yet</span>';
   }
   const tc = document.getElementById('sdTypeChecks');
   if (tc) {
@@ -5768,10 +5778,19 @@ function renderSdTable(){
     const sp = parseFloat(e.sp) || (parseFloat(e.qty) ? (parseFloat(e.rev)||0)/parseFloat(e.qty) : 0);
     return s + r * sp;
   }, 0);
+  // Overall Discount % — jo bhi Date/Type filter abhi lage hain, usी filtered
+  // entries (ents) par based hai: MRP vs weighted-avg selling price. Koi filter
+  // na ho to ye poore SKU ka overall discount % hota hai (jaisa maanga gaya).
+  const mrp = parseFloat(item.mrp) || 0;
+  const overallAvgSp = totalQty ? (totalRev / totalQty) : 0;
+  const overallDiscPct = (mrp > 0 && overallAvgSp > 0 && overallAvgSp < mrp)
+    ? Math.round((mrp - overallAvgSp) / mrp * 100 * 10) / 10 : 0;
+
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
   setT('sdOrders', ents.length);
   setT('sdQty', totalQty);
   setT('sdRev', fmt(totalRev));
+  setT('sdDiscPct', overallDiscPct + '%');
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
   setT('sdRetAmt', fmt(totalRetAmt));
 
@@ -5780,14 +5799,22 @@ function renderSdTable(){
 
   const body = document.getElementById('sdBody');
   if (body) {
-    body.innerHTML = ents.length ? ents.map(e => `<tr>
+    body.innerHTML = ents.length ? ents.map(e => {
+      const q = parseFloat(e.qty) || 0;
+      const rv = parseFloat(e.rev) || 0;
+      const sp = parseFloat(e.sp) || (q ? rv / q : 0);
+      const dPct = (mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0;
+      return `<tr>
       <td class="gold">${e.date === 'N/A' ? '—' : e.date}</td>
       <td>${safeText(e.cust)}</td>
       <td>${safeText(e.type)}</td>
-      <td class="gold">${parseFloat(e.qty) || 0}</td>
-      ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(parseFloat(e.rev) || 0)}</td>`}
-    </tr>`).join('')
-    : '<tr><td colspan="5" class="tno-data" style="padding:30px">No transactions for the selected type(s).</td></tr>';
+      <td>${safeText(e.channel)}</td>
+      <td class="gold">${q}</td>
+      <td class="rev-only">${dPct}%</td>
+      <td class="rev-only green">${fmt(rv)}</td>
+    </tr>`;
+    }).join('')
+    : '<tr><td colspan="7" class="tno-data" style="padding:30px">No transactions for the selected type(s).</td></tr>';
   }
 }
 
@@ -6017,25 +6044,33 @@ function renderSdChannel(){
 function exportSD(fmtType){
   const item = (master || []).find(i => i.sku === currentSdSku);
   if (!item) { alert('Open a SKU first.'); return; }
-  const picked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
-  let ents = (item.sales_entries || []).slice();
-  if (picked.length) ents = ents.filter(e => picked.includes(e.type || 'Regular'));
+  // Ab export bhi Date + Type filter dono respect karta hai (jo screen par
+  // lage hain wahi rows export hongi) — _sdFilteredEntries wahi function hai
+  // jo table/trend/channel charts use karte hain.
+  let ents = _sdFilteredEntries(item).slice();
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
-  const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Net Revenue']), 'Image Link'];
-  const data = ents.map(e => ({
-    'Dispatch Date': e.date === 'N/A' ? '' : e.date,
-    SKU: item.sku,
-    'SKU Name': exportSkuName(item.sku, item.sku_name),
-    'Product Dimensions': item.dimensions || '',
-    Customer: e.cust,
-    Type: e.type,
-    'Final Qty': parseFloat(e.qty) || 0,
-    'MRP': parseFloat(item.mrp) || 0,
-    ...(emp0 ? {} : {'Selling Price': parseFloat(e.sp) || 0, 'Net Revenue': parseFloat(e.rev) || 0}),
-    'Image Link': item.image_url || '',
-  }));
+  const mrp = parseFloat(item.mrp) || 0;
+  const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Customer','Type','Channel','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const data = ents.map(e => {
+    const q = parseFloat(e.qty) || 0;
+    const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
+    const discPct = (mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0;
+    return {
+      'Dispatch Date': e.date === 'N/A' ? '' : e.date,
+      SKU: item.sku,
+      'SKU Name': exportSkuName(item.sku, item.sku_name),
+      'Product Dimensions': item.dimensions || '',
+      Customer: e.cust,
+      Type: e.type,
+      Channel: e.channel || '',
+      'Final Qty': q,
+      'MRP': mrp,
+      ...(emp0 ? {} : {'Selling Price': sp, 'Discount %': discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
+      'Image Link': item.image_url || '',
+    };
+  });
   downloadTable(headers, data, `sku_${String(item.sku).replace(/[^A-Za-z0-9_-]/g,'')}`, fmtType);
 }
 
