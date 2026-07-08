@@ -10160,6 +10160,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         C_DELV = _at(11)  # L  Delivery Date
         C_RECV = _at(12)  # M  Receiving Date
         rows_all = []
+        _seen_rows = set()
         for _, r in df.iterrows():
             sku = clean(r.get(C_SKU, "")).upper() if C_SKU else ""
             order_no = clean(r.get(C_ORD, "")) if C_ORD else ""
@@ -10168,7 +10169,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             dt = parse_date_any(r.get(C_DATE, "")) if C_DATE else None
             dv = parse_date_any(r.get(C_DELV, "")) if C_DELV else None
             rv = parse_date_any(r.get(C_RECV, "")) if C_RECV else None
-            rows_all.append({
+            row = {
                 "date":      dt.strftime("%Y-%m-%d") if dt else "",
                 "date_disp": dt.strftime("%d-%b-%Y") if dt else "",
                 "order_no":  order_no,
@@ -10181,7 +10182,15 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "delivery_date": dv.strftime("%d-%b-%Y") if dv else "",
                 "delivery_iso":  dv.strftime("%Y-%m-%d") if dv else "",
                 "receiving_date": rv.strftime("%d-%b-%Y") if rv else "",
-            })
+            }
+            # Exact-duplicate row (same date+order no+sku+everything) — skip repeats
+            dedup_key = tuple(row[k] for k in (
+                "date", "order_no", "sku", "order_type", "channel",
+                "order_qty", "recv_qty", "bal_qty", "delivery_date", "receiving_date"))
+            if dedup_key in _seen_rows:
+                continue
+            _seen_rows.add(dedup_key)
+            rows_all.append(row)
         _PROD_CACHE["rows"] = rows_all
         _PROD_CACHE["ts"] = time.time()
 
