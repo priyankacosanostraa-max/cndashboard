@@ -1354,11 +1354,19 @@ def _refresh_data():
         elif _sps:
             last_sp = _sps[-1]
 
-        # Discount % — EXACT same method as the Discount Leakage tab, taaki SKU
-        # ke saath jahan bhi discount % dikhaya jaye, wahi number match kare.
-        _disc_sp = last_sp or avg_sp
-        if mrp > 0 and _disc_sp > 0 and _disc_sp < mrp:
-            discount_pct = round((mrp - _disc_sp) / mrp * 100, 1)
+        # Discount % — OVERALL AVERAGE discount across ALL sales (qty-weighted:
+        # total revenue / total qty vs MRP). Pehle last_selling_price ka istemal
+        # hota tha jo GALAT tha — agar sirf AAKHRI order full-price par hota
+        # tha to poora SKU 0% discount dikhata tha, chahe baaki saari sales
+        # discounted hoti thi. Ab yeh number sahi "overall average" hai, aur
+        # UI mein filter (date/channel/type) lagne par isी method se
+        # filtered discount % nikala jaata hai — Discount Leakage tab bhi
+        # isी method se match karta hai (neeche dekho).
+        _tot_rev_all = sum(float(e.get("rev") or 0) for e in ent)
+        _tot_qty_all = sum(float(e.get("qty") or 0) for e in ent)
+        _overall_avg_sp = (_tot_rev_all / _tot_qty_all) if _tot_qty_all > 0 else 0.0
+        if mrp > 0 and _overall_avg_sp > 0 and _overall_avg_sp < mrp:
+            discount_pct = round((mrp - _overall_avg_sp) / mrp * 100, 1)
         else:
             discount_pct = 0.0
 
@@ -6618,11 +6626,24 @@ function applyRO(){
     const fe = (item.sales_entries || []).filter(entOk);
     const totalRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = fe.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
+    // Filter-aware Discount % — jo bhi Date/Channel/Type filter abhi lage
+    // hain, usी ke hisaab se overall average discount % (qty-weighted:
+    // filtered revenue / filtered qty vs MRP). Koi filter na ho to yeh
+    // poore SKU ka overall average discount % hota hai (item.discount_pct
+    // ke barabar).
+    const mrp = parseFloat(item.mrp) || 0;
+    const anyRoFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || d1 || d2);
+    let fDiscPct = parseFloat(item.discount_pct) || 0;
+    if (anyRoFilter) {
+      const avgSp = totalQty ? (totalRev / totalQty) : 0;
+      fDiscPct = (mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0;
+    }
     return {
       ...item,
       _fe: fe,
       _fRev: totalRev,
       _fQty: totalQty,
+      _fDiscPct: fDiscPct,
       _customer_count: new Set(fe.map(e=>e.cust)).size
     };
   });
@@ -6743,11 +6764,12 @@ function applyRO(){
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
       ...e, sku: item.sku, sku_name: item.sku_name, inv_stock: item.inv_stock, inv_wip: item.inv_wip,
-      image_url: item.image_url, dimensions: item.dimensions || ''
+      image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
     })));
     txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     roTxns = txns;
 
+    const empTx = LOGIN_ROLE === 'employee';
     if (thead) thead.innerHTML = `
       <th style="width:46px;text-align:center"><input type="checkbox" id="roSelectAllTxn" onclick="roToggleAllTxns(this.checked)" title="Select all"></th>
       <th>Dispatch Date</th>
@@ -6755,7 +6777,9 @@ function applyRO(){
       <th>Dimensions</th>
       <th>Customer</th>
       <th>Type</th>
+      <th>Channel</th>
       <th>Final Qty</th>
+      ${empTx ? '' : '<th>Discount %</th>'}
       <th>Inv Stock</th>
       <th>Inv (WIP)</th>
       <th style="min-width:160px">Remark</th>`;
@@ -6775,6 +6799,10 @@ function applyRO(){
       const stk = parseInt(t.inv_stock) || 0;
       const wip = parseInt(t.inv_wip) || 0;
       const ck = selectedSkuSet.has(t.sku) ? 'checked' : '';
+      const tq = parseFloat(t.qty) || 0;
+      const tsp = parseFloat(t.sp) || (tq ? (parseFloat(t.rev)||0) / tq : 0);
+      const tMrp = parseFloat(t.mrp) || 0;
+      const tDisc = (tMrp > 0 && tsp > 0 && tsp < tMrp) ? Math.round((tMrp - tsp) / tMrp * 100 * 10) / 10 : 0;
       return `<tr>
         <td style="text-align:center"><input type="checkbox" ${ck} onchange="roToggleTxn('${skuEsc}', this.checked)"></td>
         <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
@@ -6782,13 +6810,15 @@ function applyRO(){
         <td>${safeText(t.dimensions || '—')}</td>
         <td>${safeText(t.cust)}</td>
         <td>${safeText(t.type)}</td>
-        <td class="gold">${parseFloat(t.qty) || 0}</td>
+        <td>${safeText(t.channel)}</td>
+        <td class="gold">${tq}</td>
+        ${empTx ? '' : `<td>${tDisc}%</td>`}
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
         <td><input type="text" class="ro-remark" value="${(roRemarks[t.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)"></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
-      ? `<tr><td colspan="10" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
+      ? `<tr><td colspan="12" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
       : '');
     updateExportHint();
     return;
@@ -6803,6 +6833,7 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('qty_15d',this)">15D Sale</th>
     <th class="sort-arrow" onclick="sortRO('qty_1m',this)">30D Sale</th>
     <th class="sort-arrow" onclick="sortRO('final_qty',this)">Sold Qty</th>
+    ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_fDiscPct',this)" title="Overall average discount % vs MRP — updates with Date/Channel/Type filters">Discount %</th>`}
     <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
     <th class="sort-arrow" onclick="sortRO('inv_wip',this)">Inv WIP</th>
     <th class="sort-arrow" onclick="sortRO('blocked_qty',this)" title="Blocked Qty (column U)">Blocked Qty</th>
@@ -6879,6 +6910,7 @@ function applyRO(){
       <td class="${q15 > 0 ? 'green' : 'muted'}">${Math.round(q15)}</td>
       <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
+      ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
       <td class="${(item.blocked_qty||0) > 0 ? 'red' : 'muted'}">${item.blocked_qty || 0}</td>
@@ -6888,7 +6920,7 @@ function applyRO(){
       <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
     </tr>`;
   }).join('') + (filtered.length > RO_CAP
-    ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
+    ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
     : '');
 
   const allBox = document.getElementById('roSelectAll');
@@ -7045,6 +7077,7 @@ function applyColFilters(){
       <td class="${q15 > 0 ? 'green' : 'muted'}">${Math.round(q15)}</td>
       <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
+      ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
       <td><span class="forecast-pill">${item.forecast_60d || 0}</span></td>
@@ -7052,7 +7085,7 @@ function applyColFilters(){
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
     </tr>`;
   }).join('') + (colFiltered.length > RO_CAP
-    ? `<tr><td colspan="11" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
+    ? `<tr><td colspan="12" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
     : '');
 }
 
@@ -7093,8 +7126,12 @@ function exportRO(fmtType){
     const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {};
     ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Remark','Image Link'];
-    const data = txns.map(t => ({
+    const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const data = txns.map(t => {
+      const mrp0 = parseFloat(mrpMap[t.sku]) || 0;
+      const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
+      const discPct0 = (mrp0 > 0 && sp0 > 0 && sp0 < mrp0) ? Math.round((mrp0 - sp0) / mrp0 * 100 * 10) / 10 : 0;
+      return {
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[t.sku]),
@@ -7103,13 +7140,14 @@ function exportRO(fmtType){
       Customer: t.cust,
       Type: t.type,
       'Final Qty': parseFloat(t.qty) || 0,
-      'MRP': parseFloat(mrpMap[t.sku]) || 0,
-      ...(emp0 ? {} : {'Selling Price': parseFloat(t.sp) || 0}),
+      'MRP': mrp0,
+      ...(emp0 ? {} : {'Selling Price': sp0, 'Discount %': discPct0 + '%'}),
       'Inv Stock': parseInt(t.inv_stock) || 0,
       'Inv WIP': parseInt(t.inv_wip) || 0,
       'Remark': roRemarks[t.sku] || '',
       'Image Link': t.image_url || '',
-    }));
+      };
+    });
     downloadTable(headers, data, 'repeat_orders_transactions', fmtType);
     return;
   }
@@ -7145,7 +7183,7 @@ function exportRO(fmtType){
     if (singleType && (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer'))) return o.inv_wip_designer || 0;
     return o.inv_wip || 0;
   };
-  const headers = ['Row Type','SKU','SKU Name','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','SKU Name','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row: filter ke according 7D/15D/30D/Sold + channel WIP
@@ -7170,7 +7208,7 @@ function exportRO(fmtType){
       '30D Sale': Math.round(r30),
       'Sold Qty': Math.round(rSold),
       'MRP': parseFloat(item.mrp) || 0,
-      ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0}),
+      ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0, 'Discount %': (item._fDiscPct||0) + '%'}),
       'Inv Stock': item.inv_stock || 0,
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
@@ -7215,7 +7253,7 @@ function exportRO(fmtType){
         '30D Sale': c30,
         'Sold Qty': cSold,
         'MRP': parseFloat(c.mrp) || 0,
-        ...(emp1 ? {} : {'Selling Price': ''}),
+        ...(emp1 ? {} : {'Selling Price': '', 'Discount %': ''}),
         'Inv Stock': c.inv_stock || 0,
         'Inv WIP': chWip(c),
         'Blocked Qty': c.blocked_qty || 0,
@@ -10393,8 +10431,11 @@ def _build_discount_leakage(min_disc=0.0, sort_key="leakage"):
     tot_units = 0.0
     for it in comp:
         mrp = float(it.get("mrp") or 0)
-        sp  = float(it.get("last_selling_price") or 0) or float(it.get("avg_selling_price") or 0)
         qty = float(it.get("final_qty") or 0)
+        # Overall qty-weighted average SP (total_net_revenue/qty) — same method
+        # ab item compile step mein bhi use hota hai (discount_pct), taaki
+        # Discount Leakage aur baaki app mein number match kare.
+        sp  = (float(it.get("total_net_revenue") or 0) / qty) if qty > 0 else 0.0
         if mrp <= 0 or sp <= 0 or qty <= 0:
             continue
         if sp >= mrp:        # koi discount nahi (ya MRP se upar) → skip
