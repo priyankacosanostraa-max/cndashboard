@@ -993,6 +993,7 @@ def _refresh_data():
     I_DIM = find_col(inv.columns, "Product Dimensions","Dimensions","Dimension","Size")
     I_LNCH = find_col(inv.columns, "Launch Date","Launching Date","Launch","Launched")
     I_STONE = find_col(inv.columns, "Stone Details","Stone Detail","Remarks","Remark","combo","combo sku","combo skus","combo_skus","stone")
+    I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
                  and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()]
@@ -1402,6 +1403,7 @@ def _refresh_data():
             "launch_month": _si(launch_label),
             "combo_skus":   clean(r.get(I_STONE,"")) if I_STONE else "",
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
+            "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
@@ -1484,6 +1486,7 @@ def _refresh_data():
             it["combo_details"].append({
                 "sku": cand,
                 "sku_name": (ci.get("sku_name") if ci else ""),
+                "stone_color": (ci.get("stone_color") if ci else ""),
                 "image_url": (ci.get("image_url") if ci else ""),
                 "inv_stock": info["stock"] if info else 0,
                 "inv_wip":   info["wip"] if info else 0,
@@ -5693,6 +5696,7 @@ function renderSkuDetails(sku){
   if (metaEl) metaEl.innerHTML =
     `<span>Category: <b>${safeText(item.taxon)}</b></span>` +
     `<span>Plating: <b>${safeText(item.plating)}</b></span>` +
+    (item.stone_color ? `<span>Stone Color: <b>${safeText(item.stone_color)}</b></span>` : '') +
     (item.dimensions ? `<span>Dimensions: <b>${safeText(item.dimensions)}</b></span>` : '') +
     (item.combo_skus ? `<span>Combo SKUs: <b>${safeText(item.combo_skus)}</b></span>` : '') +
     `<span>Status: <b>${safeText(item.status)}</b></span>` +
@@ -6060,7 +6064,7 @@ function exportSD(fmtType){
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const mrp = parseFloat(item.mrp) || 0;
-  const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Customer','Type','Channel','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
@@ -6069,6 +6073,7 @@ function exportSD(fmtType){
       'Dispatch Date': e.date === 'N/A' ? '' : e.date,
       SKU: item.sku,
       'SKU Name': exportSkuName(item.sku, item.sku_name),
+      'Stone Color': item.stone_color || '',
       'Product Dimensions': item.dimensions || '',
       Customer: e.cust,
       Type: e.type,
@@ -7123,10 +7128,10 @@ function exportRO(fmtType){
       const narrowed = roTxns.filter(t => selectedSkuSet.has(t.sku));
       if (narrowed.length) txns = narrowed;
     }
-    const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {};
-    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; } });
+    const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {};
+    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; stoneMap[it.sku] = it.stone_color || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','SKU Name','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = txns.map(t => {
       const mrp0 = parseFloat(mrpMap[t.sku]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
@@ -7135,6 +7140,7 @@ function exportRO(fmtType){
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[t.sku]),
+      'Stone Color': stoneMap[t.sku] || '',
       'Product Dimensions': (t.dimensions || dimMap[t.sku] || ''),
       'Pack Details': packMap[t.sku] || '',
       Customer: t.cust,
@@ -7183,7 +7189,7 @@ function exportRO(fmtType){
     if (singleType && (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer'))) return o.inv_wip_designer || 0;
     return o.inv_wip || 0;
   };
-  const headers = ['Row Type','SKU','SKU Name','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row: filter ke according 7D/15D/30D/Sold + channel WIP
@@ -7200,6 +7206,7 @@ function exportRO(fmtType){
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
       'SKU Name': exportSkuName(item.sku, item.sku_name),
+      'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
       'Pack Details': item.pack_details || '',
@@ -7245,6 +7252,7 @@ function exportRO(fmtType){
         'Row Type': '— Set Item',
         SKU: c.sku,
         'SKU Name': exportSkuName(c.sku, c.sku_name),
+        'Stone Color': c.stone_color || '',
         'Set Item Of': item.sku,
         'Product Dimensions': '',
         'Pack Details': '',
@@ -8047,7 +8055,7 @@ function renderDiscount(){
     return;
   }
   const head = `<tr>
-    <th>SKU</th><th>Category</th><th>MRP</th><th>Avg SP</th><th>Last SP</th>
+    <th>SKU</th><th>Stone Color</th><th>Category</th><th>MRP</th><th>Avg SP</th><th>Last SP</th>
     <th>Discount %</th><th>Gap / unit</th><th>Qty Sold</th><th>Leakage</th></tr>`;
   const body = d.rows.map(r => {
     const dCls = r.disc_pct >= 40 ? 'red' : r.disc_pct >= 20 ? 'orange' : 'gold';
@@ -8055,6 +8063,7 @@ function renderDiscount(){
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">` : '';
     return `<tr>
       <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
+      <td>${escHtml(r.stone_color||'')}</td>
       <td>${escHtml(r.taxon||'')}</td>
       <td>${fmt(r.mrp)}</td>
       <td>${fmt(r.avg_sp)}</td>
@@ -8070,8 +8079,8 @@ function renderDiscount(){
 function exportDiscount(){
   const d = _discData;
   if (!d || !d.rows || !d.rows.length){ alert('No discount data to export.'); return; }
-  const headers = ['SKU','SKU Name','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
-  const rows = d.rows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
+  const headers = ['SKU','SKU Name','Stone Color','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
+  const rows = d.rows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
     Math.round(r.last_sp), r.disc_pct, Math.round(r.per_unit_gap), r.qty, Math.round(r.leakage), Math.round(r.net_revenue)]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -8089,7 +8098,7 @@ let _prodSortKey = 'order_qty', _prodSortDir = -1;
 function sortProd(key){
   if (!_prodData || !_prodData.rows) return;
   if (_prodSortKey === key) _prodSortDir *= -1; else { _prodSortDir = -1; _prodSortKey = key; }
-  const isStr = ['sku','order_no','taxon','order_type','channel','date','delivery_iso'].includes(key);
+  const isStr = ['sku','order_no','taxon','order_type','channel','date','delivery_iso','stone_color'].includes(key);
   _prodData.rows.sort((a,b) => {
     let va = a[key], vb = b[key];
     if (isStr){
@@ -8193,6 +8202,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('date')">Order Date ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_no')">Order No. ⇅</th>
     <th class="sort-arrow" onclick="sortProd('sku')">SKU ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('stone_color')">Stone Color ⇅</th>
     <th class="sort-arrow" onclick="sortProd('taxon')">Taxon ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_type')">Type ⇅</th>
     <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
@@ -8217,6 +8227,7 @@ function renderProduction(){
       <td class="gold">${escHtml(r.date_disp || '—')}</td>
       <td style="font-weight:800">${escHtml(r.order_no || '—')}</td>
       <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
+      <td>${escHtml(r.stone_color || '—')}</td>
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
@@ -8231,7 +8242,7 @@ function renderProduction(){
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
   }).join('') + (d.count > d.rows.length
-    ? `<tr><td colspan="${empProd?14:16}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
+    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
     : '');
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
@@ -8243,8 +8254,8 @@ function resetProduction(){
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','SKU Name','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
-  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
+  const headers = ['Order Date','Order No.','SKU','SKU Name','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
+  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
     (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -8632,6 +8643,7 @@ function renderTaxonTop50(){
     return `<tr>
       <td>${roThumb(it.image_url)}</td>
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td>${escHtml(it.stone_color||'—')}</td>
       <td style="text-align:right;font-weight:700">${Math.round(it.final_qty||0).toLocaleString('en-IN')}</td>
       ${emp?'':`<td style="text-align:right;font-weight:800">${fmt(it.total_net_revenue||0)}</td><td style="text-align:right">${fmt(it.aov_per_piece||0)}</td><td style="text-align:right">${it.discount_pct||0}%</td>`}
       <td style="text-align:right">${Math.round(it.inv_stock||0).toLocaleString('en-IN')}</td>
@@ -8642,11 +8654,11 @@ function renderTaxonTop50(){
     </tr>`;
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
-      <th>Image</th><th>SKU</th><th style="text-align:right">Final Qty</th>
+      <th>Image</th><th>SKU</th><th>Stone Color</th><th style="text-align:right">Final Qty</th>
       ${emp?'':'<th style="text-align:right">Net Revenue</th><th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
-    </tr></thead><tbody>${body || `<tr><td colspan="${emp?9:11}" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>`}</tbody></table>`;
+    </tr></thead><tbody>${body || `<tr><td colspan="${emp?10:12}" style="text-align:center;padding:20px;color:#999">No SKUs in this taxon</td></tr>`}</tbody></table>`;
 }
 function exportTaxonTop50(){
   const emp = (LOGIN_ROLE === 'employee');
@@ -8657,11 +8669,11 @@ function exportTaxonTop50(){
   }).slice(0, 50);
   if (!sorted.length){ alert('No rows to export'); return; }
   const headers = emp
-    ? ['SKU','SKU Name','Final Qty','Stock','WIP','Status','Best Channel']
-    : ['SKU','SKU Name','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
+    ? ['SKU','SKU Name','Stone Color','Final Qty','Stock','WIP','Status','Best Channel']
+    : ['SKU','SKU Name','Stone Color','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
   const data = sorted.map(it => emp
-    ? [it.sku, exportSkuName(it.sku, it.sku_name), Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
-    : [it.sku, exportSkuName(it.sku, it.sku_name), Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
+    ? [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
+    : [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
   _dlCsv(headers, data, `taxon_${String(_txDrillTaxon||'top50').replace(/[^A-Za-z0-9_-]/g,'_')}_top50`);
 }
 window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
@@ -8710,6 +8722,7 @@ function renderStockStatus(){
     return `<tr>
       <td>${roThumb(it.image_url)}</td>
       <td style="font-weight:700"><button class="sku-link" onclick="openSkuDetails('${String(it.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(it.sku, it.sku_name))}</button></td>
+      <td>${escHtml(it.stone_color||'')}</td>
       <td>${escHtml(it.taxon||'')}</td>
       <td style="text-align:center">${escHtml(it.status||'')}</td>
       ${emp ? '' : `<td style="text-align:right">${fmt(it.aov_per_piece||0)}</td><td style="text-align:right">${it.discount_pct||0}%</td>`}
@@ -8722,19 +8735,19 @@ function renderStockStatus(){
     </tr>`;
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:880px"><thead><tr>
-      <th>Image</th><th>SKU</th><th>Category</th><th style="text-align:center">Movement Status</th>
+      <th>Image</th><th>SKU</th><th>Stone Color</th><th>Category</th><th style="text-align:center">Movement Status</th>
       ${emp ? '' : '<th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
       <th style="text-align:right">Days Since Sale</th><th>Flags</th>
-    </tr></thead><tbody>${body || `<tr><td colspan="${emp?10:12}" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>`}</tbody></table>
+    </tr></thead><tbody>${body || `<tr><td colspan="${emp?11:13}" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>`}</tbody></table>
     ${sorted.length > 500 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 500 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters.</p>` : ''}`;
 }
 function exportStockStatus(){
   const rows = _ssFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
-  const headers = ['SKU','SKU Name','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
-  const data = rows.map(it => [it.sku, exportSkuName(it.sku, it.sku_name), it.taxon||'', it.status||'',
+  const headers = ['SKU','SKU Name','Stone Color','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
+  const data = rows.map(it => [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', it.taxon||'', it.status||'',
     Math.round(it.inv_stock||0), Math.round(it.inv_wip||0),
     Math.round((it.inv_stock||0)+(it.inv_wip||0)), Math.round(it.reorder_qty||0),
     it.days_since_last_sale >= 0 ? it.days_since_last_sale : '',
@@ -9563,10 +9576,11 @@ function resetInsights(){
 
 function exportInsights(fmtType){
   if (!insightRows || !insightRows.length) { alert('No insights rows to export'); return; }
-  const headers = ['SKU','SKU Name','MRP','Selling Price','Net Revenue','Final Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
+  const headers = ['SKU','SKU Name','Stone Color','MRP','Selling Price','Net Revenue','Final Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
   const data = insightRows.map(i => ({
     SKU: i.sku,
     'SKU Name': exportSkuName(i.sku, i.sku_name),
+    'Stone Color': i.stone_color || '',
     'MRP': parseFloat(i.mrp) || 0,
     'Selling Price': parseFloat(i.last_selling_price) || 0,
     'Net Revenue': Math.round(i._iRev || 0),
@@ -10209,7 +10223,7 @@ _PROD_CACHE = {"rows": None, "ts": 0}
 
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode=""):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
-    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}
+    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
     try:
         comp = get_data()[0]
         for it in comp:
@@ -10222,6 +10236,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 tax_map[sk] = it["taxon"]
             aov_map[sk] = it.get("aov_per_piece", 0) or 0
             disc_map[sk] = it.get("discount_pct", 0) or 0
+            stone_map[sk] = it.get("stone_color", "") or ""
     except Exception:
         pass
 
@@ -10338,6 +10353,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["all_orders"] = sku_orders.get(r["sku"], [])
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
+        rr["stone_color"] = stone_map.get(r["sku"], "")
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
         # AOV/Discount% — revenue-sensitive, employee ko 0 (jaisa baaki app me hai)
         if session.get("role") == "employee":
@@ -10558,6 +10574,7 @@ def _build_discount_leakage(min_disc=0.0, sort_key="leakage"):
         tot_units += qty
         rows.append({
             "sku": it.get("sku"), "sku_name": it.get("sku_name", ""), "image_url": it.get("image_url", ""),
+            "stone_color": it.get("stone_color", ""),
             "taxon": it.get("taxon", ""), "plating": it.get("plating", ""),
             "mrp": mrp, "avg_sp": round(float(it.get("avg_selling_price") or 0), 2),
             "last_sp": round(sp, 2), "disc_pct": disc_pct,
