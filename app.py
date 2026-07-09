@@ -7657,13 +7657,16 @@ function renderHome(){
   // type ki sales se top SKU nikalta hai. Default: All Types.
   const homeType = (document.getElementById('homeTypeFilter')?.value || '').trim();
 
+  // Type filter check — Same Month / Same Day / Top Customer blocks bhi isi se filter hote hain.
+  function entOk(e){ return !homeType || (e.type || '').trim() === homeType; }
+
   // Har SKU ke liye QTY (dono roles qty se rank — same dikhe).
   function topByQty(matchFn){
     let best = null, bestQty = -1, bestRev = 0;
     for (const it of data){
       let rev = 0, qty = 0;
       for (const e of (it.sales_entries || [])){
-        if (homeType && (e.type || '').trim() !== homeType) continue;
+        if (!entOk(e)) continue;
         if (e.date && e.date !== 'N/A' && matchFn(e.date)){
           rev += (parseFloat(e.rev) || 0);
           qty += (parseFloat(e.qty) || 0);
@@ -7672,6 +7675,40 @@ function renderHome(){
       if (qty > bestQty && qty > 0){ bestQty = qty; bestRev = rev; best = {it, rev, qty}; }
     }
     return best;
+  }
+
+  // Generic rev+qty aggregator (Same Month / Same Day blocks ke liye) — homeType filter respect karta hai.
+  function sumRevQty(matchFn){
+    let rev = 0, qty = 0;
+    for (const it of data){
+      for (const e of (it.sales_entries || [])){
+        if (!entOk(e)) continue;
+        if (e.date && e.date !== 'N/A' && matchFn(e.date)){
+          rev += (parseFloat(e.rev) || 0);
+          qty += (parseFloat(e.qty) || 0);
+        }
+      }
+    }
+    return {rev, qty};
+  }
+
+  // Top customer by Final Qty for a period (homeType filter respect karta hai).
+  function topCustomer(matchFn){
+    const agg = {};
+    for (const it of data){
+      for (const e of (it.sales_entries || [])){
+        if (!entOk(e)) continue;
+        if (!e.date || e.date === 'N/A' || !matchFn(e.date)) continue;
+        const nm = (e.cust || 'Unknown').trim() || 'Unknown';
+        const a = agg[nm] || (agg[nm] = {qty:0, rev:0, orders:0});
+        a.qty += (parseFloat(e.qty) || 0);
+        a.rev += (parseFloat(e.rev) || 0);
+        a.orders += 1;
+      }
+    }
+    let bestName = null, best = null;
+    for (const nm in agg){ if (!best || agg[nm].qty > best.qty){ best = agg[nm]; bestName = nm; } }
+    return bestName ? {name: bestName, ...best} : null;
   }
 
   const tWeek  = topByQty(d => d >= wkStart && d <= wkEnd);          // last week (Mon–Sun)
@@ -7709,45 +7746,89 @@ function renderHome(){
     </div>`;
   }
 
-  // YoY: same month last year (periodKpis se)
-  const k = periodKpis || {};
-  const lymLabel = k.last_year_month_label || 'Same month last year';
-  const lymRev = k.last_year_month || 0;
-  const lmLabel = k.last_month_label || 'Last month';
-  const lmRev = k.last_month || 0;
-  const yoy = (typeof k.mom_yoy_pct === 'number') ? k.mom_yoy_pct : null;
-  // same-month-last-year final qty: us mahine ki sari entries se nikaalo
-  let lymQty = 0;
-  if (k.last_year_month_label){
-    // ly key = "YYYY-MM" — label se nahi, dobara compute (entries se)
-  }
-  const lyKey = (() => {
-    const d = new Date(today); d.setMonth(d.getMonth()-12); d.setDate(1);
-    // last full month last year:
-    const lm = new Date(today.getFullYear(), today.getMonth(), 1); // 1st of this month
-    const prevMonth = new Date(lm); prevMonth.setMonth(prevMonth.getMonth()-1); // last month
-    const lym = new Date(prevMonth); lym.setFullYear(lym.getFullYear()-1);
-    return lym.toISOString().slice(0,7);
-  })();
-  for (const it of data){
-    for (const e of (it.sales_entries||[])){
-      if (e.date && e.date.slice(0,7) === lyKey) lymQty += (parseFloat(e.qty)||0);
-    }
-  }
+  // ── SAME MONTH — Last Year vs This Year (ab homeType filter ke according recompute hota hai) ──
+  const lmDate = new Date(today.getFullYear(), today.getMonth(), 1);
+  lmDate.setMonth(lmDate.getMonth() - 1);              // last completed calendar month (this year)
+  const lmKey = lmDate.toISOString().slice(0,7);
+  const lmLabel = lmDate.toLocaleDateString('en-GB', {month:'short', year:'numeric'});
+  const lyMonDate = new Date(lmDate); lyMonDate.setFullYear(lyMonDate.getFullYear() - 1);
+  const lyMonKey = lyMonDate.toISOString().slice(0,7);
+  const lyMonLabel = lyMonDate.toLocaleDateString('en-GB', {month:'short', year:'numeric'});
+
+  const lmAgg = sumRevQty(d => d.slice(0,7) === lmKey);
+  const lyMonAgg = sumRevQty(d => d.slice(0,7) === lyMonKey);
+  const monYoy = lyMonAgg.rev > 0 ? Math.round(((lmAgg.rev - lyMonAgg.rev) / lyMonAgg.rev) * 1000) / 10 : null;
 
   const yoyBlock = isEmp ? '' : `
-    <p class="home-sec-label">Same Month — Last Year vs This Year</p>
+    <p class="home-sec-label">Same Month — Last Year vs This Year${homeType ? ' — '+escHtml(homeType) : ''}</p>
     <div class="yoy-grid">
       <div class="yoy-card">
-        <div class="yc-label">${escHtml(lymLabel)} — Revenue</div>
-        <div class="yc-val">${fmt(lymRev)}</div>
-        <div class="yc-sub">Final Qty: ${Math.round(lymQty).toLocaleString('en-IN')} units</div>
+        <div class="yc-label">${escHtml(lyMonLabel)} — Revenue</div>
+        <div class="yc-val">${fmt(lyMonAgg.rev)}</div>
+        <div class="yc-sub">Final Qty: ${Math.round(lyMonAgg.qty).toLocaleString('en-IN')} units</div>
       </div>
       <div class="yoy-card">
         <div class="yc-label">${escHtml(lmLabel)} — Revenue (this year)</div>
-        <div class="yc-val">${fmt(lmRev)}</div>
-        ${yoy !== null ? `<div class="yc-delta ${yoy>=0?'up':'down'}">${yoy>=0?'▲ +':'▼ '}${yoy}% YoY</div>` : ''}
+        <div class="yc-val">${fmt(lmAgg.rev)}</div>
+        <div class="yc-sub">Final Qty: ${Math.round(lmAgg.qty).toLocaleString('en-IN')} units</div>
+        ${monYoy !== null ? `<div class="yc-delta ${monYoy>=0?'up':'down'}">${monYoy>=0?'▲ +':'▼ '}${monYoy}% YoY</div>` : ''}
       </div>
+    </div>`;
+
+  // ── SAME DAY — Last Year vs This Year (yesterday vs same date last year) ──
+  const yestDate = yesterdayISO ? new Date(yesterdayISO + 'T00:00:00') : new Date(today.getTime() - 86400000);
+  const yestKey = yesterdayISO || iso(yestDate);
+  const yestLabel = yestDate.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+  const yestLyDate = new Date(yestDate); yestLyDate.setFullYear(yestLyDate.getFullYear() - 1);
+  const yestLyKey = iso(yestLyDate);
+  const yestLyLabel = yestLyDate.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+
+  const dayAggThis = sumRevQty(d => d === yestKey);
+  const dayAggLy   = sumRevQty(d => d === yestLyKey);
+  const dayYoy = dayAggLy.rev > 0 ? Math.round(((dayAggThis.rev - dayAggLy.rev) / dayAggLy.rev) * 1000) / 10 : null;
+
+  const dayBlock = isEmp ? '' : `
+    <p class="home-sec-label" style="margin-top:22px">Same Day — Last Year vs This Year${homeType ? ' — '+escHtml(homeType) : ''}</p>
+    <div class="yoy-grid">
+      <div class="yoy-card">
+        <div class="yc-label">${escHtml(yestLyLabel)} — Revenue</div>
+        <div class="yc-val">${fmt(dayAggLy.rev)}</div>
+        <div class="yc-sub">Final Qty: ${Math.round(dayAggLy.qty).toLocaleString('en-IN')} units</div>
+      </div>
+      <div class="yoy-card">
+        <div class="yc-label">${escHtml(yestLabel)} — Revenue (this year)</div>
+        <div class="yc-val">${fmt(dayAggThis.rev)}</div>
+        <div class="yc-sub">Final Qty: ${Math.round(dayAggThis.qty).toLocaleString('en-IN')} units</div>
+        ${dayYoy !== null ? `<div class="yc-delta ${dayYoy>=0?'up':'down'}">${dayYoy>=0?'▲ +':'▼ '}${dayYoy}% YoY</div>` : ''}
+      </div>
+    </div>`;
+
+  // ── TOP CUSTOMER — Last Week / This Month / This Year (name + Final Qty, table format) ──
+  const cWeek  = topCustomer(d => d >= wkStart && d <= wkEnd);
+  const cMonth = topCustomer(d => d.slice(0,7) === monKey);
+  const cYear  = topCustomer(d => d.slice(0,4) === yrKey);
+
+  const custRow = (period, picked) => `
+    <tr>
+      <td style="font-weight:800;color:var(--cn-dark)">${escHtml(period)}</td>
+      <td>${picked ? escHtml(picked.name) : '—'}</td>
+      <td style="text-align:right;font-weight:800;color:var(--cn-gold)">${picked ? Math.round(picked.qty).toLocaleString('en-IN') : '—'}</td>
+      ${isEmp ? '' : `<td style="text-align:right">${picked ? fmt(picked.rev) : '—'}</td>`}
+    </tr>`;
+
+  const custTableBlock = `
+    <p class="home-sec-label" style="margin-top:22px">Top Customer${homeType ? ' — '+escHtml(homeType) : ''}</p>
+    <div class="ro-table-wrap" style="padding:0;overflow-x:auto">
+      <table class="ro" style="width:100%;min-width:420px">
+        <thead><tr>
+          <th>Period</th><th>Top Customer</th><th style="text-align:right">Final Qty</th>${isEmp ? '' : '<th style="text-align:right">Revenue</th>'}
+        </tr></thead>
+        <tbody>
+          ${custRow('Last Week', cWeek)}
+          ${custRow('This Month', cMonth)}
+          ${custRow('This Year', cYear)}
+        </tbody>
+      </table>
     </div>`;
 
   // Available types (sales_entries se unique) — dropdown ke liye.
@@ -7771,6 +7852,8 @@ function renderHome(){
       ${card('Top SKU · This Year', tYear)}
     </div>
     ${yoyBlock}
+    ${dayBlock}
+    ${custTableBlock}
     <div id="helpQueriesBox"></div>
   `;
   if (LOGIN_ROLE === 'admin') { try { renderHelpQueries(); } catch(e){} }
