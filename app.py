@@ -8920,7 +8920,9 @@ function renderPayments(){
   const wkHost = document.getElementById('payWeekTable');
   if (wkHost){
     const wm = d.week_meta || [];
-    // filtered customers ke week_due se overdue-becoming-due recompute
+    // filtered customers ke week_due se "Overdue(month end)" week-wise recompute
+    // (isme carried-forward backlog + is month ke due-dates dono already shamil
+    // hain — backend hi Week 1 me carry-forward add kar deta hai)
     const wkOverdue = wm.map(()=>0);
     rows.forEach(r => {
       (r.week_due || []).forEach(([ds, amt]) => {
@@ -8929,11 +8931,7 @@ function renderPayments(){
         }
       });
     });
-    // FIX: payment received ab bhi FILTERED rows ke week_paid se (pehle company-wide
-    // frozen "d.week_overdue[].payment" use hota tha, jo filtered balance ke saath
-    // mix ho ke galat "Balance Remaining" deta tha — jaise Designer filter lagane
-    // par bhi Myntra/SOR ka payment ghat jata tha). Ab sirf isi filter ke
-    // customers ka is-hafte-mila payment count hota hai.
+    // Payment Received — jaisa tha waisa hi (FILTERED rows ke week_paid se)
     const wkPayment = wm.map(()=>0);
     rows.forEach(r => {
       (r.week_paid || []).forEach(([ds, amt]) => {
@@ -8942,45 +8940,48 @@ function renderPayments(){
         }
       });
     });
-    const filtBalance = rows.reduce((s,r)=>s+(r.balance||0),0);
-    // frozen target (company-wide, fixed — target hamesha waisa hi rehta hai
-    // poore month, filter se independent, kyunki ye "reference" hai)
+    // "Overdue(month end) Target" — month shuru me (pehli baar ledger build hote
+    // hi) company-wide Overdue(month end) total freeze ho jata hai, weekly
+    // (due-date ke hisaab se) bant jata hai — poore month FIXED rehta hai.
     const frozen = d.week_overdue || [];
     const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
+    const tgtTotalFrozen = parseFloat(d.overdue_target_total || 0) || 0;
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
     _payWeekRowsExport = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
-      const pay = Math.round(wkPayment[wi]);   // ab FILTERED payment (bug fix)
-      const tgt = tgtMap[label] || 0;          // FROZEN target (month start)
+      const pay = Math.round(wkPayment[wi]);
+      const tgt = tgtMap[label] || 0;          // FROZEN target, is week ka hissa
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
-      const balAfter = Math.round(filtBalance - cumPay);
-      _payWeekRowsExport.push({week: label, range: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)), overdue_becoming_due: ov, payment_received: pay, balance_remaining: balAfter, overdue_target: tgt});
+      // Balance Remaining = poore month ka FROZEN Target total minus ab tak
+      // (is week tak) mila hua cumulative payment.
+      const balAfter = Math.round(tgtTotalFrozen - cumPay);
+      _payWeekRowsExport.push({week: label, range: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)), overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter});
       return `<tr>
         <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(pay)}</td>
         <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
       </tr>`;
     }).join('');
-    _payWeekRowsExport.push({week:'Total', range:'', overdue_becoming_due: ovTotal, payment_received: payTotal, balance_remaining: '', overdue_target: tgtTotal});
+    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: Math.round(tgtTotalFrozen - cumPay)});
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px">Overdue Becoming Due</th>
+        <th style="text-align:right;padding:5px 8px;background:#fdf6e3">Overdue(month end) Target<br><span style="font-weight:400;font-size:.85em">(month freeze)</span></th>
+        <th style="text-align:right;padding:5px 8px">Overdue(month end)</th>
         <th style="text-align:right;padding:5px 8px">Payment Received</th>
         <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
-        <th style="text-align:right;padding:5px 8px;background:#fdf6e3">Overdue Target<br><span style="font-weight:400;font-size:.85em">(month freeze)</span></th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td style="padding:5px 8px">Total</td>
+        <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
-        <td style="text-align:right;padding:5px 8px"></td>
-        <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(Math.round(tgtTotalFrozen - cumPay))}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Overdue Becoming Due, Payment & Balance ab filter (tag/customer) ke according. <b>Overdue Target</b> = month shuru me freeze hua (poore month fixed) — is month ka target reference. Week 1 = 1st–7th, and so on.</p>`;
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px"><b>Overdue(month end) Target</b> = month shuru me (pehli ledger update par) freeze hua total, weekly bant ke — poore month FIXED rehta hai (reference ke liye). <b>Overdue(month end)</b>, Payment &amp; Balance Remaining ab filter (tag/customer) ke according live update hote hain. <b>Balance Remaining</b> = Overdue(month end) Target (poora frozen total) minus ab tak mila cumulative payment. Week 1 = 1st–7th, and so on.</p>`;
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
@@ -9095,8 +9096,8 @@ function exportPayAging(){
 }
 function exportPayWeek(){
   if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue Becoming Due','Payment Received','Balance Remaining','Overdue Target (month freeze)'];
-  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_becoming_due, w.payment_received, w.balance_remaining, w.overdue_target]);
+  const headers = ['Week','Range','Overdue(month end) Target','Overdue(month end)','Payment Received','Balance Remaining'];
+  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
   _dlCsv(headers, data, 'week_wise_overdue_tracker');
 }
 function exportPayTagSummary(){
