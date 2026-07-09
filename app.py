@@ -8940,19 +8940,27 @@ function renderPayments(){
         }
       });
     });
-    // "Overdue(month end) Target" — month shuru me (pehli baar ledger build hote
-    // hi) company-wide Overdue(month end) total freeze ho jata hai, weekly
-    // (due-date ke hisaab se) bant jata hai — poore month FIXED rehta hai.
-    const frozen = d.week_overdue || [];
-    const tgtMap = {}; frozen.forEach(w => tgtMap[w.label] = w.target || 0);
-    const tgtTotalFrozen = parseFloat(d.overdue_target_total || 0) || 0;
+    // "Overdue(month end) Target" — ab FILTER-AWARE: har customer ka target
+    // month ki pehli baar hi freeze ho chuka hai (backend me), yahan sirf
+    // FILTERED customers ka wahi frozen target sum hota hai. Isliye Tag/Type
+    // filter lagane par ye number badalta hai, par poore month ke liye fixed
+    // rehta hai (ledger baad me kitna bhi badle, frozen value nahi badlegi).
+    const wkTarget = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.target_week_due || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkTarget[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
+    });
+    const tgtTotalFrozen = wkTarget.reduce((s,v)=>s+v, 0);
     let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
     _payWeekRowsExport = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
       const pay = Math.round(wkPayment[wi]);
-      const tgt = tgtMap[label] || 0;          // FROZEN target, is week ka hissa
+      const tgt = Math.round(wkTarget[wi]);    // FROZEN target, filter-aware, is week ka hissa
       cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
       // Balance Remaining = poore month ka FROZEN Target total minus ab tak
       // (is week tak) mila hua cumulative payment.
@@ -10883,6 +10891,13 @@ _PAY_RAW_LEDGER = {"data": None}
 # Month-start pe overdue target freeze hota hai (poore month fixed). Key = "YYYY-MM".
 # Ek baar set hone ke baad month bhar wahi rehta hai (target reference).
 _PAY_OVERDUE_TARGET = {}   # {"2026-07": {"total": 1873072, "weeks": {"Week 1": ..., ...}}}
+# Per-customer FROZEN target — Overdue(month end) Target ab tag/type filter ke
+# hisaab se change hona chahiye, isliye company-wide total ke bajaye har
+# customer ka apna target (month ki pehli baar jo week_due bana, wahi) freeze
+# karke rakhte hain. Filtered rows me se jinke customers pass karte hain,
+# unka target sum karke dikhaya jata hai — number filter ke hisaab se badalta
+# hai par MONTH BHAR wahi fixed rehta hai (ledger baad me badle to bhi nahi).
+_PAY_TARGET_FREEZE = {}   # {"2026-07": {"customer_norm_name": [[date, amt], ...]}}
 
 def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
@@ -11090,6 +11105,16 @@ def _build_payments():
             if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
                 _cust_week_paid.append([e["date"].strftime("%Y-%m-%d"), round(e["credit"], 2)])
         # is customer ne is month kitna pay kiya (collected this month)
+
+        # FREEZE: is customer ka target (week_due jaisa tha) month ki pehli
+        # baar yahan freeze ho jata hai — filter-aware AUR poore month fixed.
+        _mkey_now = f"{today.year}-{today.month:02d}"
+        if _mkey_now not in _PAY_TARGET_FREEZE:
+            _PAY_TARGET_FREEZE[_mkey_now] = {}
+        if nm not in _PAY_TARGET_FREEZE[_mkey_now]:
+            _PAY_TARGET_FREEZE[_mkey_now][nm] = [list(x) for x in _cust_week_due]
+        _cust_target_week_due = _PAY_TARGET_FREEZE[_mkey_now][nm]
+
         rows.append({
             "customer": nm.title(),
             "tag": tag,
@@ -11104,6 +11129,7 @@ def _build_payments():
             "carry_over_overdue": round(cust_carry_over, 0),
             "week_due": _cust_week_due,
             "week_paid": _cust_week_paid,
+            "target_week_due": _cust_target_week_due,
         })
         tot_due += cust_due; tot_over += cust_over; tot_bal += cust_bal
         me_due += cust_due_me; me_over += cust_over_me
