@@ -4514,7 +4514,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="kpis">
       <div class="kpi"><div class="kpi-t">SKUs shown</div><div class="kpi-v" id="rCount" style="color:#d4af5a">0</div></div>
-      <div class="kpi"><div class="kpi-t">Total Final Qty</div><div class="kpi-v" id="rQty" style="color:#d4af5a">0</div></div>
+      <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="rQty" style="color:#d4af5a">0</div></div>
       <div class="kpi"><div class="kpi-t">Inv WIP</div><div class="kpi-v" id="rWip" style="color:#e67e22">0</div></div>
       <div class="kpi"><div class="kpi-t">7D Sale Qty</div><div class="kpi-v" id="rQty7d" style="color:#2ecc71">0</div></div>
       <div class="kpi"><div class="kpi-t">15D Sale Qty</div><div class="kpi-v" id="rQty15d" style="color:#2ecc71">0</div></div>
@@ -4760,7 +4760,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
       <div class="kpis" style="justify-content:flex-start">
         <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div></div>
-        <div class="kpi"><div class="kpi-t">Total Final Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
+        <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
@@ -4814,7 +4814,7 @@ select.lg-in option{background:#fff;color:#1a1610}
             <th>Customer</th>
             <th>Type</th>
             <th>Channel</th>
-            <th>Final Qty</th>
+            <th>Sold Qty</th>
             <th class="rev-only">Discount %</th>
             <th class="rev-only">Net Revenue</th>
           </tr></thead>
@@ -4890,7 +4890,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vTaxon" style="display:none">
   <div class="insights-head">
     <div><div class="insights-title">Taxon Details</div>
-      <div style="color:var(--cn-mid);font-size:.8rem">Har taxon ka total Net Revenue &amp; Final Qty</div></div>
+      <div style="color:var(--cn-mid);font-size:.8rem">Har taxon ka total Net Revenue &amp; Sold Qty</div></div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadTaxon()">Apply / Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportTaxon()">Export CSV</button>
@@ -4923,7 +4923,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <label class="fl" style="margin:0">Sort by</label>
         <select class="fs" id="txDrillSort" onchange="renderTaxonTop50()" style="width:auto">
           <option value="revenue">Net Revenue (high → low)</option>
-          <option value="qty">Final Qty (high → low)</option>
+          <option value="qty">Sold Qty (high → low)</option>
         </select>
         <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportTaxonTop50()">Export CSV</button>
       </div>
@@ -5089,7 +5089,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
 
       <div class="pm-two">
-        <div class="fc"><label class="fl">Final Qty (for total)</label><input type="number" class="fi pm-num" id="pmQty" placeholder="1" min="0" oninput="pmCalc()"></div>
+        <div class="fc"><label class="fl">Sold Qty (for total)</label><input type="number" class="fi pm-num" id="pmQty" placeholder="1" min="0" oninput="pmCalc()"></div>
         <div class="fc"><label class="fl">Net Revenue (COSA)</label><input type="number" class="fi pm-num" id="pmNetRev" placeholder="0" min="0" readonly style="background:#f5f0e6"></div>
       </div>
 
@@ -5144,7 +5144,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="pm-br profit-row pos"><span>Profit Amount <span style="opacity:.6;font-weight:600">(per unit)</span></span><span id="pmBrProfit">₹0</span></div>
       </div>
       <div class="pm-break" id="pmTotalBox" style="margin-top:14px">
-        <div class="pm-br head"><span>Final Qty</span><span id="pmTotQty">1</span></div>
+        <div class="pm-br head"><span>Sold Qty</span><span id="pmTotQty">1</span></div>
         <div class="pm-br"><span>Total Selling Value</span><span id="pmTotSP">₹0</span></div>
         <div class="pm-br minus"><span>Total Deductions</span><span id="pmTotDed">−₹0</span></div>
         <div class="pm-br profit-row pos"><span>Total Profit (× Qty)</span><span id="pmTotProfit">₹0</span></div>
@@ -6064,7 +6064,7 @@ function exportSD(fmtType){
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const mrp = parseFloat(item.mrp) || 0;
-  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
@@ -6078,7 +6078,7 @@ function exportSD(fmtType){
       Customer: e.cust,
       Type: e.type,
       Channel: e.channel || '',
-      'Final Qty': q,
+      'Sold Qty': q,
       'MRP': mrp,
       ...(emp0 ? {} : {'Selling Price': sp, 'Discount %': discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
       'Image Link': item.image_url || '',
@@ -6377,7 +6377,7 @@ function mkCard(item, rev, conf, slow){
   return `<div class="card"><div class="img-box">${img}${statusB}${confB}${invB}</div><div class="cb">
     <div class="sku" style="cursor:pointer" onclick="openSkuDetails('${String(item.sku).replace(/'/g, "\\\\'")}')" title="View full SKU details">${skuLabel(item.sku, item.sku_name)}</div>
     ${revRows}
-    <div class="row"><span>Final Qty</span><span>${item.final_qty || 0}</span></div>
+    <div class="row"><span>Sold Qty</span><span>${item.final_qty || 0}</span></div>
     <div class="row"><span>MRP</span><span>₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</span></div>
     ${item.dimensions ? `<div class="row"><span>Dimensions</span><span>${escHtml(String(item.dimensions))}</span></div>` : ''}
     <div class="row"><span>Inv. Stock</span><span>${item.inv_stock}</span></div>
@@ -6513,7 +6513,7 @@ function applyF(){
         }).join('');
         grid.innerHTML = `<div class="ro-table-wrap" style="grid-column:1/-1">
           <table class="ro"><thead><tr>
-            <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Final Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
+            <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
           </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
       }
     } else {
@@ -6783,7 +6783,7 @@ function applyRO(){
       <th>Customer</th>
       <th>Type</th>
       <th>Channel</th>
-      <th>Final Qty</th>
+      <th>Sold Qty</th>
       ${empTx ? '' : '<th>Discount %</th>'}
       <th>Inv Stock</th>
       <th>Inv (WIP)</th>
@@ -7131,7 +7131,7 @@ function exportRO(fmtType){
     const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {};
     ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; stoneMap[it.sku] = it.stone_color || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Final Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = txns.map(t => {
       const mrp0 = parseFloat(mrpMap[t.sku]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
@@ -7145,7 +7145,7 @@ function exportRO(fmtType){
       'Pack Details': packMap[t.sku] || '',
       Customer: t.cust,
       Type: t.type,
-      'Final Qty': parseFloat(t.qty) || 0,
+      'Sold Qty': parseFloat(t.qty) || 0,
       'MRP': mrp0,
       ...(emp0 ? {} : {'Selling Price': sp0, 'Discount %': discPct0 + '%'}),
       'Inv Stock': parseInt(t.inv_stock) || 0,
@@ -7619,7 +7619,7 @@ function renderProHeader(){
     strip.innerHTML = [
       {label:'SKUs', value: totalSkus.toLocaleString('en-IN'), sub:'catalog size'},
       ...(LOGIN_ROLE === 'employee' ? [] : [{label:'Net Revenue', value: fmt(totalRevenue), sub:'all time'}]),
-      {label:'Final Qty', value: totalQty.toLocaleString('en-IN'), sub:'units sold'},
+      {label:'Sold Qty', value: totalQty.toLocaleString('en-IN'), sub:'units sold'},
       {label:'Low Stock', value: lowStock.toLocaleString('en-IN'), sub:'<= 10 inv'},
       {label:'New Launches', value: launch.toLocaleString('en-IN'), sub:'launched this month'},
       {label:'Top Category', value: topCat, sub: top ? escHtml(top.sku) : '—'},
@@ -7773,12 +7773,12 @@ function renderHome(){
       <div class="yoy-card">
         <div class="yc-label">${escHtml(lyMonLabel)} — Revenue</div>
         <div class="yc-val">${fmt(lyMonAgg.rev)}</div>
-        <div class="yc-sub">Final Qty: ${Math.round(lyMonAgg.qty).toLocaleString('en-IN')} units</div>
+        <div class="yc-sub">Sold Qty: ${Math.round(lyMonAgg.qty).toLocaleString('en-IN')} units</div>
       </div>
       <div class="yoy-card">
         <div class="yc-label">${escHtml(lmLabel)} — Revenue (this year)</div>
         <div class="yc-val">${fmt(lmAgg.rev)}</div>
-        <div class="yc-sub">Final Qty: ${Math.round(lmAgg.qty).toLocaleString('en-IN')} units</div>
+        <div class="yc-sub">Sold Qty: ${Math.round(lmAgg.qty).toLocaleString('en-IN')} units</div>
         ${monYoy !== null ? `<div class="yc-delta ${monYoy>=0?'up':'down'}">${monYoy>=0?'▲ +':'▼ '}${monYoy}% YoY</div>` : ''}
       </div>
     </div>`;
@@ -7801,12 +7801,12 @@ function renderHome(){
       <div class="yoy-card">
         <div class="yc-label">${escHtml(yestLyLabel)} — Revenue</div>
         <div class="yc-val">${fmt(dayAggLy.rev)}</div>
-        <div class="yc-sub">Final Qty: ${Math.round(dayAggLy.qty).toLocaleString('en-IN')} units</div>
+        <div class="yc-sub">Sold Qty: ${Math.round(dayAggLy.qty).toLocaleString('en-IN')} units</div>
       </div>
       <div class="yoy-card">
         <div class="yc-label">${escHtml(yestLabel)} — Revenue (this year)</div>
         <div class="yc-val">${fmt(dayAggThis.rev)}</div>
-        <div class="yc-sub">Final Qty: ${Math.round(dayAggThis.qty).toLocaleString('en-IN')} units</div>
+        <div class="yc-sub">Sold Qty: ${Math.round(dayAggThis.qty).toLocaleString('en-IN')} units</div>
         ${dayYoy !== null ? `<div class="yc-delta ${dayYoy>=0?'up':'down'}">${dayYoy>=0?'▲ +':'▼ '}${dayYoy}% YoY</div>` : ''}
       </div>
     </div>`;
@@ -7829,7 +7829,7 @@ function renderHome(){
     <div class="ro-table-wrap" style="padding:0;overflow-x:auto">
       <table class="ro" style="width:100%;min-width:420px">
         <thead><tr>
-          <th>Period</th><th>Top Customer</th><th style="text-align:right">Final Qty</th>${isEmp ? '' : '<th style="text-align:right">Revenue</th>'}
+          <th>Period</th><th>Top Customer</th><th style="text-align:right">Sold Qty</th>${isEmp ? '' : '<th style="text-align:right">Revenue</th>'}
         </tr></thead>
         <tbody>
           ${custRow('Last Week', cWeek)}
@@ -8425,7 +8425,7 @@ function exportProfit(){
   rows.push(['Total Deductions (per unit)', Math.round(totalDed)]);
   rows.push(['Profit Amount (per unit)', Math.round(profit)]);
   rows.push(['Net Profit Margin %', margin.toFixed(1)]);
-  rows.push(['Final Qty', qty]);
+  rows.push(['Sold Qty', qty]);
   rows.push(['Total Selling Value', Math.round(sp*qty)]);
   rows.push(['Total Deductions', Math.round(totalDed*qty)]);
   rows.push(['Total Profit', Math.round(profit*qty)]);
@@ -8546,7 +8546,7 @@ function renderTaxon(){
     // taaki filtered vs unfiltered confusion na ho. Neeche table filter se update hoti hai.
     sumHost.innerHTML =
       `<div class="yoy-card"><div class="yc-label">Total Taxons</div><div class="yc-val">${(allTaxons||[]).length}</div></div>
-       <div class="yoy-card"><div class="yc-label">Total Final Qty</div><div class="yc-val">${Math.round(grandFinalQty||0).toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(grandFinalQty||0).toLocaleString('en-IN')}</div></div>
        ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(grandNetRevenue)}</div></div>`}`;
   }
   const host = document.getElementById('txContent');
@@ -8560,7 +8560,7 @@ function renderTaxon(){
     host.innerHTML = `<table class="ro" style="width:100%;min-width:420px"><thead><tr>
         <th onclick="sortTaxon('taxon')" style="cursor:pointer">Taxon ⇅</th>
         <th style="text-align:center">SKUs</th>
-        <th style="text-align:right;cursor:pointer" onclick="sortTaxon('final_qty')">Final Qty ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortTaxon('final_qty')">Sold Qty ⇅</th>
         ${emp ? '' : '<th style="text-align:right;cursor:pointer" onclick="sortTaxon(\'net_revenue\')">Net Revenue ⇅</th>'}
       </tr></thead><tbody>${body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
@@ -8586,7 +8586,7 @@ function sortTaxon(key){
 function exportTaxon(){
   const d = _taxonData; if (!d || !d.rows.length){ alert('No data to export'); return; }
   const emp = (LOGIN_ROLE === 'employee');
-  const headers = emp ? ['Taxon','SKU Count','Final Qty'] : ['Taxon','SKU Count','Final Qty','Net Revenue'];
+  const headers = emp ? ['Taxon','SKU Count','Sold Qty'] : ['Taxon','SKU Count','Sold Qty','Net Revenue'];
   const data = d.rows.map(r => emp ? [r.taxon, r.sku_count, r.final_qty] : [r.taxon, r.sku_count, r.final_qty, r.net_revenue]);
   _dlCsv(headers, data, 'taxon_details');
 }
@@ -8654,7 +8654,7 @@ function renderTaxonTop50(){
     </tr>`;
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead><tr>
-      <th>Image</th><th>SKU</th><th>Stone Color</th><th style="text-align:right">Final Qty</th>
+      <th>Image</th><th>SKU</th><th>Stone Color</th><th style="text-align:right">Sold Qty</th>
       ${emp?'':'<th style="text-align:right">Net Revenue</th><th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:center">Status</th><th>Best Channel</th><th>Flags</th>
@@ -8669,8 +8669,8 @@ function exportTaxonTop50(){
   }).slice(0, 50);
   if (!sorted.length){ alert('No rows to export'); return; }
   const headers = emp
-    ? ['SKU','SKU Name','Stone Color','Final Qty','Stock','WIP','Status','Best Channel']
-    : ['SKU','SKU Name','Stone Color','Final Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
+    ? ['SKU','SKU Name','Stone Color','Sold Qty','Stock','WIP','Status','Best Channel']
+    : ['SKU','SKU Name','Stone Color','Sold Qty','Net Revenue','Stock','WIP','Status','Best Channel'];
   const data = sorted.map(it => emp
     ? [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', Math.round(it.final_qty||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']
     : [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', Math.round(it.final_qty||0), Math.round(it.total_net_revenue||0), Math.round(it.inv_stock||0), Math.round(it.inv_wip||0), it.status||'', it.best_channel||'']);
@@ -9585,7 +9585,7 @@ function resetInsights(){
 
 function exportInsights(fmtType){
   if (!insightRows || !insightRows.length) { alert('No insights rows to export'); return; }
-  const headers = ['SKU','SKU Name','Stone Color','MRP','Selling Price','Net Revenue','Final Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
+  const headers = ['SKU','SKU Name','Stone Color','MRP','Selling Price','Net Revenue','Sold Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
   const data = insightRows.map(i => ({
     SKU: i.sku,
     'SKU Name': exportSkuName(i.sku, i.sku_name),
@@ -9593,7 +9593,7 @@ function exportInsights(fmtType){
     'MRP': parseFloat(i.mrp) || 0,
     'Selling Price': parseFloat(i.last_selling_price) || 0,
     'Net Revenue': Math.round(i._iRev || 0),
-    'Final Qty': Math.round(i._iQty || 0),
+    'Sold Qty': Math.round(i._iQty || 0),
     'Return Qty': Math.round(i._iRet || 0),
     'Return Amount': Math.round(i._iRetAmt || 0),
     'Inv Stock': i.inv_stock || 0,
@@ -9801,7 +9801,7 @@ mkCard = function(item, rev, conf, slow){
       <div class="row rev-only"><span>This Month</span><span>${fmt(item.rev_month || 0)}</span></div>
       <div class="row rev-only"><span>This FY</span><span>${fmt(item.rev_fy || 0)}</span></div>
       <div class="row rev-only"><span>Previous FY</span><span>${fmt(item.rev_prev_fy || 0)}</span></div>`}
-      <div class="row"><span>Final Qty</span><span>${item.final_qty || 0}</span></div>
+      <div class="row"><span>Sold Qty</span><span>${item.final_qty || 0}</span></div>
       <div class="row"><span>Inv. Stock</span><span>${item.inv_stock}</span></div>
       <div class="row"><span>Inv (WIP)</span><span>${item.inv_wip}</span></div>
       <div class="row"><span>Blocked Qty</span><span>${item.blocked_qty || 0}</span></div>
@@ -11813,7 +11813,7 @@ def api_upload_report():
             "Status": matched.get("status", "") if matched else "",
             "Inv Stock": matched.get("inv_stock", "") if matched else "",
             "Inv WIP": matched.get("inv_wip", "") if matched else "",
-            "Final Qty": matched.get("final_qty", "") if matched else "",
+            "Sold Qty": matched.get("final_qty", "") if matched else "",
             "Image Link": matched.get("image_url", "") if matched else "",
             "Combo SKUs": matched.get("combo_skus", "") if matched else "",
         })
