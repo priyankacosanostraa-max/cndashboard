@@ -8953,18 +8953,18 @@ function renderPayments(){
         }
       });
     });
-    const tgtTotalFrozen = wkTarget.reduce((s,v)=>s+v, 0);
-    let cumPay = 0, tgtTotal = 0, ovTotal = 0, payTotal = 0;
+    let tgtTotal = 0, ovTotal = 0, payTotal = 0, balTotal = 0;
     _payWeekRowsExport = [];
     const body = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
       const pay = Math.round(wkPayment[wi]);
       const tgt = Math.round(wkTarget[wi]);    // FROZEN target, filter-aware, is week ka hissa
-      cumPay += pay; ovTotal += ov; payTotal += pay; tgtTotal += tgt;
-      // Balance Remaining = poore month ka FROZEN Target total minus ab tak
-      // (is week tak) mila hua cumulative payment.
-      const balAfter = Math.round(tgtTotalFrozen - cumPay);
+      tgtTotal += tgt; ovTotal += ov; payTotal += pay;
+      // Balance Remaining = ISI WEEK ka Target minus ISI WEEK me mila Payment
+      // (per-week, cumulative NAHI — taaki har week apna number dikhaye).
+      const balAfter = Math.round(tgt - pay);
+      balTotal += balAfter;
       _payWeekRowsExport.push({week: label, range: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)), overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter});
       return `<tr>
         <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
@@ -8974,7 +8974,7 @@ function renderPayments(){
         <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
       </tr>`;
     }).join('');
-    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: Math.round(tgtTotalFrozen - cumPay)});
+    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
         <th style="text-align:right;padding:5px 8px;background:#fdf6e3">Overdue(month end) Target<br><span style="font-weight:400;font-size:.85em">(month freeze)</span></th>
@@ -8987,9 +8987,9 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(Math.round(tgtTotalFrozen - cumPay))}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px"><b>Overdue(month end) Target</b> = month shuru me (pehli ledger update par) freeze hua total, weekly bant ke — poore month FIXED rehta hai (reference ke liye). <b>Overdue(month end)</b>, Payment &amp; Balance Remaining ab filter (tag/customer) ke according live update hote hain. <b>Balance Remaining</b> = Overdue(month end) Target (poora frozen total) minus ab tak mila cumulative payment. Week 1 = 1st–7th, and so on.</p>`;
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px"><b>Overdue(month end) Target</b> = month shuru me (pehli ledger update par) freeze hua, weekly bant ke — poore month FIXED rehta hai (reference ke liye), aur Tag/Customer filter lagane par sirf usi filter ke customers ka target dikhata hai. <b>Overdue(month end)</b>, Payment &amp; Balance Remaining ab filter ke according live update hote hain. <b>Balance Remaining</b> = usi week ka Target minus usi week me mila Payment. Week 1 = 1st–7th, and so on.</p>`;
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
@@ -10917,12 +10917,24 @@ def _build_payments():
         tc = terms_df[T_CUST].tolist() if T_CUST else []
         tt = terms_df[T_TERM].tolist() if T_TERM else [0]*len(tc)
         tg = terms_df[T_TAG].tolist()  if T_TAG  else [""]*len(tc)
+        # Tag/Type ab CASE-INSENSITIVE — "Designer", "designer", "DESIGNER" sab
+        # ek hi tag maane jayenge. Canonical spelling = jo pehli baar mila
+        # (isse "SOR" jaisे all-caps tags bhi bigadte nahi, sirf case-variants
+        # ek dusre me fold ho jate hain).
+        _tag_canon = {}
         for i in range(len(tc)):
             nm = _norm_name(tc[i])
             if not nm:
                 continue
             term_map[nm] = to_int(tt[i])
-            tag_map[nm]  = clean(tg[i])
+            _tg_raw = clean(tg[i]).strip()
+            if _tg_raw:
+                _tg_key = _tg_raw.lower()
+                if _tg_key not in _tag_canon:
+                    _tag_canon[_tg_key] = _tg_raw
+                tag_map[nm] = _tag_canon[_tg_key]
+            else:
+                tag_map[nm] = ""
     except Exception as e:
         print("payments terms fetch error:", str(e)[:200])
 
