@@ -5251,6 +5251,27 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select class="fs" id="tgtChannel" onchange="loadTarget()"><option value="">All Channels</option></select></div>
   </div>
   <div id="tgtContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Daily Revenue Glimpse</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRG()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRG()">Export CSV</button>
+    </div>
+  </div>
+  <div id="drgContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Daily Log</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRGLog()">Export CSV</button>
+    </div>
+  </div>
+  <div id="drgLogContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8012,6 +8033,122 @@ function exportTarget(){
 }
 window.loadTarget = loadTarget; window.exportTarget = exportTarget;
 
+/* ── DAILY REVENUE GLIMPSE (Target tab, 2nd table) ── */
+let _drgData = null;
+function loadDRG(){
+  const host = document.getElementById('drgContent');
+  if (!host) return;
+  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
+  fetch('/api/daily_revenue_glimpse', {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => {
+      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      _drgData = d;
+      renderDRGTable();
+      renderDRGLogTable();
+    })
+    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+}
+function renderDRGTable(){
+  const host = document.getElementById('drgContent');
+  const d = _drgData;
+  if (!host || !d) return;
+  const t = d.totals || {};
+  const pctCell = (tgt, ach) => {
+    if (!tgt) return '<span style="color:var(--cn-mid)">—</span>';
+    const cls = ach >= 100 ? 'green' : ach >= 70 ? 'orange' : 'red';
+    return `<span class="${cls}" style="font-weight:800">${ach}%</span>`;
+  };
+  const rowsHtml = (d.rows||[]).map(r => `<tr>
+      <td style="font-weight:700">${escHtml(r.channel)}</td>
+      <td>${fmt(r.last_month)}</td>
+      <td>${fmt(r.day_before)}</td>
+      <td>${fmt(r.yesterday)}</td>
+      <td style="font-weight:800">${fmt(r.mtd)}</td>
+      <td>${r.mtd_target ? fmt(r.mtd_target) : '—'}</td>
+      <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
+    </tr>`).join('');
+  const totalRow = `<tr style="background:#eef7ea;font-weight:900">
+      <td>TOTAL</td>
+      <td>${fmt(t.last_month)}</td>
+      <td>${fmt(t.day_before)}</td>
+      <td>${fmt(t.yesterday)}</td>
+      <td>${fmt(t.mtd)}</td>
+      <td>${t.mtd_target ? fmt(t.mtd_target) : '—'}</td>
+      <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
+    </tr>`;
+  host.innerHTML = `
+    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
+      Day Before: ${escHtml(d.day_before_label||'')} &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
+      &nbsp;•&nbsp; Last Month: ${escHtml(d.last_month_label||'')} &nbsp;•&nbsp; MTD Month: ${escHtml(d.month_label||'')}
+    </p>
+    <table class="ro" style="width:100%;min-width:820px">
+      <thead><tr>
+        <th>Channel</th><th>Last Month</th><th>Day Before</th><th>Yesterday</th>
+        <th>MTD</th><th>MTD Target</th><th>MTD Achievement %</th>
+      </tr></thead>
+      <tbody>${rowsHtml}${totalRow}</tbody>
+    </table>`;
+}
+function exportDRG(){
+  const d = _drgData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  const headers = ['Channel','Last Month','Day Before','Yesterday','MTD','MTD Target','MTD Achievement %'];
+  const rows = d.rows.map(r => [r.channel, Math.round(r.last_month), Math.round(r.day_before),
+    Math.round(r.yesterday), Math.round(r.mtd), Math.round(r.mtd_target||0), r.mtd_target ? r.mtd_achievement : '']);
+  const t = d.totals||{};
+  rows.push(['TOTAL', Math.round(t.last_month||0), Math.round(t.day_before||0),
+    Math.round(t.yesterday||0), Math.round(t.mtd||0), Math.round(t.mtd_target||0), t.mtd_target ? t.mtd_achievement : '']);
+  const csv = [headers].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_glimpse_' + (d.month_label||'').replace(/\s+/g,'_') + '.csv'; a.click();
+}
+function renderDRGLogTable(){
+  const host = document.getElementById('drgLogContent');
+  const d = _drgData;
+  if (!host || !d) return;
+  const cols = d.daily_log_columns || [];
+  const logRows = d.daily_log || [];
+  if (!logRows.length){
+    host.innerHTML = '<div class="home-empty" style="padding:20px">Aaj (' + escHtml(d.daily_start_date||'') + ') se log shuru hoga — refresh karte rahiye, roz ek naya row neeche judta jayega.</div>';
+    return;
+  }
+  const theadCols = cols.map(c => `<th>${escHtml(c)}</th>`).join('');
+  const bodyRows = logRows.map(r => `<tr>
+      <td style="font-weight:700">${escHtml(r.date_disp)}</td>
+      ${cols.map(c => `<td>${fmt(r[c] || 0)}</td>`).join('')}
+      <td style="font-weight:900">${fmt(r.Total || 0)}</td>
+    </tr>`).join('');
+  host.innerHTML = `
+    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
+      Daily tracking ${escHtml(d.daily_start_date||'')} se shuru — har din ka naya row neeche jud jata hai.
+    </p>
+    <table class="ro" style="width:100%;min-width:1100px">
+      <thead><tr><th>Date</th>${theadCols}<th>Total</th></tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`;
+}
+function exportDRGLog(){
+  const d = _drgData;
+  if (!d || !d.daily_log || !d.daily_log.length){ alert('Abhi daily log me koi data nahi hai.'); return; }
+  const cols = d.daily_log_columns || [];
+  const headers = ['Date'].concat(cols).concat(['Total']);
+  const rows = d.daily_log.map(r => [r.date_disp].concat(cols.map(c => Math.round(r[c] || 0))).concat([Math.round(r.Total || 0)]));
+  const csv = [headers].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_log.csv'; a.click();
+}
+window.loadDRG = loadDRG; window.exportDRG = exportDRG;
+window.renderDRGLogTable = renderDRGLogTable; window.exportDRGLog = exportDRGLog;
+
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
 function loadDiscount(){
@@ -9761,7 +9898,7 @@ showTab = function(t){
   if (t === 'repeat')   setTimeout(()=>{ try{ applyRO(); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
-  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); }catch(e){console.error(e);} }, 0);
+  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
@@ -10551,6 +10688,230 @@ def api_target():
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"target build failed: {e}"}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  📅 DAILY REVENUE GLIMPSE  (admin/employee) — Target tab ka 2nd
+#  table (summary) + ek growing "Daily Log" table (date-wise, aaj
+#  se shuru, roz neeche naya row jud jata hai — file me persist
+#  hota hai taaki history bani rahe).
+#
+#  Rows/Buckets: Website(DTC), Amazon, Flipkart, Myntra, Nykaa, Ajio,
+#  Blinkit, Zepto, Instamart, Other SOR Channels, Others (Purchase,
+#  Exhibition, Bulk).
+#
+#  Channel logic (COSA "Type" + "Customer" par based):
+#    - Amazon/Flipkart/Myntra/Nykaa/Ajio: COSA me "Type" = SOR hota
+#      hai, asli channel Customer naam se pehchana jata hai
+#      (calc_channel/calc_sub_channel already yeh kar chuke hain —
+#      entry ka "channel"="Ecom" + "sub_channel"="Myntra"/"Nykaa"/
+#      "Amazon"/"Flipkart"/"AJIO" seedhe use karte hain).
+#    - Website (DTC): COSA "Type" = Website/Online → channel="D2C".
+#    - Blinkit/Zepto/Instamart: COSA "Type" me seedhe waisa hi likha
+#      hota hai (abhi sheet me data nahi hai to 0 hi aayega, jaise
+#      hi data aayega apne aap bharna shuru ho jayega).
+#    - Other SOR Channels: Type=SOR ho lekin marketplace na ho (na
+#      Myntra/Nykaa/Amazon/Flipkart/Ajio), ya koi aur chhoti
+#      marketplace (Tata CLiQ/FNP/Fern/Mirraw).
+#    - Others (Purchase, Exhibition, Bulk): sirf in teeno Type ka
+#      data, + koi bhi truly unclassified row (safety net, taaki
+#      TOTAL hamesha grand actual revenue se match kare).
+#
+#  Type/word matching poori tarah case-insensitive hai (Website/
+#  WEBSITE/website, Sor/SOR/sor — sab ek jaisa treat hota hai) aur
+#  date parsing already parse_date_any() se hoti hai jo string/int/
+#  date/datetime — sab format handle karta hai.
+# ════════════════════════════════════════════════════════════════
+_DRG_ROWS_ORDER = ["Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio",
+                   "Blinkit", "Zepto", "Instamart",
+                   "Other SOR Channels", "Others (Purchase, Exhibition, Bulk)"]
+_DRG_LABELS = {"Website": "Website (DTC)"}
+
+# Target sheet ki "Channel Type" ko in row-buckets se match karne ke
+# liye aliases (case-insensitive). Jo match na ho wo bhi "Others
+# (Purchase, Exhibition, Bulk)" me chala jata hai — isse MTD Target
+# ka total bhi Target sheet ke total se match karta hai.
+_DRG_TARGET_ALIASES = {
+    "Website":                          {"website", "d2c", "online"},
+    "Amazon":                           {"amazon"},
+    "Flipkart":                         {"flipkart"},
+    "Myntra":                           {"myntra"},
+    "Nykaa":                            {"nykaa"},
+    "Ajio":                             {"ajio"},
+    "Blinkit":                          {"blinkit"},
+    "Zepto":                            {"zepto"},
+    "Instamart":                        {"instamart", "swiggy instamart", "swiggy"},
+    "Other SOR Channels":               {"sor"},
+    "Others (Purchase, Exhibition, Bulk)": {"purchase", "bulk", "exhibition"},
+}
+_DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
+
+def _drg_bucket(channel, sub_channel, typ):
+    """Har entry (channel/sub_channel/type — already normalized, case
+    kuch bhi ho) ko humare 11 row-buckets me se ek me daalta hai."""
+    ch_l  = str(channel or "").strip().lower()
+    sub_l = str(sub_channel or "").strip().lower()
+    t_l   = str(typ or "").strip().lower()
+    if ch_l == "ecom":
+        if sub_l == "myntra":   return "Myntra"
+        if sub_l == "nykaa":    return "Nykaa"
+        if sub_l == "amazon":   return "Amazon"
+        if sub_l == "flipkart": return "Flipkart"
+        if sub_l == "ajio":     return "Ajio"
+        return "Other SOR Channels"     # Tata CLiQ / FNP / Fern / Mirraw / Other Marketplace
+    if ch_l == "d2c":
+        return "Website"
+    if ch_l == "sor":
+        return "Other SOR Channels"     # SOR type, koi named marketplace nahi
+    if t_l == "blinkit":   return "Blinkit"
+    if t_l == "zepto":     return "Zepto"
+    if t_l == "instamart": return "Instamart"
+    if t_l in ("purchase", "bulk", "exhibition"):
+        return _DRG_OTHER_BUCKET
+    return _DRG_OTHER_BUCKET            # koi bhi leftover — safety net (total hamesha match kare)
+
+# ── Daily Log persistence (ek chhoti JSON file — roz ka snapshot
+#    upar se neeche jud'ta jata hai, "aaj" se shuru) ──
+DRG_LOG_FILE = "daily_revenue_log.json"
+DRG_START_DATE = "2026-07-15"   # daily tracking isi din se shuru hui hai
+_DRG_LOG_LOCK = threading.Lock()
+
+def _drg_load_log():
+    try:
+        with open(DRG_LOG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _drg_save_log(log):
+    try:
+        tmp = DRG_LOG_FILE + ".part"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(log, f)
+        os.replace(tmp, DRG_LOG_FILE)
+    except Exception:
+        pass
+
+def _build_daily_revenue_glimpse():
+    """Daily Revenue Glimpse:
+    1) Summary table — channel-wise Last Month / Day Before / Yesterday /
+       MTD / MTD Target / MTD Achievement %.
+    2) Daily Log — date-wise growing table (aaj se shuru), har din ka
+       apna row neeche jud'ta jata hai (JSON file me persist hota hai)."""
+    data = get_data()
+    comp = data[0]
+    targets = _fetch_target_rows()
+
+    today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    yest_dt  = today_dt - timedelta(days=1)
+    dbef_dt  = today_dt - timedelta(days=2)
+    cm_start = today_dt.replace(day=1)
+    cur_month = today_dt.strftime("%Y-%m")
+
+    lm_end   = cm_start - timedelta(days=1)
+    lm_start = lm_end.replace(day=1)
+
+    yest_iso     = yest_dt.strftime("%Y-%m-%d")
+    dbef_iso     = dbef_dt.strftime("%Y-%m-%d")
+    lm_start_iso = lm_start.strftime("%Y-%m-%d")
+    lm_end_iso   = lm_end.strftime("%Y-%m-%d")
+    cm_start_iso = cm_start.strftime("%Y-%m-%d")
+    today_iso    = today_dt.strftime("%Y-%m-%d")
+
+    buckets = {b: {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "today": 0.0}
+               for b in _DRG_ROWS_ORDER}
+
+    for it in comp:
+        for e in (it.get("sales_entries") or []):
+            d = e.get("date")
+            if not d or d == "N/A":
+                continue
+            rev = float(e.get("rev") or 0)
+            b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
+            slot = buckets[b]
+            if d == today_iso:
+                slot["today"] += rev
+            if d == yest_iso:
+                slot["yesterday"] += rev
+            if d == dbef_iso:
+                slot["day_before"] += rev
+            if lm_start_iso <= d <= lm_end_iso:
+                slot["last_month"] += rev
+            if cm_start_iso <= d <= today_iso:
+                slot["mtd"] += rev
+
+    # MTD Target: current month ke Target sheet rows ko bucket ke hisaab se jodo
+    tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
+    for t in targets:
+        if t["month"] != cur_month:
+            continue
+        ch = (t.get("channel") or "").strip().lower()
+        matched = None
+        for b, aliases in _DRG_TARGET_ALIASES.items():
+            if ch in aliases:
+                matched = b
+                break
+        tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
+
+    # ── 1) Summary rows ──
+    rows = []
+    tot = {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
+    for b in _DRG_ROWS_ORDER:
+        slot = buckets[b]
+        mtd_target = tgt.get(b, 0.0)
+        ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
+        rows.append({
+            "channel": _DRG_LABELS.get(b, b),
+            "last_month": slot["last_month"], "day_before": slot["day_before"],
+            "yesterday": slot["yesterday"], "mtd": slot["mtd"],
+            "mtd_target": mtd_target, "mtd_achievement": ach,
+        })
+        tot["last_month"] += slot["last_month"]; tot["day_before"] += slot["day_before"]
+        tot["yesterday"]  += slot["yesterday"];  tot["mtd"]        += slot["mtd"]
+        tot["mtd_target"] += mtd_target
+    tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
+
+    # ── 2) Daily Log — aaj ka row upsert karo (day khatam hote hi freeze ho
+    #      jayega, kal se naya row apne aap neeche jud jayega) ──
+    with _DRG_LOG_LOCK:
+        log = _drg_load_log()
+        today_row = {b: round(buckets[b]["today"], 2) for b in _DRG_ROWS_ORDER}
+        today_row["Total"] = round(sum(today_row.values()), 2)
+        log[today_iso] = today_row
+        _drg_save_log(log)
+
+    daily_log = []
+    for dkey in sorted(log.keys()):
+        if dkey < DRG_START_DATE:      # daily tracking sirf aaj (start date) se
+            continue
+        row = dict(log[dkey])
+        try:
+            row_date_disp = datetime.strptime(dkey, "%Y-%m-%d").strftime("%d-%b-%Y")
+        except Exception:
+            row_date_disp = dkey
+        row["date"] = dkey
+        row["date_disp"] = row_date_disp
+        daily_log.append(row)
+
+    return {
+        "rows": rows, "totals": tot,
+        "month_label": today_dt.strftime("%b %Y"),
+        "yesterday_label": yest_dt.strftime("%d-%b"),
+        "day_before_label": dbef_dt.strftime("%d-%b"),
+        "last_month_label": lm_start.strftime("%b %Y"),
+        "daily_log": daily_log,
+        "daily_log_columns": [_DRG_LABELS.get(b, b) for b in _DRG_ROWS_ORDER],
+        "daily_start_date": DRG_START_DATE,
+    }
+
+@app.route("/api/daily_revenue_glimpse")
+def api_daily_revenue_glimpse():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        rep = _build_daily_revenue_glimpse()
+        return jsonify(rep)
+    except Exception as e:
+        return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
 #  💸 DISCOUNT LEAKAGE REPORT  (admin only)
