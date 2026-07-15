@@ -5262,16 +5262,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
   <div id="drgContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div>
-      <div class="insights-title">Daily Log</div>
-    </div>
-    <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRGLog()">Export CSV</button>
-    </div>
-  </div>
-  <div id="drgLogContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8045,7 +8035,6 @@ function loadDRG(){
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       _drgData = d;
       renderDRGTable();
-      renderDRGLogTable();
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
@@ -8107,47 +8096,7 @@ function exportDRG(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_glimpse_' + (d.month_label||'').replace(/\s+/g,'_') + '.csv'; a.click();
 }
-function renderDRGLogTable(){
-  const host = document.getElementById('drgLogContent');
-  const d = _drgData;
-  if (!host || !d) return;
-  const cols = d.daily_log_columns || [];
-  const logRows = d.daily_log || [];
-  if (!logRows.length){
-    host.innerHTML = '<div class="home-empty" style="padding:20px">Aaj (' + escHtml(d.daily_start_date||'') + ') se log shuru hoga — refresh karte rahiye, roz ek naya row neeche judta jayega.</div>';
-    return;
-  }
-  const theadCols = cols.map(c => `<th>${escHtml(c)}</th>`).join('');
-  const bodyRows = logRows.map(r => `<tr>
-      <td style="font-weight:700">${escHtml(r.date_disp)}</td>
-      ${cols.map(c => `<td>${fmt(r[c] || 0)}</td>`).join('')}
-      <td style="font-weight:900">${fmt(r.Total || 0)}</td>
-    </tr>`).join('');
-  host.innerHTML = `
-    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
-      Daily tracking ${escHtml(d.daily_start_date||'')} se shuru — har din ka naya row neeche jud jata hai.
-    </p>
-    <table class="ro" style="width:100%;min-width:1100px">
-      <thead><tr><th>Date</th>${theadCols}<th>Total</th></tr></thead>
-      <tbody>${bodyRows}</tbody>
-    </table>`;
-}
-function exportDRGLog(){
-  const d = _drgData;
-  if (!d || !d.daily_log || !d.daily_log.length){ alert('Abhi daily log me koi data nahi hai.'); return; }
-  const cols = d.daily_log_columns || [];
-  const headers = ['Date'].concat(cols).concat(['Total']);
-  const rows = d.daily_log.map(r => [r.date_disp].concat(cols.map(c => Math.round(r[c] || 0))).concat([Math.round(r.Total || 0)]));
-  const csv = [headers].concat(rows).map(r => r.map(c => {
-    const s = String(c==null?'':c);
-    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_log.csv'; a.click();
-}
 window.loadDRG = loadDRG; window.exportDRG = exportDRG;
-window.renderDRGLogTable = renderDRGLogTable; window.exportDRGLog = exportDRGLog;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -10691,9 +10640,8 @@ def api_target():
 
 # ════════════════════════════════════════════════════════════════
 #  📅 DAILY REVENUE GLIMPSE  (admin/employee) — Target tab ka 2nd
-#  table (summary) + ek growing "Daily Log" table (date-wise, aaj
-#  se shuru, roz neeche naya row jud jata hai — file me persist
-#  hota hai taaki history bani rahe).
+#  table. Channel-wise: Last Month, Day Before, Yesterday, MTD,
+#  MTD Target (Target sheet se), MTD Achievement %.
 #
 #  Rows/Buckets: Website(DTC), Amazon, Flipkart, Myntra, Nykaa, Ajio,
 #  Blinkit, Zepto, Instamart, Other SOR Channels, Others (Purchase,
@@ -10769,34 +10717,10 @@ def _drg_bucket(channel, sub_channel, typ):
         return _DRG_OTHER_BUCKET
     return _DRG_OTHER_BUCKET            # koi bhi leftover — safety net (total hamesha match kare)
 
-# ── Daily Log persistence (ek chhoti JSON file — roz ka snapshot
-#    upar se neeche jud'ta jata hai, "aaj" se shuru) ──
-DRG_LOG_FILE = "daily_revenue_log.json"
-DRG_START_DATE = "2026-07-15"   # daily tracking isi din se shuru hui hai
-_DRG_LOG_LOCK = threading.Lock()
-
-def _drg_load_log():
-    try:
-        with open(DRG_LOG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-def _drg_save_log(log):
-    try:
-        tmp = DRG_LOG_FILE + ".part"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(log, f)
-        os.replace(tmp, DRG_LOG_FILE)
-    except Exception:
-        pass
-
 def _build_daily_revenue_glimpse():
-    """Daily Revenue Glimpse:
-    1) Summary table — channel-wise Last Month / Day Before / Yesterday /
-       MTD / MTD Target / MTD Achievement %.
-    2) Daily Log — date-wise growing table (aaj se shuru), har din ka
-       apna row neeche jud'ta jata hai (JSON file me persist hota hai)."""
+    """Daily Revenue Glimpse: channel-wise Last Month / Day Before / Yesterday /
+    MTD / MTD Target / MTD Achievement %. Target tab me Target vs Actual ke
+    neeche doosra table."""
     data = get_data()
     comp = data[0]
     targets = _fetch_target_rows()
@@ -10817,7 +10741,7 @@ def _build_daily_revenue_glimpse():
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
     today_iso    = today_dt.strftime("%Y-%m-%d")
 
-    buckets = {b: {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "today": 0.0}
+    buckets = {b: {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
                for b in _DRG_ROWS_ORDER}
 
     for it in comp:
@@ -10828,8 +10752,6 @@ def _build_daily_revenue_glimpse():
             rev = float(e.get("rev") or 0)
             b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
             slot = buckets[b]
-            if d == today_iso:
-                slot["today"] += rev
             if d == yest_iso:
                 slot["yesterday"] += rev
             if d == dbef_iso:
@@ -10852,7 +10774,6 @@ def _build_daily_revenue_glimpse():
                 break
         tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
 
-    # ── 1) Summary rows ──
     rows = []
     tot = {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
     for b in _DRG_ROWS_ORDER:
@@ -10870,37 +10791,12 @@ def _build_daily_revenue_glimpse():
         tot["mtd_target"] += mtd_target
     tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
 
-    # ── 2) Daily Log — aaj ka row upsert karo (day khatam hote hi freeze ho
-    #      jayega, kal se naya row apne aap neeche jud jayega) ──
-    with _DRG_LOG_LOCK:
-        log = _drg_load_log()
-        today_row = {b: round(buckets[b]["today"], 2) for b in _DRG_ROWS_ORDER}
-        today_row["Total"] = round(sum(today_row.values()), 2)
-        log[today_iso] = today_row
-        _drg_save_log(log)
-
-    daily_log = []
-    for dkey in sorted(log.keys()):
-        if dkey < DRG_START_DATE:      # daily tracking sirf aaj (start date) se
-            continue
-        row = dict(log[dkey])
-        try:
-            row_date_disp = datetime.strptime(dkey, "%Y-%m-%d").strftime("%d-%b-%Y")
-        except Exception:
-            row_date_disp = dkey
-        row["date"] = dkey
-        row["date_disp"] = row_date_disp
-        daily_log.append(row)
-
     return {
         "rows": rows, "totals": tot,
         "month_label": today_dt.strftime("%b %Y"),
         "yesterday_label": yest_dt.strftime("%d-%b"),
         "day_before_label": dbef_dt.strftime("%d-%b"),
         "last_month_label": lm_start.strftime("%b %Y"),
-        "daily_log": daily_log,
-        "daily_log_columns": [_DRG_LABELS.get(b, b) for b in _DRG_ROWS_ORDER],
-        "daily_start_date": DRG_START_DATE,
     }
 
 @app.route("/api/daily_revenue_glimpse")
