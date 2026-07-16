@@ -8038,6 +8038,21 @@ function loadDRG(){
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
+function drgFmtNum(n){
+  // Indian comma-grouping (matches [>=10000000]##,##,##,##0;[>=100000]##,##,##0;##,##0)
+  n = Math.round(n || 0);
+  const neg = n < 0; n = Math.abs(n);
+  let s = String(n);
+  if (s.length > 3){
+    const last3 = s.slice(-3);
+    let rest = s.slice(0, -3);
+    const parts = [];
+    while (rest.length > 2){ parts.unshift(rest.slice(-2)); rest = rest.slice(0, -2); }
+    if (rest) parts.unshift(rest);
+    s = parts.join(',') + ',' + last3;
+  }
+  return (neg ? '-' : '') + s;
+}
 function renderDRGTable(){
   const host = document.getElementById('drgContent');
   const d = _drgData;
@@ -8050,31 +8065,34 @@ function renderDRGTable(){
   };
   const rowsHtml = (d.rows||[]).map(r => `<tr>
       <td style="font-weight:700">${escHtml(r.channel)}</td>
+      <td style="font-weight:800">${fmt(r.ytd)}</td>
       <td>${fmt(r.last_month)}</td>
+      <td style="font-weight:800">${fmt(r.mtd)}</td>
       <td>${fmt(r.day_before)}</td>
       <td>${fmt(r.yesterday)}</td>
-      <td style="font-weight:800">${fmt(r.mtd)}</td>
       <td>${r.mtd_target ? fmt(r.mtd_target) : '—'}</td>
       <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
     </tr>`).join('');
   const totalRow = `<tr style="background:#eef7ea;font-weight:900">
       <td>TOTAL</td>
+      <td>${fmt(t.ytd)}</td>
       <td>${fmt(t.last_month)}</td>
+      <td>${fmt(t.mtd)}</td>
       <td>${fmt(t.day_before)}</td>
       <td>${fmt(t.yesterday)}</td>
-      <td>${fmt(t.mtd)}</td>
       <td>${t.mtd_target ? fmt(t.mtd_target) : '—'}</td>
       <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
     </tr>`;
   host.innerHTML = `
     <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
-      Day Before: ${escHtml(d.day_before_label||'')} &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
-      &nbsp;•&nbsp; Last Month: ${escHtml(d.last_month_label||'')} &nbsp;•&nbsp; MTD Month: ${escHtml(d.month_label||'')}
+      YTD: ${escHtml(d.fy_label||'')} &nbsp;•&nbsp; Last Month: ${escHtml(d.last_month_label||'')}
+      &nbsp;•&nbsp; This Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; Day Before: ${escHtml(d.day_before_label||'')}
+      &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
-    <table class="ro" style="width:100%;min-width:820px">
+    <table class="ro" style="width:100%;min-width:920px">
       <thead><tr>
-        <th>Channel</th><th>Last Month</th><th>Day Before</th><th>Yesterday</th>
-        <th>MTD</th><th>MTD Target</th><th>MTD Achievement %</th>
+        <th>Channel</th><th>YTD</th><th>Last Month</th><th>This Month</th>
+        <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th>
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
@@ -8082,12 +8100,12 @@ function renderDRGTable(){
 function exportDRG(){
   const d = _drgData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const headers = ['Channel','Last Month','Day Before','Yesterday','MTD','MTD Target','MTD Achievement %'];
-  const rows = d.rows.map(r => [r.channel, Math.round(r.last_month), Math.round(r.day_before),
-    Math.round(r.yesterday), Math.round(r.mtd), Math.round(r.mtd_target||0), r.mtd_target ? r.mtd_achievement : '']);
+  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %'];
+  const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), drgFmtNum(r.mtd_target||0), r.mtd_target ? r.mtd_achievement : '']);
   const t = d.totals||{};
-  rows.push(['TOTAL', Math.round(t.last_month||0), Math.round(t.day_before||0),
-    Math.round(t.yesterday||0), Math.round(t.mtd||0), Math.round(t.mtd_target||0), t.mtd_target ? t.mtd_achievement : '']);
+  rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), drgFmtNum(t.mtd_target||0), t.mtd_target ? t.mtd_achievement : '']);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -10772,9 +10790,11 @@ def _drg_bucket(channel, sub_channel, typ):
     return _DRG_OTHER_BUCKET            # koi bhi leftover — safety net (total hamesha match kare)
 
 def _build_daily_revenue_glimpse():
-    """Daily Revenue Glimpse: channel-wise Last Month / Day Before / Yesterday /
-    MTD / MTD Target / MTD Achievement %. Target tab me Target vs Actual ke
-    neeche doosra table. Data source: cossa_orderdate sheet (Order Date)."""
+    """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
+    Before / Yesterday / This Month Target / Achievement %. Target tab me
+    Target vs Actual ke neeche doosra table. Data source: cossa_orderdate
+    sheet (Order Date). Rows sorted by YTD revenue (max revenue channel
+    sabse upar)."""
     src_rows = _fetch_drg_source_rows()
     targets = _fetch_target_rows()
 
@@ -10787,6 +10807,9 @@ def _build_daily_revenue_glimpse():
     lm_end   = cm_start - timedelta(days=1)
     lm_start = lm_end.replace(day=1)
 
+    fy_label, fy_start_dt, _fy_end_dt = fy_bounds(today_dt.replace(tzinfo=TZ))
+    fy_start_iso = fy_start_dt.strftime("%Y-%m-%d")
+
     yest_iso     = yest_dt.strftime("%Y-%m-%d")
     dbef_iso     = dbef_dt.strftime("%Y-%m-%d")
     lm_start_iso = lm_start.strftime("%Y-%m-%d")
@@ -10794,7 +10817,7 @@ def _build_daily_revenue_glimpse():
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
     today_iso    = today_dt.strftime("%Y-%m-%d")
 
-    buckets = {b: {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
+    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
                for b in _DRG_ROWS_ORDER}
 
     for e in src_rows:
@@ -10804,6 +10827,8 @@ def _build_daily_revenue_glimpse():
         rev = float(e.get("rev") or 0)
         b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         slot = buckets[b]
+        if fy_start_iso <= d <= today_iso:
+            slot["ytd"] += rev
         if d == yest_iso:
             slot["yesterday"] += rev
         if d == dbef_iso:
@@ -10827,24 +10852,30 @@ def _build_daily_revenue_glimpse():
         tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
 
     rows = []
-    tot = {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
+    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
     for b in _DRG_ROWS_ORDER:
         slot = buckets[b]
         mtd_target = tgt.get(b, 0.0)
         ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
         rows.append({
             "channel": _DRG_LABELS.get(b, b),
+            "ytd": slot["ytd"],
             "last_month": slot["last_month"], "day_before": slot["day_before"],
             "yesterday": slot["yesterday"], "mtd": slot["mtd"],
             "mtd_target": mtd_target, "mtd_achievement": ach,
         })
+        tot["ytd"]        += slot["ytd"]
         tot["last_month"] += slot["last_month"]; tot["day_before"] += slot["day_before"]
         tot["yesterday"]  += slot["yesterday"];  tot["mtd"]        += slot["mtd"]
         tot["mtd_target"] += mtd_target
     tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
 
+    # Max revenue wale channel sabse upar (YTD ke hisaab se descending sort)
+    rows.sort(key=lambda r: r["ytd"], reverse=True)
+
     return {
         "rows": rows, "totals": tot,
+        "fy_label": fy_label,
         "month_label": today_dt.strftime("%b %Y"),
         "yesterday_label": yest_dt.strftime("%d-%b"),
         "day_before_label": dbef_dt.strftime("%d-%b"),
