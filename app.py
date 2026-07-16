@@ -5259,6 +5259,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRG()">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRG()">Export CSV</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDRGExcel()">Export Excel</button>
     </div>
   </div>
   <div id="drgContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
@@ -6405,6 +6406,7 @@ function mkCard(item, rev, conf, slow){
     </div></div></div>`;
 }
 
+let _matrixTxns = [];   // Overall Details drill-down (customer/date filtered) rows — export ke liye
 function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
@@ -6501,6 +6503,7 @@ function applyF(){
   if (grid) {
     if (drill) {
       txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+      _matrixTxns = txns;
       if (!txns.length) {
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
@@ -6523,11 +6526,15 @@ function applyF(){
           </tr>`;
         }).join('');
         grid.innerHTML = `<div class="ro-table-wrap" style="grid-column:1/-1">
+          <div style="display:flex;justify-content:flex-end;padding:12px 12px 0">
+            <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#2f6f3e" onclick="exportMatrixTxns()">Export CSV</button>
+          </div>
           <table class="ro"><thead><tr>
             <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
           </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
       }
     } else {
+      _matrixTxns = [];
       // MRP range select hua → low MRP pehle, phir high (ascending).
       let ordered = cards;
       if (mrpRange) ordered = cards.slice().sort((a,b) => a.mrp - b.mrp);
@@ -6548,6 +6555,36 @@ function applyF(){
     setTxt('kY', ky); setTxt('kM', km); setTxt('kF', kf); setTxt('kPF', kpf); setTxt('kT', kt);
   }
 }
+
+function exportMatrixTxns(){
+  if (!_matrixTxns || !_matrixTxns.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  const invBy = {};
+  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty}; });
+  const showRev = LOGIN_ROLE !== 'employee';
+  const headers = ['Dispatch Date','SKU','Customer','Type','Sold Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty']);
+  const rows = _matrixTxns.map(t => {
+    const iv = invBy[t.sku] || {s:0, w:0, b:0};
+    const row = [t.date === 'N/A' ? '' : t.date, t.sku, t.cust, t.type, parseFloat(t.qty) || 0];
+    if (showRev) row.push(Math.round(parseFloat(t.rev) || 0));
+    row.push(parseInt(iv.s) || 0, parseInt(iv.w) || 0, parseInt(iv.b) || 0);
+    return row;
+  });
+  const custQ = (document.getElementById('fCust')?.value || '').trim();
+  const d1 = document.getElementById('fD1')?.value || '';
+  const d2 = document.getElementById('fD2')?.value || '';
+  const csv = [headers].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  const parts = ['overall_details'];
+  if (custQ) parts.push(custQ.replace(/[^a-z0-9]+/gi,'_'));
+  if (d1) parts.push(d1);
+  if (d2) parts.push(d2);
+  a.href = URL.createObjectURL(blob); a.download = parts.join('_') + '.csv'; a.click();
+}
+window.exportMatrixTxns = exportMatrixTxns;
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
@@ -8059,7 +8096,7 @@ function renderDRGTable(){
   if (!host || !d) return;
   const t = d.totals || {};
   const pctCell = (tgt, ach) => {
-    if (!tgt) return '<span style="color:var(--cn-mid)">—</span>';
+    if (!tgt) return '';
     const cls = ach >= 100 ? 'green' : ach >= 70 ? 'orange' : 'red';
     return `<span class="${cls}" style="font-weight:800">${ach}%</span>`;
   };
@@ -8070,7 +8107,7 @@ function renderDRGTable(){
       <td style="font-weight:800">${fmt(r.mtd)}</td>
       <td>${fmt(r.day_before)}</td>
       <td>${fmt(r.yesterday)}</td>
-      <td>${r.mtd_target ? fmt(r.mtd_target) : '—'}</td>
+      <td>${r.mtd_target ? fmt(r.mtd_target) : 'NA'}</td>
       <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
     </tr>`).join('');
   const totalRow = `<tr style="background:#eef7ea;font-weight:900">
@@ -8080,7 +8117,7 @@ function renderDRGTable(){
       <td>${fmt(t.mtd)}</td>
       <td>${fmt(t.day_before)}</td>
       <td>${fmt(t.yesterday)}</td>
-      <td>${t.mtd_target ? fmt(t.mtd_target) : '—'}</td>
+      <td>${t.mtd_target ? fmt(t.mtd_target) : 'NA'}</td>
       <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
     </tr>`;
   host.innerHTML = `
@@ -8101,12 +8138,13 @@ function exportDRG(){
   const d = _drgData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
   const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %'];
+  const titleRow = [d.title_date || '', '', '', '', '', '', '', ''];
   const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
-    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), drgFmtNum(r.mtd_target||0), r.mtd_target ? r.mtd_achievement : '']);
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : '']);
   const t = d.totals||{};
   rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
-    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), drgFmtNum(t.mtd_target||0), t.mtd_target ? t.mtd_achievement : '']);
-  const csv = [headers].concat(rows).map(r => r.map(c => {
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : '']);
+  const csv = [titleRow, headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   }).join(',')).join('\n');
@@ -8114,7 +8152,12 @@ function exportDRG(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_glimpse_' + (d.month_label||'').replace(/\s+/g,'_') + '.csv'; a.click();
 }
-window.loadDRG = loadDRG; window.exportDRG = exportDRG;
+function exportDRGExcel(){
+  const d = _drgData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  window.location.href = '/api/daily_revenue_glimpse/export.xlsx';
+}
+window.loadDRG = loadDRG; window.exportDRG = exportDRG; window.exportDRGExcel = exportDRGExcel;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -10662,22 +10705,22 @@ def api_target():
 #  MTD Target (Target sheet se), MTD Achievement %.
 #
 #  Rows/Buckets: Website(DTC), Amazon, Flipkart, Myntra, Nykaa, Ajio,
-#  Blinkit, Zepto, Instamart, Other SOR Channels, Others (Purchase,
+#  Tata, Blinkit, Instamart, Other SOR Channels, Others (Purchase,
 #  Exhibition, Bulk).
 #
 #  Channel logic (COSA "Type" + "Customer" par based):
-#    - Amazon/Flipkart/Myntra/Nykaa/Ajio: COSA me "Type" = SOR hota
-#      hai, asli channel Customer naam se pehchana jata hai
+#    - Amazon/Flipkart/Myntra/Nykaa/Ajio/Tata: COSA me "Type" = SOR
+#      hota hai, asli channel Customer naam se pehchana jata hai
 #      (calc_channel/calc_sub_channel already yeh kar chuke hain —
 #      entry ka "channel"="Ecom" + "sub_channel"="Myntra"/"Nykaa"/
-#      "Amazon"/"Flipkart"/"AJIO" seedhe use karte hain).
+#      "Amazon"/"Flipkart"/"AJIO"/"Tata CLiQ" seedhe use karte hain).
 #    - Website (DTC): COSA "Type" = Website/Online → channel="D2C".
-#    - Blinkit/Zepto/Instamart: COSA "Type" me seedhe waisa hi likha
+#    - Blinkit/Instamart: COSA "Type" me seedhe waisa hi likha
 #      hota hai (abhi sheet me data nahi hai to 0 hi aayega, jaise
 #      hi data aayega apne aap bharna shuru ho jayega).
 #    - Other SOR Channels: Type=SOR ho lekin marketplace na ho (na
-#      Myntra/Nykaa/Amazon/Flipkart/Ajio), ya koi aur chhoti
-#      marketplace (Tata CLiQ/FNP/Fern/Mirraw).
+#      Myntra/Nykaa/Amazon/Flipkart/Ajio/Tata), ya koi aur chhoti
+#      marketplace (FNP/Fern/Mirraw).
 #    - Others (Purchase, Exhibition, Bulk): sirf in teeno Type ka
 #      data, + koi bhi truly unclassified row (safety net, taaki
 #      TOTAL hamesha grand actual revenue se match kare).
@@ -10688,7 +10731,7 @@ def api_target():
 #  date/datetime — sab format handle karta hai.
 # ════════════════════════════════════════════════════════════════
 _DRG_ROWS_ORDER = ["Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata",
-                   "Blinkit", "Zepto", "Instamart",
+                   "Blinkit", "Instamart",
                    "Other SOR Channels", "Others (Purchase, Exhibition, Bulk)"]
 _DRG_LABELS = {"Website": "Website (DTC)"}
 
@@ -10705,7 +10748,6 @@ _DRG_TARGET_ALIASES = {
     "Ajio":                             {"ajio"},
     "Tata":                             {"tata", "tata cliq"},
     "Blinkit":                          {"blinkit"},
-    "Zepto":                            {"zepto"},
     "Instamart":                        {"instamart", "swiggy instamart", "swiggy"},
     "Other SOR Channels":               {"sor"},
     "Others (Purchase, Exhibition, Bulk)": {"purchase", "bulk", "exhibition"},
@@ -10766,7 +10808,7 @@ def _fetch_drg_source_rows():
 
 def _drg_bucket(channel, sub_channel, typ):
     """Har entry (channel/sub_channel/type — already normalized, case
-    kuch bhi ho) ko humare 12 row-buckets me se ek me daalta hai."""
+    kuch bhi ho) ko humare 11 row-buckets me se ek me daalta hai."""
     ch_l  = str(channel or "").strip().lower()
     sub_l = str(sub_channel or "").strip().lower()
     t_l   = str(typ or "").strip().lower()
@@ -10783,7 +10825,6 @@ def _drg_bucket(channel, sub_channel, typ):
     if ch_l == "sor":
         return "Other SOR Channels"     # SOR type, koi named marketplace nahi
     if t_l == "blinkit":   return "Blinkit"
-    if t_l == "zepto":     return "Zepto"
     if t_l == "instamart": return "Instamart"
     if t_l in ("purchase", "bulk", "exhibition"):
         return _DRG_OTHER_BUCKET
@@ -10880,6 +10921,7 @@ def _build_daily_revenue_glimpse():
         "yesterday_label": yest_dt.strftime("%d-%b"),
         "day_before_label": dbef_dt.strftime("%d-%b"),
         "last_month_label": lm_start.strftime("%b %Y"),
+        "title_date": today_dt.strftime("%d - %b - %Y"),
     }
 
 @app.route("/api/daily_revenue_glimpse")
@@ -10891,6 +10933,105 @@ def api_daily_revenue_glimpse():
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
+
+@app.route("/api/daily_revenue_glimpse/export.xlsx")
+def api_daily_revenue_glimpse_export_xlsx():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        rep = _build_daily_revenue_glimpse()
+        rows = rep["rows"]
+        tot  = rep["totals"]
+        today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        title_txt = today_dt.strftime("%d - %b - %Y")
+
+        headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
+                   "Yesterday", "This Month Target", "Achievement %"]
+        n_cols = len(headers)
+        NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Daily Revenue Glimpse"
+
+        title_fill  = PatternFill("solid", fgColor="000000")
+        title_font  = Font(bold=True, color="FFFFFF", size=12)
+        head_fill   = PatternFill("solid", fgColor="C9DAF8")
+        head_font   = Font(bold=True)
+        total_fill  = PatternFill("solid", fgColor="C9DAF8")
+        total_font  = Font(bold=True)
+        thin = Side(style="thin", color="CCCCCC")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center")
+
+        # Row 1: title bar
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
+        c = ws.cell(row=1, column=1, value=title_txt)
+        c.fill = title_fill; c.font = title_font; c.alignment = center
+        for col in range(1, n_cols + 1):
+            ws.cell(row=1, column=col).fill = title_fill
+
+        # Row 2: header
+        for col, h in enumerate(headers, start=1):
+            c = ws.cell(row=2, column=col, value=h)
+            c.fill = head_fill; c.font = head_font; c.alignment = center; c.border = border
+
+        # Data rows
+        r_idx = 3
+        for r in rows:
+            ws.cell(row=r_idx, column=1, value=r["channel"]).font = Font(bold=True)
+            ws.cell(row=r_idx, column=2, value=round(r["ytd"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=3, value=round(r["last_month"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=4, value=round(r["mtd"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=5, value=round(r["day_before"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=6, value=round(r["yesterday"])).number_format = NUM_FMT
+            if r["mtd_target"]:
+                ws.cell(row=r_idx, column=7, value=round(r["mtd_target"])).number_format = NUM_FMT
+                ws.cell(row=r_idx, column=8, value=r["mtd_achievement"])
+            else:
+                ws.cell(row=r_idx, column=7, value="NA")
+                ws.cell(row=r_idx, column=8, value="")
+            for col in range(1, n_cols + 1):
+                ws.cell(row=r_idx, column=col).border = border
+            r_idx += 1
+
+        # TOTAL row
+        ws.cell(row=r_idx, column=1, value="TOTAL")
+        ws.cell(row=r_idx, column=2, value=round(tot["ytd"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=3, value=round(tot["last_month"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=4, value=round(tot["mtd"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=5, value=round(tot["day_before"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=6, value=round(tot["yesterday"])).number_format = NUM_FMT
+        if tot["mtd_target"]:
+            ws.cell(row=r_idx, column=7, value=round(tot["mtd_target"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=8, value=tot["mtd_achievement"])
+        else:
+            ws.cell(row=r_idx, column=7, value="NA")
+            ws.cell(row=r_idx, column=8, value="")
+        for col in range(1, n_cols + 1):
+            cell = ws.cell(row=r_idx, column=col)
+            cell.fill = total_fill; cell.font = total_font; cell.border = border
+
+        widths = [26, 14, 14, 14, 12, 12, 16, 14]
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"daily_revenue_glimpse_{today_dt.strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(
+            bio.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"excel export failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
 #  💸 DISCOUNT LEAKAGE REPORT  (admin only)
