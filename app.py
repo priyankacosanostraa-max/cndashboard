@@ -10669,7 +10669,7 @@ def api_target():
 #  date parsing already parse_date_any() se hoti hai jo string/int/
 #  date/datetime — sab format handle karta hai.
 # ════════════════════════════════════════════════════════════════
-_DRG_ROWS_ORDER = ["Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio",
+_DRG_ROWS_ORDER = ["Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata",
                    "Blinkit", "Zepto", "Instamart",
                    "Other SOR Channels", "Others (Purchase, Exhibition, Bulk)"]
 _DRG_LABELS = {"Website": "Website (DTC)"}
@@ -10685,6 +10685,7 @@ _DRG_TARGET_ALIASES = {
     "Myntra":                           {"myntra"},
     "Nykaa":                            {"nykaa"},
     "Ajio":                             {"ajio"},
+    "Tata":                             {"tata", "tata cliq"},
     "Blinkit":                          {"blinkit"},
     "Zepto":                            {"zepto"},
     "Instamart":                        {"instamart", "swiggy instamart", "swiggy"},
@@ -10693,19 +10694,72 @@ _DRG_TARGET_ALIASES = {
 }
 _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
 
+# Daily Revenue Glimpse ka apna source: "cossa_orderdate" sheet — layout
+# COSA jaisa hi hai (SKU, MRP, Total Qty, Return Qty, Final Qty, Selling
+# Price, Net Revenue, Customer Name, Type, Wooden Box No), sirf column A
+# "Order Date" hai (Dispatch Date nahi). Baaki dashboard (Target vs Actual,
+# Inventory, etc.) COSA (dispatch date) wale se hi chalta rahega — sirf
+# yeh ek feature Order Date wali sheet use karta hai.
+COSA_ORDERDATE_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
+                       "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
+_DRG_SRC_CACHE = {"rows": None, "ts": 0}
+
+def _fetch_drg_source_rows():
+    """cossa_orderdate sheet ko parse karke normalized rows deta hai
+    (date/rev/channel/sub_channel/type) — 10 min cache (sheet bahut badi
+    hai, baar baar fetch karna mehenga hai). Date/word kisi bhi format
+    (chhote/bade/mixed letters, int/str, date ya date-time) me ho, sab
+    parse_date_any()/norm_type()/norm_cust() se handle ho jata hai."""
+    if _DRG_SRC_CACHE["rows"] is not None and (time.time() - _DRG_SRC_CACHE["ts"] < 600):
+        return _DRG_SRC_CACHE["rows"]
+    df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+    df.columns = [str(c).strip() for c in df.columns]
+    cols = list(df.columns)
+    def _at(i): return cols[i] if len(cols) > i else None
+
+    C_DATE = _at(0)  or find_col(df.columns, "Order Date", "Dispatch Date", "date")
+    C_QTY  = (find_col(df.columns, "Final Qty", "final quantity", "final_qty")
+              or _at(6) or find_col(df.columns, "qty", "quantity") or _at(5))
+    C_SP   = find_col(df.columns, "Selling Price", "selling price", "sp", "unit price") or _at(7)
+    C_REV  = _at(8)  or find_col(df.columns, "Net Revenue", "net rev", "revenue")
+    C_CUST = _at(9)  or find_col(df.columns, "Customer Name", "customer", "client", "party")
+    C_TYPE = _at(10) or find_col(df.columns, "Type", "channel", "mode")
+
+    out = []
+    for _, r in df.iterrows():
+        dt = parse_date_any(r.get(C_DATE, "")) if C_DATE else None
+        if dt is None:
+            continue
+        rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
+        cust = norm_cust(r.get(C_CUST, "Unknown")) if C_CUST else "Unknown"
+        typ  = norm_type(r.get(C_TYPE, "Regular")) if C_TYPE else "Regular"
+        channel = calc_channel(cust, typ)
+        sub_channel = calc_sub_channel(cust, channel, typ)
+        out.append({
+            "date": dt.strftime("%Y-%m-%d"),
+            "rev": rev,
+            "channel": channel,
+            "sub_channel": sub_channel,
+            "type": typ,
+        })
+    _DRG_SRC_CACHE["rows"] = out
+    _DRG_SRC_CACHE["ts"] = time.time()
+    return out
+
 def _drg_bucket(channel, sub_channel, typ):
     """Har entry (channel/sub_channel/type — already normalized, case
-    kuch bhi ho) ko humare 11 row-buckets me se ek me daalta hai."""
+    kuch bhi ho) ko humare 12 row-buckets me se ek me daalta hai."""
     ch_l  = str(channel or "").strip().lower()
     sub_l = str(sub_channel or "").strip().lower()
     t_l   = str(typ or "").strip().lower()
     if ch_l == "ecom":
-        if sub_l == "myntra":   return "Myntra"
-        if sub_l == "nykaa":    return "Nykaa"
-        if sub_l == "amazon":   return "Amazon"
-        if sub_l == "flipkart": return "Flipkart"
-        if sub_l == "ajio":     return "Ajio"
-        return "Other SOR Channels"     # Tata CLiQ / FNP / Fern / Mirraw / Other Marketplace
+        if sub_l == "myntra":    return "Myntra"
+        if sub_l == "nykaa":     return "Nykaa"
+        if sub_l == "amazon":    return "Amazon"
+        if sub_l == "flipkart":  return "Flipkart"
+        if sub_l == "ajio":      return "Ajio"
+        if sub_l == "tata cliq": return "Tata"
+        return "Other SOR Channels"     # FNP / Fern / Mirraw / Other Marketplace
     if ch_l == "d2c":
         return "Website"
     if ch_l == "sor":
@@ -10720,9 +10774,8 @@ def _drg_bucket(channel, sub_channel, typ):
 def _build_daily_revenue_glimpse():
     """Daily Revenue Glimpse: channel-wise Last Month / Day Before / Yesterday /
     MTD / MTD Target / MTD Achievement %. Target tab me Target vs Actual ke
-    neeche doosra table."""
-    data = get_data()
-    comp = data[0]
+    neeche doosra table. Data source: cossa_orderdate sheet (Order Date)."""
+    src_rows = _fetch_drg_source_rows()
     targets = _fetch_target_rows()
 
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
@@ -10744,22 +10797,21 @@ def _build_daily_revenue_glimpse():
     buckets = {b: {"last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
                for b in _DRG_ROWS_ORDER}
 
-    for it in comp:
-        for e in (it.get("sales_entries") or []):
-            d = e.get("date")
-            if not d or d == "N/A":
-                continue
-            rev = float(e.get("rev") or 0)
-            b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
-            slot = buckets[b]
-            if d == yest_iso:
-                slot["yesterday"] += rev
-            if d == dbef_iso:
-                slot["day_before"] += rev
-            if lm_start_iso <= d <= lm_end_iso:
-                slot["last_month"] += rev
-            if cm_start_iso <= d <= today_iso:
-                slot["mtd"] += rev
+    for e in src_rows:
+        d = e.get("date")
+        if not d or d == "N/A":
+            continue
+        rev = float(e.get("rev") or 0)
+        b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
+        slot = buckets[b]
+        if d == yest_iso:
+            slot["yesterday"] += rev
+        if d == dbef_iso:
+            slot["day_before"] += rev
+        if lm_start_iso <= d <= lm_end_iso:
+            slot["last_month"] += rev
+        if cm_start_iso <= d <= today_iso:
+            slot["mtd"] += rev
 
     # MTD Target: current month ke Target sheet rows ko bucket ke hisaab se jodo
     tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
