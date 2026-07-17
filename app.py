@@ -6407,6 +6407,7 @@ function mkCard(item, rev, conf, slow){
 }
 
 let _matrixTxns = [];   // Overall Details drill-down (customer/date filtered) rows — export ke liye
+let _matrixPivot = [];  // Overall Details pivot (customer + SKU wise totals) — export ke liye
 function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
@@ -6505,10 +6506,23 @@ function applyF(){
       txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
       _matrixTxns = txns;
       if (!txns.length) {
+        _matrixPivot = [];
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
         master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
+
+        // ── Pivot: customer + SKU ke hisaab se (alag alag date ki entries) jod do ──
+        const pivotMap = new Map();
+        txns.forEach(t => {
+          const key = t.cust + '|||' + t.sku;
+          if (!pivotMap.has(key)) pivotMap.set(key, { cust: t.cust, sku: t.sku, sku_name: t.sku_name, qty: 0, rev: 0 });
+          const p = pivotMap.get(key);
+          p.qty += parseFloat(t.qty) || 0;
+          p.rev += parseFloat(t.rev) || 0;
+        });
+        _matrixPivot = Array.from(pivotMap.values()).sort((a,b) => b.rev - a.rev);
+
         const rowsHtml = txns.map(t => {
           const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
           const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
@@ -6525,16 +6539,42 @@ function applyF(){
             <td class="${blk > 0 ? 'red' : 'muted'}">${blk}</td>
           </tr>`;
         }).join('');
+
+        const pivotRowsHtml = _matrixPivot.map(p => {
+          const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
+          const iv = invBy[p.sku] || {img:''};
+          return `<tr>
+            <td>${safeText(p.cust)}</td>
+            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(p.sku, p.sku_name)}</button></div></td>
+            <td class="gold">${p.qty}</td>
+            ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(p.rev)}</td>`}
+          </tr>`;
+        }).join('');
+
+        const exportBtns = kind => `
+          <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:1.5px;background:#2f6f3e" onclick="exportMatrixCSV('${kind}')">Export CSV</button>
+          <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:1.5px;background:#1d6f42" onclick="exportMatrixExcel('${kind}')">Export Excel</button>
+          <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:1.5px;background:#8c2f2f" onclick="exportMatrixPDF('${kind}')">Export PDF</button>`;
+
         grid.innerHTML = `<div class="ro-table-wrap" style="grid-column:1/-1">
-          <div style="display:flex;justify-content:flex-end;padding:12px 12px 0">
-            <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#2f6f3e" onclick="exportMatrixTxns()">Export CSV</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 12px 0;flex-wrap:wrap;gap:8px">
+            <div class="insights-title" style="font-size:1rem">Transactions</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
             <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
-          </tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+          </tr></thead><tbody>${rowsHtml}</tbody></table></div>
+        <div class="ro-table-wrap" style="grid-column:1/-1;margin-top:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 12px 0;flex-wrap:wrap;gap:8px">
+            <div class="insights-title" style="font-size:1rem">Pivot — SKU-wise Summary</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
+          </div>
+          <table class="ro"><thead><tr>
+            <th>Customer</th><th>SKU</th><th>Total Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}
+          </tr></thead><tbody>${pivotRowsHtml}</tbody></table></div>`;
       }
     } else {
-      _matrixTxns = [];
+      _matrixTxns = []; _matrixPivot = [];
       // MRP range select hua → low MRP pehle, phir high (ascending).
       let ordered = cards;
       if (mrpRange) ordered = cards.slice().sort((a,b) => a.mrp - b.mrp);
@@ -6556,35 +6596,102 @@ function applyF(){
   }
 }
 
-function exportMatrixTxns(){
-  if (!_matrixTxns || !_matrixTxns.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
-  const invBy = {};
-  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty}; });
-  const showRev = LOGIN_ROLE !== 'employee';
-  const headers = ['Dispatch Date','SKU','Customer','Type','Sold Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty']);
-  const rows = _matrixTxns.map(t => {
-    const iv = invBy[t.sku] || {s:0, w:0, b:0};
-    const row = [t.date === 'N/A' ? '' : t.date, t.sku, t.cust, t.type, parseFloat(t.qty) || 0];
-    if (showRev) row.push(Math.round(parseFloat(t.rev) || 0));
-    row.push(parseInt(iv.s) || 0, parseInt(iv.w) || 0, parseInt(iv.b) || 0);
-    return row;
-  });
+function _matrixExportMeta(){
   const custQ = (document.getElementById('fCust')?.value || '').trim();
   const d1 = document.getElementById('fD1')?.value || '';
   const d2 = document.getElementById('fD2')?.value || '';
-  const csv = [headers].concat(rows).map(r => r.map(c => {
+  const parts = ['overall_details'];
+  if (custQ) parts.push(custQ.replace(/[^a-z0-9]+/gi,'_'));
+  if (d1) parts.push(d1);
+  if (d2) parts.push(d2);
+  return { custQ, d1, d2, base: parts.join('_') };
+}
+function _matrixInvLookup(){
+  const invBy = {};
+  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
+  return invBy;
+}
+function _matrixBuildPayload(kind){
+  const showRev = LOGIN_ROLE !== 'employee';
+  const invBy = _matrixInvLookup();
+  if (kind === 'transactions'){
+    return _matrixTxns.map(t => {
+      const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
+      return {
+        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, customer: t.cust, type: t.type,
+        qty: parseFloat(t.qty) || 0, revenue: showRev ? Math.round(parseFloat(t.rev) || 0) : null,
+        inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
+        image_url: iv.img || ''
+      };
+    });
+  }
+  return _matrixPivot.map(p => {
+    const iv = invBy[p.sku] || {img:''};
+    return { customer: p.cust, sku: p.sku, qty: p.qty, revenue: showRev ? Math.round(p.rev) : null, image_url: iv.img || '' };
+  });
+}
+function exportMatrixCSV(kind){
+  const rows = _matrixBuildPayload(kind);
+  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  const meta = _matrixExportMeta();
+  const showRev = LOGIN_ROLE !== 'employee';
+  let headers, csvRows;
+  if (kind === 'transactions'){
+    headers = ['Dispatch Date','SKU','Customer','Type','Sold Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
+    csvRows = rows.map(r => {
+      const line = [r.date, r.sku, r.customer, r.type, r.qty];
+      if (showRev) line.push(r.revenue);
+      line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url);
+      return line;
+    });
+  } else {
+    headers = ['Customer','SKU','Total Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Image Link']);
+    csvRows = rows.map(r => {
+      const line = [r.customer, r.sku, r.qty];
+      if (showRev) line.push(r.revenue);
+      line.push(r.image_url);
+      return line;
+    });
+  }
+  const csv = [headers].concat(csvRows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   }).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
-  const parts = ['overall_details'];
-  if (custQ) parts.push(custQ.replace(/[^a-z0-9]+/gi,'_'));
-  if (d1) parts.push(d1);
-  if (d2) parts.push(d2);
-  a.href = URL.createObjectURL(blob); a.download = parts.join('_') + '.csv'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = meta.base + '_' + kind + '.csv'; a.click();
 }
-window.exportMatrixTxns = exportMatrixTxns;
+function exportMatrixExcel(kind){
+  const rows = _matrixBuildPayload(kind);
+  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  const meta = _matrixExportMeta();
+  fetch('/api/overall_export/xlsx', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ kind, rows, title: meta.base })
+  }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = meta.base + '_' + kind + '.xlsx'; a.click();
+    })
+    .catch(err => alert('Excel export failed: ' + (err.message || err)));
+}
+function exportMatrixPDF(kind){
+  const rows = _matrixBuildPayload(kind);
+  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  const meta = _matrixExportMeta();
+  fetch('/api/overall_export/pdf', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ kind, rows, title: meta.base })
+  }).then(r => { if (!r.ok) return r.json().then(j => { throw new Error(j.error || ('HTTP ' + r.status)); }); return r.blob(); })
+    .then(blob => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = meta.base + '_' + kind + '.pdf'; a.click();
+    })
+    .catch(err => alert('PDF export failed: ' + (err.message || err)));
+}
+window.exportMatrixCSV = exportMatrixCSV;
+window.exportMatrixExcel = exportMatrixExcel;
+window.exportMatrixPDF = exportMatrixPDF;
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
@@ -11032,6 +11139,169 @@ def api_daily_revenue_glimpse_export_xlsx():
         return resp
     except Exception as e:
         return jsonify({"error": f"excel export failed: {e}"}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  📤 OVERALL DETAILS EXPORT (Customer/Date drill-down)
+#  Jab Overall Details tab me Customer/Date se search karke
+#  Transactions + Pivot (SKU-wise summary) table dikhti hai, wahan
+#  ke Export Excel / Export PDF buttons yahan hit karte hain.
+#  Frontend jo bhi filtered rows (already filters lagi hui) bhejta
+#  hai wahi export hoti hai — image_url "Image Link" column me
+#  (Excel) ya photo ke roop me (PDF) shamil hota hai.
+# ════════════════════════════════════════════════════════════════
+_OVERALL_NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
+
+@app.route("/api/overall_export/xlsx", methods=["POST"])
+def api_overall_export_xlsx():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+
+        payload = request.get_json(force=True) or {}
+        kind  = payload.get("kind", "transactions")
+        rows  = payload.get("rows") or []
+        title = (payload.get("title") or "overall_details").strip() or "overall_details"
+        show_rev = bool(rows) and rows[0].get("revenue") is not None
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Pivot" if kind == "pivot" else "Transactions"
+
+        if kind == "pivot":
+            headers = ["Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) + ["Image Link"]
+        else:
+            headers = ["Dispatch Date", "SKU", "Customer", "Type", "Sold Qty"] + (["Net Revenue"] if show_rev else []) \
+                      + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
+
+        ws.append(headers)
+        for c in ws[1]:
+            c.font = Font(bold=True, color="FFFFFF")
+            c.fill = PatternFill("solid", fgColor="8C7A42")
+
+        num_cols = {"Sold Qty", "Total Qty", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"}
+        for r in rows:
+            if kind == "pivot":
+                line = [r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
+                if show_rev:
+                    line.append(r.get("revenue", 0))
+                line.append(r.get("image_url", "") or "")
+            else:
+                line = [r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
+                if show_rev:
+                    line.append(r.get("revenue", 0))
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
+            ws.append(line)
+
+        for col_idx, h in enumerate(headers, start=1):
+            if h in num_cols:
+                for row_i in range(2, ws.max_row + 1):
+                    ws.cell(row=row_i, column=col_idx).number_format = _OVERALL_NUM_FMT
+
+        for col_cells in ws.columns:
+            length = max((len(str(c.value)) for c in col_cells if c.value is not None), default=10)
+            ws.column_dimensions[col_cells[0].column_letter].width = min(max(length + 2, 10), 60)
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", title)
+        resp = app.response_class(
+            bio.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp.headers["Content-Disposition"] = f"attachment; filename={safe_title}_{kind}.xlsx"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"excel export failed: {e}"}), 500
+
+@app.route("/api/overall_export/pdf", methods=["POST"])
+def api_overall_export_pdf():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.units import mm
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+            from reportlab.lib.styles import getSampleStyleSheet
+        except ImportError:
+            return jsonify({"error": "PDF export ke liye 'reportlab' package deploy me install nahi hai — "
+                                      "requirements.txt me 'reportlab' add karke Railway par redeploy karein."}), 500
+
+        payload = request.get_json(force=True) or {}
+        kind  = payload.get("kind", "transactions")
+        rows  = payload.get("rows") or []
+        title = payload.get("title") or "Overall Details"
+        show_rev = bool(rows) and rows[0].get("revenue") is not None
+
+        def _img_flowable(url):
+            """Photo ko best-effort download karke chhoti thumbnail flowable banata hai.
+            Fail ho (bad link/timeout) to khaali cell — poori report kabhi nahi girti."""
+            if not url:
+                return ""
+            try:
+                ir = requests.get(url, timeout=4)
+                ir.raise_for_status()
+                raw = ir.content
+                if PIL_AVAILABLE:
+                    im = Image.open(io.BytesIO(raw)).convert("RGB")
+                    im.thumbnail((90, 90))
+                    out = io.BytesIO()
+                    im.save(out, format="JPEG", quality=80)
+                    out.seek(0)
+                    return RLImage(out, width=13 * mm, height=13 * mm)
+                bio2 = io.BytesIO(raw)
+                return RLImage(bio2, width=13 * mm, height=13 * mm)
+            except Exception:
+                return ""
+
+        styles = getSampleStyleSheet()
+        elements = [Paragraph(str(title).replace("_", " "), styles["Heading2"]), Spacer(1, 8)]
+
+        if kind == "pivot":
+            headers = ["Photo", "Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else [])
+        else:
+            headers = ["Photo", "Date", "SKU", "Customer", "Type", "Qty"] + (["Net Revenue"] if show_rev else []) \
+                      + ["Stock", "WIP", "Blocked"]
+
+        table_data = [headers]
+        for r in rows:
+            img_cell = _img_flowable(r.get("image_url"))
+            if kind == "pivot":
+                line = [img_cell, r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
+                if show_rev:
+                    line.append(r.get("revenue", 0))
+            else:
+                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
+                if show_rev:
+                    line.append(r.get("revenue", 0))
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
+            table_data.append(line)
+
+        tbl = Table(table_data, repeatRows=1)
+        tbl.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#8C7A42")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 7),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F7F5EE")]),
+        ]))
+        elements.append(tbl)
+
+        bio = io.BytesIO()
+        doc = SimpleDocTemplate(bio, pagesize=landscape(A4), topMargin=18, bottomMargin=18, leftMargin=18, rightMargin=18)
+        doc.build(elements)
+        bio.seek(0)
+        safe_title = re.sub(r"[^A-Za-z0-9_-]+", "_", str(title))
+        resp = app.response_class(bio.read(), mimetype="application/pdf")
+        resp.headers["Content-Disposition"] = f"attachment; filename={safe_title}_{kind}.pdf"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"pdf export failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
 #  💸 DISCOUNT LEAKAGE REPORT  (admin only)
