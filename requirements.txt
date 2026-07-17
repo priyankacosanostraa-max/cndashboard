@@ -7,3 +7,4 @@ pillow
 google-genai
 gradio_client
 gunicorn
+reportlab
