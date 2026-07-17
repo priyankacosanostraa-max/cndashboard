@@ -9250,7 +9250,13 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
       </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px"><b>Overdue(month end) Target</b> = month shuru me (pehli ledger update par) freeze hua, weekly bant ke — poore month FIXED rehta hai (reference ke liye), aur Tag/Customer filter lagane par sirf usi filter ke customers ka target dikhata hai. <b>Overdue(month end)</b>, Payment &amp; Balance Remaining ab filter ke according live update hote hain. <b>Balance Remaining</b> = usi week ka Target minus usi week me mila Payment. Week 1 = 1st–7th, and so on.</p>`;
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
+        <b>Overdue(month end) Target</b> = month ke pehle din (pehli ledger update par) freeze hua outstanding — poore month FIXED rehta hai (reference ke liye), aur Tag/Customer filter par sirf unhi customers ka target dikhata hai.<br>
+        <b>Overdue(month end)</b> = agar is month me <i>koi bhi payment nahi aata</i> toh month-end tak total kitna overdue hoga — yahi "Outstanding till month-end" table ke "Overdue" total se match karta hai.<br>
+        <b>Payment Received</b> = abhi tak is month me aaya payment (live).<br>
+        <b>Balance Remaining</b> = Target minus is week ka payment = kitna abhi bhi lena baaki hai.
+        Week 1 = 1st–7th, aur aage bhi.
+      </p>`;
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
@@ -11882,7 +11888,11 @@ def _build_payments():
                 aging["0 Days"] += rem
                 cust_aging["0 Days"] += rem
             # as of MONTH-END
-            if due_date and month_end > due_date:
+            # >= isliye: month ka aakhiri din (e.g. July 31) jis invoice
+            # ki due date hai, wo EOD tak unpaid raha to overdue hi mana
+            # jata hai — aur week_due bhi <= month_end use karta hai,
+            # to dono totals match karte hain.
+            if due_date and month_end >= due_date:
                 cust_over_me += rem
             else:
                 cust_due_me += rem
