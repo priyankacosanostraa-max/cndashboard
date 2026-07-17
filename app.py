@@ -6542,12 +6542,15 @@ function applyF(){
 
         const pivotRowsHtml = _matrixPivot.map(p => {
           const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[p.sku] || {img:''};
+          const iv = invBy[p.sku] || {s:0, w:0, img:''};
+          const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
           return `<tr>
             <td>${safeText(p.cust)}</td>
             <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(p.sku, p.sku_name)}</button></div></td>
             <td class="gold">${p.qty}</td>
             ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(p.rev)}</td>`}
+            <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
+            <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
           </tr>`;
         }).join('');
 
@@ -6570,7 +6573,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>Customer</th><th>SKU</th><th>Total Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}
+            <th>Customer</th><th>SKU</th><th>Total Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table></div>`;
       }
     } else {
@@ -6626,8 +6629,12 @@ function _matrixBuildPayload(kind){
     });
   }
   return _matrixPivot.map(p => {
-    const iv = invBy[p.sku] || {img:''};
-    return { customer: p.cust, sku: p.sku, qty: p.qty, revenue: showRev ? Math.round(p.rev) : null, image_url: iv.img || '' };
+    const iv = invBy[p.sku] || {s:0, w:0, img:''};
+    return {
+      customer: p.cust, sku: p.sku, qty: p.qty, revenue: showRev ? Math.round(p.rev) : null,
+      inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
+      image_url: iv.img || ''
+    };
   });
 }
 function exportMatrixCSV(kind){
@@ -6645,11 +6652,11 @@ function exportMatrixCSV(kind){
       return line;
     });
   } else {
-    headers = ['Customer','SKU','Total Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Image Link']);
+    headers = ['Customer','SKU','Total Qty'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
     csvRows = rows.map(r => {
       const line = [r.customer, r.sku, r.qty];
       if (showRev) line.push(r.revenue);
-      line.push(r.image_url);
+      line.push(r.inv_stock, r.inv_wip, r.image_url);
       return line;
     });
   }
@@ -11170,7 +11177,8 @@ def api_overall_export_xlsx():
         ws.title = "Pivot" if kind == "pivot" else "Transactions"
 
         if kind == "pivot":
-            headers = ["Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) + ["Image Link"]
+            headers = ["Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
+                      + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
             headers = ["Dispatch Date", "SKU", "Customer", "Type", "Sold Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
@@ -11186,7 +11194,7 @@ def api_overall_export_xlsx():
                 line = [r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
-                line.append(r.get("image_url", "") or "")
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
             else:
                 line = [r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
                 if show_rev:
@@ -11230,6 +11238,7 @@ def api_overall_export_pdf():
         except ImportError:
             return jsonify({"error": "PDF export ke liye 'reportlab' package deploy me install nahi hai — "
                                       "requirements.txt me 'reportlab' add karke Railway par redeploy karein."}), 500
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
         payload = request.get_json(force=True) or {}
         kind  = payload.get("kind", "transactions")
@@ -11237,32 +11246,69 @@ def api_overall_export_pdf():
         title = payload.get("title") or "Overall Details"
         show_rev = bool(rows) and rows[0].get("revenue") is not None
 
-        def _img_flowable(url):
-            """Photo ko best-effort download karke chhoti thumbnail flowable banata hai.
-            Fail ho (bad link/timeout) to khaali cell — poori report kabhi nahi girti."""
-            if not url:
-                return ""
+        # ── Photos: sirf UNIQUE URLs download karo (Transactions me ek hi SKU
+        #    baar baar aata hai), parallel me, chhota timeout, aur ek limit
+        #    taaki bahut zyada rows ho to bhi PDF hang na ho / gunicorn
+        #    timeout na maare. Limit se upar wale rows me photo blank rahega. ──
+        MAX_PDF_IMAGES = 100
+        IMG_TIMEOUT = 2.0
+
+        def _download_thumb(url):
             try:
-                ir = requests.get(url, timeout=4)
+                ir = requests.get(url, timeout=IMG_TIMEOUT)
                 ir.raise_for_status()
                 raw = ir.content
                 if PIL_AVAILABLE:
                     im = Image.open(io.BytesIO(raw)).convert("RGB")
                     im.thumbnail((90, 90))
                     out = io.BytesIO()
-                    im.save(out, format="JPEG", quality=80)
+                    im.save(out, format="JPEG", quality=78)
                     out.seek(0)
-                    return RLImage(out, width=13 * mm, height=13 * mm)
-                bio2 = io.BytesIO(raw)
-                return RLImage(bio2, width=13 * mm, height=13 * mm)
+                    return out.read()
+                return raw
+            except Exception:
+                return None
+
+        unique_urls = []
+        seen = set()
+        for r in rows:
+            u = r.get("image_url")
+            if u and u not in seen:
+                seen.add(u)
+                unique_urls.append(u)
+            if len(unique_urls) >= MAX_PDF_IMAGES:
+                break
+
+        img_bytes_cache = {}
+        if unique_urls:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                futs = {ex.submit(_download_thumb, u): u for u in unique_urls}
+                for fut in as_completed(futs):
+                    u = futs[fut]
+                    try:
+                        img_bytes_cache[u] = fut.result()
+                    except Exception:
+                        img_bytes_cache[u] = None
+
+        def _img_flowable(url):
+            raw = img_bytes_cache.get(url)
+            if not raw:
+                return ""
+            try:
+                return RLImage(io.BytesIO(raw), width=13 * mm, height=13 * mm)
             except Exception:
                 return ""
 
         styles = getSampleStyleSheet()
         elements = [Paragraph(str(title).replace("_", " "), styles["Heading2"]), Spacer(1, 8)]
+        if len(rows) > 1500:
+            elements.append(Paragraph(f"({len(rows)} rows — showing all; photos limited to first "
+                                       f"{MAX_PDF_IMAGES} unique SKUs for speed)", styles["Normal"]))
+            elements.append(Spacer(1, 6))
 
         if kind == "pivot":
-            headers = ["Photo", "Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else [])
+            headers = ["Photo", "Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
+                      + ["Stock", "WIP"]
         else:
             headers = ["Photo", "Date", "SKU", "Customer", "Type", "Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP", "Blocked"]
@@ -11274,6 +11320,7 @@ def api_overall_export_pdf():
                 line = [img_cell, r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
             else:
                 line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
                 if show_rev:
