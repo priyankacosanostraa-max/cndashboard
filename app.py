@@ -9244,10 +9244,12 @@ function renderPayments(){
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
       const pay = Math.round(wkPayment[wi]);
-      const tgt = Math.round(wkTarget[wi]);    // FROZEN target, filter-aware, this week's share
+      // "Overdue-month end Target" = this week's live Overdue(month end) + this
+      // week's Payment Received (i.e. what the overdue would have been for this
+      // week BEFORE this week's payment was applied/knocked off).
+      const tgt = Math.round(ov + pay);
       tgtTotal += tgt; ovTotal += ov; payTotal += pay;
-      // Balance Remaining = THIS WEEK's Target minus THIS WEEK's Payment
-      // (per-week, NOT cumulative — so every week shows its own number).
+      // Balance = Target minus this week's Payment Received
       const balAfter = Math.round(tgt - pay);
       balTotal += balAfter;
       return {
@@ -9269,13 +9271,12 @@ function renderPayments(){
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(r.payment_received)}</td>
         <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(r.balance_remaining)}</td>
       </tr>`).join('');
-    const _monthLbl = escHtml(d.month_label || 'This Month');
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">${_monthLbl} Overdue If Zero Payment Received<br><span style="font-weight:400;font-size:.85em">(fixed target, set on day 1 of the month)</span> ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">Overdue-month end Target ⇅</th>
         <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_month_end')" class="sort-arrow">Overdue (Month End, Live) ⇅</th>
         <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('payment_received')" class="sort-arrow">Payment Received ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Outstanding Due (Balance Remaining) ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Balance ⇅</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td style="padding:5px 8px">Total</td>
@@ -9285,10 +9286,10 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>${_monthLbl} Overdue If Zero Payment Received</b> = the outstanding amount that was already due as of day 1 of the month (frozen snapshot from the first ledger update of the month, fixed for the whole month for reference). This is the projected overdue by month-end assuming <i>not a single payment</i> comes in during the month. Only customers matching the current Tag/Customer filter are included.<br>
+        <b>Overdue-month end Target</b> = this week's Overdue (Month End, Live) plus this week's Payment Received — i.e. what would have been overdue for this week if this week's payment had not come in. Only customers matching the current Tag/Customer filter are included.<br>
         <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
         <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
-        <b>Outstanding Due (Balance Remaining)</b> = Target minus this week's payment received = how much is still pending for this week.
+        <b>Balance</b> = Overdue-month end Target minus this week's Payment Received.
         Week 1 = 1st–7th of the month, and so on.
       </p>`;
   }
@@ -9405,7 +9406,7 @@ function exportPayAging(){
 }
 function exportPayWeek(){
   if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue If Zero Payment Received (Fixed Target)','Overdue (Month End, Live)','Payment Received','Outstanding Due (Balance Remaining)'];
+  const headers = ['Week','Range','Overdue-month end Target','Overdue (Month End, Live)','Payment Received','Balance'];
   const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
   _dlCsv(headers, data, 'week_wise_overdue_tracker');
 }
