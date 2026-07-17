@@ -4990,6 +4990,16 @@ select.lg-in option{background:#fff;color:#1a1610}
       </select></div>
   </div>
   <div id="payLastUpdated" style="font-size:.85rem;font-weight:700;color:#1f7a3a;margin-bottom:10px;padding:8px 12px;background:#f0faf3;border:1px solid #cfe9d8;border-radius:8px"></div>
+
+  <div class="insights-head" style="margin-bottom:8px">
+    <div class="insights-title" style="font-size:1rem">Planning — Inward Projection vs Actual</div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:6px 12px;font-size:.65rem;letter-spacing:1px" onclick="loadPaymentsPlanning(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:6px 12px;font-size:.65rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPaymentsPlanning()">Export CSV</button>
+    </div>
+  </div>
+  <div id="planContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:18px"></div>
+
   <div id="paySummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:14px">
     <div><div class="insights-head" style="margin-bottom:8px">
@@ -9561,6 +9571,79 @@ function exportPayments(){
 }
 window.loadPayments = loadPayments; window.renderPayments = renderPayments; window.exportPayments = exportPayments;
 
+/* ── PAYMENTS PLANNING (Inward Projection vs Actual) ── */
+let _planData = null;
+function loadPaymentsPlanning(force){
+  const host = document.getElementById('planContent');
+  if (!host) return;
+  host.innerHTML = '<div class="home-empty" style="padding:20px">Loading…</div>';
+  fetch('/api/payments/planning' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => {
+      if (d.error && (!d.rows || !d.rows.length)){
+        host.innerHTML = '<div class="home-empty" style="padding:20px;color:#a33">' + escHtml(d.error) + '</div>';
+        _planData = d;
+        return;
+      }
+      _planData = d;
+      renderPaymentsPlanning();
+    })
+    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+}
+function renderPaymentsPlanning(){
+  const host = document.getElementById('planContent');
+  const d = _planData;
+  if (!host || !d) return;
+  const t = d.totals || {};
+  const pctCell = v => v === null || v === undefined
+    ? '<span style="color:var(--cn-mid)">NA</span>'
+    : `<span class="${v>=100?'green':v>=70?'orange':'red'}" style="font-weight:800">${v}%</span>`;
+  const rowsHtml = (d.rows||[]).map(r => `<tr>
+      <td style="font-weight:700">${escHtml(r.category)}</td>
+      <td>${fmt(r.inward_projection)}</td>
+      <td class="green">${fmt(r.actual)}</td>
+      <td class="${r.pending>0?'red':'green'}">${fmt(r.pending)}</td>
+      <td>${pctCell(r.pct_achievement)}</td>
+      <td>${fmt(r.actual_str)}</td>
+      <td>${fmt(r.required_str)}</td>
+    </tr>`).join('');
+  const totalRow = `<tr style="background:#eef7ea;font-weight:900">
+      <td>TOTAL</td>
+      <td>${fmt(t.inward_projection)}</td>
+      <td class="green">${fmt(t.actual)}</td>
+      <td class="${t.pending>0?'red':'green'}">${fmt(t.pending)}</td>
+      <td>${pctCell(t.pct_achievement)}</td>
+      <td>${fmt(t.actual_str)}</td>
+      <td>${fmt(t.required_str)}</td>
+    </tr>`;
+  const noteHtml = d.error ? `<p style="color:#a33;font-size:.72rem;margin:6px 0">${escHtml(d.error)}</p>` : '';
+  host.innerHTML = `
+    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; As of: ${escHtml(d.today||'')}</p>
+    ${noteHtml}
+    <table class="ro" style="width:100%;min-width:820px">
+      <thead><tr>
+        <th>Category</th><th>Inward Projection</th><th>Actual</th><th>Pending</th>
+        <th>% Ach</th><th>Actual STR</th><th>Required STR</th>
+      </tr></thead>
+      <tbody>${rowsHtml}${totalRow}</tbody>
+    </table>`;
+}
+function exportPaymentsPlanning(){
+  const d = _planData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  const headers = ['Category','Inward Projection','Actual','Pending','% Ach','Actual STR','Required STR'];
+  const rows = (d.rows||[]).map(r => [r.category, Math.round(r.inward_projection||0), Math.round(r.actual||0),
+    Math.round(r.pending||0), r.pct_achievement === null ? 'NA' : r.pct_achievement,
+    Math.round(r.actual_str||0), Math.round(r.required_str||0)]);
+  const t = d.totals || {};
+  rows.push(['TOTAL', Math.round(t.inward_projection||0), Math.round(t.actual||0), Math.round(t.pending||0),
+    t.pct_achievement === null ? 'NA' : t.pct_achievement, Math.round(t.actual_str||0), Math.round(t.required_str||0)]);
+  _dlCsv(headers, rows, 'payments_planning_' + (d.month_label||'').replace(/[^a-z0-9]/gi,'_'));
+}
+window.loadPaymentsPlanning = loadPaymentsPlanning; window.renderPaymentsPlanning = renderPaymentsPlanning;
+window.exportPaymentsPlanning = exportPaymentsPlanning;
+
+
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
   const csv = [headers].concat(rows).map(r => r.map(c => {
@@ -10070,7 +10153,7 @@ showTab = function(t){
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
-  if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); }catch(e){console.error(e);} }, 0);
+  if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
 
@@ -12138,6 +12221,165 @@ def _build_payments():
     _PAY_CACHE["data"] = data
     _PAY_CACHE["ts"] = time.time()
     return data
+
+# ════════════════════════════════════════════════════════════════
+#  📋 PAYMENTS PLANNING — same "payments spreadsheet" ki "Planning"
+#  sheet se manually-filled monthly "Inward Projection" (Designer/
+#  SOR/Online & Website), Payments tab ke "Actual" (collected this
+#  month, tag-wise, jo already _build_payments() nikaal raha hai) ke
+#  saath jodta hai — Pending / % Ach / Actual STR / Required STR
+#  bilkul Priyanka ke diye formulas ke hisaab se nikalte hain.
+#
+#  Category mapping:
+#    "Designer"          ← Planning sheet ki category "Designer"/"Purchase"
+#                           ← Actual = Payments Tag "Purchase"/"Designer" ka collected_month
+#    "SOR"                ← Planning sheet ki category "SOR"
+#                           ← Actual = Payments Tag "SOR" ka collected_month
+#    "Online & Website"   ← Planning sheet ki category "Online"/"Website"/
+#                            "Online & Website" (dono jud jate hain)
+#                           ← Actual = Payments Tag "Online" + "Website" ka collected_month
+#
+#  ⚠️ IMPORTANT: PAY_PLANNING_URL abhi placeholder hai — Priyanka ko apni
+#  "Planning" sheet ka "Publish to web → CSV" link (File > Share > Publish
+#  to web, sheet = Planning, format = CSV) dena hoga, us gid ko neeche
+#  daal dena / PAY_PLANNING_URL environment variable set kar dena Railway
+#  par. Column names kuch bhi ho ("Month"/"Category"/"Inward Projection"
+#  jaise) — case/format kaisa bhi ho, find_col() se robust match hota hai.
+# ════════════════════════════════════════════════════════════════
+PAY_PLANNING_URL = os.environ.get("PAY_PLANNING_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=919749386&single=true&output=csv")
+
+_PLAN_CATS = ["Designer", "SOR", "Online & Website"]
+_PLAN_CACHE = {"data": None, "ts": 0}
+
+def _plan_bucket(cat_raw):
+    c = str(cat_raw or "").strip().lower()
+    if "designer" in c or "purchase" in c:
+        return "Designer"
+    if "sor" in c:
+        return "SOR"
+    if "online" in c or "website" in c:
+        return "Online & Website"
+    return None
+
+def _plan_month_matches(val, today):
+    """Month column kisi bhi format me ho (date, 'Jul-26', 'July 2026',
+    '2026-07', '07/2026' etc.) — sab handle karta hai."""
+    if val is None or str(val).strip() == "":
+        return False
+    s = str(val).strip()
+    try:
+        dt = parse_date_any(s)
+        if isinstance(dt, datetime):
+            dt = dt.date()
+        if dt and dt.year == today.year and dt.month == today.month:
+            return True
+    except Exception:
+        pass
+    candidates = {
+        today.strftime("%b-%y").lower(), today.strftime("%B-%y").lower(),
+        today.strftime("%b-%Y").lower(), today.strftime("%B %Y").lower(),
+        today.strftime("%b %Y").lower(), today.strftime("%Y-%m"),
+        today.strftime("%m/%Y"), today.strftime("%b'%y").lower(),
+        today.strftime("%b%y").lower(), today.strftime("%B").lower() + str(today.year),
+    }
+    sl = s.lower().replace(" ", "")
+    return any(c.replace(" ", "") in sl or sl in c.replace(" ", "") for c in candidates)
+
+def _build_payments_planning():
+    if _PLAN_CACHE["data"] is not None and (time.time() - _PLAN_CACHE["ts"] < 600):
+        return _PLAN_CACHE["data"]
+
+    import calendar
+    today = now_ist().date()
+
+    # ---- Inward Projection: Planning sheet se, current month ke rows ----
+    inward = {c: 0.0 for c in _PLAN_CATS}
+    plan_err = None
+    try:
+        pdf = _fetch_csv_fresh(PAY_PLANNING_URL)
+        C_MONTH = find_col(pdf.columns, "Month", "period", "month year", "for month", "planning month")
+        C_CAT   = find_col(pdf.columns, "Category", "Channel", "Tag", "Type", "channel category", "channel type")
+        C_AMT   = find_col(pdf.columns, "Inward Projection", "Projection", "Inward", "Amount",
+                            "Target", "projected amount", "inward amount")
+        if C_CAT and C_AMT:
+            months = pdf[C_MONTH].tolist() if C_MONTH else [None] * len(pdf)
+            cats = pdf[C_CAT].tolist()
+            amts = pdf[C_AMT].tolist()
+            for i in range(len(pdf)):
+                if C_MONTH and not _plan_month_matches(months[i], today):
+                    continue
+                b = _plan_bucket(cats[i])
+                if not b:
+                    continue
+                inward[b] += to_num(amts[i])
+        else:
+            plan_err = f"Planning sheet me Category/Inward Projection column nahi mila. Columns: {list(pdf.columns)[:12]}"
+    except Exception as e:
+        plan_err = f"Planning sheet fetch nahi ho payi: {str(e)[:200]} — pehle PAY_PLANNING_URL sahi gid ke saath set karein."
+
+    # ---- Actual: Payments tab ke tag-wise "collected this month" se ----
+    pay_data = _build_payments()
+    tag_collected = {}
+    for s in pay_data.get("tag_summary", []):
+        tag_collected[(s.get("tag") or "").strip().lower()] = s.get("collected_month", 0) or 0
+
+    actual = {c: 0.0 for c in _PLAN_CATS}
+    actual["Designer"] = (tag_collected.get("purchase", 0) or 0) + (tag_collected.get("designer", 0) or 0)
+    actual["SOR"] = tag_collected.get("sor", 0) or 0
+    actual["Online & Website"] = (tag_collected.get("online", 0) or 0) + (tag_collected.get("website", 0) or 0) \
+        + (tag_collected.get("online & website", 0) or 0)
+
+    # ---- STR formulas (bilkul jaisa bataya) ----
+    days_in_month = calendar.monthrange(today.year, today.month)[1]           # DAY(EOMONTH(TODAY(),0))
+    yday = today - timedelta(days=1)
+    days_in_month_yday = calendar.monthrange(yday.year, yday.month)[1]        # DAY(EOMONTH(TODAY()-1,0))
+    remaining_days = days_in_month_yday - yday.day                            # - INT(TEXT(TODAY()-1,"dd"))
+
+    rows = []
+    tot = {"inward_projection": 0.0, "actual": 0.0, "pending": 0.0}
+    for c in _PLAN_CATS:
+        inw = round(inward.get(c, 0) or 0, 0)
+        act = round(actual.get(c, 0) or 0, 0)
+        pend = inw - act
+        pct_ach = round((act / inw * 100), 1) if inw else None                # % Ach = Actual/Inward Projection
+        actual_str = round(inw / days_in_month, 0) if days_in_month else 0    # Actual STR = Inward Projection/days-in-month
+        required_str = round(pend / remaining_days, 0) if remaining_days > 0 else pend   # Required STR = IFERROR(Pending/remaining,Pending)
+        rows.append({
+            "category": c, "inward_projection": inw, "actual": act, "pending": pend,
+            "pct_achievement": pct_ach, "actual_str": actual_str, "required_str": required_str,
+        })
+        tot["inward_projection"] += inw; tot["actual"] += act; tot["pending"] += pend
+
+    tot_pct = round((tot["actual"] / tot["inward_projection"] * 100), 1) if tot["inward_projection"] else None
+    tot_actual_str = round(tot["inward_projection"] / days_in_month, 0) if days_in_month else 0
+    tot_required_str = round(tot["pending"] / remaining_days, 0) if remaining_days > 0 else tot["pending"]
+
+    data = {
+        "rows": rows,
+        "totals": {
+            "inward_projection": round(tot["inward_projection"], 0), "actual": round(tot["actual"], 0),
+            "pending": round(tot["pending"], 0), "pct_achievement": tot_pct,
+            "actual_str": tot_actual_str, "required_str": tot_required_str,
+        },
+        "month_label": today.strftime("%b-%y"),
+        "today": today.strftime("%d-%b-%y"),
+        "error": plan_err,
+    }
+    _PLAN_CACHE["data"] = data
+    _PLAN_CACHE["ts"] = time.time()
+    return data
+
+@app.route("/api/payments/planning")
+def api_payments_planning():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        if request.args.get("force", "").lower() == "true":
+            _PLAN_CACHE["data"] = None
+        return jsonify(_build_payments_planning())
+    except Exception as e:
+        return jsonify({"error": f"planning build failed: {e}"}), 500
 
 @app.route("/api/payments")
 def api_payments():
