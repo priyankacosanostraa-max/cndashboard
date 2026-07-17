@@ -4890,7 +4890,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vTaxon" style="display:none">
   <div class="insights-head">
     <div><div class="insights-title">Taxon Details</div>
-      <div style="color:var(--cn-mid);font-size:.8rem">Har taxon ka total Net Revenue &amp; Sold Qty</div></div>
+      <div style="color:var(--cn-mid);font-size:.8rem">Total Net Revenue &amp; Sold Qty per taxon</div></div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadTaxon()">Apply / Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportTaxon()">Export CSV</button>
@@ -6639,7 +6639,7 @@ function _matrixBuildPayload(kind){
 }
 function exportMatrixCSV(kind){
   const rows = _matrixBuildPayload(kind);
-  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  if (!rows.length){ alert('No data to export — please apply a customer/date filter first.'); return; }
   const meta = _matrixExportMeta();
   const showRev = LOGIN_ROLE !== 'employee';
   let headers, csvRows;
@@ -6670,7 +6670,7 @@ function exportMatrixCSV(kind){
 }
 function exportMatrixExcel(kind){
   const rows = _matrixBuildPayload(kind);
-  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  if (!rows.length){ alert('No data to export — please apply a customer/date filter first.'); return; }
   const meta = _matrixExportMeta();
   fetch('/api/overall_export/xlsx', {
     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -6684,7 +6684,7 @@ function exportMatrixExcel(kind){
 }
 function exportMatrixPDF(kind){
   const rows = _matrixBuildPayload(kind);
-  if (!rows.length){ alert('Koi data nahi hai export karne ke liye — pehle customer/date filter lagayein.'); return; }
+  if (!rows.length){ alert('No data to export — please apply a customer/date filter first.'); return; }
   const meta = _matrixExportMeta();
   fetch('/api/overall_export/pdf', {
     method: 'POST', headers: {'Content-Type':'application/json'},
@@ -8474,7 +8474,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('recv_qty')">Recv Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('bal_qty')">Balance Qty ⇅</th>
-    <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Iss SKU ki saare orders ki Balance Qty jodkar (total)">Total Balance (All Orders) ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Sum of Balance Qty across all orders for this SKU (total)">Total Balance (All Orders) ⇅</th>
     <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
     <th>Receiving Date</th></tr>`;
   const body = d.rows.map(r => {
@@ -9029,6 +9029,16 @@ function sortPay(key){
   if (_paySortKey === key) _paySortDir *= -1; else { _paySortDir = -1; _paySortKey = key; }
   renderPayments();
 }
+let _payMeSortKey = null, _payMeSortDir = -1;
+function sortPayMe(key){
+  if (_payMeSortKey === key) _payMeSortDir *= -1; else { _payMeSortDir = -1; _payMeSortKey = key; }
+  renderPayments();
+}
+let _payWeekSortKey = null, _payWeekSortDir = -1;
+function sortPayWeek(key){
+  if (_payWeekSortKey === key) _payWeekSortDir *= -1; else { _payWeekSortDir = -1; _payWeekSortKey = key; }
+  renderPayments();
+}
 function _applyPaySort(rows){
   const key = _paySortKey, dir = _paySortDir;
   const isStr = (key === 'customer' || key === 'tag');
@@ -9137,7 +9147,18 @@ function renderPayments(){
   const meTitle = document.getElementById('payMeTitle');
   if (meTitle) meTitle.textContent = 'Outstanding till month-end (' + (d.month_end||'') + ')';
   if (meHost){
-    const body = rows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
+    let meRows = rows.slice();
+    if (_payMeSortKey){
+      const k = _payMeSortKey, dir = _payMeSortDir;
+      const isStr = (k === 'customer' || k === 'tag');
+      meRows.sort((a,b) => {
+        let va = a[k], vb = b[k];
+        if (isStr){ va = String(va||''); vb = String(vb||''); return dir * (va < vb ? 1 : va > vb ? -1 : 0); }
+        va = Number(va)||0; vb = Number(vb)||0;
+        return dir * (vb - va);
+      });
+    }
+    const body = meRows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
         <td style="font-weight:700;color:#1a5fb4;text-decoration:underline">${escHtml(r.customer)}</td>
         <td style="text-align:center;color:var(--cn-mid)">${escHtml(r.tag||'Unknown')}</td>
         <td class="${(r.due_me||0)>0?'green':'muted'}" style="text-align:right">${fmt(r.due_me)}</td>
@@ -9145,8 +9166,11 @@ function renderPayments(){
         <td style="text-align:right;font-weight:800">${fmt(r.balance)}</td>
       </tr>`).join('');
     meHost.innerHTML = `<table class="ro" style="width:100%;min-width:520px"><thead><tr>
-        <th>Customer Name</th><th style="text-align:center">Tag</th>
-        <th style="text-align:right">Due (by month-end)</th><th style="text-align:right">Overdue (by month-end)</th><th style="text-align:right">Balance</th>
+        <th class="sort-arrow" style="cursor:pointer" onclick="sortPayMe('customer')">Customer Name ⇅</th>
+        <th style="text-align:center;cursor:pointer" onclick="sortPayMe('tag')" class="sort-arrow">Tag ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPayMe('due_me')" class="sort-arrow">Due (by month-end) ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPayMe('overdue_me')" class="sort-arrow">Overdue (by month-end) ⇅</th>
+        <th style="text-align:right;cursor:pointer" onclick="sortPayMe('balance')" class="sort-arrow">Outstanding Due (Balance) ⇅</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No customers match</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
         <td>Total</td><td></td>
@@ -9216,46 +9240,56 @@ function renderPayments(){
     });
     let tgtTotal = 0, ovTotal = 0, payTotal = 0, balTotal = 0;
     _payWeekRowsExport = [];
-    const body = wm.map((w,wi) => {
+    let _weekRowsData = wm.map((w,wi) => {
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
       const pay = Math.round(wkPayment[wi]);
-      const tgt = Math.round(wkTarget[wi]);    // FROZEN target, filter-aware, is week ka hissa
+      const tgt = Math.round(wkTarget[wi]);    // FROZEN target, filter-aware, this week's share
       tgtTotal += tgt; ovTotal += ov; payTotal += pay;
-      // Balance Remaining = ISI WEEK ka Target minus ISI WEEK me mila Payment
-      // (per-week, cumulative NAHI — taaki har week apna number dikhaye).
+      // Balance Remaining = THIS WEEK's Target minus THIS WEEK's Payment
+      // (per-week, NOT cumulative — so every week shows its own number).
       const balAfter = Math.round(tgt - pay);
       balTotal += balAfter;
-      _payWeekRowsExport.push({week: label, range: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)), overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter});
-      return `<tr>
-        <td style="padding:5px 8px">${escHtml(label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(w.start.slice(8)+'-'+w.start.slice(5,7))} to ${escHtml(w.end.slice(8)+'-'+w.end.slice(5,7))}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(tgt)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(ov)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(pay)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(balAfter)}</td>
-      </tr>`;
-    }).join('');
+      return {
+        label, wi,
+        rangeShort: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)),
+        overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter
+      };
+    });
+    _payWeekRowsExport = _weekRowsData.map(r => ({week: r.label, range: r.rangeShort, overdue_target: r.overdue_target, overdue_month_end: r.overdue_month_end, payment_received: r.payment_received, balance_remaining: r.balance_remaining}));
     _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
+    if (_payWeekSortKey){
+      const k = _payWeekSortKey, dir = _payWeekSortDir;
+      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((b[k]||0) - (a[k]||0)));
+    }
+    const body = _weekRowsData.map(r => `<tr>
+        <td style="padding:5px 8px">${escHtml(r.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(r.rangeShort)}</span></td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(r.overdue_target)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(r.overdue_month_end)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(r.payment_received)}</td>
+        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(r.balance_remaining)}</td>
+      </tr>`).join('');
+    const _monthLbl = escHtml(d.month_label || 'This Month');
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px;background:#fdf6e3">Overdue(month end) Target<br><span style="font-weight:400;font-size:.85em">(month freeze)</span></th>
-        <th style="text-align:right;padding:5px 8px">Overdue(month end)</th>
-        <th style="text-align:right;padding:5px 8px">Payment Received</th>
-        <th style="text-align:right;padding:5px 8px">Balance Remaining</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">${_monthLbl} Overdue If Zero Payment Received<br><span style="font-weight:400;font-size:.85em">(fixed target, set on day 1 of the month)</span> ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_month_end')" class="sort-arrow">Overdue (Month End, Live) ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('payment_received')" class="sort-arrow">Payment Received ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Outstanding Due (Balance Remaining) ⇅</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
         <td style="padding:5px 8px">Total</td>
-        <td style="text-align:right;padding:5px 8px;background:#fdf6e3">${fmt(tgtTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tgtTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
         <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Overdue(month end) Target</b> = month ke pehle din (pehli ledger update par) freeze hua outstanding — poore month FIXED rehta hai (reference ke liye), aur Tag/Customer filter par sirf unhi customers ka target dikhata hai.<br>
-        <b>Overdue(month end)</b> = agar is month me <i>koi bhi payment nahi aata</i> toh month-end tak total kitna overdue hoga — yahi "Outstanding till month-end" table ke "Overdue" total se match karta hai.<br>
-        <b>Payment Received</b> = abhi tak is month me aaya payment (live).<br>
-        <b>Balance Remaining</b> = Target minus is week ka payment = kitna abhi bhi lena baaki hai.
-        Week 1 = 1st–7th, aur aage bhi.
+        <b>${_monthLbl} Overdue If Zero Payment Received</b> = the outstanding amount that was already due as of day 1 of the month (frozen snapshot from the first ledger update of the month, fixed for the whole month for reference). This is the projected overdue by month-end assuming <i>not a single payment</i> comes in during the month. Only customers matching the current Tag/Customer filter are included.<br>
+        <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
+        <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
+        <b>Outstanding Due (Balance Remaining)</b> = Target minus this week's payment received = how much is still pending for this week.
+        Week 1 = 1st–7th of the month, and so on.
       </p>`;
   }
 
@@ -9371,7 +9405,7 @@ function exportPayAging(){
 }
 function exportPayWeek(){
   if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue(month end) Target','Overdue(month end)','Payment Received','Balance Remaining'];
+  const headers = ['Week','Range','Overdue If Zero Payment Received (Fixed Target)','Overdue (Month End, Live)','Payment Received','Outstanding Due (Balance Remaining)'];
   const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
   _dlCsv(headers, data, 'week_wise_overdue_tracker');
 }
