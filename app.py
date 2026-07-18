@@ -1445,6 +1445,63 @@ def _refresh_data():
         taxons.add(taxon)
         if plat != "N/A": platings.add(plat)
 
+    # ── ORPHAN SKUs: cossa sheet ke SKU jo All Product (inventory) sheet
+    # mein NAHI hain — unka revenue Total Net Rev jaise unfiltered KPIs mein
+    # toh count hota tha (kyunki wo grand_net_revenue/period_kpis seedhe COSA
+    # rows se ban rahe the), par kisi bhi card/filter/SKU-view mein kabhi
+    # nahi dikhta tha, isliye Type/Taxon/Customer/Date filter lagate hi
+    # numbers "total" se kam dikhte the. Ab unhe bhi ek minimal item banake
+    # add kar rahe hain (taxon = "Not In Inventory") taaki filtered KPIs
+    # bhi sheet ke total se exactly match karein. In SKUs ko All Product
+    # sheet mein add karna hi asli data-hygiene fix hai — yeh sirf display
+    # ko sahi karta hai.
+    for orphan_key, sd in sales_exact.items():
+        if orphan_key in seen_skus:
+            continue
+        ent = sd["entries"]
+        if not ent:
+            continue
+        seen_skus.add(orphan_key)
+        sku_list.append(orphan_key)
+        A = _agg_entries(ent)
+        _cn_name_o = cn_display_name(orphan_key) or orphan_key
+        _cn_tags_o = cn_classify_tags(_cn_name_o)
+        item = {
+            "sku": orphan_key, "sku_name": cn_sku_label(orphan_key),
+            "is_religious": _cn_tags_o["religious"], "is_seasonal": _cn_tags_o["seasonal"],
+            "image_url": "", "inv_stock": 0, "inv_wip": 0,
+            "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0, "inv_wip_sor": 0,
+            "blocked_qty": 0, "total_inv": 0, "mrp": 0.0, "cost": 0.0,
+            "avg_selling_price": 0.0, "last_selling_price": 0.0, "aov_per_piece": 0.0,
+            "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
+            "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
+            "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
+            "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
+            "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
+            "customer_count": A["ncust"],
+            "qty_7d": A["q7"], "qty_15d": A["q15"], "qty_1m": A["q1m"],
+            "qty_3m": A["q3m"], "qty_6m": A["q6m"], "qty_1y": A["q1y"],
+            "rev_yesterday": A["rev_y"], "rev_month": A["rev_m"],
+            "rev_fy": A["rev_fy"], "rev_prev_fy": A["rev_pfy"],
+            "dispatch_count": len(ent), "first_dispatch_date": A["first"],
+            "last_dispatch_date": A["last"], "forecast_30d": simple_forecast(ent, 30),
+            "status": "",
+        }
+        item["forecast_60d"] = simple_forecast(ent, 60)
+        item["reorder_qty"] = 0
+        item["status"] = classify_status(item, month_s)
+        _flags, _best_chan, _best_chan_rev, _days_since, _best_mkt, _best_mkt_rev, _trend = _compute_alerts_and_channel(item, today)
+        item["alert_flags"] = _flags
+        item["best_channel"] = _si(_best_chan)
+        item["best_channel_revenue"] = round(_best_chan_rev, 0)
+        item["best_marketplace"] = _si(_best_mkt)
+        item["best_marketplace_revenue"] = round(_best_mkt_rev, 0)
+        item["trend"] = _trend or ""
+        item["days_since_last_sale"] = _days_since if _days_since is not None else -1
+        item["combo_details"] = []
+        compiled.append(item)
+        taxons.add("Not In Inventory")
+
     # ── COMBO/GIFT-SET enrichment ──
     # Stone Details (combo_skus) me jo SKUs likhe hain, un sabki Inv Stock + WIP
     # nikaal ke saath jod do. Gift Set / combo SKUs me ye details dikhengi.
