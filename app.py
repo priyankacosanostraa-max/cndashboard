@@ -1379,6 +1379,13 @@ def _refresh_data():
         _cn_name_for_item = cn_display_name(raw) or raw
         _cn_tags_for_item = cn_classify_tags(_cn_name_for_item)
 
+        stone_details = clean(r.get(I_STONE,"")) if I_STONE else ""
+        gift_set_stone_details = stone_details if (
+            raw.strip().upper().startswith("CMB") and
+            re.sub(r"[^a-z0-9]", "", str(taxon or "").lower()) == "giftset" and
+            stone_details.strip()
+        ) else ""
+
         item = {
             "sku":         raw,
             "sku_name":    cn_sku_label(raw),
@@ -1406,7 +1413,8 @@ def _refresh_data():
             "launch_date":  _si(launch_iso),
             "launch_key":   _si(launch_key),
             "launch_month": _si(launch_label),
-            "combo_skus":   clean(r.get(I_STONE,"")) if I_STONE else "",
+            "combo_skus":   stone_details,
+            "gift_set_stone_details": gift_set_stone_details,
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
             "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
@@ -5415,6 +5423,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 </div><script>
 let _masterSkuMap = {};   // SKU.toUpperCase() → item (fast combo lookup)
+let _giftSetStoneMap = {}; // CMB Gift Set SKU -> Stone Details/Remarks
 let master = [], allCusts = [], allTypes = [], allPlatings = [],
     allSkus = [], allFYs = [], allTaxons = [];
 let currentFY = "", previousFY = "", todayISO = "",
@@ -5449,9 +5458,14 @@ let roSortDir = -1;
 
 function fmt(n){ return '₹' + Math.round(n || 0).toLocaleString('en-IN'); }
 function safeText(v){ return (v === null || v === undefined) ? '' : String(v); }
+function giftSetStoneDetails(sku){
+  return _giftSetStoneMap[String(sku || '').trim().toUpperCase()] || '';
+}
 function skuLabel(sku, name){
   // cosanostraa.com par mila to "Product Name (SKU)", warna sirf SKU code.
-  return (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
+  const base = (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
+  const stone = giftSetStoneDetails(sku);
+  return stone ? (base + ' - ' + stone) : base;
 }
 
 // Export ke liye "SKU Name" column — sirf tabhi jab REAL naam mila ho
@@ -5461,9 +5475,11 @@ function skuLabel(sku, name){
 function exportSkuName(sku, name){
   const s = String(sku || '').trim().toUpperCase();
   const n = String(name || '').trim();
-  if (!n) return '';
-  if (n.toUpperCase() === s) return '';   // naam == SKU code -> koi real naam nahi mila
-  return n;
+  const stone = giftSetStoneDetails(sku);
+  let out = '';
+  if (n && n.toUpperCase() !== s) out = n;   // naam == SKU code -> koi real naam nahi mila
+  if (stone) out = out ? (out + ' - ' + stone) : stone;
+  return out;
 }
 window.exportSkuName = exportSkuName;
 
@@ -6371,7 +6387,16 @@ function loadData(force){
       }
 
       master = d.inventory || [];
-      _masterSkuMap = {}; master.forEach(it => { if(it&&it.sku) _masterSkuMap[String(it.sku).toUpperCase()] = it; });
+      _masterSkuMap = {};
+      _giftSetStoneMap = {};
+      master.forEach(it => {
+        if (it && it.sku) {
+          const skuKey = String(it.sku).trim().toUpperCase();
+          _masterSkuMap[skuKey] = it;
+          const stone = String(it.gift_set_stone_details || '').trim().replace(/[<>]/g, '');
+          if (stone) _giftSetStoneMap[skuKey] = stone;
+        }
+      });
       allCusts = d.customers || [];
       allTypes = d.types || [];
       allChannels = d.channels || [];
@@ -7791,7 +7816,7 @@ function _renderComboDetails(combo_details, comboWipFn, wipLabel, typeSel) {
     }
     const skuEscC = String(c.sku).replace(/'/g, "\\\\'");
     return '<div class="combo-detail">'
-      + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEscC + '\')">' + escHtml(c.sku) + '</button>'
+      + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEscC + '\')">' + escHtml(skuLabel(c.sku, c.sku_name)) + '</button>'
       + (c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>')
       + '<div class="combo-grid">'
       + '<span>7D <b>' + cQ7 + '</b></span>'
@@ -7856,7 +7881,7 @@ function renderProHeader(){
       {label:'Sold Qty', value: totalQty.toLocaleString('en-IN'), sub:'units sold'},
       {label:'Low Stock', value: lowStock.toLocaleString('en-IN'), sub:'<= 10 inv'},
       {label:'New Launches', value: launch.toLocaleString('en-IN'), sub:'launched this month'},
-      {label:'Top Category', value: topCat, sub: top ? escHtml(top.sku) : '—'},
+      {label:'Top Category', value: topCat, sub: top ? escHtml(skuLabel(top.sku, top.sku_name)) : '—'},
     ].map(x => `<div class="pro-chip"><div class="label">${escHtml(x.label)}</div><div class="value">${x.value}</div><div class="sub">${escHtml(x.sub)}</div></div>`).join('');
   }
 
@@ -7867,7 +7892,7 @@ function renderProHeader(){
       `<div class="pro-pill"><b>${fmt(totalRevenue)}</b> Revenue</div>`,
       `<div class="pro-pill"><b>${lowStock}</b> Low stock</div>`,
       `<div class="pro-pill"><b>${zeroSales}</b> No sale SKUs</div>`,
-      ...topLabels.map(i => `<div class="pro-pill">${escHtml(i.sku)} • <b>${fmt(i.total_net_revenue || 0)}</b></div>`)
+      ...topLabels.map(i => `<div class="pro-pill">${escHtml(skuLabel(i.sku, i.sku_name))} • <b>${fmt(i.total_net_revenue || 0)}</b></div>`)
     ].join('');
   }
 }
@@ -7975,7 +8000,7 @@ function renderHome(){
       <div class="tc-ribbon">${ribbon}</div>
       <div class="tc-img">${img}</div>
       <div class="tc-body">
-        <div class="tc-sku" onclick="openSkuDetails('${skuEsc}')" title="View details">${escHtml(it.sku)}</div>
+        <div class="tc-sku" onclick="openSkuDetails('${skuEsc}')" title="View details">${escHtml(skuLabel(it.sku, it.sku_name))}</div>
         <div class="tc-sub">${escHtml(it.taxon || 'General')}${it.plating && it.plating!=='N/A' ? ' • '+escHtml(it.plating) : ''}</div>
         <div class="tc-rows">
           <div class="tc-row"><span class="tc-k">Qty sold (period)</span><span class="tc-v">${Math.round(picked.qty).toLocaleString('en-IN')}</span></div>
@@ -8659,7 +8684,7 @@ function pmSkuType(){
     ? matches.map(c => {
         const im = (c.image_url && String(c.image_url).trim() && String(c.image_url).toLowerCase()!=='nan')
           ? `<img src="${escHtml(c.image_url)}" loading="lazy" style="width:26px;height:26px;object-fit:cover;border-radius:5px;margin-right:8px;vertical-align:middle" onerror="this.style.display='none'">` : '';
-        return `<div class="pm-skuopt" onclick="pmPickSku('${c.sku.replace(/'/g,"\\\\'")}')"><span>${im}${escHtml(c.sku)}</span><span class="mrp">${c.mrp?'MRP '+pmRupee(c.mrp):'MRP —'}${c.cost?' · Cost '+pmRupee(c.cost):''}</span></div>`;
+        return `<div class="pm-skuopt" onclick="pmPickSku('${c.sku.replace(/'/g,"\\\\'")}')"><span>${im}${escHtml(skuLabel(c.sku, c.sku_name))}</span><span class="mrp">${c.mrp?'MRP '+pmRupee(c.mrp):'MRP —'}${c.cost?' · Cost '+pmRupee(c.cost):''}</span></div>`;
       }).join('')
     : '<div class="pm-skuopt" style="cursor:default;color:#a99">No match</div>';
   list.classList.add('show');
@@ -8675,7 +8700,7 @@ function pmPickSku(sku){
   const nrEl = document.getElementById('pmNetRev'); if (nrEl) nrEl.value = c.net_revenue ? Math.round(c.net_revenue) : '';
   const im = (c.image_url && String(c.image_url).trim() && String(c.image_url).toLowerCase()!=='nan')
     ? `<img src="${escHtml(c.image_url)}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--cn-line);margin-right:10px;vertical-align:middle" onerror="this.style.display='none'">` : '';
-  document.getElementById('pmSkuStatus').innerHTML = `${im}<b>${escHtml(c.sku)}</b> · MRP ${c.mrp?pmRupee(c.mrp):'—'} · Cost ${c.cost?pmRupee(c.cost):'—'} · Sold Qty ${c.final_qty||0} · Net Rev ${c.net_revenue?pmRupee(c.net_revenue):'—'}. Edit any field if needed.`;
+  document.getElementById('pmSkuStatus').innerHTML = `${im}<b>${escHtml(skuLabel(c.sku, c.sku_name))}</b> · MRP ${c.mrp?pmRupee(c.mrp):'—'} · Cost ${c.cost?pmRupee(c.cost):'—'} · Sold Qty ${c.final_qty||0} · Net Rev ${c.net_revenue?pmRupee(c.net_revenue):'—'}. Edit any field if needed.`;
   pmCalc();
 }
 document.addEventListener('click', e => {
