@@ -1528,10 +1528,12 @@ def _refresh_data():
         _item_map[ku] = it
         _stock_map[ku] = {
             "stock": int(it.get("inv_stock") or 0),
+            "stock_3p": int(it.get("inv_stock_3p") or 0) if it.get("inv_stock_3p") is not None else None,
             "wip":   int(it.get("inv_wip") or 0),
             "wip_website":  int(it.get("inv_wip_website") or 0),
             "wip_sor":      int(it.get("inv_wip_sor") or 0),
             "wip_designer": int(it.get("inv_wip_designer") or 0),
+            "wip_customer": int(it.get("inv_wip_customer") or 0),
         }
     _sku_re = re.compile(r"[A-Za-z]{1,5}[-_ ]?\d{2,5}(?:[-_(][A-Za-z0-9)]+)*")
     for it in compiled:
@@ -1560,10 +1562,12 @@ def _refresh_data():
                 "stone_color": (ci.get("stone_color") if ci else ""),
                 "image_url": (ci.get("image_url") if ci else ""),
                 "inv_stock": info["stock"] if info else 0,
+                "inv_stock_3p": info["stock_3p"] if info and info.get("stock_3p") is not None else (info["stock"] if info else 0),
                 "inv_wip":   info["wip"] if info else 0,
                 "inv_wip_website":  info["wip_website"] if info else 0,
                 "inv_wip_sor":      info["wip_sor"] if info else 0,
                 "inv_wip_designer": info["wip_designer"] if info else 0,
+                "inv_wip_customer": info["wip_customer"] if info else 0,
                 "blocked_qty": (ci.get("blocked_qty") if ci else 0),
                 # poori details — CMB jaisi (combo SKU khud bhi inventory me hai)
                 "qty_7d":   (ci.get("qty_7d") if ci else 0) or 0,
@@ -5484,6 +5488,34 @@ function exportSkuName(sku, name){
 }
 window.exportSkuName = exportSkuName;
 
+function roInvContext(typeSel, chanSel, subChanSel){
+  const words = []
+    .concat(typeSel || [])
+    .concat(chanSel || [])
+    .concat(subChanSel || [])
+    .map(v => String(v || '').trim().toLowerCase())
+    .filter(Boolean)
+    .join(' ');
+  if (!words) return {mode:'overall', wipLabel:'WIP'};
+  if (/(website|d2c|direct\s*to\s*consumer|online)/i.test(words)) return {mode:'website', wipLabel:'WIP (Website Repeat)'};
+  if (/(s\.?\s*o\.?\s*r|sor|3p|ecom|marketplace|myntra|nykaa|amazon|flipkart|ajio|tata|blinkit|instamart)/i.test(words)) return {mode:'sor', wipLabel:'WIP (SOR)'};
+  if (/(customer|customize|customise|customized|customised)/i.test(words)) return {mode:'customer', wipLabel:'WIP (Customer)'};
+  if (/(designer|purchase)/i.test(words)) return {mode:'designer', wipLabel:'WIP (Designer)'};
+  return {mode:'overall', wipLabel:'WIP'};
+}
+function roInvStock(item, ctx){
+  if (ctx && ctx.mode === 'sor') return Number(item.inv_stock_3p ?? item.inv_stock ?? 0) || 0;
+  return Number(item.inv_stock ?? 0) || 0;
+}
+function roInvWip(item, ctx){
+  const mode = (ctx && ctx.mode) || 'overall';
+  if (mode === 'website') return Number(item.inv_wip_website ?? 0) || 0;
+  if (mode === 'sor') return Number(item.inv_wip_sor ?? 0) || 0;
+  if (mode === 'customer') return Number(item.inv_wip_customer ?? 0) || 0;
+  if (mode === 'designer') return Number(item.inv_wip_designer ?? 0) || 0;
+  return Number(item.inv_wip ?? 0) || 0;
+}
+
 function skuInsightBadge(item){
   // "Best on <Channel>" + "Marketplace: X" + AOV/Discount + alert flag chips —
   // SKU ke neeche, har jagah jahan bhi SKU dikhta hai (RO, Overall Details,
@@ -6836,6 +6868,7 @@ function applyRO(){
   const typeSel = getSelectedTypes('rType');
   const chanSel = getSelectedChannels('rChan');
   const subChanSel = getSelectedSubChannels('rSubChan');
+  const roInvCtx = roInvContext(typeSel, chanSel, subChanSel);
   const taxQ = document.getElementById('rTaxon')?.value || 'All';
   const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
@@ -6916,16 +6949,15 @@ function applyRO(){
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
   const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
-  const _singleTypeSort = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
     // channel-aware WIP
     if (key === 'inv_wip'){
-      if (_singleTypeSort && _singleTypeSort.includes('website')) return Number(it.inv_wip_website)||0;
-      if (_singleTypeSort && (_singleTypeSort.includes('sor')||_singleTypeSort.includes('s.o.r'))) return Number(it.inv_wip_sor)||0;
-      if (_singleTypeSort && (_singleTypeSort.includes('purchase')||_singleTypeSort.includes('designer')||_singleTypeSort.includes('customer'))) return Number(it.inv_wip_designer)||0;
-      return Number(it.inv_wip)||0;
+      return roInvWip(it, roInvCtx);
+    }
+    if (key === 'inv_stock'){
+      return roInvStock(it, roInvCtx);
     }
     // channel-aware sale windows + sold qty (jab type filter active ho)
     if (!roNoFilterSort && typeSel.length > 0 && (key==='qty_7d'||key==='qty_15d'||key==='qty_1m'||key==='final_qty')){
@@ -6958,12 +6990,8 @@ function applyRO(){
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
 
   // Channel-aware WIP: if exactly one channel selected, show its specific WIP column
-  const singleType = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
   const wipSum = filtered.reduce((s,i) => {
-    if (singleType && singleType.includes('website')) return s + (parseInt(i.inv_wip_website) || 0);
-    if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) return s + (parseInt(i.inv_wip_sor) || 0);
-    if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) return s + (parseInt(i.inv_wip_designer) || 0);
-    return s + (parseInt(i.inv_wip) || 0);
+    return s + roInvWip(i, roInvCtx);
   }, 0);
 
   // Channel-aware 7d/15d/30d qty: if type filter active, sum only matching entries
@@ -7028,7 +7056,8 @@ function applyRO(){
     if (colFiltersBar) colFiltersBar.style.display = 'none';
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
-      ...e, sku: item.sku, sku_name: item.sku_name, inv_stock: item.inv_stock, inv_wip: item.inv_wip,
+      ...e, sku: item.sku, sku_name: item.sku_name,
+      inv_stock: roInvStock(item, roInvCtx), inv_wip: roInvWip(item, roInvCtx),
       image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
     })));
     txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -7123,13 +7152,9 @@ function applyRO(){
     const img = (item.image_url && item.image_url !== '' && String(item.image_url).toLowerCase() !== 'nan')
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
-    const stk = parseInt(item.inv_stock) || 0;
+    const stk = roInvStock(item, roInvCtx);
     // Channel-aware WIP per row
-    let wip;
-    if (singleType && singleType.includes('website')) wip = parseInt(item.inv_wip_website) || 0;
-    else if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) wip = parseInt(item.inv_wip_sor) || 0;
-    else if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) wip = parseInt(item.inv_wip_designer) || 0;
-    else wip = parseInt(item.inv_wip) || 0;
+    const wip = roInvWip(item, roInvCtx);
     // Channel-aware sale qty per row
     let q7, q15, q30;
     if (!roNoFilter && typeSel.length > 0) {
@@ -7150,18 +7175,11 @@ function applyRO(){
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Combo SKU ki WIP — Type filter ke hisaab se channel-wise, warna total.
-    const comboWip = (c) => {
-      if (singleType && singleType.includes('website')) return c.inv_wip_website || 0;
-      if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) return c.inv_wip_sor || 0;
-      if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) return c.inv_wip_designer || 0;
-      return c.inv_wip || 0;
-    };
-    const wipLabel = singleType ? (singleType.includes('website') ? 'WIP (Website)'
-      : (singleType.includes('sor')||singleType.includes('s.o.r')) ? 'WIP (SOR)'
-      : (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer')) ? 'WIP (Designer)'
-      : 'WIP') : 'WIP';
+    const comboStock = (c) => roInvStock(c, roInvCtx);
+    const comboWip = (c) => roInvWip(c, roInvCtx);
+    const wipLabel = roInvCtx.wipLabel || 'WIP';
     // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboWip, wipLabel, typeSel);
+    const comboHtml = _renderComboDetails(item.combo_details, comboStock, comboWip, wipLabel, typeSel);
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
@@ -7237,14 +7255,18 @@ function applyColFilters(){
   if (!roFiltered) return;
 
   let colFiltered = roFiltered;
+  const typeSelCF = getSelectedTypes('rType');
+  const chanSelCF = getSelectedChannels('rChan');
+  const subChanSelCF = getSelectedSubChannels('rSubChan');
+  const roInvCtxCF = roInvContext(typeSelCF, chanSelCF, subChanSelCF);
   if (_cfActive) {
     colFiltered = roFiltered.filter(item => {
       const q7  = parseInt(item.qty_7d)  || 0;
       const q15 = parseInt(item.qty_15d) || 0;
       const q30 = parseInt(item.qty_1m)  || 0;
       const sold = parseInt(item.final_qty) || 0;
-      const stk  = parseInt(item.inv_stock) || 0;
-      const wip  = parseInt(item.inv_wip)   || 0;
+      const stk  = roInvStock(item, roInvCtxCF);
+      const wip  = roInvWip(item, roInvCtxCF);
       const fc   = parseInt(item.forecast_60d) || 0;
       const reo  = parseInt(item.reorder_qty)  || 0;
       const rmk  = (roRemarks[item.sku] || '').toLowerCase();
@@ -7265,13 +7287,11 @@ function applyColFilters(){
   // Re-render tbody only (not thead / KPIs)
   const RO_CAP = 300;
   const roShown = colFiltered.slice(0, RO_CAP);
-  const singleType = (() => {
-    const typeSel = getSelectedTypes('rType');
-    return typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
-  })();
   const roNoFilter = !_cfActive && !(
     (document.getElementById('rSearch')?.value || '').trim() ||
-    getSelectedTypes('rType').length > 0 ||
+    typeSelCF.length > 0 ||
+    chanSelCF.length > 0 ||
+    subChanSelCF.length > 0 ||
     (document.getElementById('rTaxon')?.value || 'All') !== 'All' ||
     (document.getElementById('rCust')?.value  || '').trim() ||
     (document.getElementById('rD1')?.value    || '') ||
@@ -7296,14 +7316,10 @@ function applyColFilters(){
     const imgTag = (item.image_url && item.image_url !== '' && String(item.image_url).toLowerCase() !== 'nan')
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
-    const stk = parseInt(item.inv_stock) || 0;
-    let wip;
-    if (singleType && singleType.includes('website'))  wip = parseInt(item.inv_wip_website) || 0;
-    else if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) wip = parseInt(item.inv_wip_sor) || 0;
-    else if (singleType && (singleType.includes('purchase') || singleType.includes('designer'))) wip = parseInt(item.inv_wip_designer) || 0;
-    else wip = parseInt(item.inv_wip) || 0;
+    const stk = roInvStock(item, roInvCtxCF);
+    const wip = roInvWip(item, roInvCtxCF);
     let q7, q15, q30;
-    if (!roNoFilter && getSelectedTypes('rType').length > 0) {
+    if (!roNoFilter && typeSelCF.length > 0) {
       const fe = item._fe || [];
       q7  = fe.filter(e=>e.date!=='N/A'&&e.date>=iso7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
       q15 = fe.filter(e=>e.date!=='N/A'&&e.date>=iso15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
@@ -7317,18 +7333,11 @@ function applyColFilters(){
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
-    const comboWip2 = (c) => {
-      if (singleType && singleType.includes('website')) return c.inv_wip_website || 0;
-      if (singleType && (singleType.includes('sor') || singleType.includes('s.o.r'))) return c.inv_wip_sor || 0;
-      if (singleType && (singleType.includes('purchase') || singleType.includes('designer') || singleType.includes('customer'))) return c.inv_wip_designer || 0;
-      return c.inv_wip || 0;
-    };
-    const wipLabel2 = singleType ? (singleType.includes('website') ? 'WIP (Website)'
-      : (singleType.includes('sor')||singleType.includes('s.o.r')) ? 'WIP (SOR)'
-      : (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer')) ? 'WIP (Designer)'
-      : 'WIP') : 'WIP';
+    const comboStock2 = (c) => roInvStock(c, roInvCtxCF);
+    const comboWip2 = (c) => roInvWip(c, roInvCtxCF);
+    const wipLabel2 = roInvCtxCF.wipLabel || 'WIP';
     // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboWip2, wipLabel2, getSelectedTypes('rType'));
+    const comboHtml = _renderComboDetails(item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF);
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
@@ -7429,26 +7438,28 @@ function exportRO(fmtType){
   const emp1 = LOGIN_ROLE === 'employee';
   // Filter context — export ko screen jaisa channel-aware banane ke liye
   const typeSel = getSelectedTypes('rType');
-  const singleType = typeSel.length === 1 ? typeSel[0].toLowerCase() : null;
-  const roNoFilterX = !(typeSel.length > 0);
+  const chanSel = getSelectedChannels('rChan');
+  const subChanSel = getSelectedSubChannels('rSubChan');
+  const roInvCtxX = roInvContext(typeSel, chanSel, subChanSel);
+  const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0);
   const nowX = todayISO || new Date().toISOString().slice(0,10);
   const _dAgo = n => new Date(new Date(nowX) - n*86400000).toISOString().slice(0,10);
   const D7 = _dAgo(7), D15 = _dAgo(15), D30 = _dAgo(30);
   // entries ko type filter ke hisaab se le aao (filter na ho to saari)
   const filtEnts = (it) => {
-    if (typeSel.length > 0) {
-      return (it._fe && it._fe.length) ? it._fe : (it.sales_entries || []).filter(e => typeSel.includes(e.type));
+    if (typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0) {
+      return (it._fe && it._fe.length) ? it._fe : (it.sales_entries || []).filter(e =>
+        (!typeSel.length || typeSel.includes(e.type)) &&
+        (!chanSel.length || chanSel.includes(e.channel)) &&
+        (!subChanSel.length || subChanSel.includes(e.sub_channel))
+      );
     }
     return it.sales_entries || [];
   };
   const winQty = (ents, since) => ents.filter(e=>e.date!=='N/A'&&e.date>=since).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
   // channel-aware WIP (jaise screen pe)
-  const chWip = (o) => {
-    if (singleType && singleType.includes('website')) return o.inv_wip_website || 0;
-    if (singleType && (singleType.includes('sor')||singleType.includes('s.o.r'))) return o.inv_wip_sor || 0;
-    if (singleType && (singleType.includes('purchase')||singleType.includes('designer')||singleType.includes('customer'))) return o.inv_wip_designer || 0;
-    return o.inv_wip || 0;
-  };
+  const chStock = (o) => roInvStock(o, roInvCtxX);
+  const chWip = (o) => roInvWip(o, roInvCtxX);
   const headers = ['Row Type','SKU','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
@@ -7476,7 +7487,7 @@ function exportRO(fmtType){
       'Sold Qty': Math.round(rSold),
       'MRP': parseFloat(item.mrp) || 0,
       ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0, 'Discount %': (item._fDiscPct||0) + '%'}),
-      'Inv Stock': item.inv_stock || 0,
+      'Inv Stock': chStock(item),
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
       'Forecast Sold Qty': item.forecast_60d || 0,
@@ -7494,10 +7505,14 @@ function exportRO(fmtType){
     (item.combo_details || []).forEach(c => {
       // Type filter active hai to combo SKU ke filtered sales nikalo
       let c7, c15, c30, cSold;
-      if (!roNoFilterX && typeSel.length > 0) {
+      if (!roNoFilterX && (typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0)) {
         const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
         if (masterC) {
-          const fe = (masterC.sales_entries || []).filter(e => typeSel.includes(e.type));
+          const fe = (masterC.sales_entries || []).filter(e =>
+            (!typeSel.length || typeSel.includes(e.type)) &&
+            (!chanSel.length || chanSel.includes(e.channel)) &&
+            (!subChanSel.length || subChanSel.includes(e.sub_channel))
+          );
           c7    = Math.round(winQty(fe, D7));
           c15   = Math.round(winQty(fe, D15));
           c30   = Math.round(winQty(fe, D30));
@@ -7522,7 +7537,7 @@ function exportRO(fmtType){
         'Sold Qty': cSold,
         'MRP': parseFloat(c.mrp) || 0,
         ...(emp1 ? {} : {'Selling Price': '', 'Discount %': ''}),
-        'Inv Stock': c.inv_stock || 0,
+        'Inv Stock': chStock(c),
         'Inv WIP': chWip(c),
         'Blocked Qty': c.blocked_qty || 0,
         'Forecast Sold Qty': c.forecast_60d || 0,
@@ -7793,7 +7808,7 @@ function escHtml(v){
 /* ── Helper: combo SKU ka filter-aware HTML (Type filter ke hisaab se
    7D/15D/30D/Sold sales dikhata hai, warna pre-computed totals).
    WIP bhi channel-aware (comboWipFn(c) se). ── */
-function _renderComboDetails(combo_details, comboWipFn, wipLabel, typeSel) {
+function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, typeSel) {
   if (!combo_details || !combo_details.length) return '';
   const now = todayISO || new Date().toISOString().slice(0,10);
   const cd7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
@@ -7824,7 +7839,7 @@ function _renderComboDetails(combo_details, comboWipFn, wipLabel, typeSel) {
       + '<span>15D <b>' + cQ15 + '</b></span>'
       + '<span>30D <b>' + cQ30 + '</b></span>'
       + '<span>Sold <b>' + cSold + '</b></span>'
-      + '<span>Stock <b>' + (c.inv_stock||0) + '</b></span>'
+      + '<span>Stock <b>' + (comboStockFn(c)||0) + '</b></span>'
       + '<span>WIP <b>' + (comboWipFn(c)||0) + '</b></span>'
       + '<span>Fcast <b>' + (c.forecast_60d||0) + '</b></span>'
       + '<span>Reorder <b style="color:#b45309">' + (c.reorder_qty||0) + '</b></span>'
