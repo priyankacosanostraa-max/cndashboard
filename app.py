@@ -8582,8 +8582,8 @@ function resetProduction(){
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','SKU Name','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
-  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
+  const headers = ['Order Date','Order No.','SKU','SKU Name','Inv Stock','Inv (WIP)','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
+  const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.inv_stock||0), Math.round(r.inv_wip||0), r.stone_color||'', r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
     (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -10674,7 +10674,7 @@ _PROD_CACHE = {"rows": None, "ts": 0}
 
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode=""):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
-    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
+    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}; stock_map = {}; wip_map = {}
     try:
         comp = get_data()[0]
         for it in comp:
@@ -10688,6 +10688,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             aov_map[sk] = it.get("aov_per_piece", 0) or 0
             disc_map[sk] = it.get("discount_pct", 0) or 0
             stone_map[sk] = it.get("stone_color", "") or ""
+            stock_map[sk] = it.get("inv_stock", 0) or 0
+            wip_map[sk] = it.get("inv_wip", 0) or 0
     except Exception:
         pass
 
@@ -10805,6 +10807,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
         rr["stone_color"] = stone_map.get(r["sku"], "")
+        rr["inv_stock"] = stock_map.get(r["sku"], 0) or 0
+        rr["inv_wip"] = wip_map.get(r["sku"], 0) or 0
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
         # AOV/Discount% — revenue-sensitive, employee ko 0 (jaisa baaki app me hai)
         if session.get("role") == "employee":
@@ -10832,6 +10836,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                     "taxon": r.get("taxon", ""),
                     "order_type": r.get("order_type", ""),
                     "channel": r.get("channel", ""),
+                    "inv_stock": r.get("inv_stock", 0) or 0,
+                    "inv_wip": r.get("inv_wip", 0) or 0,
                     "order_qty": 0.0, "recv_qty": 0.0, "bal_qty": 0.0,
                     "all_orders": r.get("all_orders", []),
                     "sku_total_balance": r.get("sku_total_balance", 0),
