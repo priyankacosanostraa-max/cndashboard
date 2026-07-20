@@ -998,6 +998,9 @@ def _refresh_data():
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
                  and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()]
     I_STK = stk_cands[0] if stk_cands else find_col(inv.columns,"Inv. Stock","stock")
+    stk_3p_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
+                    and "3p" in c.lower()]
+    I_STK_3P = stk_3p_cands[0] if stk_3p_cands else find_col(inv.columns,"Inv. Stock _3P","Inv Stock _3P","stock 3p","3p stock")
     wip_exact = [c for c in inv.columns if re.sub(r"[^a-z0-9]","",c.lower()) == "invwip"]
     if wip_exact:
         I_WIP = wip_exact[0]
@@ -1330,6 +1333,7 @@ def _refresh_data():
                     launch_label = _ld.strftime("%B %Y")
         img   = clean(r.get(I_IMG,""))                  if I_IMG else ""
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
+        stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
         wip   = to_int(r.get(I_WIP,0))                 if I_WIP else 0
         wip_website  = to_int(r.get(I_WIP_WEBSITE,0))  if I_WIP_WEBSITE  else 0
         wip_designer = to_int(r.get(I_WIP_DESIGNER,0)) if I_WIP_DESIGNER else 0
@@ -1382,6 +1386,7 @@ def _refresh_data():
             "is_seasonal":  _cn_tags_for_item["seasonal"],
             "image_url":   img,
             "inv_stock":   stk,
+            "inv_stock_3p": stk_3p,
             "inv_wip":     wip,
             "inv_wip_website":  wip_website,
             "inv_wip_designer": wip_designer,
@@ -8582,9 +8587,9 @@ function resetProduction(){
 function exportProduction(){
   const d = _prodData;
   if (!d || !d.rows || !d.rows.length){ alert('No production data to export.'); return; }
-  const headers = ['Order Date','Order No.','SKU','SKU Name','Inv Stock','Inv (WIP)','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date'];
+  const headers = ['Order Date','Order No.','SKU','SKU Name','Inv Stock','Inv (WIP)','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date','Image Link'];
   const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.inv_stock||0), Math.round(r.inv_wip||0), r.stone_color||'', r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
-    (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date]);
+    (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date, r.image_url||'']);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -10674,7 +10679,8 @@ _PROD_CACHE = {"rows": None, "ts": 0}
 
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode=""):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
-    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}; stock_map = {}; wip_map = {}
+    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
+    stock_map = {}; stock_3p_map = {}; wip_map = {}; wip_website_map = {}; wip_designer_map = {}; wip_customer_map = {}; wip_sor_map = {}
     try:
         comp = get_data()[0]
         for it in comp:
@@ -10689,7 +10695,13 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             disc_map[sk] = it.get("discount_pct", 0) or 0
             stone_map[sk] = it.get("stone_color", "") or ""
             stock_map[sk] = it.get("inv_stock", 0) or 0
+            if it.get("inv_stock_3p") is not None:
+                stock_3p_map[sk] = it.get("inv_stock_3p", 0) or 0
             wip_map[sk] = it.get("inv_wip", 0) or 0
+            wip_website_map[sk] = it.get("inv_wip_website", 0) or 0
+            wip_designer_map[sk] = it.get("inv_wip_designer", 0) or 0
+            wip_customer_map[sk] = it.get("inv_wip_customer", 0) or 0
+            wip_sor_map[sk] = it.get("inv_wip_sor", 0) or 0
     except Exception:
         pass
 
@@ -10775,6 +10787,25 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     txf = taxon_filter.strip().lower()
     tyf = type_filter.strip().lower()
     bo = (balance_only or "").strip().lower()   # "yes" = sirf balance qty waale, "no" = balance 0 waale
+    inv_filter_ctx = (cf or tyf).strip()
+    def _prod_inv_stock(sku):
+        # Blank channel/type filter = normal overall inventory. SOR/3P channels
+        # use the All Product sheet's "Inv. Stock _3P" when it exists.
+        if inv_filter_ctx and ("sor" in inv_filter_ctx or "3p" in inv_filter_ctx):
+            return stock_3p_map.get(sku, stock_map.get(sku, 0)) or 0
+        return stock_map.get(sku, 0) or 0
+
+    def _prod_inv_wip(sku):
+        if inv_filter_ctx:
+            if "website" in inv_filter_ctx:
+                return wip_website_map.get(sku, 0) or 0
+            if "designer" in inv_filter_ctx:
+                return wip_designer_map.get(sku, 0) or 0
+            if "customer" in inv_filter_ctx or "customize" in inv_filter_ctx:
+                return wip_customer_map.get(sku, 0) or 0
+            if "sor" in inv_filter_ctx or "3p" in inv_filter_ctx:
+                return wip_sor_map.get(sku, 0) or 0
+        return wip_map.get(sku, 0) or 0
     rows = []
     for r in rows_all:
         if cf and r["channel"].strip().lower() != cf:
@@ -10807,8 +10838,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
         rr["stone_color"] = stone_map.get(r["sku"], "")
-        rr["inv_stock"] = stock_map.get(r["sku"], 0) or 0
-        rr["inv_wip"] = wip_map.get(r["sku"], 0) or 0
+        rr["inv_stock"] = _prod_inv_stock(r["sku"])
+        rr["inv_wip"] = _prod_inv_wip(r["sku"])
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
         # AOV/Discount% — revenue-sensitive, employee ko 0 (jaisa baaki app me hai)
         if session.get("role") == "employee":
