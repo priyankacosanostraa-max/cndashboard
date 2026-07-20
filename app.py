@@ -993,6 +993,7 @@ def _refresh_data():
     I_DIM = find_col(inv.columns, "Product Dimensions","Dimensions","Dimension","Size")
     I_LNCH = find_col(inv.columns, "Launch Date","Launching Date","Launch","Launched")
     I_STONE = find_col(inv.columns, "Stone Details","Stone Detail","Remarks","Remark","combo","combo sku","combo skus","combo_skus","stone")
+    I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
@@ -1379,11 +1380,11 @@ def _refresh_data():
         _cn_name_for_item = cn_display_name(raw) or raw
         _cn_tags_for_item = cn_classify_tags(_cn_name_for_item)
 
-        stone_details = clean(r.get(I_STONE,"")) if I_STONE else ""
+        stone_details_raw = clean(r.get(I_STONE,"")) if I_STONE else ""
+        combo_details_raw = clean(r.get(I_COMBO_DETAILS,"")) if I_COMBO_DETAILS else ""
+        stone_details = stone_details_raw or (combo_details_raw if re.match(r"^\s*cmb", raw or "", re.I) else "")
         gift_set_stone_details = stone_details if (
-            raw.strip().upper().startswith("CMB") and
-            re.sub(r"[^a-z0-9]", "", str(taxon or "").lower()) == "giftset" and
-            stone_details.strip()
+            re.match(r"^\s*cmb", raw or "", re.I) and stone_details.strip()
         ) else ""
 
         item = {
