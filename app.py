@@ -4466,6 +4466,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
   <button class="menu-item" id="m19" onclick="showTab('stockstatus')">Stock Status</button>
+  <button class="menu-item" id="m20" onclick="showTab('rakhi')">Rakhi</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -5314,6 +5315,22 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="discSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="discContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  </div>
+
+
+  <div id="vRakhi" style="display:none">
+  <div class="insights-head">
+    <div>
+      <div class="insights-title">Rakhi</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhi()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU.</div>
+  <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
+  <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8466,6 +8483,115 @@ function exportDiscount(){
 }
 window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
 
+/* ── RAKHI ── SKUs starting with RKH, + CMB (gift set) SKUs whose Stone
+   Details/Remarks mention an RKH SKU. Built entirely client-side from
+   `master` (already-loaded compiled data) — order-date level (one row
+   per sales transaction), same source `master` uses everywhere else. */
+let _rakhiRows = [];
+function _rkhIsRakhiSku(sku){
+  return /^\s*rkh/i.test(String(sku == null ? '' : sku));
+}
+function _rkhIsComboSku(sku){
+  return /^\s*cmb/i.test(String(sku == null ? '' : sku));
+}
+function _rkhComboHasRakhi(item){
+  const stone = String((item && (item.combo_skus || item.gift_set_stone_details)) || '');
+  return /rkh/i.test(stone);
+}
+function _rkhMatchItem(item){
+  const sku = item && item.sku;
+  if (_rkhIsRakhiSku(sku)) return true;
+  if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
+  return false;
+}
+function _rkhBuildRows(){
+  const rows = [];
+  (master || []).forEach(item => {
+    if (!item || !_rkhMatchItem(item)) return;
+    const entries = item.sales_entries || [];
+    entries.forEach(e => {
+      rows.push({
+        date: (e && e.date) || 'N/A',
+        sku: item.sku,
+        sku_name: item.sku_name || '',
+        image_url: item.image_url || '',
+        type: (e && e.type) || '',
+        cust: (e && e.cust) || '',
+        rev: Number(e && e.rev) || 0,
+        qty: Number(e && e.qty) || 0
+      });
+    });
+  });
+  rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return rows;
+}
+function loadRakhi(){ renderRakhi(); }
+function renderRakhi(){
+  const host = document.getElementById('rakhiContent');
+  const sumHost = document.getElementById('rakhiSummary');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment. <button class="go-btn" style="width:auto;padding:6px 14px;margin-left:10px" onclick="loadData(true)">Retry</button></div>';
+    if (sumHost) sumHost.innerHTML = '';
+    return;
+  }
+  const rows = _rkhBuildRows();
+  _rakhiRows = rows;
+  const emp = LOGIN_ROLE === 'employee';
+  if (sumHost){
+    const totQty = rows.reduce((s, r) => s + (r.qty || 0), 0);
+    const totRev = rows.reduce((s, r) => s + (r.rev || 0), 0);
+    const skuSet = new Set(rows.map(r => String(r.sku || '').toUpperCase()));
+    sumHost.innerHTML = `
+      <div class="yoy-card"><div class="yc-label">Rakhi Orders</div><div class="yc-val">${rows.length.toLocaleString('en-IN')}</div><div class="yc-sub">Matching transactions</div></div>
+      <div class="yoy-card"><div class="yc-label">Distinct SKUs</div><div class="yc-val">${skuSet.size.toLocaleString('en-IN')}</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
+      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>`}
+    `;
+  }
+  if (!rows.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders found.</div>';
+    return;
+  }
+  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th></tr>`;
+  const body = rows.map(r => {
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    const dateDisp = (r.date && r.date !== 'N/A') ? r.date : '—';
+    return `<tr>
+      <td>${escHtml(dateDisp)}</td>
+      <td>${img}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td>${escHtml(r.type || '—')}</td>
+      <td>${escHtml(r.cust || '—')}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhi(){
+  const rows = _rakhiRows || [];
+  if (!rows.length){ alert('No Rakhi data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Order Date', 'SKU', 'SKU Name', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Image Link'];
+  const data = rows.map(r => [
+    r.date, r.sku, exportSkuName(r.sku, r.sku_name), r.type || '', r.cust || '',
+    ...(emp ? [] : [Math.round(r.rev)]),
+    Math.round(r.qty), r.image_url || ''
+  ]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_orders.csv'; a.click();
+}
+window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
+
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
 let _prodSortKey = 'order_qty', _prodSortDir = -1;
@@ -10191,6 +10317,7 @@ showTab = function(t){
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
+    rakhi: {id: 'vRakhi', btn: 'm20'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -10232,6 +10359,7 @@ showTab = function(t){
       atrisk: 'AT-RISK CUSTOMERS',
       taxon: 'TAXON DETAILS',
       stockstatus: 'STOCK STATUS',
+      rakhi: 'RAKHI',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -10256,6 +10384,7 @@ showTab = function(t){
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
+  if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
