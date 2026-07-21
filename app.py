@@ -5331,6 +5331,19 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU.</div>
   <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Yesterday &amp; Day Before</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiYd()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Same Rakhi SKU/combo match, restricted to orders dated yesterday or the day before yesterday.</div>
+  <div id="rakhiYdSummary" class="yoy-grid" style="margin-bottom:16px"></div>
+  <div id="rakhiYdContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8488,6 +8501,7 @@ window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
    `master` (already-loaded compiled data) — order-date level (one row
    per sales transaction), same source `master` uses everywhere else. */
 let _rakhiRows = [];
+let _rakhiYdRows = [];
 function _rkhIsRakhiSku(sku){
   return /^\s*rkh/i.test(String(sku == null ? '' : sku));
 }
@@ -8525,7 +8539,20 @@ function _rkhBuildRows(){
   rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return rows;
 }
-function loadRakhi(){ renderRakhi(); }
+function _rkhYdDates(){
+  // Order date column ("cosa_orderdate" sheet) parses to ISO YYYY-MM-DD
+  // server-side regardless of original format. todayISO comes from the
+  // server (IST) — fallback to browser date if not loaded yet.
+  const base = todayISO ? new Date(todayISO + 'T00:00:00') : new Date();
+  const y1 = new Date(base.getTime() - 1 * 86400000).toISOString().slice(0, 10);
+  const y2 = new Date(base.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+  return [y1, y2];
+}
+function _rkhBuildYdRows(){
+  const [y1, y2] = _rkhYdDates();
+  return (_rakhiRows || []).filter(r => r.date === y1 || r.date === y2);
+}
+function loadRakhi(){ renderRakhi(); renderRakhiYd(); }
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -8591,6 +8618,71 @@ function exportRakhi(){
   a.href = URL.createObjectURL(blob); a.download = 'rakhi_orders.csv'; a.click();
 }
 window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
+
+function renderRakhiYd(){
+  const host = document.getElementById('rakhiYdContent');
+  const sumHost = document.getElementById('rakhiYdSummary');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    if (sumHost) sumHost.innerHTML = '';
+    return;
+  }
+  const rows = _rkhBuildYdRows();
+  _rakhiYdRows = rows;
+  const emp = LOGIN_ROLE === 'employee';
+  const [y1, y2] = _rkhYdDates();
+  if (sumHost){
+    const totQty = rows.reduce((s, r) => s + (r.qty || 0), 0);
+    const totRev = rows.reduce((s, r) => s + (r.rev || 0), 0);
+    sumHost.innerHTML = `
+      <div class="yoy-card"><div class="yc-label">Orders (${escHtml(y1)} &amp; ${escHtml(y2)})</div><div class="yc-val">${rows.length.toLocaleString('en-IN')}</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
+      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>`}
+    `;
+  }
+  if (!rows.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders for yesterday or the day before.</div>';
+    return;
+  }
+  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>Customer</th><th>Type</th>${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
+  const body = rows.map(r => {
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    const dateDisp = (r.date && r.date !== 'N/A') ? r.date : '—';
+    return `<tr>
+      <td>${escHtml(dateDisp)}</td>
+      <td>${img}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      <td>${escHtml(r.cust || '—')}</td>
+      <td>${escHtml(r.type || '—')}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiYd(){
+  const rows = _rakhiYdRows || [];
+  if (!rows.length){ alert('No Rakhi (yesterday/day-before) data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Order Date', 'SKU', 'SKU Name', 'Sold Qty', 'Customer', 'Type', ...(emp ? [] : ['Net Revenue']), 'Image Link'];
+  const data = rows.map(r => [
+    r.date, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty), r.cust || '', r.type || '',
+    ...(emp ? [] : [Math.round(r.rev)]),
+    r.image_url || ''
+  ]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_yesterday_daybefore.csv'; a.click();
+}
+window.renderRakhiYd = renderRakhiYd; window.exportRakhiYd = exportRakhiYd;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
