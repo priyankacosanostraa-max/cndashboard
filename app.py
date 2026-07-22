@@ -4389,7 +4389,6 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
 
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -5339,7 +5338,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiChannelExcel()">Export Excel</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiChannelCSV()">Export CSV</button>
     </div>
   </div>
   <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Day Before → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
@@ -8628,21 +8627,23 @@ window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRak
 
 /* ── RAKHI CHANNEL vs TARGET ──
    Channel rule (as given): Type == "Website" -> Website channel; every
-   other order is classified purely from the Customer Name text. Targets
-   below are fixed figures from the Rakhi target sheet (SP/Qty Target-Aug
-   column, which is the only one with a figure for every channel). */
+   other order is classified purely from the Customer Name text. Figures
+   below are fixed, taken as-is from the Rakhi target sheet (Launch Date,
+   SP/Qty Target-Aug, SP/Qty Target-Jul — same layout as the sheet). Short%
+   is measured against the Aug target since that's the only column with a
+   figure for every channel (it's also the full-season total). */
 const RAKHI_CHANNEL_ORDER = ['Website', 'Blinkit', 'Instamart', 'Myntra', 'Nykaa', 'IGP', 'Flipkart', 'Amazon', 'Ajio', 'Others'];
 const RAKHI_TARGETS = {
-  'Website':   {sp: 17358600, qty: 13079},
-  'Blinkit':   {sp: 9427600,  qty: 4900},
-  'Instamart': {sp: 2828280,  qty: 1470},
-  'Myntra':    {sp: 1678080,  qty: 920},
-  'Nykaa':     {sp: 1048800,  qty: 575},
-  'IGP':       {sp: 960000,   qty: 1360},
-  'Flipkart':  {sp: 335616,   qty: 184},
-  'Amazon':    {sp: 268493,   qty: 147},
-  'Ajio':      {sp: 251712,   qty: 138},
-  'Others':    {sp: 109592,   qty: 55}
+  'Website':   {launch: '22nd July', spAug: 17358600, qtyAug: 13079, spJul: 2200800, qtyJul: 1572},
+  'Blinkit':   {launch: '',          spAug: 9427600,  qtyAug: 4900,  spJul: 0,       qtyJul: 0},
+  'Instamart': {launch: '5th Aug',   spAug: 2828280,  qtyAug: 1470,  spJul: 0,       qtyJul: 0},
+  'Myntra':    {launch: '29th July', spAug: 1678080,  qtyAug: 920,   spJul: 0,       qtyJul: 0},
+  'Nykaa':     {launch: '29th July', spAug: 1048800,  qtyAug: 575,   spJul: 0,       qtyJul: 0},
+  'IGP':       {launch: '15th July', spAug: 960000,   qtyAug: 1360,  spJul: 240000,  qtyJul: 340},
+  'Flipkart':  {launch: '17th July', spAug: 335616,   qtyAug: 184,   spJul: 83904,   qtyJul: 46},
+  'Amazon':    {launch: '16th July', spAug: 268493,   qtyAug: 147,   spJul: 67123,   qtyJul: 37},
+  'Ajio':      {launch: '',          spAug: 251712,   qtyAug: 138,   spJul: 0,       qtyJul: 0},
+  'Others':    {launch: '',          spAug: 109592,   qtyAug: 55,    spJul: 0,       qtyJul: 0}
 };
 const _RKH_CH_TOKENS = [
   ['blinkit', 'Blinkit'],
@@ -8706,95 +8707,110 @@ function renderRakhiChannel(){
   const list = _rkhBuildChannelSummary();
   _rakhiChRows = list;
   const emp = LOGIN_ROLE === 'employee';
-  const totTargetSp = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.sp, 0);
-  const totTargetQty = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qty, 0);
+  const totTargetSpAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spAug, 0);
+  const totTargetQtyAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyAug, 0);
+  const totTargetSpJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spJul, 0);
+  const totTargetQtyJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyJul, 0);
   const totRev = list.reduce((s, r) => s + r.rev, 0);
   const totQty = list.reduce((s, r) => s + r.qty, 0);
   if (sumHost){
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Overall Qty Short</div><div class="yc-val">${_rkhShortNum(totTargetQty, totQty)}</div><div class="yc-sub">${Math.round(totQty).toLocaleString('en-IN')} / ${totTargetQty.toLocaleString('en-IN')} target</div></div>
-      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSp, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSp)} target</div></div>`}
+      <div class="yoy-card"><div class="yc-label">Overall Qty Short</div><div class="yc-val">${_rkhShortNum(totTargetQtyAug, totQty)}</div><div class="yc-sub">${Math.round(totQty).toLocaleString('en-IN')} / ${totTargetQtyAug.toLocaleString('en-IN')} target</div></div>
+      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSpAug, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSpAug)} target</div></div>`}
     `;
   }
+  const [yestISO, dbISO] = _rkhYdDates();
+  const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const head = `<tr>
-      <th>Channel</th>
-      ${emp ? '' : '<th>SP Target</th>'}<th>Qty Target</th>
-      ${emp ? '' : '<th>Yesterday Rev</th>'}<th>Yesterday Qty</th>
-      ${emp ? '' : '<th>Day Before Rev</th>'}<th>Day Before Qty</th>
-      ${emp ? '' : '<th>Today Rev</th>'}<th>Today Qty</th>
+      <th>Channel</th><th>Launch Date</th>
+      ${emp ? '' : '<th>SP Target-Aug</th>'}<th>Qty Target-Aug</th>
+      ${emp ? '' : '<th>SP Target-Jul</th>'}<th>Qty Target-Jul</th>
       ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
+      ${emp ? '' : `<th>${escHtml(yestISO)} Rev</th>`}<th>${escHtml(yestISO)} Qty</th>
+      ${emp ? '' : `<th>${escHtml(dbISO)} Rev</th>`}<th>${escHtml(dbISO)} Qty</th>
+      ${emp ? '' : `<th>${escHtml(todayStr)} Rev</th>`}<th>${escHtml(todayStr)} Qty</th>
       ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
     </tr>`;
   const body = list.map(r => {
-    const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
+    const t = RAKHI_TARGETS[r.channel] || {launch: '', spAug: 0, qtyAug: 0, spJul: 0, qtyJul: 0};
     return `<tr>
-      <td><b>${escHtml(r.channel)}</b></td>
-      ${emp ? '' : `<td>${fmt(t.sp)}</td>`}<td>${t.qty.toLocaleString('en-IN')}</td>
+      <td><b>${escHtml(r.channel)}</b></td><td>${escHtml(t.launch || '—')}</td>
+      ${emp ? '' : `<td>${fmt(t.spAug)}</td>`}<td>${t.qtyAug.toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${t.spJul ? fmt(t.spJul) : '—'}</td>`}<td>${t.qtyJul ? t.qtyJul.toLocaleString('en-IN') : '—'}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.yRev)}</td>`}<td>${Math.round(r.yQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.dbRev)}</td>`}<td>${Math.round(r.dbQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.tRev)}</td>`}<td>${Math.round(r.tQty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${_rkhShortCell(t.sp, r.rev)}</td>`}<td>${_rkhShortCell(t.qty, r.qty)}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(t.spAug, r.rev)}</td>`}<td>${_rkhShortCell(t.qtyAug, r.qty)}</td>
     </tr>`;
   }).join('');
   const yTot = list.reduce((s, r) => s + r.yRev, 0), yQTot = list.reduce((s, r) => s + r.yQty, 0);
   const dbTot = list.reduce((s, r) => s + r.dbRev, 0), dbQTot = list.reduce((s, r) => s + r.dbQty, 0);
   const tTot = list.reduce((s, r) => s + r.tRev, 0), tQTot = list.reduce((s, r) => s + r.tQty, 0);
   const totalRow = `<tr style="font-weight:700;border-top:2px solid #333">
-      <td>Total</td>
-      ${emp ? '' : `<td>${fmt(totTargetSp)}</td>`}<td>${totTargetQty.toLocaleString('en-IN')}</td>
+      <td>Total</td><td>—</td>
+      ${emp ? '' : `<td>${fmt(totTargetSpAug)}</td>`}<td>${totTargetQtyAug.toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(totTargetSpJul)}</td>`}<td>${totTargetQtyJul.toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(yTot)}</td>`}<td>${Math.round(yQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(dbTot)}</td>`}<td>${Math.round(dbQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(tTot)}</td>`}<td>${Math.round(tQTot).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${_rkhShortCell(totTargetSp, totRev)}</td>`}<td>${_rkhShortCell(totTargetQty, totQty)}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(totTargetSpAug, totRev)}</td>`}<td>${_rkhShortCell(totTargetQtyAug, totQty)}</td>
     </tr>`;
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:1100px"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
 }
-function exportRakhiChannelExcel(){
+function exportRakhiChannelCSV(){
   const list = _rakhiChRows || [];
   if (!list.length){ alert('No Rakhi channel data to export.'); return; }
-  if (typeof XLSX === 'undefined'){ alert('Excel export library still loading — try again in a moment.'); return; }
   const emp = LOGIN_ROLE === 'employee';
+  const totTargetSpAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spAug, 0);
+  const totTargetQtyAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyAug, 0);
+  const totTargetSpJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spJul, 0);
+  const totTargetQtyJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyJul, 0);
   const [yestISO, dbISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
-  const headers = ['Channel', 'SP Target', 'Qty Target',
-    'Yesterday (' + yestISO + ') Revenue', 'Yesterday (' + yestISO + ') Qty Sold',
-    'Day Before (' + dbISO + ') Revenue', 'Day Before (' + dbISO + ') Qty Sold',
-    'Today (' + todayStr + ') Revenue', 'Today (' + todayStr + ') Qty Sold',
-    'Revenue Till Now', 'Qty Sold Till Now',
+  const headers = ['Channel', 'Launch Date',
+    'SP Target-Aug', 'Qty Target-Aug', 'SP Target-Jul', 'Qty Target-Jul',
+    'Revenue Till Now', 'Qty Till Now',
+    yestISO + ' Revenue', yestISO + ' Qty',
+    dbISO + ' Revenue', dbISO + ' Qty',
+    todayStr + ' Revenue', todayStr + ' Qty',
     'SP Short %', 'Qty Short %'
   ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
-  const aoa = [headers];
-  let totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0, totRev = 0, totQty = 0;
-  const totTargetSp = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.sp, 0);
-  const totTargetQty = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qty, 0);
-  list.forEach(r => {
-    const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
-    totYRev += r.yRev; totYQty += r.yQty; totDbRev += r.dbRev; totDbQty += r.dbQty;
-    totTRev += r.tRev; totTQty += r.tQty; totRev += r.rev; totQty += r.qty;
-    const line = [r.channel, t.sp, t.qty,
+  let totRev = 0, totQty = 0, totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0;
+  const rowsOut = list.map(r => {
+    const t = RAKHI_TARGETS[r.channel] || {launch: '', spAug: 0, qtyAug: 0, spJul: 0, qtyJul: 0};
+    totRev += r.rev; totQty += r.qty; totYRev += r.yRev; totYQty += r.yQty;
+    totDbRev += r.dbRev; totDbQty += r.dbQty; totTRev += r.tRev; totTQty += r.tQty;
+    const line = [r.channel, t.launch || '',
+      t.spAug, t.qtyAug, t.spJul || '', t.qtyJul || '',
+      Math.round(r.rev), Math.round(r.qty),
       Math.round(r.yRev), Math.round(r.yQty),
       Math.round(r.dbRev), Math.round(r.dbQty),
       Math.round(r.tRev), Math.round(r.tQty),
-      Math.round(r.rev), Math.round(r.qty),
-      _rkhShortNum(t.sp, r.rev), _rkhShortNum(t.qty, r.qty)
+      _rkhShortNum(t.spAug, r.rev), _rkhShortNum(t.qtyAug, r.qty)
     ];
-    aoa.push(emp ? [line[0], line[2], line[4], line[6], line[8], line[10], line[12]] : line);
+    return emp ? [line[0], line[1], line[3], line[5], line[7], line[9], line[11], line[13], line[15]] : line;
   });
-  const totLine = ['Total', totTargetSp, totTargetQty,
-    Math.round(totYRev), Math.round(totYQty), Math.round(totDbRev), Math.round(totDbQty),
-    Math.round(totTRev), Math.round(totTQty), Math.round(totRev), Math.round(totQty),
-    _rkhShortNum(totTargetSp, totRev), _rkhShortNum(totTargetQty, totQty)
+  const totLine = ['Total', '',
+    totTargetSpAug, totTargetQtyAug, totTargetSpJul || '', totTargetQtyJul || '',
+    Math.round(totRev), Math.round(totQty),
+    Math.round(totYRev), Math.round(totYQty),
+    Math.round(totDbRev), Math.round(totDbQty),
+    Math.round(totTRev), Math.round(totTQty),
+    _rkhShortNum(totTargetSpAug, totRev), _rkhShortNum(totTargetQtyAug, totQty)
   ];
-  aoa.push(emp ? [totLine[0], totLine[2], totLine[4], totLine[6], totLine[8], totLine[10], totLine[12]] : totLine);
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Rakhi Channel vs Target');
-  XLSX.writeFile(wb, 'rakhi_channel_vs_target.xlsx');
+  rowsOut.push(emp ? [totLine[0], totLine[1], totLine[3], totLine[5], totLine[7], totLine[9], totLine[11], totLine[13], totLine[15]] : totLine);
+  const csv = [headers].concat(rowsOut).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_channel_vs_target.csv'; a.click();
 }
 let _rakhiChRows = [];
-window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelExcel = exportRakhiChannelExcel;
+window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
