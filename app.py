@@ -8727,12 +8727,14 @@ function renderRakhiChannel(){
   const totTargetQtyAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyAug, 0);
   const totTargetSpJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spJul, 0);
   const totTargetQtyJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyJul, 0);
+  const totTargetSp = totTargetSpAug + totTargetSpJul;
+  const totTargetQty = totTargetQtyAug + totTargetQtyJul;
   const totRev = list.reduce((s, r) => s + r.rev, 0);
   const totQty = list.reduce((s, r) => s + r.qty, 0);
   if (sumHost){
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Overall Qty Short</div><div class="yc-val">${_rkhShortNum(totTargetQtyAug, totQty)}</div><div class="yc-sub">${Math.round(totQty).toLocaleString('en-IN')} / ${totTargetQtyAug.toLocaleString('en-IN')} target</div></div>
-      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSpAug, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSpAug)} target</div></div>`}
+      <div class="yoy-card"><div class="yc-label">Overall Qty Short</div><div class="yc-val">${_rkhShortNum(totTargetQty, totQty)}</div><div class="yc-sub">${Math.round(totQty).toLocaleString('en-IN')} / ${totTargetQty.toLocaleString('en-IN')} target (Jul+Aug)</div></div>
+      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSp, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSp)} target (Jul+Aug)</div></div>`}
     `;
   }
   const [yestISO] = _rkhYdDates();
@@ -8744,10 +8746,11 @@ function renderRakhiChannel(){
       ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
       ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
       ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
-      ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
+      ${emp ? '' : '<th>SP Short % (Jul+Aug)</th>'}<th>Qty Short % (Jul+Aug)</th>
     </tr>`;
   const body = list.map(r => {
     const t = RAKHI_TARGETS[r.channel] || {launch: '', spAug: 0, qtyAug: 0, spJul: 0, qtyJul: 0};
+    const tSp = t.spAug + t.spJul, tQty = t.qtyAug + t.qtyJul;
     return `<tr>
       <td><b>${escHtml(r.channel)}</b></td><td>${escHtml(t.launch || '—')}</td>
       ${emp ? '' : `<td>${fmt(t.spAug)}</td>`}<td>${t.qtyAug.toLocaleString('en-IN')}</td>
@@ -8755,7 +8758,7 @@ function renderRakhiChannel(){
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.yRev)}</td>`}<td>${Math.round(r.yQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.tRev)}</td>`}<td>${Math.round(r.tQty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${_rkhShortCell(t.spAug, r.rev)}</td>`}<td>${_rkhShortCell(t.qtyAug, r.qty)}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(tSp, r.rev)}</td>`}<td>${_rkhShortCell(tQty, r.qty)}</td>
     </tr>`;
   }).join('');
   const yTot = list.reduce((s, r) => s + r.yRev, 0), yQTot = list.reduce((s, r) => s + r.yQty, 0);
@@ -8767,7 +8770,7 @@ function renderRakhiChannel(){
       ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(yTot)}</td>`}<td>${Math.round(yQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(tTot)}</td>`}<td>${Math.round(tQTot).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${_rkhShortCell(totTargetSpAug, totRev)}</td>`}<td>${_rkhShortCell(totTargetQtyAug, totQty)}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(totTargetSp, totRev)}</td>`}<td>${_rkhShortCell(totTargetQty, totQty)}</td>
     </tr>`;
   host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1000px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
 }
@@ -8779,6 +8782,8 @@ function exportRakhiChannelCSV(){
   const totTargetQtyAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyAug, 0);
   const totTargetSpJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spJul, 0);
   const totTargetQtyJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyJul, 0);
+  const totTargetSp = totTargetSpAug + totTargetSpJul;
+  const totTargetQty = totTargetQtyAug + totTargetQtyJul;
   const [yestISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const headers = ['Channel', 'Launch Date',
@@ -8786,11 +8791,12 @@ function exportRakhiChannelCSV(){
     'Revenue Till Now', 'Qty Till Now',
     _rkhFmtShortDate(yestISO) + ' Revenue', _rkhFmtShortDate(yestISO) + ' Qty',
     _rkhFmtShortDate(todayStr) + ' Revenue', _rkhFmtShortDate(todayStr) + ' Qty',
-    'SP Short %', 'Qty Short %'
+    'SP Short % (Jul+Aug)', 'Qty Short % (Jul+Aug)'
   ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
   let totRev = 0, totQty = 0, totYRev = 0, totYQty = 0, totTRev = 0, totTQty = 0;
   const rowsOut = list.map(r => {
     const t = RAKHI_TARGETS[r.channel] || {launch: '', spAug: 0, qtyAug: 0, spJul: 0, qtyJul: 0};
+    const tSp = t.spAug + t.spJul, tQty = t.qtyAug + t.qtyJul;
     totRev += r.rev; totQty += r.qty; totYRev += r.yRev; totYQty += r.yQty;
     totTRev += r.tRev; totTQty += r.tQty;
     const line = [r.channel, t.launch || '',
@@ -8798,7 +8804,7 @@ function exportRakhiChannelCSV(){
       Math.round(r.rev), Math.round(r.qty),
       Math.round(r.yRev), Math.round(r.yQty),
       Math.round(r.tRev), Math.round(r.tQty),
-      _rkhShortNum(t.spAug, r.rev), _rkhShortNum(t.qtyAug, r.qty)
+      _rkhShortNum(tSp, r.rev), _rkhShortNum(tQty, r.qty)
     ];
     return emp ? [line[0], line[1], line[3], line[5], line[7], line[9], line[11], line[13]] : line;
   });
@@ -8807,7 +8813,7 @@ function exportRakhiChannelCSV(){
     Math.round(totRev), Math.round(totQty),
     Math.round(totYRev), Math.round(totYQty),
     Math.round(totTRev), Math.round(totTQty),
-    _rkhShortNum(totTargetSpAug, totRev), _rkhShortNum(totTargetQtyAug, totQty)
+    _rkhShortNum(totTargetSp, totRev), _rkhShortNum(totTargetQty, totQty)
   ];
   rowsOut.push(emp ? [totLine[0], totLine[1], totLine[3], totLine[5], totLine[7], totLine[9], totLine[11], totLine[13]] : totLine);
   const csv = [headers].concat(rowsOut).map(r => r.map(c => {
