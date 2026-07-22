@@ -5328,7 +5328,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhi()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU.</div>
+  <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU. Restricted to FY 2026-27 orders only.</div>
   <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
@@ -8518,12 +8518,23 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
+function _rkhIsFy2627(e){
+  // fy comes normalized server-side as "FY 2026-27" — match robustly
+  // regardless of spacing/case; fall back to the order date if the fy
+  // tag itself is missing/blank on that row.
+  const fy = String((e && e.fy) || '').toUpperCase().replace(/\s+/g, '');
+  if (fy) return fy === 'FY2026-27' || fy === '2026-27';
+  const d = e && e.date;
+  if (d && d !== 'N/A') return d >= '2026-04-01' && d <= '2027-03-31';
+  return false;
+}
 function _rkhBuildRows(){
   const rows = [];
   (master || []).forEach(item => {
     if (!item || !_rkhMatchItem(item)) return;
     const entries = item.sales_entries || [];
     entries.forEach(e => {
+      if (!_rkhIsFy2627(e)) return;
       rows.push({
         date: (e && e.date) || 'N/A',
         sku: item.sku,
