@@ -8553,10 +8553,24 @@ function _rkhYdDates(){
   // Order date column ("cosa_orderdate" sheet) parses to ISO YYYY-MM-DD
   // server-side regardless of original format. todayISO comes from the
   // server (IST) — fallback to browser date if not loaded yet.
-  const base = todayISO ? new Date(todayISO + 'T00:00:00') : new Date();
-  const y1 = new Date(base.getTime() - 1 * 86400000).toISOString().slice(0, 10);
-  const y2 = new Date(base.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+  // IMPORTANT: anchor the calculation in UTC (Date.UTC + toISOString, both
+  // UTC) so the browser's local timezone (e.g. IST, UTC+5:30) never shifts
+  // the calendar date backward by a day.
+  const src = todayISO || new Date().toISOString().slice(0, 10);
+  const [Y, M, D] = src.split('-').map(Number);
+  const baseUTC = Date.UTC(Y, M - 1, D);
+  const y1 = new Date(baseUTC - 1 * 86400000).toISOString().slice(0, 10);
+  const y2 = new Date(baseUTC - 2 * 86400000).toISOString().slice(0, 10);
   return [y1, y2];
+}
+function _rkhFmtShortDate(iso){
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  if (parts.length !== 3) return String(iso);
+  const [Y, M, D] = parts.map(Number);
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  if (!M || M < 1 || M > 12) return String(iso);
+  return `${D} ${months[M - 1]}`;
 }
 function loadRakhi(){ renderRakhi(); renderRakhiChannel(); }
 function renderRakhi(){
@@ -8726,9 +8740,9 @@ function renderRakhiChannel(){
       ${emp ? '' : '<th>SP Target-Aug</th>'}<th>Qty Target-Aug</th>
       ${emp ? '' : '<th>SP Target-Jul</th>'}<th>Qty Target-Jul</th>
       ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
-      ${emp ? '' : `<th>${escHtml(yestISO)} Rev</th>`}<th>${escHtml(yestISO)} Qty</th>
-      ${emp ? '' : `<th>${escHtml(dbISO)} Rev</th>`}<th>${escHtml(dbISO)} Qty</th>
-      ${emp ? '' : `<th>${escHtml(todayStr)} Rev</th>`}<th>${escHtml(todayStr)} Qty</th>
+      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
+      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(dbISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(dbISO))} Qty</th>
+      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
       ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
     </tr>`;
   const body = list.map(r => {
@@ -8772,9 +8786,9 @@ function exportRakhiChannelCSV(){
   const headers = ['Channel', 'Launch Date',
     'SP Target-Aug', 'Qty Target-Aug', 'SP Target-Jul', 'Qty Target-Jul',
     'Revenue Till Now', 'Qty Till Now',
-    yestISO + ' Revenue', yestISO + ' Qty',
-    dbISO + ' Revenue', dbISO + ' Qty',
-    todayStr + ' Revenue', todayStr + ' Qty',
+    _rkhFmtShortDate(yestISO) + ' Revenue', _rkhFmtShortDate(yestISO) + ' Qty',
+    _rkhFmtShortDate(dbISO) + ' Revenue', _rkhFmtShortDate(dbISO) + ' Qty',
+    _rkhFmtShortDate(todayStr) + ' Revenue', _rkhFmtShortDate(todayStr) + ' Qty',
     'SP Short %', 'Qty Short %'
   ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
   let totRev = 0, totQty = 0, totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0;
