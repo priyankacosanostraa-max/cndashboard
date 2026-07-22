@@ -8666,12 +8666,12 @@ function _rkhChannelOf(row){
 function _rkhShortCell(target, actual){
   if (!target) return '—';
   const pct = ((target - actual) / target) * 100;
-  if (pct <= 0) return `<span style="color:#2f6f3e;font-weight:600">+${Math.abs(pct).toFixed(1)}%</span>`;
-  return `<span style="color:#b3261e;font-weight:600">${pct.toFixed(1)}%</span>`;
+  if (pct <= 0) return `<span style="color:#2f6f3e;font-weight:600">+${Math.abs(pct).toFixed(2)}%</span>`;
+  return `<span style="color:#b3261e;font-weight:600">${pct.toFixed(2)}%</span>`;
 }
 function _rkhShortNum(target, actual){
   if (!target) return '';
-  return (((target - actual) / target) * 100).toFixed(1) + '%';
+  return (((target - actual) / target) * 100).toFixed(2) + '%';
 }
 function _rkhBuildChannelSummary(){
   const rows = _rakhiRows || [];
@@ -8718,22 +8718,22 @@ function renderRakhiChannel(){
   }
   const head = `<tr>
       <th>Channel</th>
-      <th>Yesterday Rev</th><th>Yesterday Qty</th>
-      <th>Day Before Rev</th><th>Day Before Qty</th>
-      <th>Today Rev</th><th>Today Qty</th>
-      ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
       ${emp ? '' : '<th>SP Target</th>'}<th>Qty Target</th>
+      ${emp ? '' : '<th>Yesterday Rev</th>'}<th>Yesterday Qty</th>
+      ${emp ? '' : '<th>Day Before Rev</th>'}<th>Day Before Qty</th>
+      ${emp ? '' : '<th>Today Rev</th>'}<th>Today Qty</th>
+      ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
       ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
     </tr>`;
   const body = list.map(r => {
     const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
     return `<tr>
       <td><b>${escHtml(r.channel)}</b></td>
+      ${emp ? '' : `<td>${fmt(t.sp)}</td>`}<td>${t.qty.toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.yRev)}</td>`}<td>${Math.round(r.yQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.dbRev)}</td>`}<td>${Math.round(r.dbQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.tRev)}</td>`}<td>${Math.round(r.tQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(t.sp)}</td>`}<td>${t.qty.toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${_rkhShortCell(t.sp, r.rev)}</td>`}<td>${_rkhShortCell(t.qty, r.qty)}</td>
     </tr>`;
   }).join('');
@@ -8742,11 +8742,11 @@ function renderRakhiChannel(){
   const tTot = list.reduce((s, r) => s + r.tRev, 0), tQTot = list.reduce((s, r) => s + r.tQty, 0);
   const totalRow = `<tr style="font-weight:700;border-top:2px solid #333">
       <td>Total</td>
+      ${emp ? '' : `<td>${fmt(totTargetSp)}</td>`}<td>${totTargetQty.toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(yTot)}</td>`}<td>${Math.round(yQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(dbTot)}</td>`}<td>${Math.round(dbQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(tTot)}</td>`}<td>${Math.round(tQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(totTargetSp)}</td>`}<td>${totTargetQty.toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${_rkhShortCell(totTargetSp, totRev)}</td>`}<td>${_rkhShortCell(totTargetQty, totQty)}</td>
     </tr>`;
   host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
@@ -8758,12 +8758,12 @@ function exportRakhiChannelExcel(){
   const emp = LOGIN_ROLE === 'employee';
   const [yestISO, dbISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
-  const headers = ['Channel',
+  const headers = ['Channel', 'SP Target', 'Qty Target',
     'Yesterday (' + yestISO + ') Revenue', 'Yesterday (' + yestISO + ') Qty Sold',
     'Day Before (' + dbISO + ') Revenue', 'Day Before (' + dbISO + ') Qty Sold',
     'Today (' + todayStr + ') Revenue', 'Today (' + todayStr + ') Qty Sold',
     'Revenue Till Now', 'Qty Sold Till Now',
-    'SP Target', 'Qty Target', 'SP Short %', 'Qty Short %'
+    'SP Short %', 'Qty Short %'
   ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
   const aoa = [headers];
   let totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0, totRev = 0, totQty = 0;
@@ -8773,19 +8773,19 @@ function exportRakhiChannelExcel(){
     const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
     totYRev += r.yRev; totYQty += r.yQty; totDbRev += r.dbRev; totDbQty += r.dbQty;
     totTRev += r.tRev; totTQty += r.tQty; totRev += r.rev; totQty += r.qty;
-    const line = [r.channel,
+    const line = [r.channel, t.sp, t.qty,
       Math.round(r.yRev), Math.round(r.yQty),
       Math.round(r.dbRev), Math.round(r.dbQty),
       Math.round(r.tRev), Math.round(r.tQty),
       Math.round(r.rev), Math.round(r.qty),
-      t.sp, t.qty, _rkhShortNum(t.sp, r.rev), _rkhShortNum(t.qty, r.qty)
+      _rkhShortNum(t.sp, r.rev), _rkhShortNum(t.qty, r.qty)
     ];
     aoa.push(emp ? [line[0], line[2], line[4], line[6], line[8], line[10], line[12]] : line);
   });
-  const totLine = ['Total',
+  const totLine = ['Total', totTargetSp, totTargetQty,
     Math.round(totYRev), Math.round(totYQty), Math.round(totDbRev), Math.round(totDbQty),
     Math.round(totTRev), Math.round(totTQty), Math.round(totRev), Math.round(totQty),
-    totTargetSp, totTargetQty, _rkhShortNum(totTargetSp, totRev), _rkhShortNum(totTargetQty, totQty)
+    _rkhShortNum(totTargetSp, totRev), _rkhShortNum(totTargetQty, totQty)
   ];
   aoa.push(emp ? [totLine[0], totLine[2], totLine[4], totLine[6], totLine[8], totLine[10], totLine[12]] : totLine);
   const ws = XLSX.utils.aoa_to_sheet(aoa);
