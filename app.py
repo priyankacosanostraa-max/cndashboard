@@ -2552,6 +2552,9 @@ table.ro tbody tr:hover{background:rgba(212,175,90,.05)}
 table.ro td{padding:10px 14px;vertical-align:middle;font-weight:700;color:#e8d5a3;white-space:nowrap}
 table.ro td.muted{color:#5a4a2a;font-weight:600}
 table.ro td.green{color:#2ecc71;font-weight:800}
+table.rkh-grid,table.rkh-grid th,table.rkh-grid td{border:1px solid rgba(212,175,90,.35)}
+table.rkh-grid{border-collapse:collapse}
+table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
 table.ro td.gold{color:#d4af5a;font-weight:800}
 table.ro td.orange{color:#e67e22;font-weight:800}
 table.ro td.red{color:#e74c3c;font-weight:800}
@@ -5341,7 +5344,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiChannelCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Day Before → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
+  <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
   <div id="rakhiChSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiChContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
@@ -8681,28 +8684,27 @@ function _rkhChannelOf(row){
 function _rkhShortCell(target, actual){
   if (!target) return '—';
   const pct = ((target - actual) / target) * 100;
-  if (pct <= 0) return `<span style="color:#2f6f3e;font-weight:600">+${Math.abs(pct).toFixed(2)}%</span>`;
-  return `<span style="color:#b3261e;font-weight:600">${pct.toFixed(2)}%</span>`;
+  if (pct <= 0) return `<span style="color:#2f6f3e;font-weight:600">+${Math.round(Math.abs(pct))}%</span>`;
+  return `<span style="color:#b3261e;font-weight:600">${Math.round(pct)}%</span>`;
 }
 function _rkhShortNum(target, actual){
   if (!target) return '';
-  return (((target - actual) / target) * 100).toFixed(2) + '%';
+  return Math.round(((target - actual) / target) * 100) + '%';
 }
 function _rkhBuildChannelSummary(){
   const rows = _rakhiRows || [];
-  const [yestISO, dbISO] = _rkhYdDates();
+  const [yestISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const map = {};
   RAKHI_CHANNEL_ORDER.forEach(ch => {
-    map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, dbRev: 0, dbQty: 0, tRev: 0, tQty: 0};
+    map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, tRev: 0, tQty: 0};
   });
   rows.forEach(r => {
     const ch = _rkhChannelOf(r);
-    if (!map[ch]) map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, dbRev: 0, dbQty: 0, tRev: 0, tQty: 0};
+    if (!map[ch]) map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, tRev: 0, tQty: 0};
     const m = map[ch];
     m.rev += (r.rev || 0); m.qty += (r.qty || 0);
     if (r.date === yestISO){ m.yRev += (r.rev || 0); m.yQty += (r.qty || 0); }
-    else if (r.date === dbISO){ m.dbRev += (r.rev || 0); m.dbQty += (r.qty || 0); }
     if (r.date === todayStr){ m.tRev += (r.rev || 0); m.tQty += (r.qty || 0); }
   });
   const order = RAKHI_CHANNEL_ORDER.slice();
@@ -8733,7 +8735,7 @@ function renderRakhiChannel(){
       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSpAug, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSpAug)} target</div></div>`}
     `;
   }
-  const [yestISO, dbISO] = _rkhYdDates();
+  const [yestISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const head = `<tr>
       <th>Channel</th><th>Launch Date</th>
@@ -8741,7 +8743,6 @@ function renderRakhiChannel(){
       ${emp ? '' : '<th>SP Target-Jul</th>'}<th>Qty Target-Jul</th>
       ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
       ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
-      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(dbISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(dbISO))} Qty</th>
       ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
       ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
     </tr>`;
@@ -8753,13 +8754,11 @@ function renderRakhiChannel(){
       ${emp ? '' : `<td>${t.spJul ? fmt(t.spJul) : '—'}</td>`}<td>${t.qtyJul ? t.qtyJul.toLocaleString('en-IN') : '—'}</td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.yRev)}</td>`}<td>${Math.round(r.yQty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(r.dbRev)}</td>`}<td>${Math.round(r.dbQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.tRev)}</td>`}<td>${Math.round(r.tQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${_rkhShortCell(t.spAug, r.rev)}</td>`}<td>${_rkhShortCell(t.qtyAug, r.qty)}</td>
     </tr>`;
   }).join('');
   const yTot = list.reduce((s, r) => s + r.yRev, 0), yQTot = list.reduce((s, r) => s + r.yQty, 0);
-  const dbTot = list.reduce((s, r) => s + r.dbRev, 0), dbQTot = list.reduce((s, r) => s + r.dbQty, 0);
   const tTot = list.reduce((s, r) => s + r.tRev, 0), tQTot = list.reduce((s, r) => s + r.tQty, 0);
   const totalRow = `<tr style="font-weight:700;border-top:2px solid #333">
       <td>Total</td><td>—</td>
@@ -8767,11 +8766,10 @@ function renderRakhiChannel(){
       ${emp ? '' : `<td>${fmt(totTargetSpJul)}</td>`}<td>${totTargetQtyJul.toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(yTot)}</td>`}<td>${Math.round(yQTot).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(dbTot)}</td>`}<td>${Math.round(dbQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(tTot)}</td>`}<td>${Math.round(tQTot).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${_rkhShortCell(totTargetSpAug, totRev)}</td>`}<td>${_rkhShortCell(totTargetQtyAug, totQty)}</td>
     </tr>`;
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:1100px"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1000px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
 }
 function exportRakhiChannelCSV(){
   const list = _rakhiChRows || [];
@@ -8781,40 +8779,37 @@ function exportRakhiChannelCSV(){
   const totTargetQtyAug = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyAug, 0);
   const totTargetSpJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.spJul, 0);
   const totTargetQtyJul = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qtyJul, 0);
-  const [yestISO, dbISO] = _rkhYdDates();
+  const [yestISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const headers = ['Channel', 'Launch Date',
     'SP Target-Aug', 'Qty Target-Aug', 'SP Target-Jul', 'Qty Target-Jul',
     'Revenue Till Now', 'Qty Till Now',
     _rkhFmtShortDate(yestISO) + ' Revenue', _rkhFmtShortDate(yestISO) + ' Qty',
-    _rkhFmtShortDate(dbISO) + ' Revenue', _rkhFmtShortDate(dbISO) + ' Qty',
     _rkhFmtShortDate(todayStr) + ' Revenue', _rkhFmtShortDate(todayStr) + ' Qty',
     'SP Short %', 'Qty Short %'
   ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
-  let totRev = 0, totQty = 0, totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0;
+  let totRev = 0, totQty = 0, totYRev = 0, totYQty = 0, totTRev = 0, totTQty = 0;
   const rowsOut = list.map(r => {
     const t = RAKHI_TARGETS[r.channel] || {launch: '', spAug: 0, qtyAug: 0, spJul: 0, qtyJul: 0};
     totRev += r.rev; totQty += r.qty; totYRev += r.yRev; totYQty += r.yQty;
-    totDbRev += r.dbRev; totDbQty += r.dbQty; totTRev += r.tRev; totTQty += r.tQty;
+    totTRev += r.tRev; totTQty += r.tQty;
     const line = [r.channel, t.launch || '',
       t.spAug, t.qtyAug, t.spJul || '', t.qtyJul || '',
       Math.round(r.rev), Math.round(r.qty),
       Math.round(r.yRev), Math.round(r.yQty),
-      Math.round(r.dbRev), Math.round(r.dbQty),
       Math.round(r.tRev), Math.round(r.tQty),
       _rkhShortNum(t.spAug, r.rev), _rkhShortNum(t.qtyAug, r.qty)
     ];
-    return emp ? [line[0], line[1], line[3], line[5], line[7], line[9], line[11], line[13], line[15]] : line;
+    return emp ? [line[0], line[1], line[3], line[5], line[7], line[9], line[11], line[13]] : line;
   });
   const totLine = ['Total', '',
     totTargetSpAug, totTargetQtyAug, totTargetSpJul || '', totTargetQtyJul || '',
     Math.round(totRev), Math.round(totQty),
     Math.round(totYRev), Math.round(totYQty),
-    Math.round(totDbRev), Math.round(totDbQty),
     Math.round(totTRev), Math.round(totTQty),
     _rkhShortNum(totTargetSpAug, totRev), _rkhShortNum(totTargetQtyAug, totQty)
   ];
-  rowsOut.push(emp ? [totLine[0], totLine[1], totLine[3], totLine[5], totLine[7], totLine[9], totLine[11], totLine[13], totLine[15]] : totLine);
+  rowsOut.push(emp ? [totLine[0], totLine[1], totLine[3], totLine[5], totLine[7], totLine[9], totLine[11], totLine[13]] : totLine);
   const csv = [headers].concat(rowsOut).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
