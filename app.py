@@ -4389,6 +4389,7 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
 
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -5334,16 +5335,16 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:26px">
     <div>
-      <div class="insights-title">Rakhi — Yesterday &amp; Day Before</div>
+      <div class="insights-title">Rakhi — Channel-wise vs Target</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiYd()">Export CSV</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiChannelExcel()">Export Excel</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Same Rakhi SKU/combo match, restricted to orders dated yesterday or the day before yesterday.</div>
-  <div id="rakhiYdSummary" class="yoy-grid" style="margin-bottom:16px"></div>
-  <div id="rakhiYdContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Day Before → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
+  <div id="rakhiChSummary" class="yoy-grid" style="margin-bottom:16px"></div>
+  <div id="rakhiChContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8501,7 +8502,6 @@ window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
    `master` (already-loaded compiled data) — order-date level (one row
    per sales transaction), same source `master` uses everywhere else. */
 let _rakhiRows = [];
-let _rakhiYdRows = [];
 function _rkhIsRakhiSku(sku){
   return /^\s*rkh/i.test(String(sku == null ? '' : sku));
 }
@@ -8559,11 +8559,7 @@ function _rkhYdDates(){
   const y2 = new Date(base.getTime() - 2 * 86400000).toISOString().slice(0, 10);
   return [y1, y2];
 }
-function _rkhBuildYdRows(){
-  const [y1, y2] = _rkhYdDates();
-  return (_rakhiRows || []).filter(r => r.date === y1 || r.date === y2);
-}
-function loadRakhi(){ renderRakhi(); renderRakhiYd(); }
+function loadRakhi(){ renderRakhi(); renderRakhiChannel(); }
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -8630,70 +8626,175 @@ function exportRakhi(){
 }
 window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
 
-function renderRakhiYd(){
-  const host = document.getElementById('rakhiYdContent');
-  const sumHost = document.getElementById('rakhiYdSummary');
+/* ── RAKHI CHANNEL vs TARGET ──
+   Channel rule (as given): Type == "Website" -> Website channel; every
+   other order is classified purely from the Customer Name text. Targets
+   below are fixed figures from the Rakhi target sheet (SP/Qty Target-Aug
+   column, which is the only one with a figure for every channel). */
+const RAKHI_CHANNEL_ORDER = ['Website', 'Blinkit', 'Instamart', 'Myntra', 'Nykaa', 'IGP', 'Flipkart', 'Amazon', 'Ajio', 'Others'];
+const RAKHI_TARGETS = {
+  'Website':   {sp: 17358600, qty: 13079},
+  'Blinkit':   {sp: 9427600,  qty: 4900},
+  'Instamart': {sp: 2828280,  qty: 1470},
+  'Myntra':    {sp: 1678080,  qty: 920},
+  'Nykaa':     {sp: 1048800,  qty: 575},
+  'IGP':       {sp: 960000,   qty: 1360},
+  'Flipkart':  {sp: 335616,   qty: 184},
+  'Amazon':    {sp: 268493,   qty: 147},
+  'Ajio':      {sp: 251712,   qty: 138},
+  'Others':    {sp: 109592,   qty: 55}
+};
+const _RKH_CH_TOKENS = [
+  ['blinkit', 'Blinkit'],
+  ['instamart', 'Instamart'],
+  ['myntra', 'Myntra'],
+  ['nykaa', 'Nykaa'],
+  ['indian gift portal', 'IGP'], ['indiangiftportal', 'IGP'], ['igp', 'IGP'],
+  ['flipkart', 'Flipkart'],
+  ['amazon', 'Amazon'],
+  ['ajio', 'Ajio']
+];
+function _rkhChannelOf(row){
+  const typ = String((row && row.type) || '').trim().toLowerCase();
+  if (typ === 'website') return 'Website';
+  const cust = String((row && row.cust) || '').toLowerCase();
+  for (const [tok, label] of _RKH_CH_TOKENS){
+    if (cust.includes(tok)) return label;
+  }
+  return 'Others';
+}
+function _rkhShortCell(target, actual){
+  if (!target) return '—';
+  const pct = ((target - actual) / target) * 100;
+  if (pct <= 0) return `<span style="color:#2f6f3e;font-weight:600">+${Math.abs(pct).toFixed(1)}%</span>`;
+  return `<span style="color:#b3261e;font-weight:600">${pct.toFixed(1)}%</span>`;
+}
+function _rkhShortNum(target, actual){
+  if (!target) return '';
+  return (((target - actual) / target) * 100).toFixed(1) + '%';
+}
+function _rkhBuildChannelSummary(){
+  const rows = _rakhiRows || [];
+  const [yestISO, dbISO] = _rkhYdDates();
+  const todayStr = todayISO || new Date().toISOString().slice(0, 10);
+  const map = {};
+  RAKHI_CHANNEL_ORDER.forEach(ch => {
+    map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, dbRev: 0, dbQty: 0, tRev: 0, tQty: 0};
+  });
+  rows.forEach(r => {
+    const ch = _rkhChannelOf(r);
+    if (!map[ch]) map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, dbRev: 0, dbQty: 0, tRev: 0, tQty: 0};
+    const m = map[ch];
+    m.rev += (r.rev || 0); m.qty += (r.qty || 0);
+    if (r.date === yestISO){ m.yRev += (r.rev || 0); m.yQty += (r.qty || 0); }
+    else if (r.date === dbISO){ m.dbRev += (r.rev || 0); m.dbQty += (r.qty || 0); }
+    if (r.date === todayStr){ m.tRev += (r.rev || 0); m.tQty += (r.qty || 0); }
+  });
+  const order = RAKHI_CHANNEL_ORDER.slice();
+  Object.keys(map).forEach(ch => { if (!order.includes(ch)) order.push(ch); });
+  return order.map(ch => map[ch]).filter(Boolean);
+}
+function renderRakhiChannel(){
+  const host = document.getElementById('rakhiChContent');
+  const sumHost = document.getElementById('rakhiChSummary');
   if (!host) return;
   if (!master || !master.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
     if (sumHost) sumHost.innerHTML = '';
     return;
   }
-  const rows = _rkhBuildYdRows();
-  _rakhiYdRows = rows;
+  const list = _rkhBuildChannelSummary();
+  _rakhiChRows = list;
   const emp = LOGIN_ROLE === 'employee';
-  const [y1, y2] = _rkhYdDates();
+  const totTargetSp = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.sp, 0);
+  const totTargetQty = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qty, 0);
+  const totRev = list.reduce((s, r) => s + r.rev, 0);
+  const totQty = list.reduce((s, r) => s + r.qty, 0);
   if (sumHost){
-    const totQty = rows.reduce((s, r) => s + (r.qty || 0), 0);
-    const totRev = rows.reduce((s, r) => s + (r.rev || 0), 0);
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Orders (${escHtml(y1)} &amp; ${escHtml(y2)})</div><div class="yc-val">${rows.length.toLocaleString('en-IN')}</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
-      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>`}
+      <div class="yoy-card"><div class="yc-label">Overall Qty Short</div><div class="yc-val">${_rkhShortNum(totTargetQty, totQty)}</div><div class="yc-sub">${Math.round(totQty).toLocaleString('en-IN')} / ${totTargetQty.toLocaleString('en-IN')} target</div></div>
+      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Overall Revenue Short</div><div class="yc-val">${_rkhShortNum(totTargetSp, totRev)}</div><div class="yc-sub">${fmt(totRev)} / ${fmt(totTargetSp)} target</div></div>`}
     `;
   }
-  if (!rows.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders for yesterday or the day before.</div>';
-    return;
-  }
-  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>Customer</th><th>Type</th>${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
-  const body = rows.map(r => {
-    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
-    const img = hasImg
-      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
-      : '—';
-    const dateDisp = (r.date && r.date !== 'N/A') ? r.date : '—';
+  const head = `<tr>
+      <th>Channel</th>
+      <th>Yesterday Rev</th><th>Yesterday Qty</th>
+      <th>Day Before Rev</th><th>Day Before Qty</th>
+      <th>Today Rev</th><th>Today Qty</th>
+      ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
+      ${emp ? '' : '<th>SP Target</th>'}<th>Qty Target</th>
+      ${emp ? '' : '<th>SP Short %</th>'}<th>Qty Short %</th>
+    </tr>`;
+  const body = list.map(r => {
+    const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
     return `<tr>
-      <td>${escHtml(dateDisp)}</td>
-      <td>${img}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
-      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-      <td>${escHtml(r.cust || '—')}</td>
-      <td>${escHtml(r.type || '—')}</td>
-      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+      <td><b>${escHtml(r.channel)}</b></td>
+      ${emp ? '' : `<td>${fmt(r.yRev)}</td>`}<td>${Math.round(r.yQty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(r.dbRev)}</td>`}<td>${Math.round(r.dbQty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(r.tRev)}</td>`}<td>${Math.round(r.tQty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}<td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(t.sp)}</td>`}<td>${t.qty.toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(t.sp, r.rev)}</td>`}<td>${_rkhShortCell(t.qty, r.qty)}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  const yTot = list.reduce((s, r) => s + r.yRev, 0), yQTot = list.reduce((s, r) => s + r.yQty, 0);
+  const dbTot = list.reduce((s, r) => s + r.dbRev, 0), dbQTot = list.reduce((s, r) => s + r.dbQty, 0);
+  const tTot = list.reduce((s, r) => s + r.tRev, 0), tQTot = list.reduce((s, r) => s + r.tQty, 0);
+  const totalRow = `<tr style="font-weight:700;border-top:2px solid #333">
+      <td>Total</td>
+      ${emp ? '' : `<td>${fmt(yTot)}</td>`}<td>${Math.round(yQTot).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(dbTot)}</td>`}<td>${Math.round(dbQTot).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(tTot)}</td>`}<td>${Math.round(tQTot).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(totRev)}</td>`}<td>${Math.round(totQty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(totTargetSp)}</td>`}<td>${totTargetQty.toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${_rkhShortCell(totTargetSp, totRev)}</td>`}<td>${_rkhShortCell(totTargetQty, totQty)}</td>
+    </tr>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
 }
-function exportRakhiYd(){
-  const rows = _rakhiYdRows || [];
-  if (!rows.length){ alert('No Rakhi (yesterday/day-before) data to export.'); return; }
+function exportRakhiChannelExcel(){
+  const list = _rakhiChRows || [];
+  if (!list.length){ alert('No Rakhi channel data to export.'); return; }
+  if (typeof XLSX === 'undefined'){ alert('Excel export library still loading — try again in a moment.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Order Date', 'SKU', 'SKU Name', 'Sold Qty', 'Customer', 'Type', ...(emp ? [] : ['Net Revenue']), 'Image Link'];
-  const data = rows.map(r => [
-    r.date, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty), r.cust || '', r.type || '',
-    ...(emp ? [] : [Math.round(r.rev)]),
-    r.image_url || ''
-  ]);
-  const csv = [headers].concat(data).map(r => r.map(c => {
-    const s = String(c == null ? '' : c);
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type: 'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_yesterday_daybefore.csv'; a.click();
+  const [yestISO, dbISO] = _rkhYdDates();
+  const todayStr = todayISO || new Date().toISOString().slice(0, 10);
+  const headers = ['Channel',
+    'Yesterday (' + yestISO + ') Revenue', 'Yesterday (' + yestISO + ') Qty Sold',
+    'Day Before (' + dbISO + ') Revenue', 'Day Before (' + dbISO + ') Qty Sold',
+    'Today (' + todayStr + ') Revenue', 'Today (' + todayStr + ') Qty Sold',
+    'Revenue Till Now', 'Qty Sold Till Now',
+    'SP Target', 'Qty Target', 'SP Short %', 'Qty Short %'
+  ].filter(h => !emp || (!h.toLowerCase().includes('revenue') && !h.startsWith('SP')));
+  const aoa = [headers];
+  let totYRev = 0, totYQty = 0, totDbRev = 0, totDbQty = 0, totTRev = 0, totTQty = 0, totRev = 0, totQty = 0;
+  const totTargetSp = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.sp, 0);
+  const totTargetQty = Object.values(RAKHI_TARGETS).reduce((s, t) => s + t.qty, 0);
+  list.forEach(r => {
+    const t = RAKHI_TARGETS[r.channel] || {sp: 0, qty: 0};
+    totYRev += r.yRev; totYQty += r.yQty; totDbRev += r.dbRev; totDbQty += r.dbQty;
+    totTRev += r.tRev; totTQty += r.tQty; totRev += r.rev; totQty += r.qty;
+    const line = [r.channel,
+      Math.round(r.yRev), Math.round(r.yQty),
+      Math.round(r.dbRev), Math.round(r.dbQty),
+      Math.round(r.tRev), Math.round(r.tQty),
+      Math.round(r.rev), Math.round(r.qty),
+      t.sp, t.qty, _rkhShortNum(t.sp, r.rev), _rkhShortNum(t.qty, r.qty)
+    ];
+    aoa.push(emp ? [line[0], line[2], line[4], line[6], line[8], line[10], line[12]] : line);
+  });
+  const totLine = ['Total',
+    Math.round(totYRev), Math.round(totYQty), Math.round(totDbRev), Math.round(totDbQty),
+    Math.round(totTRev), Math.round(totTQty), Math.round(totRev), Math.round(totQty),
+    totTargetSp, totTargetQty, _rkhShortNum(totTargetSp, totRev), _rkhShortNum(totTargetQty, totQty)
+  ];
+  aoa.push(emp ? [totLine[0], totLine[2], totLine[4], totLine[6], totLine[8], totLine[10], totLine[12]] : totLine);
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Rakhi Channel vs Target');
+  XLSX.writeFile(wb, 'rakhi_channel_vs_target.xlsx');
 }
-window.renderRakhiYd = renderRakhiYd; window.exportRakhiYd = exportRakhiYd;
+let _rakhiChRows = [];
+window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelExcel = exportRakhiChannelExcel;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
