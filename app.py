@@ -1036,6 +1036,10 @@ def _refresh_data():
     def _at(idx): return cols[idx] if len(cols) > idx else None
 
     C_DATE  = _at(0)  or find_col(cosa.columns, "Dispatch Date","date")
+    # Order Date — separate from the dispatch/COSA date above. Used ONLY for
+    # the Rakhi tab (per-entry "order_date"); every other tab in the app
+    # keeps using C_DATE (dispatch date) untouched.
+    C_ODATE = find_col(cosa.columns, "Order Date","order date","orderdate")
     C_FY    = _at(1)  or find_col(cosa.columns, "FY Year","fy","financial year")
     C_SKU   = _at(2)  or find_col(cosa.columns, "SKU","item code") or cols[0]
     # G (index 6) = Final Qty (confirmed layout). Header-match pehle "Final Qty"
@@ -1121,6 +1125,8 @@ def _refresh_data():
 
         dt = parse_date_any(r.get(C_DATE,"")) if C_DATE else None
         date_iso = dt.strftime("%Y-%m-%d") if dt else "N/A"
+        dt_o = parse_date_any(r.get(C_ODATE,"")) if C_ODATE else None
+        order_date_iso = dt_o.strftime("%Y-%m-%d") if dt_o else "N/A"
         
         # FY logic
         fy = norm_fy(r.get(C_FY,"")) if C_FY else ""
@@ -1188,7 +1194,7 @@ def _refresh_data():
 
         # Return amount = return qty × us transaction ki selling price (COSA F × H)
         entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
-                 "date":_si(date_iso),"cust":_si(cust),"type":_si(typ),
+                 "date":_si(date_iso),"order_date":_si(order_date_iso),"cust":_si(cust),"type":_si(typ),
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
@@ -8544,13 +8550,20 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
+function _rkhOrderDate(e){
+  // Rakhi tab uses Order Date (cossa_orderdate sheet), NOT dispatch date —
+  // every other tab in the app keeps using dispatch date (e.date) as-is.
+  const od = e && e.order_date;
+  if (od && od !== 'N/A') return od;
+  return (e && e.date) || 'N/A';
+}
 function _rkhIsFy2627(e){
   // fy comes normalized server-side as "FY 2026-27" — match robustly
   // regardless of spacing/case; fall back to the order date if the fy
   // tag itself is missing/blank on that row.
   const fy = String((e && e.fy) || '').toUpperCase().replace(/\s+/g, '');
   if (fy) return fy === 'FY2026-27' || fy === '2026-27';
-  const d = e && e.date;
+  const d = _rkhOrderDate(e);
   if (d && d !== 'N/A') return d >= '2026-04-01' && d <= '2027-03-31';
   return false;
 }
@@ -8562,7 +8575,7 @@ function _rkhBuildRows(){
     entries.forEach(e => {
       if (!_rkhIsFy2627(e)) return;
       rows.push({
-        date: (e && e.date) || 'N/A',
+        date: _rkhOrderDate(e),
         sku: item.sku,
         sku_name: item.sku_name || '',
         image_url: item.image_url || '',
