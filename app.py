@@ -5347,6 +5347,30 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
   <div id="rakhiChSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiChContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Top-Selling SKUs</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopSkusCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Ranked by units sold, FY 2026-27 Rakhi orders only (same RKH / CMB match as above).</div>
+  <div id="rakhiTopSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Return Rate by Channel</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiReturnsCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Return Rate = Returned Qty ÷ (Sold Qty + Returned Qty), channel-wise, FY 2026-27 Rakhi orders only.</div>
+  <div id="rakhiReturnsContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -8545,7 +8569,9 @@ function _rkhBuildRows(){
         type: (e && e.type) || '',
         cust: (e && e.cust) || '',
         rev: Number(e && e.rev) || 0,
-        qty: Number(e && e.qty) || 0
+        qty: Number(e && e.qty) || 0,
+        ret: Number(e && e.ret) || 0,
+        ret_amt: Number(e && e.ret_amt) || 0
       });
     });
   });
@@ -8575,7 +8601,7 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){ renderRakhi(); renderRakhiChannel(); }
+function loadRakhi(){ renderRakhi(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiReturns(); }
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -8741,11 +8767,11 @@ function renderRakhiChannel(){
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const head = `<tr>
       <th>Channel</th><th>Launch Date</th>
-      ${emp ? '' : '<th>SP Target-Aug</th>'}<th>Qty Target-Aug</th>
-      ${emp ? '' : '<th>SP Target-Jul</th>'}<th>Qty Target-Jul</th>
-      ${emp ? '' : '<th>Revenue Till Now</th>'}<th>Qty Till Now</th>
-      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
-      ${emp ? '' : `<th>${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th>${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
+      ${emp ? '' : '<th style="color:#e53935">SP Target-Aug</th>'}<th style="color:#e53935">Qty Target-Aug</th>
+      ${emp ? '' : '<th style="color:#1976d2">SP Target-Jul</th>'}<th style="color:#1976d2">Qty Target-Jul</th>
+      ${emp ? '' : '<th style="color:#2e9e4a">Revenue Till Now</th>'}<th style="color:#2e9e4a">Qty Till Now</th>
+      ${emp ? '' : `<th style="color:#000">${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th style="color:#000">${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
+      ${emp ? '' : `<th style="color:#000">${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th style="color:#000">${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
       ${emp ? '' : '<th>SP Short % (Jul+Aug)</th>'}<th>Qty Short % (Jul+Aug)</th>
     </tr>`;
   const body = list.map(r => {
@@ -8826,6 +8852,157 @@ function exportRakhiChannelCSV(){
 }
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
+
+/* ── RAKHI TOP-SELLING SKUs ── */
+let _rakhiTopSkuRows = [];
+function _rkhBuildTopSkus(){
+  const rows = _rakhiRows || [];
+  const map = {};
+  rows.forEach(r => {
+    const key = String(r.sku || '').trim();
+    if (!key) return;
+    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, rev: 0};
+    map[key].qty += (r.qty || 0);
+    map[key].rev += (r.rev || 0);
+  });
+  return Object.values(map).sort((a, b) => b.qty - a.qty);
+}
+function renderRakhiTopSkus(){
+  const host = document.getElementById('rakhiTopSkuContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  const list = _rkhBuildTopSkus();
+  _rakhiTopSkuRows = list;
+  if (!list.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi SKU sales found.</div>';
+    return;
+  }
+  const emp = LOGIN_ROLE === 'employee';
+  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th>${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
+  const body = list.map((r, i) => {
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    return `<tr>
+      <td><b>${i + 1}</b></td>
+      <td>${img}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:600px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiTopSkusCSV(){
+  const list = _rakhiTopSkuRows || [];
+  if (!list.length){ alert('No Rakhi SKU data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Rank', 'SKU', 'SKU Name', 'Qty Sold', ...(emp ? [] : ['Net Revenue']), 'Image Link'];
+  const data = list.map((r, i) => [
+    i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
+    ...(emp ? [] : [Math.round(r.rev)]),
+    r.image_url || ''
+  ]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_top_skus.csv'; a.click();
+}
+window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = exportRakhiTopSkusCSV;
+
+/* ── RAKHI RETURN RATE BY CHANNEL ── */
+let _rakhiReturnRows = [];
+function _rkhBuildReturns(){
+  const rows = _rakhiRows || [];
+  const map = {};
+  RAKHI_CHANNEL_ORDER.forEach(ch => { map[ch] = {channel: ch, qty: 0, rev: 0, ret: 0, retAmt: 0}; });
+  rows.forEach(r => {
+    const ch = _rkhChannelOf(r);
+    if (!map[ch]) map[ch] = {channel: ch, qty: 0, rev: 0, ret: 0, retAmt: 0};
+    map[ch].qty += (r.qty || 0);
+    map[ch].rev += (r.rev || 0);
+    map[ch].ret += (r.ret || 0);
+    map[ch].retAmt += (r.ret_amt || 0);
+  });
+  const order = RAKHI_CHANNEL_ORDER.slice();
+  Object.keys(map).forEach(ch => { if (!order.includes(ch)) order.push(ch); });
+  return order.map(ch => map[ch]).filter(Boolean);
+}
+function _rkhReturnRatePct(r){
+  const base = r.qty + r.ret;
+  if (!base) return 0;
+  return (r.ret / base) * 100;
+}
+function renderRakhiReturns(){
+  const host = document.getElementById('rakhiReturnsContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  const list = _rkhBuildReturns();
+  _rakhiReturnRows = list;
+  const emp = LOGIN_ROLE === 'employee';
+  const head = `<tr><th>Channel</th><th>Sold Qty</th><th>Returned Qty</th><th>Return Rate %</th>${emp ? '' : '<th>Returned Amount</th>'}${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
+  const body = list.map(r => {
+    const pct = _rkhReturnRatePct(r);
+    const color = pct >= 15 ? '#b3261e' : (pct >= 5 ? '#c98a1a' : '#2f6f3e');
+    return `<tr>
+      <td><b>${escHtml(r.channel)}</b></td>
+      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      <td>${Math.round(r.ret).toLocaleString('en-IN')}</td>
+      <td><span style="color:${color};font-weight:600">${pct.toFixed(1)}%</span></td>
+      ${emp ? '' : `<td>${fmt(r.retAmt)}</td>`}
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+    </tr>`;
+  }).join('');
+  const totQty = list.reduce((s, r) => s + r.qty, 0);
+  const totRet = list.reduce((s, r) => s + r.ret, 0);
+  const totRetAmt = list.reduce((s, r) => s + r.retAmt, 0);
+  const totRev = list.reduce((s, r) => s + r.rev, 0);
+  const totPct = _rkhReturnRatePct({qty: totQty, ret: totRet});
+  const totColor = totPct >= 15 ? '#b3261e' : (totPct >= 5 ? '#c98a1a' : '#2f6f3e');
+  const totalRow = `<tr style="font-weight:700;border-top:2px solid #333">
+      <td>Total</td>
+      <td>${Math.round(totQty).toLocaleString('en-IN')}</td>
+      <td>${Math.round(totRet).toLocaleString('en-IN')}</td>
+      <td><span style="color:${totColor}">${totPct.toFixed(1)}%</span></td>
+      ${emp ? '' : `<td>${fmt(totRetAmt)}</td>`}
+      ${emp ? '' : `<td>${fmt(totRev)}</td>`}
+    </tr>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:700px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table>`;
+}
+function exportRakhiReturnsCSV(){
+  const list = _rakhiReturnRows || [];
+  if (!list.length){ alert('No Rakhi return data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Channel', 'Sold Qty', 'Returned Qty', 'Return Rate %', ...(emp ? [] : ['Returned Amount', 'Net Revenue'])];
+  const data = list.map(r => [
+    r.channel, Math.round(r.qty), Math.round(r.ret), _rkhReturnRatePct(r).toFixed(1) + '%',
+    ...(emp ? [] : [Math.round(r.retAmt), Math.round(r.rev)])
+  ]);
+  const totQty = list.reduce((s, r) => s + r.qty, 0);
+  const totRet = list.reduce((s, r) => s + r.ret, 0);
+  const totRetAmt = list.reduce((s, r) => s + r.retAmt, 0);
+  const totRev = list.reduce((s, r) => s + r.rev, 0);
+  data.push(['Total', Math.round(totQty), Math.round(totRet), _rkhReturnRatePct({qty: totQty, ret: totRet}).toFixed(1) + '%',
+    ...(emp ? [] : [Math.round(totRetAmt), Math.round(totRev)])]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_return_rate_by_channel.csv'; a.click();
+}
+window.renderRakhiReturns = renderRakhiReturns; window.exportRakhiReturnsCSV = exportRakhiReturnsCSV;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
