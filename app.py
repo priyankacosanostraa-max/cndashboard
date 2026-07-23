@@ -8767,11 +8767,11 @@ function renderRakhiChannel(){
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const head = `<tr>
       <th>Channel</th><th>Launch Date</th>
-      ${emp ? '' : '<th style="color:#e53935">SP Target-Aug</th>'}<th style="color:#e53935">Qty Target-Aug</th>
-      ${emp ? '' : '<th style="color:#1976d2">SP Target-Jul</th>'}<th style="color:#1976d2">Qty Target-Jul</th>
-      ${emp ? '' : '<th style="color:#2e9e4a">Revenue Till Now</th>'}<th style="color:#2e9e4a">Qty Till Now</th>
-      ${emp ? '' : `<th style="color:#000">${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th style="color:#000">${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
-      ${emp ? '' : `<th style="color:#000">${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th style="color:#000">${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
+      ${emp ? '' : '<th style="color:#ff5252 !important">SP Target-Aug</th>'}<th style="color:#ff5252 !important">Qty Target-Aug</th>
+      ${emp ? '' : '<th style="color:#4fa3ff !important">SP Target-Jul</th>'}<th style="color:#4fa3ff !important">Qty Target-Jul</th>
+      ${emp ? '' : '<th style="color:#3ecf7a !important">Revenue Till Now</th>'}<th style="color:#3ecf7a !important">Qty Till Now</th>
+      ${emp ? '' : `<th style="color:#000 !important;background:#fff !important">${escHtml(_rkhFmtShortDate(yestISO))} Rev</th>`}<th style="color:#000 !important;background:#fff !important">${escHtml(_rkhFmtShortDate(yestISO))} Qty</th>
+      ${emp ? '' : `<th style="color:#000 !important;background:#fff !important">${escHtml(_rkhFmtShortDate(todayStr))} Rev</th>`}<th style="color:#000 !important;background:#fff !important">${escHtml(_rkhFmtShortDate(todayStr))} Qty</th>
       ${emp ? '' : '<th>SP Short % (Jul+Aug)</th>'}<th>Qty Short % (Jul+Aug)</th>
     </tr>`;
   const body = list.map(r => {
