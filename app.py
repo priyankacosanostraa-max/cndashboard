@@ -5579,6 +5579,41 @@ function roInvWip(item, ctx){
   return Number(item.inv_wip ?? 0) || 0;
 }
 
+/* ── "Anu Ma'am" virtual Type filter (Repeat Order tab only) ──
+   Yeh koi real dispatch Type nahi hai — tick karne par us SKU ki
+   Production (PPC-WIP) sheet me "Top Seller Ordering - Anu Ma'am"
+   order-type ki Balance Qty ko WIP ki jagah dikhaya jaata hai. */
+const ANU_MAAM_TYPE_VALUE = "Anu Ma'am";
+const ANU_MAAM_PROD_TYPE  = "Top Seller Ordering - Anu Ma'am";
+let roAnuWipMap = {};       // SKU -> Balance Qty (Anu Ma'am order-type only)
+let roAnuLastQuery = null;  // last SKU-search text jiske liye fetch hua
+let roAnuLoading = false;
+
+function roAnuWipFor(sku){
+  return roAnuWipMap[String(sku||'').toUpperCase()] || 0;
+}
+
+function fetchAnuWipData(txt){
+  if (roAnuLoading) return;
+  roAnuLoading = true;
+  const qs = 'type=' + encodeURIComponent(ANU_MAAM_PROD_TYPE) + (txt ? '&sku=' + encodeURIComponent(txt) : '');
+  fetch('/api/production?' + qs, {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.json())
+    .then(d => {
+      const map = {};
+      (d.rows || []).forEach(r => {
+        const sk = String(r.sku || '').toUpperCase();
+        if (!sk) return;
+        map[sk] = (map[sk] || 0) + (parseFloat(r.bal_qty) || 0);
+      });
+      roAnuWipMap = map;
+      roAnuLastQuery = txt;
+      roAnuLoading = false;
+      applyRO();
+    })
+    .catch(() => { roAnuLoading = false; });
+}
+
 function skuInsightBadge(item){
   // "Best on <Channel>" + "Marketplace: X" + AOV/Discount + alert flag chips —
   // SKU ke neeche, har jagah jahan bhi SKU dikhta hai (RO, Overall Details,
@@ -5689,10 +5724,18 @@ function renderTypeChecks(){
     const box = document.getElementById(cid);
     if (!box) return;
     const onChange = cid === 'fTypeChecks' ? 'applyF()' : cid === 'rTypeChecks' ? 'applyRO()' : 'applyInsights()';
-    box.innerHTML = (allTypes || []).map(t => {
+    let html = (allTypes || []).map(t => {
       const safe = String(t).replace(/"/g, '&quot;');
       return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
     }).join('') || '<span class="small-note">No types</span>';
+    // Repeat Order tab me ek extra virtual option — SKU search karke isko
+    // tick karne par us SKU ki Production-sheet "Anu Ma'am" Balance Qty
+    // WIP ki jagah dikhti hai (asli dispatch Type nahi hai, sirf ismi tab me).
+    if (cid === 'rTypeChecks') {
+      const anuSafe = ANU_MAAM_TYPE_VALUE.replace(/"/g, '&quot;');
+      html += `<label class="type-opt" title="Search SKU + isko tick karo — Production sheet ki 'Top Seller Ordering - Anu Ma'am' Balance Qty ko WIP ki tarah dikhayega"><input type="checkbox" value="${anuSafe}" onchange="applyRO()"><span>Anu Ma'am</span></label>`;
+    }
+    box.innerHTML = html;
   });
 }
 
@@ -6928,7 +6971,13 @@ function smSrch(q){
 
 function applyRO(){
   const txt = (document.getElementById('rSearch')?.value || '').trim().toLowerCase();
-  const typeSel = getSelectedTypes('rType');
+  const typeSelRaw = getSelectedTypes('rType');
+  const roAnuMode = typeSelRaw.includes(ANU_MAAM_TYPE_VALUE);
+  // "Anu Ma'am" koi real Type nahi hai — normal type-filtering se hata do,
+  // warna kisi bhi sales entry se match nahi hoga aur sab kuch khali dikhega.
+  const typeSel = roAnuMode ? typeSelRaw.filter(t => t !== ANU_MAAM_TYPE_VALUE) : typeSelRaw;
+  if (roAnuMode && roAnuLastQuery !== txt) { fetchAnuWipData(txt); }
+  const wipOf = (it) => roAnuMode ? roAnuWipFor(it && it.sku) : roInvWip(it, roInvCtx);
   const chanSel = getSelectedChannels('rChan');
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtx = roInvContext(typeSel, chanSel, subChanSel);
@@ -7015,9 +7064,9 @@ function applyRO(){
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
-    // channel-aware WIP
+    // channel-aware WIP (ya Anu Ma'am Balance Qty jab uska filter tick ho)
     if (key === 'inv_wip'){
-      return roInvWip(it, roInvCtx);
+      return wipOf(it);
     }
     if (key === 'inv_stock'){
       return roInvStock(it, roInvCtx);
@@ -7053,8 +7102,9 @@ function applyRO(){
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
 
   // Channel-aware WIP: if exactly one channel selected, show its specific WIP column
+  // (ya Anu Ma'am tick ho to Production sheet ki us SKU ki Balance Qty)
   const wipSum = filtered.reduce((s,i) => {
-    return s + roInvWip(i, roInvCtx);
+    return s + wipOf(i);
   }, 0);
 
   // Channel-aware 7d/15d/30d qty: if type filter active, sum only matching entries
@@ -7120,7 +7170,7 @@ function applyRO(){
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
       ...e, sku: item.sku, sku_name: item.sku_name,
-      inv_stock: roInvStock(item, roInvCtx), inv_wip: roInvWip(item, roInvCtx),
+      inv_stock: roInvStock(item, roInvCtx), inv_wip: wipOf(item),
       image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
     })));
     txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -7138,7 +7188,7 @@ function applyRO(){
       <th>Sold Qty</th>
       ${empTx ? '' : '<th>Discount %</th>'}
       <th>Inv Stock</th>
-      <th>Inv (WIP)</th>
+      <th>${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv (WIP)'}</th>
       <th style="min-width:160px">Remark</th>`;
 
     if (!txns.length) {
@@ -7192,7 +7242,7 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('final_qty',this)">Sold Qty</th>
     ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_fDiscPct',this)" title="Overall average discount % vs MRP — updates with Date/Channel/Type filters">Discount %</th>`}
     <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
-    <th class="sort-arrow" onclick="sortRO('inv_wip',this)">Inv WIP</th>
+    <th class="sort-arrow" onclick="sortRO('inv_wip',this)">${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv WIP'}</th>
     <th class="sort-arrow" onclick="sortRO('blocked_qty',this)" title="Blocked Qty (column U)">Blocked Qty</th>
     <th class="sort-arrow" onclick="sortRO('forecast_60d',this)" title="Expected units to sell in the next 60 days. Based on recent sales velocity: last 60 days weighted 70%, last 180 days 30%, plus a small trend adjustment.">Forecast 60D</th>
     <th class="sort-arrow" onclick="sortRO('reorder_qty',this)" title="Next 60 days expected demand minus current stock + WIP">Reorder Qty</th>
@@ -7216,8 +7266,8 @@ function applyRO(){
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
     const stk = roInvStock(item, roInvCtx);
-    // Channel-aware WIP per row
-    const wip = roInvWip(item, roInvCtx);
+    // Channel-aware WIP per row (ya Anu Ma'am Balance Qty jab uska filter tick ho)
+    const wip = wipOf(item);
     // Channel-aware sale qty per row
     let q7, q15, q30;
     if (!roNoFilter && typeSel.length > 0) {
@@ -7239,8 +7289,8 @@ function applyRO(){
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Combo SKU ki WIP — Type filter ke hisaab se channel-wise, warna total.
     const comboStock = (c) => roInvStock(c, roInvCtx);
-    const comboWip = (c) => roInvWip(c, roInvCtx);
-    const wipLabel = roInvCtx.wipLabel || 'WIP';
+    const comboWip = (c) => wipOf(c);
+    const wipLabel = roAnuMode ? "WIP (Anu Ma'am)" : (roInvCtx.wipLabel || 'WIP');
     // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
     const comboHtml = _renderComboDetails(item.combo_details, comboStock, comboWip, wipLabel, typeSel);
     return `<tr>
@@ -7318,10 +7368,14 @@ function applyColFilters(){
   if (!roFiltered) return;
 
   let colFiltered = roFiltered;
-  const typeSelCF = getSelectedTypes('rType');
+  const typeSelRawCF = getSelectedTypes('rType');
+  const roAnuModeCF = typeSelRawCF.includes(ANU_MAAM_TYPE_VALUE);
+  // "Anu Ma'am" koi real Type nahi hai — column-filter re-render me bhi hata do.
+  const typeSelCF = roAnuModeCF ? typeSelRawCF.filter(t => t !== ANU_MAAM_TYPE_VALUE) : typeSelRawCF;
   const chanSelCF = getSelectedChannels('rChan');
   const subChanSelCF = getSelectedSubChannels('rSubChan');
   const roInvCtxCF = roInvContext(typeSelCF, chanSelCF, subChanSelCF);
+  const wipOfCF = (it) => roAnuModeCF ? roAnuWipFor(it && it.sku) : roInvWip(it, roInvCtxCF);
   if (_cfActive) {
     colFiltered = roFiltered.filter(item => {
       const q7  = parseInt(item.qty_7d)  || 0;
@@ -7329,7 +7383,7 @@ function applyColFilters(){
       const q30 = parseInt(item.qty_1m)  || 0;
       const sold = parseInt(item.final_qty) || 0;
       const stk  = roInvStock(item, roInvCtxCF);
-      const wip  = roInvWip(item, roInvCtxCF);
+      const wip  = wipOfCF(item);
       const fc   = parseInt(item.forecast_60d) || 0;
       const reo  = parseInt(item.reorder_qty)  || 0;
       const rmk  = (roRemarks[item.sku] || '').toLowerCase();
@@ -7380,7 +7434,7 @@ function applyColFilters(){
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
     const stk = roInvStock(item, roInvCtxCF);
-    const wip = roInvWip(item, roInvCtxCF);
+    const wip = wipOfCF(item);
     let q7, q15, q30;
     if (!roNoFilter && typeSelCF.length > 0) {
       const fe = item._fe || [];
@@ -7397,8 +7451,8 @@ function applyColFilters(){
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
     const comboStock2 = (c) => roInvStock(c, roInvCtxCF);
-    const comboWip2 = (c) => roInvWip(c, roInvCtxCF);
-    const wipLabel2 = roInvCtxCF.wipLabel || 'WIP';
+    const comboWip2 = (c) => wipOfCF(c);
+    const wipLabel2 = roAnuModeCF ? "WIP (Anu Ma'am)" : (roInvCtxCF.wipLabel || 'WIP');
     // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
     const comboHtml = _renderComboDetails(item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF);
     return `<tr>
@@ -7440,6 +7494,7 @@ window.resetColFilters = resetColFilters;
 function resetRO(){
   ['rSearch','rCust','rD1','rD2','rSkuSearch'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
   document.querySelectorAll('#rTypeChecks input:checked').forEach(c => c.checked = false);
+  roAnuWipMap = {}; roAnuLastQuery = null;
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   const rx = document.getElementById('rTaxon'); if (rx) rx.value='All';
   const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
@@ -7500,7 +7555,10 @@ function exportRO(fmtType){
 
   const emp1 = LOGIN_ROLE === 'employee';
   // Filter context — export ko screen jaisa channel-aware banane ke liye
-  const typeSel = getSelectedTypes('rType');
+  const typeSelRawX = getSelectedTypes('rType');
+  const roAnuModeX = typeSelRawX.includes(ANU_MAAM_TYPE_VALUE);
+  // "Anu Ma'am" koi real sales Type nahi hai — export filtering se hata do.
+  const typeSel = roAnuModeX ? typeSelRawX.filter(t => t !== ANU_MAAM_TYPE_VALUE) : typeSelRawX;
   const chanSel = getSelectedChannels('rChan');
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtxX = roInvContext(typeSel, chanSel, subChanSel);
@@ -7520,9 +7578,10 @@ function exportRO(fmtType){
     return it.sales_entries || [];
   };
   const winQty = (ents, since) => ents.filter(e=>e.date!=='N/A'&&e.date>=since).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-  // channel-aware WIP (jaise screen pe)
+  // channel-aware WIP (jaise screen pe) — Anu Ma'am tick ho to Production
+  // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
-  const chWip = (o) => roInvWip(o, roInvCtxX);
+  const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
   const headers = ['Row Type','SKU','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Sold Qty','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
@@ -11704,7 +11763,8 @@ def _fetch_drg_source_rows():
     cols = list(df.columns)
     def _at(i): return cols[i] if len(cols) > i else None
 
-    C_DATE = _at(0)  or find_col(df.columns, "Order Date", "Dispatch Date", "date")
+    C_DATE = (find_col(df.columns, "Order Date", "order date", "orderdate")
+              or _at(0) or find_col(df.columns, "Dispatch Date", "date"))
     C_QTY  = (find_col(df.columns, "Final Qty", "final quantity", "final_qty")
               or _at(6) or find_col(df.columns, "qty", "quantity") or _at(5))
     C_SP   = find_col(df.columns, "Selling Price", "selling price", "sp", "unit price") or _at(7)
