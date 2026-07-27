@@ -8735,6 +8735,23 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
+function _rkhImageCell(row, size){
+  const px = Math.max(72, Number(size) || 78);
+  const url = String((row && row.image_url) || '').trim();
+  const valid = url && url.toLowerCase() !== 'nan' && url.toLowerCase() !== 'n/a';
+  const boxStyle = `width:${px}px;height:${px}px;border-radius:10px;border:1px solid rgba(128,128,128,.24);background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:3px auto`;
+  if (!valid){
+    return `<div style="${boxStyle};color:#7b8190;font-size:10px;font-weight:800;text-align:center">NO IMAGE</div>`;
+  }
+  return `<div style="${boxStyle}">
+    <img src="${escHtml(url)}" loading="lazy" decoding="async"
+      title="Click to open full-size image"
+      onclick="window.open(this.src,'_blank')"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+      style="width:100%;height:100%;object-fit:contain;cursor:zoom-in">
+    <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;color:#7b8190;font-size:10px;font-weight:800;text-align:center">NO IMAGE</span>
+  </div>`;
+}
 function _rkhOrderDate(e){
   // Rakhi tab uses Order Date (cossa_orderdate sheet), NOT dispatch date —
   // every other tab in the app keeps using dispatch date (e.date) as-is.
@@ -8835,10 +8852,7 @@ function renderRakhi(){
   }
   const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th></tr>`;
   const body = rows.map(r => {
-    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
-    const img = hasImg
-      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
-      : '—';
+    const img = _rkhImageCell(r, 78);
     const dateDisp = (r.date && r.date !== 'N/A') ? r.date : '—';
     return `<tr>
       <td>${escHtml(dateDisp)}</td>
@@ -9087,10 +9101,7 @@ function renderRakhiTopSkus(){
   const emp = LOGIN_ROLE === 'employee';
   const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th>${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
   const body = list.map((r, i) => {
-    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
-    const img = hasImg
-      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
-      : '—';
+    const img = _rkhImageCell(r, 78);
     return `<tr>
       <td><b>${i + 1}</b></td>
       <td>${img}</td>
@@ -9512,14 +9523,14 @@ function renderRakhiDecisionCenter(){
   const productHost = document.getElementById('rakhiProductPerformance');
   if (productHost){
     const productTable = (title, list, slowMode) => {
-      const rows = list.map((m,i) => `<tr><td>${i+1}</td><td>${_rkhSkuCell(m)}</td>
+      const rows = list.map((m,i) => `<tr><td>${i+1}</td><td>${_rkhImageCell(m,78)}</td><td>${_rkhSkuCell(m)}</td>
         <td>${Math.round(m.qPeriod).toLocaleString('en-IN')}</td><td>${Math.round(m.qPrev).toLocaleString('en-IN')}</td>
         <td>${Math.round(m.stock).toLocaleString('en-IN')}</td><td>${_rkhPct(m.trend)}</td>
         <td style="min-width:220px">${escHtml(_rkhProductAction(m))}</td></tr>`).join('');
       return `<div class="ro-table-wrap" style="padding:0;overflow-x:auto"><div style="padding:13px 16px;font-weight:900">${title}</div>
-        <table class="ro rkh-grid" style="width:100%;min-width:760px;border-collapse:collapse"><thead><tr>
-        <th>#</th><th>SKU</th><th>${perfDays}D Qty</th><th>Previous Qty</th><th>Stock</th><th>Trend</th><th>Next Action</th>
-        </tr></thead><tbody>${rows || '<tr><td colspan="7">No data</td></tr>'}</tbody></table></div>`;
+        <table class="ro rkh-grid" style="width:100%;min-width:860px;border-collapse:collapse"><thead><tr>
+        <th>#</th><th>Photo</th><th>SKU</th><th>${perfDays}D Qty</th><th>Previous Qty</th><th>Stock</th><th>Trend</th><th>Next Action</th>
+        </tr></thead><tbody>${rows || '<tr><td colspan="8">No data</td></tr>'}</tbody></table></div>`;
     };
     productHost.innerHTML = productTable('Top 10 Products', top, false) + productTable('Slow Movers 10', slow, true);
   }
@@ -9527,13 +9538,13 @@ function renderRakhiDecisionCenter(){
   const invHost = document.getElementById('rakhiInventoryHealth');
   if (invHost){
     const urgent = inventory.filter(x => x.priority < 4);
-    const rows = urgent.map(m => `<tr><td>${_rkhSkuCell(m)}</td><td>${Math.round(m.stock)}</td><td>${Math.round(m.stock3p)}</td><td>${Math.round(m.wip)}</td>
+    const rows = urgent.map(m => `<tr><td>${_rkhImageCell(m,78)}</td><td>${_rkhSkuCell(m)}</td><td>${Math.round(m.stock)}</td><td>${Math.round(m.stock3p)}</td><td>${Math.round(m.wip)}</td>
       <td>${Math.round(m.q3)}</td><td>${Math.round(m.q7)}</td><td>${m.velocity.toFixed(1)}</td><td>${m.demand48}</td>
       <td>${m.cover===null?'—':m.cover.toFixed(1)}</td><td>${_rkhStatusBadge(m.health)}</td><td style="min-width:220px">${escHtml(_rkhProductAction(m))}</td></tr>`).join('');
-    invHost.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1100px;border-collapse:collapse"><thead><tr>
-      <th>SKU</th><th>Ready Stock</th><th>3P Stock</th><th>WIP</th><th>3D Sales</th><th>7D Sales</th>
+    invHost.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1200px;border-collapse:collapse"><thead><tr>
+      <th>Photo</th><th>SKU</th><th>Ready Stock</th><th>3P Stock</th><th>WIP</th><th>3D Sales</th><th>7D Sales</th>
       <th>Daily Velocity</th><th>48h Demand</th><th>Days Cover</th><th>Health</th><th>Recommended Action</th>
-      </tr></thead><tbody>${rows || '<tr><td colspan="11">All Rakhi SKUs are healthy under the current rules.</td></tr>'}</tbody></table>`;
+      </tr></thead><tbody>${rows || '<tr><td colspan="12">All Rakhi SKUs are healthy under the current rules.</td></tr>'}</tbody></table>`;
   }
 
   if (!emp){
