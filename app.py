@@ -5351,6 +5351,12 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
   <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU. Restricted to FY 2026-27 orders only.</div>
+  <div class="filter-box" style="margin:0 0 14px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Type</label>
+      <select class="fs" id="rkhTypeFilter" onchange="renderRakhi()">
+        <option value="All">All Types</option>
+      </select></div>
+  </div>
   <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
@@ -8618,6 +8624,7 @@ window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
    `master` (already-loaded compiled data) — order-date level (one row
    per sales transaction), same source `master` uses everywhere else. */
 let _rakhiRows = [];
+let _rakhiFilteredRows = [];
 /* ── Curated Rakhi SKU whitelist ──
    Priyanka ne khud jo exact SKU list di hai — "Top-Selling SKUs" aur
    "Slow Movers" (Rakhi tab ke andar) SIRF inhi SKUs me se dikhne chahiye,
@@ -8865,6 +8872,22 @@ function exportRakhiOverallSummaryCSV(){
 }
 window.renderRakhiOverallSummary = renderRakhiOverallSummary;
 window.exportRakhiOverallSummaryCSV = exportRakhiOverallSummaryCSV;
+function _rkhPopulateTypeFilter(rows){
+  // Type dropdown options build karta hai (distinct r.type values, current
+  // rows se) — agar options change ho gaye hain to hi innerHTML replace
+  // karta hai, taaki user ki selection re-render pe reset na ho.
+  const sel = document.getElementById('rkhTypeFilter');
+  if (!sel) return;
+  const current = sel.value || 'All';
+  const types = Array.from(new Set(rows.map(r => String(r.type || '').trim()).filter(Boolean))).sort();
+  const newHtml = ['<option value="All">All Types</option>'].concat(
+    types.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`)
+  ).join('');
+  if (sel.innerHTML !== newHtml){
+    sel.innerHTML = newHtml;
+    sel.value = (current === 'All' || types.includes(current)) ? current : 'All';
+  }
+}
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -8876,24 +8899,30 @@ function renderRakhi(){
   }
   const rows = _rkhBuildRows();
   _rakhiRows = rows;
+  _rkhPopulateTypeFilter(rows);
+  const rkhTypeSel = document.getElementById('rkhTypeFilter')?.value || 'All';
+  // Type filter ke hisaab se rows narrow — table, summary aur export
+  // (exportRakhi) teeno isi filtered list ko follow karte hain.
+  const fRows = (rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows;
+  _rakhiFilteredRows = fRows;
   const emp = LOGIN_ROLE === 'employee';
   if (sumHost){
-    const totQty = rows.reduce((s, r) => s + (r.qty || 0), 0);
-    const totRev = rows.reduce((s, r) => s + (r.rev || 0), 0);
-    const skuSet = new Set(rows.map(r => String(r.sku || '').toUpperCase()));
+    const totQty = fRows.reduce((s, r) => s + (r.qty || 0), 0);
+    const totRev = fRows.reduce((s, r) => s + (r.rev || 0), 0);
+    const skuSet = new Set(fRows.map(r => String(r.sku || '').toUpperCase()));
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Rakhi Orders</div><div class="yc-val">${rows.length.toLocaleString('en-IN')}</div><div class="yc-sub">Matching transactions</div></div>
+      <div class="yoy-card"><div class="yc-label">Rakhi Orders</div><div class="yc-val">${fRows.length.toLocaleString('en-IN')}</div><div class="yc-sub">Matching transactions</div></div>
       <div class="yoy-card"><div class="yc-label">Distinct SKUs</div><div class="yc-val">${skuSet.size.toLocaleString('en-IN')}</div></div>
       <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>`}
     `;
   }
-  if (!rows.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders found.</div>';
+  if (!fRows.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders match the selected filter.</div>';
     return;
   }
   const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
-  const body = rows.map(r => {
+  const body = fRows.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
@@ -8920,7 +8949,9 @@ function renderRakhi(){
   host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhi(){
-  const rows = _rakhiRows || [];
+  // Type filter lga ho to sirf usi ke hisaab se filtered rows export
+  // hongi (_rakhiFilteredRows), warna full Rakhi data (_rakhiRows).
+  const rows = _rakhiFilteredRows || _rakhiRows || [];
   if (!rows.length){ alert('No Rakhi data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
   const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Inv Stock', 'Inv WIP', 'Image Link'];
