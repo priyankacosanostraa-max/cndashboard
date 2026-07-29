@@ -5330,6 +5330,19 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vRakhi" style="display:none">
   <div class="insights-head">
     <div>
+      <div class="insights-title">Rakhi — Overall Summary</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list (RKH + CMB gift sets) — overall stock, WIP, orders, run-rate and repeat-order health, FY 2026-27.</div>
+  <div id="rakhiOverallSummary" class="yoy-grid" style="margin-bottom:16px"></div>
+  <div id="rakhiActionable" style="margin-bottom:26px"></div>
+
+  <div class="insights-head">
+    <div>
       <div class="insights-title">Rakhi</div>
     </div>
     <div class="insight-toolbar-actions">
@@ -5375,7 +5388,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiSlowMoversCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Same curated Rakhi SKU list — showing only those currently flagged Slow Movers (Stock+WIP ≥ 20 &amp; no dispatch in the last 6 months).</div>
+  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list — showing every SKU that has NOT sold a single unit this Rakhi season (FY 2026-27). No stock/WIP/age criteria applied.</div>
   <div id="rakhiSlowMoverContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -8723,7 +8736,135 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){ renderRakhi(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
+function loadRakhi(){ renderRakhi(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
+
+/* ── RAKHI — OVERALL SUMMARY ──
+   "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
+   Total WIP, Total Orders, DRR (daily run rate), Repeat Customers, aur
+   dynamic Actionable Points. Depends on _rakhiRows (renderRakhi() se banta
+   hai) — isliye loadRakhi() me renderRakhi() ke turant baad call hota hai. */
+let _rakhiOverallSummaryData = null;
+function _rkhBuildOverallSummary(){
+  const wlRows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
+  let totalStock = 0, totalWip = 0;
+  RAKHI_WHITELIST_SKUS.forEach(sk => {
+    const item = _masterSkuMap[sk];
+    if (item){
+      totalStock += Number(item.inv_stock) || 0;
+      totalWip += Number(item.inv_wip) || 0;
+    }
+  });
+  const totalOrders = wlRows.length;
+  const totalQty = wlRows.reduce((s, r) => s + (r.qty || 0), 0);
+  const totalRev = wlRows.reduce((s, r) => s + (r.rev || 0), 0);
+  // DRR — total units sold divided by the number of days the data spans so far
+  const dates = wlRows.map(r => r.date).filter(d => d && d !== 'N/A').sort();
+  let daySpan = 1;
+  if (dates.length){
+    const d1 = new Date(dates[0]), d2 = new Date(dates[dates.length - 1]);
+    daySpan = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
+  }
+  const drr = totalQty / daySpan;
+  // Repeat customers — kitne unique customers ne 2+ baar order kiya
+  const custMap = {};
+  wlRows.forEach(r => {
+    const c = (r.cust || '').trim();
+    if (!c) return;
+    custMap[c] = (custMap[c] || 0) + 1;
+  });
+  const distinctCust = Object.keys(custMap).length;
+  const repeatCust = Object.values(custMap).filter(n => n >= 2).length;
+  const repeatPct = distinctCust ? Math.round((repeatCust / distinctCust) * 1000) / 10 : 0;
+  const slowCount = _rkhBuildSlowMovers().length;
+  let bestChannel = null;
+  (_rkhBuildChannelSummary() || []).forEach(c => { if (!bestChannel || c.qty > bestChannel.qty) bestChannel = c; });
+  return {
+    totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drr,
+    distinctCust, repeatCust, repeatPct, slowCount,
+    bestChannel: bestChannel ? bestChannel.channel : '',
+    bestChannelQty: bestChannel ? bestChannel.qty : 0
+  };
+}
+function renderRakhiOverallSummary(){
+  const host = document.getElementById('rakhiOverallSummary');
+  const actHost = document.getElementById('rakhiActionable');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    if (actHost) actHost.innerHTML = '';
+    return;
+  }
+  const s = _rkhBuildOverallSummary();
+  _rakhiOverallSummaryData = s;
+  const emp = LOGIN_ROLE === 'employee';
+  host.innerHTML = `
+    <div class="yoy-card"><div class="yc-label">Total Stock</div><div class="yc-val">${s.totalStock.toLocaleString('en-IN')}</div><div class="yc-sub">Curated Rakhi SKUs</div></div>
+    <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
+    <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
+    <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">units/day over ${s.daySpan} days</div></div>
+    <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers</div></div>
+    ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
+  `;
+  const points = [];
+  const todayStr = todayISO || new Date().toISOString().slice(0, 10);
+  const rbDate = '2026-08-28';
+  const daysLeft = Math.round((new Date(rbDate) - new Date(todayStr)) / 86400000);
+  if (daysLeft >= 0){
+    points.push(`🗓️ <b>${daysLeft} days left</b> for Raksha Bandhan (28 Aug 2026) — plan dispatch &amp; production accordingly.`);
+  } else {
+    points.push(`🗓️ Raksha Bandhan (28 Aug 2026) has passed — review season performance and plan clearance for leftover stock.`);
+  }
+  if (s.slowCount > 0){
+    points.push(`⚠️ <b>${s.slowCount} SKU${s.slowCount > 1 ? 's' : ''}</b> from the Rakhi list have NOT sold a single unit this season — see the Slow Movers table below and consider promotion/bundling/clearance.`);
+  } else {
+    points.push(`✅ Every SKU in the curated Rakhi list has sold at least once this season.`);
+  }
+  if (s.totalWip > 0){
+    points.push(`🏭 <b>${s.totalWip.toLocaleString('en-IN')} units</b> still in WIP (production) — follow up to ensure timely delivery before Raksha Bandhan.`);
+  }
+  if (s.bestChannel){
+    points.push(`🏆 Best-performing channel so far: <b>${escHtml(s.bestChannel)}</b> (${Math.round(s.bestChannelQty).toLocaleString('en-IN')} units) — consider shifting more stock/marketing focus here.`);
+  }
+  if (s.distinctCust > 0){
+    points.push(`🔁 Repeat customer rate is <b>${s.repeatPct}%</b> (${s.repeatCust} of ${s.distinctCust}) — ${s.repeatPct >= 15 ? 'strong repeat behaviour, consider a loyalty/referral push.' : 'low repeat rate — consider post-purchase follow-ups or discount codes for repeat buyers.'}`);
+  }
+  if (actHost){
+    actHost.innerHTML = `<div class="combo-box" style="max-width:100%">
+      <div class="combo-title">Actionable Points</div>
+      ${points.map(p => `<div class="combo-detail" style="font-size:.82rem;line-height:1.5">${p}</div>`).join('')}
+    </div>`;
+  }
+}
+function exportRakhiOverallSummaryCSV(){
+  const s = _rakhiOverallSummaryData;
+  if (!s){ alert('No summary data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Metric', 'Value'];
+  const data = [
+    ['Total Stock', s.totalStock],
+    ['Total WIP', s.totalWip],
+    ['Total Orders', s.totalOrders],
+    ['Total Sold Qty', Math.round(s.totalQty)],
+    ...(emp ? [] : [['Total Net Revenue', Math.round(s.totalRev)]]),
+    ['DRR (units/day)', s.drr.toFixed(2)],
+    ['Days Span', s.daySpan],
+    ['Distinct Customers', s.distinctCust],
+    ['Repeat Customers', s.repeatCust],
+    ['Repeat %', s.repeatPct + '%'],
+    ['Slow Movers (unsold SKUs)', s.slowCount],
+    ['Best Channel', s.bestChannel],
+    ['Best Channel Qty', Math.round(s.bestChannelQty)]
+  ];
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const str = String(c == null ? '' : c);
+    return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_overall_summary.csv'; a.click();
+}
+window.renderRakhiOverallSummary = renderRakhiOverallSummary;
+window.exportRakhiOverallSummaryCSV = exportRakhiOverallSummaryCSV;
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -9081,27 +9222,32 @@ function exportRakhiTopSkusCSV(){
 window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = exportRakhiTopSkusCSV;
 
 /* ── RAKHI SLOW MOVERS ──
-   Curated whitelist (RAKHI_WHITELIST_SKUS) ke andar se, jo bhi SKU abhi
-   "Slow Movers" status me hai (Stock+WIP >= 20 & 6 mahine se dispatch nahi) —
-   same status jo poori app me har jagah use hota hai (item.status), Rakhi
-   sales/FY se independent — seedha `master` se nikala hai. */
+   User ne saaf keh diya: koi criteria mat lagao — curated whitelist me se
+   jo bhi SKU is Rakhi season (FY 2026-27) me EK BHI unit nahi becha, bas
+   wahi dikhao. Stock/WIP/age wagera ka koi threshold nahi hai. */
 let _rakhiSlowMoverRows = [];
 function _rkhBuildSlowMovers(){
+  const soldMap = {};
+  (_rakhiRows || []).forEach(r => {
+    const key = String(r.sku || '').trim().toUpperCase();
+    if (!key) return;
+    soldMap[key] = (soldMap[key] || 0) + (r.qty || 0);
+  });
   const rows = [];
-  (master || []).forEach(item => {
-    if (!item) return;
-    if (!_rkhInWhitelist(item.sku)) return;
-    if (item.status !== 'Slow Movers') return;
+  RAKHI_WHITELIST_SKUS.forEach(sk => {
+    const sold = soldMap[sk] || 0;
+    if (sold > 0) return;   // jo bik chuka hai wo slow mover nahi
+    const item = _masterSkuMap[sk] || null;
     rows.push({
-      sku: item.sku,
-      sku_name: item.sku_name || '',
-      image_url: item.image_url || '',
-      inv_stock: Number(item.inv_stock) || 0,
-      inv_wip: Number(item.inv_wip) || 0,
-      qty_6m: Number(item.qty_6m) || 0,
-      days_since_last_sale: item.days_since_last_sale,
-      taxon: item.taxon || '',
-      combo_details: item.combo_details || []
+      sku: sk,
+      sku_name: item ? (item.sku_name || '') : '',
+      image_url: item ? (item.image_url || '') : '',
+      inv_stock: item ? (Number(item.inv_stock) || 0) : 0,
+      inv_wip: item ? (Number(item.inv_wip) || 0) : 0,
+      taxon: item ? (item.taxon || '') : '',
+      days_since_last_sale: item ? item.days_since_last_sale : -1,
+      found: !!item,
+      combo_details: item ? (item.combo_details || []) : []
     });
   });
   rows.sort((a, b) => (b.inv_stock + b.inv_wip) - (a.inv_stock + a.inv_wip));
@@ -9117,10 +9263,10 @@ function renderRakhiSlowMovers(){
   const list = _rkhBuildSlowMovers();
   _rakhiSlowMoverRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Slow Movers found in the curated Rakhi SKU list.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Every SKU in the curated Rakhi list has sold at least 1 unit this season.</div>';
     return;
   }
-  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Inv Stock</th><th>Inv WIP</th><th>Sold (6M)</th><th>Days Since Last Sale</th></tr>`;
+  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Inv Stock</th><th>Inv WIP</th><th>Days Since Last Sale (any channel)</th></tr>`;
   const body = list.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -9132,12 +9278,12 @@ function renderRakhiSlowMovers(){
       <td>${img}</td>
       <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
         <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        ${r.found ? '' : '<span class="muted" style="font-size:.68rem">(not in inventory)</span>'}
         ${comboHtml}
       </div></td>
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${r.inv_stock}</td>
       <td>${r.inv_wip}</td>
-      <td>${Math.round(r.qty_6m)}</td>
       <td>${dsls}</td>
     </tr>`;
   }).join('');
@@ -9146,18 +9292,18 @@ function renderRakhiSlowMovers(){
 function exportRakhiSlowMoversCSV(){
   const list = _rakhiSlowMoverRows || [];
   if (!list.length){ alert('No Slow Movers data to export.'); return; }
-  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Inv Stock', 'Inv WIP', 'Sold (6M)', 'Days Since Last Sale', 'Image Link'];
+  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Inv Stock', 'Inv WIP', 'Days Since Last Sale', 'Image Link'];
   const data = [];
   list.forEach(r => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
       r.sku, exportSkuName(r.sku, r.sku_name), r.taxon || '', r.inv_stock, r.inv_wip,
-      Math.round(r.qty_6m), (r.days_since_last_sale >= 0 ? r.days_since_last_sale : ''), r.image_url || ''
+      (r.days_since_last_sale >= 0 ? r.days_since_last_sale : ''), r.image_url || ''
     ]);
     (r.combo_details || []).forEach(c => {
       data.push([
         'Stone Detail', c.sku, exportSkuName(c.sku, c.sku_name), '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
-        '', '', c.image_url || ''
+        '', c.image_url || ''
       ]);
     });
   });
