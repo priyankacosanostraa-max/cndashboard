@@ -261,9 +261,6 @@ INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JY
 COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
-# Rakhi planning sheet: P=Campaign, Q=Channel, R=Ads Spent Amt,
-# S=Revenue target. It shares the same published workbook as the other tabs.
-RAKHI_URL = os.environ.get("RAKHI_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1708754136&single=true&output=csv")
 # Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
@@ -337,7 +334,7 @@ FAST_LOAD = (os.environ.get("FAST_LOAD", "1" if DEPLOY_HOST else "0") == "1")
 CACHE_TTL = 900   # bg refresher (600s) hamesha pehle chal jata hai — users ko inline refresh kabhi nahi jhelni padti
 TZ        = ZoneInfo("Asia/Kolkata")
 
-CACHE    = {"data": None, "ts": 0, "debug": {}, "rakhi_ads": []}
+CACHE    = {"data": None, "ts": 0, "debug": {}}
 UPLOAD_REPORTS = {}
 AI_READY = False
 db_data, processor, dino_model, client = None, None, None, None
@@ -984,53 +981,6 @@ def _refresh_data():
 
     dbg["inv_cols"]   = list(inv.columns)
     dbg["cosa_cols"] = list(cosa.columns)
-
-    # ── Rakhi ads plan (non-fatal) ───────────────────────────
-    # Ads data is maintained in the Rakhi tab itself. If that small sheet is
-    # temporarily unavailable, the rest of the dashboard must still load.
-    rakhi_ads = []
-    try:
-        _wstage("fetching", "Downloading Rakhi ads plan…")
-        rakhi_df = _fetch_csv_fresh(RAKHI_URL)
-        rakhi_df.columns = [str(c).strip() for c in rakhi_df.columns]
-        A_CAMPAIGN = find_col(rakhi_df.columns, "Campaign", "Campaign Name", "Ad Campaign")
-        # This sheet already has a sales "Channel" in column A and an ads
-        # "Channel" in column Q. pandas renames the duplicate Q header to
-        # Channel.1, so always resolve the Channel located after Campaign.
-        _rakhi_cols = list(rakhi_df.columns)
-        _campaign_idx = _rakhi_cols.index(A_CAMPAIGN) if A_CAMPAIGN in _rakhi_cols else -1
-        A_CHANNEL = next((
-            c for c in _rakhi_cols[_campaign_idx + 1:]
-            if re.sub(r"[^a-z0-9]", "", str(c).lower()).startswith("channel")
-        ), None) if _campaign_idx >= 0 else None
-        A_CHANNEL = A_CHANNEL or find_col(rakhi_df.columns, "Ads Channel", "Platform", "Channel")
-        A_SPEND = find_col(rakhi_df.columns, "Ads Spent Amt", "Ad Spent Amt", "Ads Spend", "Ad Spend", "Spent")
-        A_TARGET = find_col(rakhi_df.columns, "Revenue target", "Revenue Target", "Target Revenue")
-        dbg["rakhi_ads_cols"] = list(rakhi_df.columns)
-        dbg["rakhi_ads_resolved"] = {
-            "campaign": A_CAMPAIGN, "channel": A_CHANNEL,
-            "spend": A_SPEND, "revenue_target": A_TARGET,
-        }
-        if A_CAMPAIGN and A_CHANNEL and A_SPEND and A_TARGET:
-            for _ar in _df_chunks(rakhi_df):
-                _campaign = clean(_ar.get(A_CAMPAIGN, ""))
-                _channel = clean(_ar.get(A_CHANNEL, ""))
-                _spend = to_num(_ar.get(A_SPEND, 0))
-                _target = to_num(_ar.get(A_TARGET, 0))
-                if not (_campaign or _channel or _spend or _target):
-                    continue
-                rakhi_ads.append({
-                    "campaign": _si(_campaign or "Unnamed Campaign"),
-                    "channel": _si(_channel or "Website"),
-                    "spend": float(_spend),
-                    "revenue_target": float(_target),
-                })
-        else:
-            dbg["errors"].append("rakhi_ads: required columns Campaign, Channel, Ads Spent Amt, Revenue target not found")
-        del rakhi_df
-    except Exception as e:
-        dbg["errors"].append(f"rakhi_ads: {e}")
-    CACHE["rakhi_ads"] = rakhi_ads
 
     # ── Inventory columns ────────────────────────────────────
     I_SKU = find_col(inv.columns, "SKU") or inv.columns[0]
@@ -5389,72 +5339,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU. Restricted to FY 2026-27 orders only.</div>
   <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div>
-      <div class="insights-title">Rakhi — Decision Center</div>
-      <div class="small-note" style="margin-top:6px">Live sales + inventory based recommendations. Thresholds are shown below so every decision is auditable.</div>
-    </div>
-    <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiDecisionCSV()">Export Decision Report</button>
-    </div>
-  </div>
-  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
-    <div class="fc"><label class="fl">Performance Window</label>
-      <select class="fs" id="rkhPerfDays" onchange="loadRakhi()">
-        <option value="3">Last 3 days</option>
-        <option value="7" selected>Last 7 days</option>
-        <option value="14">Last 14 days</option>
-        <option value="30">Last 30 days</option>
-      </select>
-    </div>
-    <div class="small-note" style="max-width:760px;margin-bottom:7px">
-      OOS in 48h = ready stock ≤ 2 × recent daily velocity. Low inventory = ≤7 days cover or ≤5 ready units.
-      Slow moving = stock available but ≤2 units sold in 30 days.
-    </div>
-  </div>
-  <div id="rakhiDecisionSummary" class="yoy-grid" style="margin-bottom:16px"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div><div class="insights-title">Channel-wise Sales — D2C, SOR &amp; QCOM</div></div>
-  </div>
-  <div class="small-note" style="margin:6px 0 14px">QCOM includes Blinkit, Instamart, Zepto and BigBasket Now. Underperformance is flagged when the selected period is over 20% below the immediately preceding equal period.</div>
-  <div id="rakhiDecisionChannels" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div><div class="insights-title">Product Performance — Top 10 &amp; Slow Movers 10</div></div>
-  </div>
-  <div id="rakhiProductPerformance" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div><div class="insights-title">Inventory Health &amp; 48-Hour OOS Risk</div></div>
-  </div>
-  <div id="rakhiInventoryHealth" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-
-  <div id="rakhiAdminAdsPanel">
-    <div class="insights-head" style="margin-top:26px">
-      <div>
-        <div class="insights-title">Website &amp; Ads — Spend, ROAS, Revenue</div>
-        <div class="small-note" style="margin-top:6px">Automatically synced from Base Google Sheet → Rakhi tab → columns P:S.</div>
-      </div>
-      <div class="insight-toolbar-actions">
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="syncRakhiSheet()">Sync Sheet</button>
-      </div>
-    </div>
-    <div class="filter-box" style="margin:10px 0 16px">
-      <div class="small-note">
-        Actual revenue is calculated from live Rakhi sales for the sheet channel. ROAS = actual revenue ÷ ads spent.
-        Revenue target is read directly from the sheet. Weekly fund requirement uses cumulative spend ÷ elapsed campaign days × 7;
-        Scale budgets receive +25%, Pause budgets receive ₹0.
-      </div>
-    </div>
-    <div id="rakhiWebsiteSummary" class="yoy-grid" style="margin-bottom:16px"></div>
-    <div id="rakhiAdsRecommendations" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-  </div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div><div class="insights-title">Rakhi — Order Details</div></div>
-  </div>
   <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -5479,8 +5363,20 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopSkusCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Ranked by units sold, FY 2026-27 Rakhi orders only (same RKH / CMB match as above).</div>
+  <div class="small-note" style="margin:6px 0 14px">Ranked by units sold — restricted to the curated Rakhi SKU list (RKH + CMB gift sets), FY 2026-27 orders only.</div>
   <div id="rakhiTopSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Slow Movers</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiSlowMoversCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Same curated Rakhi SKU list — showing only those currently flagged Slow Movers (Stock+WIP ≥ 20 &amp; no dispatch in the last 6 months).</div>
+  <div id="rakhiSlowMoverContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
     <div>
@@ -5614,7 +5510,6 @@ let currentFY = "", previousFY = "", todayISO = "",
     yesterdayISO = "", currentMonthKey = "";
 let grandNetRevenue = 0, grandFinalQty = 0;
 let marketplaceData = null;
-let rakhiAdsData = [];
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
 
@@ -6668,7 +6563,6 @@ function loadData(force){
       currentMonthKey = d.current_month || '';
       grandNetRevenue = parseFloat(d.grand_net_revenue) || 0;
       grandFinalQty   = parseFloat(d.grand_final_qty) || 0;
-      rakhiAdsData = d.rakhi_ads || [];
       periodKpis = d.period_kpis || {total:grandNetRevenue, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 
       const custOpts = allCusts.map(c => `<option value="${c}"></option>`).join('');
@@ -6710,9 +6604,7 @@ function loadData(force){
       }, 0);
 
       if (L) L.style.display = 'none'; stopWarmupPoll();
-      const returnTab = window._returnAfterLoad || 'home';
-      window._returnAfterLoad = '';
-      showTab(returnTab);
+      showTab('home');
     })
     .catch(err => {
       clearTimeout(timer);
@@ -6723,12 +6615,6 @@ function loadData(force){
         + '<div style="margin-top:14px"><button class="go-btn" style="width:auto;padding:9px 16px" onclick="loadData(true)">Retry</button></div>';
     });
 }
-
-function syncRakhiSheet(){
-  window._returnAfterLoad = 'rakhi';
-  loadData(true);
-}
-window.syncRakhiSheet = syncRakhiSheet;
 
 function mkCard(item, rev, conf, slow){
   const img = (item.image_url && String(item.image_url).trim() && String(item.image_url).toLowerCase() !== 'nan')
@@ -8719,6 +8605,25 @@ window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
    `master` (already-loaded compiled data) — order-date level (one row
    per sales transaction), same source `master` uses everywhere else. */
 let _rakhiRows = [];
+/* ── Curated Rakhi SKU whitelist ──
+   Priyanka ne khud jo exact SKU list di hai — "Top-Selling SKUs" aur
+   "Slow Movers" (Rakhi tab ke andar) SIRF inhi SKUs me se dikhne chahiye,
+   RKH/CMB pattern-match wale broader set se nahi. List me duplicate SKUs
+   the — Set apne aap ek baar hi count karta hai. Baaki Rakhi tables (main
+   Rakhi orders, Channel vs Target, Return Rate) is whitelist se unaffected
+   hain — wahi purana RKH/CMB pattern-match wala logic use karte hain. */
+const RAKHI_WHITELIST_SKUS = new Set([
+  'RKH-0012','RKH-0017','RKH-0021','RKH-0027','RKH-0030','RKH-0031','RKH-0033',
+  'RKH-0049','RKH-0052','RKH-0070','RKH-0075','RKH-0091',
+  'CMB-0801','CMB-0802','CMB-0803','CMB-0804','CMB-0805','CMB-0806','CMB-0807',
+  'CMB-0808','CMB-0809','CMB-0810','CMB-0811','CMB-0812','CMB-0813','CMB-0814',
+  'CMB-0815','CMB-0816','CMB-0817','CMB-0818','CMB-0819','CMB-0820','CMB-0821',
+  'CMB-0822','CMB-0823','CMB-0824','CMB-0825','CMB-0826','CMB-0827','CMB-0833',
+  'CMB-0834','CMB-0837','CMB-0838','CMB-0839','CMB-0840','CMB-0849'
+]);
+function _rkhInWhitelist(sku){
+  return RAKHI_WHITELIST_SKUS.has(String(sku == null ? '' : sku).trim().toUpperCase());
+}
 function _rkhIsRakhiSku(sku){
   return /^\s*rkh/i.test(String(sku == null ? '' : sku));
 }
@@ -8735,29 +8640,28 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
-function _rkhImageCell(row, size){
-  const px = Math.max(72, Number(size) || 78);
-  const url = String((row && row.image_url) || '').trim();
-  const valid = url && url.toLowerCase() !== 'nan' && url.toLowerCase() !== 'n/a';
-  const boxStyle = `width:${px}px;height:${px}px;border-radius:10px;border:1px solid rgba(128,128,128,.24);background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;margin:3px auto`;
-  if (!valid){
-    return `<div style="${boxStyle};color:#7b8190;font-size:10px;font-weight:800;text-align:center">NO IMAGE</div>`;
-  }
-  return `<div style="${boxStyle}">
-    <img src="${escHtml(url)}" loading="lazy" decoding="async"
-      title="Click to open full-size image"
-      onclick="window.open(this.src,'_blank')"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-      style="width:100%;height:100%;object-fit:contain;cursor:zoom-in">
-    <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;color:#7b8190;font-size:10px;font-weight:800;text-align:center">NO IMAGE</span>
-  </div>`;
-}
 function _rkhOrderDate(e){
   // Rakhi tab uses Order Date (cossa_orderdate sheet), NOT dispatch date —
   // every other tab in the app keeps using dispatch date (e.date) as-is.
   const od = e && e.order_date;
   if (od && od !== 'N/A') return od;
   return (e && e.date) || 'N/A';
+}
+function _rkhComboBoxHtml(combo_details){
+  // Gift Set (CMB) SKUs — Stone Details ke andar jo sub-SKUs hain unki
+  // apni Inv Stock / Inv WIP dikhane ke liye chhota inline box (Rakhi tab).
+  if (!combo_details || !combo_details.length) return '';
+  const items = combo_details.map(c => {
+    const skuEsc = String(c.sku).replace(/'/g, "\\\\'");
+    return '<div class="combo-detail">'
+      + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEsc + '\')">' + escHtml(skuLabel(c.sku, c.sku_name)) + '</button>'
+      + (c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>')
+      + '<div class="combo-grid">'
+      + '<span>Inv Stock <b>' + (parseInt(c.inv_stock) || 0) + '</b></span>'
+      + '<span>Inv WIP <b>' + (parseInt(c.inv_wip) || 0) + '</b></span>'
+      + '</div></div>';
+  }).join('');
+  return '<div class="combo-box"><div class="combo-title">Stone Details (set items):</div>' + items + '</div>';
 }
 function _rkhIsFy2627(e){
   // fy comes normalized server-side as "FY 2026-27" — match robustly
@@ -8786,7 +8690,10 @@ function _rkhBuildRows(){
         rev: Number(e && e.rev) || 0,
         qty: Number(e && e.qty) || 0,
         ret: Number(e && e.ret) || 0,
-        ret_amt: Number(e && e.ret_amt) || 0
+        ret_amt: Number(e && e.ret_amt) || 0,
+        inv_stock: Number(item.inv_stock) || 0,
+        inv_wip: Number(item.inv_wip) || 0,
+        combo_details: item.combo_details || []
       });
     });
   });
@@ -8816,13 +8723,7 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){
-  renderRakhi();
-  renderRakhiDecisionCenter();
-  renderRakhiChannel();
-  renderRakhiTopSkus();
-  renderRakhiReturns();
-}
+function loadRakhi(){ renderRakhi(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
 function renderRakhi(){
   const host = document.getElementById('rakhiContent');
   const sumHost = document.getElementById('rakhiSummary');
@@ -8850,18 +8751,29 @@ function renderRakhi(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders found.</div>';
     return;
   }
-  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th></tr>`;
+  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = rows.map(r => {
-    const img = _rkhImageCell(r, 78);
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
     const dateDisp = (r.date && r.date !== 'N/A') ? r.date : '—';
+    const stk = parseInt(r.inv_stock) || 0;
+    const wip = parseInt(r.inv_wip) || 0;
+    const comboHtml = _rkhComboBoxHtml(r.combo_details);
     return `<tr>
       <td>${escHtml(dateDisp)}</td>
       <td>${img}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        ${comboHtml}
+      </div></td>
       <td>${escHtml(r.type || '—')}</td>
       <td>${escHtml(r.cust || '—')}</td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      <td>${stk}</td>
+      <td>${wip}</td>
     </tr>`;
   }).join('');
   host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
@@ -8870,12 +8782,24 @@ function exportRakhi(){
   const rows = _rakhiRows || [];
   if (!rows.length){ alert('No Rakhi data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Order Date', 'SKU', 'SKU Name', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Image Link'];
-  const data = rows.map(r => [
-    r.date, r.sku, exportSkuName(r.sku, r.sku_name), r.type || '', r.cust || '',
-    ...(emp ? [] : [Math.round(r.rev)]),
-    Math.round(r.qty), r.image_url || ''
-  ]);
+  const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const data = [];
+  rows.forEach(r => {
+    data.push([
+      (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
+      r.date, r.sku, exportSkuName(r.sku, r.sku_name), r.type || '', r.cust || '',
+      ...(emp ? [] : [Math.round(r.rev)]),
+      Math.round(r.qty), parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
+    ]);
+    // Gift Set ke andar wale (Stone Details) sub-SKUs — inki apni Inv Stock/WIP
+    (r.combo_details || []).forEach(c => {
+      data.push([
+        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '', '',
+        ...(emp ? [] : ['']),
+        '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
+      ]);
+    });
+  });
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -9079,7 +9003,8 @@ function _rkhBuildTopSkus(){
   rows.forEach(r => {
     const key = String(r.sku || '').trim();
     if (!key) return;
-    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, rev: 0};
+    if (!_rkhInWhitelist(key)) return;   // sirf curated whitelist ke SKUs
+    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, rev: 0, inv_stock: r.inv_stock || 0, inv_wip: r.inv_wip || 0, combo_details: r.combo_details || []};
     map[key].qty += (r.qty || 0);
     map[key].rev += (r.rev || 0);
   });
@@ -9099,15 +9024,26 @@ function renderRakhiTopSkus(){
     return;
   }
   const emp = LOGIN_ROLE === 'employee';
-  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th>${emp ? '' : '<th>Net Revenue</th>'}</tr>`;
+  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = list.map((r, i) => {
-    const img = _rkhImageCell(r, 78);
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    const stk = parseInt(r.inv_stock) || 0;
+    const wip = parseInt(r.inv_wip) || 0;
+    const comboHtml = _rkhComboBoxHtml(r.combo_details);
     return `<tr>
       <td><b>${i + 1}</b></td>
       <td>${img}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        ${comboHtml}
+      </div></td>
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+      <td>${stk}</td>
+      <td>${wip}</td>
     </tr>`;
   }).join('');
   host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:600px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
@@ -9116,12 +9052,24 @@ function exportRakhiTopSkusCSV(){
   const list = _rakhiTopSkuRows || [];
   if (!list.length){ alert('No Rakhi SKU data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Rank', 'SKU', 'SKU Name', 'Qty Sold', ...(emp ? [] : ['Net Revenue']), 'Image Link'];
-  const data = list.map((r, i) => [
-    i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
-    ...(emp ? [] : [Math.round(r.rev)]),
-    r.image_url || ''
-  ]);
+  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Qty Sold', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const data = [];
+  list.forEach((r, i) => {
+    data.push([
+      (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
+      i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
+      ...(emp ? [] : [Math.round(r.rev)]),
+      parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
+    ]);
+    // Gift Set ke andar wale (Stone Details) sub-SKUs — inki apni Inv Stock/WIP
+    (r.combo_details || []).forEach(c => {
+      data.push([
+        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '',
+        ...(emp ? [] : ['']),
+        parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
+      ]);
+    });
+  });
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -9131,6 +9079,97 @@ function exportRakhiTopSkusCSV(){
   a.href = URL.createObjectURL(blob); a.download = 'rakhi_top_skus.csv'; a.click();
 }
 window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = exportRakhiTopSkusCSV;
+
+/* ── RAKHI SLOW MOVERS ──
+   Curated whitelist (RAKHI_WHITELIST_SKUS) ke andar se, jo bhi SKU abhi
+   "Slow Movers" status me hai (Stock+WIP >= 20 & 6 mahine se dispatch nahi) —
+   same status jo poori app me har jagah use hota hai (item.status), Rakhi
+   sales/FY se independent — seedha `master` se nikala hai. */
+let _rakhiSlowMoverRows = [];
+function _rkhBuildSlowMovers(){
+  const rows = [];
+  (master || []).forEach(item => {
+    if (!item) return;
+    if (!_rkhInWhitelist(item.sku)) return;
+    if (item.status !== 'Slow Movers') return;
+    rows.push({
+      sku: item.sku,
+      sku_name: item.sku_name || '',
+      image_url: item.image_url || '',
+      inv_stock: Number(item.inv_stock) || 0,
+      inv_wip: Number(item.inv_wip) || 0,
+      qty_6m: Number(item.qty_6m) || 0,
+      days_since_last_sale: item.days_since_last_sale,
+      taxon: item.taxon || '',
+      combo_details: item.combo_details || []
+    });
+  });
+  rows.sort((a, b) => (b.inv_stock + b.inv_wip) - (a.inv_stock + a.inv_wip));
+  return rows;
+}
+function renderRakhiSlowMovers(){
+  const host = document.getElementById('rakhiSlowMoverContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  const list = _rkhBuildSlowMovers();
+  _rakhiSlowMoverRows = list;
+  if (!list.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Slow Movers found in the curated Rakhi SKU list.</div>';
+    return;
+  }
+  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Inv Stock</th><th>Inv WIP</th><th>Sold (6M)</th><th>Days Since Last Sale</th></tr>`;
+  const body = list.map(r => {
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    const comboHtml = _rkhComboBoxHtml(r.combo_details);
+    const dsls = (r.days_since_last_sale >= 0) ? (r.days_since_last_sale + ' days') : '—';
+    return `<tr>
+      <td>${img}</td>
+      <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        ${comboHtml}
+      </div></td>
+      <td>${escHtml(r.taxon || '—')}</td>
+      <td>${r.inv_stock}</td>
+      <td>${r.inv_wip}</td>
+      <td>${Math.round(r.qty_6m)}</td>
+      <td>${dsls}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:700px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiSlowMoversCSV(){
+  const list = _rakhiSlowMoverRows || [];
+  if (!list.length){ alert('No Slow Movers data to export.'); return; }
+  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Inv Stock', 'Inv WIP', 'Sold (6M)', 'Days Since Last Sale', 'Image Link'];
+  const data = [];
+  list.forEach(r => {
+    data.push([
+      (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
+      r.sku, exportSkuName(r.sku, r.sku_name), r.taxon || '', r.inv_stock, r.inv_wip,
+      Math.round(r.qty_6m), (r.days_since_last_sale >= 0 ? r.days_since_last_sale : ''), r.image_url || ''
+    ]);
+    (r.combo_details || []).forEach(c => {
+      data.push([
+        'Stone Detail', c.sku, exportSkuName(c.sku, c.sku_name), '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
+        '', '', c.image_url || ''
+      ]);
+    });
+  });
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_slow_movers.csv'; a.click();
+}
+window.renderRakhiSlowMovers = renderRakhiSlowMovers; window.exportRakhiSlowMoversCSV = exportRakhiSlowMoversCSV;
 
 /* ── RAKHI RETURN RATE BY CHANNEL ── */
 let _rakhiReturnRows = [];
@@ -9218,392 +9257,6 @@ function exportRakhiReturnsCSV(){
   a.href = URL.createObjectURL(blob); a.download = 'rakhi_return_rate_by_channel.csv'; a.click();
 }
 window.renderRakhiReturns = renderRakhiReturns; window.exportRakhiReturnsCSV = exportRakhiReturnsCSV;
-
-/* ── RAKHI DECISION CENTER ─────────────────────────────────────────────
-   Sales/inventory use the already-loaded FY 2026-27 Rakhi transactions.
-   Ads spend + revenue target come from Base Sheet > Rakhi > columns P:S. */
-let _rakhiDecisionState = null;
-
-function _rkhToday(){
-  return todayISO || new Date().toISOString().slice(0, 10);
-}
-function _rkhIsoMinus(days){
-  const p = _rkhToday().split('-').map(Number);
-  return new Date(Date.UTC(p[0], p[1] - 1, p[2]) - Number(days || 0) * 86400000).toISOString().slice(0, 10);
-}
-function _rkhInRecent(date, days, previous){
-  if (!date || date === 'N/A') return false;
-  days = Math.max(1, Number(days) || 7);
-  const start = previous ? _rkhIsoMinus(days * 2 - 1) : _rkhIsoMinus(days - 1);
-  const end = previous ? _rkhIsoMinus(days) : _rkhToday();
-  return date >= start && date <= end;
-}
-function _rkhNum(v){
-  const n = Number(String(v == null ? '' : v).replace(/[₹,\s]/g, ''));
-  return Number.isFinite(n) ? n : 0;
-}
-function _rkhAdChannelKey(channel){
-  const c = String(channel || '').trim().toLowerCase();
-  if (c === 'website' || c === 'online' || c === 'd2c') return 'd2c';
-  if (c === 'qcom' || c === 'quick commerce' || c === 'quickcommerce') return 'qcom';
-  if (c === 'sor') return 'sor';
-  return c;
-}
-function _rkhRowsForAdChannel(channel){
-  const key = _rkhAdChannelKey(channel);
-  return (_rakhiRows || []).filter(r => {
-    if (key === 'd2c') return _rkhBizChannelOf(r) === 'D2C';
-    if (key === 'qcom') return _rkhBizChannelOf(r) === 'QCOM';
-    if (key === 'sor') return _rkhBizChannelOf(r) === 'SOR';
-    const exact = String(_rkhChannelOf(r) || '').trim().toLowerCase();
-    const cust = String((r && r.cust) || '').trim().toLowerCase();
-    return exact === key || cust.includes(key);
-  });
-}
-function _rkhCampaignStart(channel, salesRows){
-  const key = _rkhAdChannelKey(channel);
-  let targetKey = String(channel || '').trim();
-  if (key === 'd2c') targetKey = 'Website';
-  let launch = (RAKHI_TARGETS[targetKey] || {}).launch || '';
-  const m = String(launch).match(/(\d{1,2}).*?\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i);
-  if (m){
-    const months = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-    const mon = months[String(m[2]).slice(0,3).toLowerCase()];
-    if (mon){
-      const year = mon >= 4 ? 2026 : 2027;
-      const iso = `${year}-${String(mon).padStart(2,'0')}-${String(Number(m[1])).padStart(2,'0')}`;
-      if (iso <= _rkhToday()) return iso;
-    }
-  }
-  const dates = (salesRows || []).map(r => r.date).filter(d => d && d !== 'N/A').sort();
-  return dates[0] || _rkhToday();
-}
-function _rkhElapsedDays(startDate){
-  const a = Date.parse(`${startDate}T00:00:00Z`);
-  const b = Date.parse(`${_rkhToday()}T00:00:00Z`);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return 1;
-  return Math.max(1, Math.floor((b-a)/86400000)+1);
-}
-function _rkhCampaignRows(){
-  const raw = (rakhiAdsData || []).map((r, index) => ({
-    index,
-    campaign: String((r && r.campaign) || 'Unnamed Campaign').trim(),
-    channel: String((r && r.channel) || 'Website').trim(),
-    spend: _rkhNum(r && r.spend),
-    target: _rkhNum(r && r.revenue_target)
-  })).filter(r => r.campaign || r.channel || r.spend || r.target);
-  const groups = {};
-  raw.forEach(r => {
-    const key = _rkhAdChannelKey(r.channel);
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(r);
-  });
-  const rows = [];
-  Object.entries(groups).forEach(([key, group]) => {
-    const allSalesRows = _rkhRowsForAdChannel(key);
-    const startDate = _rkhCampaignStart(group[0].channel, allSalesRows);
-    const salesRows = allSalesRows.filter(r => r.date && r.date !== 'N/A' && r.date >= startDate && r.date <= _rkhToday());
-    const actualChannelRevenue = salesRows.reduce((s,r) => s + (Number(r.rev)||0), 0);
-    const totalTarget = group.reduce((s,r) => s + r.target, 0);
-    const totalSpend = group.reduce((s,r) => s + r.spend, 0);
-    group.forEach(r => {
-      const share = totalTarget > 0 ? r.target/totalTarget
-        : (totalSpend > 0 ? r.spend/totalSpend : 1/group.length);
-      const actualRevenue = actualChannelRevenue * share;
-      const roas = r.spend > 0 ? actualRevenue/r.spend : 0;
-      const achievement = r.target > 0 ? actualRevenue/r.target*100 : 0;
-      const gap = Math.max(0, r.target-actualRevenue);
-      let action = 'No Spend', factor = 0, next = 'No spend recorded in the Rakhi sheet';
-      if (r.spend > 0 && roas >= 3){
-        action = 'Scale'; factor = 1.25;
-        next = gap > 0 ? 'Increase budget 20–25% to close the revenue target gap; monitor for 48 hours'
-          : 'Target achieved; scale 20–25% while ROAS remains above 3x';
-      } else if (r.spend > 0 && roas < 1){
-        action = 'Pause'; factor = 0;
-        next = 'Pause and audit creative, audience, offer and landing page before restarting';
-      } else if (r.spend > 0){
-        action = 'Optimise'; factor = 1;
-        next = 'Hold budget; refresh creative/audience and improve PDP conversion';
-      }
-      const elapsedDays = _rkhElapsedDays(startDate);
-      const weeklyRunRate = r.spend/elapsedDays*7;
-      const weeklyRecommended = weeklyRunRate*factor;
-      rows.push({...r, actualRevenue, roas, achievement, gap, action, factor, next,
-        startDate, elapsedDays, weeklyRunRate, weeklyRecommended});
-    });
-  });
-  return rows.sort((a,b) => b.spend-a.spend || a.index-b.index);
-}
-function _rkhBizChannelOf(row){
-  const cust = String((row && row.cust) || '').toLowerCase();
-  const typ = String((row && row.type) || '').trim().toLowerCase();
-  if (/(blinkit|instamart|zepto|bigbasket|bbnow|bb now)/.test(cust)) return 'QCOM';
-  if (typ === 'sor' || /\bsor\b/.test(typ)) return 'SOR';
-  if (typ === 'website' || typ === 'online' || typ === 'd2c') return 'D2C';
-  return '';
-}
-function _rkhChannelTargets(){
-  const web = RAKHI_TARGETS.Website || {};
-  const bl = RAKHI_TARGETS.Blinkit || {};
-  const ins = RAKHI_TARGETS.Instamart || {};
-  return {
-    D2C: {qty:(web.qtyJul||0)+(web.qtyAug||0), rev:(web.spJul||0)+(web.spAug||0)},
-    SOR: {qty:0, rev:0},
-    QCOM: {qty:(bl.qtyJul||0)+(bl.qtyAug||0)+(ins.qtyJul||0)+(ins.qtyAug||0),
-           rev:(bl.spJul||0)+(bl.spAug||0)+(ins.spJul||0)+(ins.spAug||0)}
-  };
-}
-function _rkhDecisionChannels(days){
-  const map = {
-    D2C:{channel:'D2C',qty:0,rev:0,recentQty:0,recentRev:0,prevQty:0,prevRev:0},
-    SOR:{channel:'SOR',qty:0,rev:0,recentQty:0,recentRev:0,prevQty:0,prevRev:0},
-    QCOM:{channel:'QCOM',qty:0,rev:0,recentQty:0,recentRev:0,prevQty:0,prevRev:0}
-  };
-  (_rakhiRows || []).forEach(r => {
-    const ch = _rkhBizChannelOf(r);
-    if (!ch) return;
-    const m = map[ch];
-    m.qty += r.qty || 0; m.rev += r.rev || 0;
-    if (_rkhInRecent(r.date, days, false)){ m.recentQty += r.qty || 0; m.recentRev += r.rev || 0; }
-    if (_rkhInRecent(r.date, days, true)){ m.prevQty += r.qty || 0; m.prevRev += r.rev || 0; }
-  });
-  const targets = _rkhChannelTargets();
-  return ['D2C','SOR','QCOM'].map(ch => {
-    const m = map[ch], t = targets[ch];
-    const trend = m.prevQty > 0 ? ((m.recentQty - m.prevQty) / m.prevQty) * 100 : (m.recentQty > 0 ? 100 : 0);
-    let status = 'Healthy';
-    if (m.qty <= 0) status = 'No Sales';
-    else if ((m.prevQty > 0 && m.recentQty < m.prevQty * 0.8) || (m.recentQty <= 0 && m.qty > 0)) status = 'Underperforming';
-    else if (m.prevQty > 0 && m.recentQty < m.prevQty) status = 'Watch';
-    else if (m.recentQty > m.prevQty) status = 'Growing';
-    return {...m, targetQty:t.qty, targetRev:t.rev, trend, status};
-  });
-}
-function _rkhItemDecisionMetrics(days){
-  const now = _rkhToday();
-  return (master || []).filter(_rkhMatchItem).map(item => {
-    const entries = (item.sales_entries || []).filter(_rkhIsFy2627);
-    let qty=0, rev=0, ret=0, qPeriod=0, revPeriod=0, qPrev=0, q3=0, q7=0, q30=0;
-    entries.forEach(e => {
-      const d = _rkhOrderDate(e), q = Number(e.qty)||0, r = Number(e.rev)||0;
-      qty += q; rev += r; ret += Number(e.ret)||0;
-      if (_rkhInRecent(d, days, false)){ qPeriod += q; revPeriod += r; }
-      if (_rkhInRecent(d, days, true)) qPrev += q;
-      if (_rkhInRecent(d, 3, false)) q3 += q;
-      if (_rkhInRecent(d, 7, false)) q7 += q;
-      if (_rkhInRecent(d, 30, false)) q30 += q;
-    });
-    const stock = Math.max(0, Number(item.inv_stock)||0);
-    const stock3p = Math.max(0, Number(item.inv_stock_3p)||0);
-    const wip = Math.max(0, Number(item.inv_wip)||0);
-    const velocity = Math.max(q3/3, q7/7, 0);
-    const demand48 = Math.ceil(velocity * 2);
-    const cover = velocity > 0 ? stock / velocity : null;
-    let health = 'Healthy', priority = 4;
-    if (stock <= 0){ health = 'OOS Now'; priority = 0; }
-    else if (demand48 > 0 && stock <= demand48){ health = 'OOS ≤48h'; priority = 1; }
-    else if ((cover !== null && cover <= 7) || stock <= 5){ health = 'Low Inventory'; priority = 2; }
-    else if (q30 <= 2 && stock > 0){ health = 'Slow Moving'; priority = 3; }
-    const returnRate = (qty + ret) > 0 ? ret / (qty + ret) * 100 : 0;
-    const trend = qPrev > 0 ? (qPeriod - qPrev) / qPrev * 100 : (qPeriod > 0 ? 100 : 0);
-    return {
-      item, sku:item.sku, sku_name:item.sku_name||'', image_url:item.image_url||'',
-      qty, rev, ret, qPeriod, revPeriod, qPrev, q3, q7, q30,
-      stock, stock3p, wip, velocity, demand48, cover, health, priority,
-      returnRate, trend, now
-    };
-  });
-}
-function _rkhProductAction(m){
-  if (m.stock <= 0 && m.q7 > 0) return 'Restock immediately; pause product ads until stock is available';
-  if (m.health === 'OOS ≤48h') return 'Prioritise replenishment / move WIP; cap ads for 48 hours';
-  if (m.returnRate >= 10) return 'Fix QC, listing accuracy and size/expectation gaps before scaling';
-  if (m.qPeriod <= 0 && (m.stock + m.wip) > 0) return 'Test new creative/offer; bundle with a top seller and improve PDP';
-  if (m.qPrev > 0 && m.qPeriod < m.qPrev * 0.8) return 'Optimise price, PDP and creative; retarget engaged visitors';
-  if (m.health === 'Slow Moving') return 'Bundle/discount selectively; reduce replenishment';
-  return 'Maintain availability; scale on the best-performing channel';
-}
-function _rkhNeedsProductAction(m){
-  return ((m.stock + m.wip) > 0 && m.qPeriod <= 0) ||
-         (m.qPrev > 0 && m.qPeriod < m.qPrev * 0.8) ||
-         m.returnRate >= 10 || m.health === 'Slow Moving';
-}
-function _rkhStatusBadge(status){
-  const color = status === 'Growing' || status === 'Healthy' || status === 'Scale' ? '#2f6f3e'
-    : status === 'Watch' || status === 'Optimise' || status === 'Low Inventory' || status === 'Slow Moving' ? '#c27b00'
-    : '#b3261e';
-  return `<span style="color:${color};font-weight:800">${escHtml(status)}</span>`;
-}
-function _rkhSkuCell(m){
-  const label = skuLabel(m.sku, m.sku_name);
-  return `<button class="sku-link" onclick="openSkuDetails('${String(m.sku).replace(/'/g, "\\\\'")}')">${escHtml(label)}</button>`;
-}
-function _rkhWebsiteMetrics(campaigns){
-  const webCampaigns = (campaigns || []).filter(r => _rkhAdChannelKey(r.channel) === 'd2c');
-  const startDates = webCampaigns.map(r=>r.startDate).filter(Boolean).sort();
-  const startDate = startDates[0] || '2026-04-01';
-  const rows = (_rakhiRows || []).filter(r => _rkhBizChannelOf(r) === 'D2C' && r.date >= startDate && r.date <= _rkhToday());
-  const revenue = webCampaigns.length
-    ? webCampaigns.reduce((s,r) => s+r.actualRevenue, 0)
-    : rows.reduce((s,r) => s + (r.rev||0), 0);
-  const qty = rows.reduce((s,r) => s + (r.qty||0), 0);
-  const spend = webCampaigns.reduce((s,r) => s + r.spend, 0);
-  const target = webCampaigns.reduce((s,r) => s + r.target, 0);
-  const roas = spend > 0 ? revenue / spend : 0;
-  const achievement = target > 0 ? revenue/target*100 : 0;
-  const gap = Math.max(0, target-revenue);
-  const weeklyRunRate = webCampaigns.reduce((s,r) => s+r.weeklyRunRate, 0);
-  const weeklyRecommended = webCampaigns.reduce((s,r) => s+r.weeklyRecommended, 0);
-  return {revenue, qty, spend, target, roas, achievement, gap, weeklyRunRate, weeklyRecommended};
-}
-function _rkhPct(v){
-  if (!Number.isFinite(v)) return '—';
-  return `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`;
-}
-function renderRakhiDecisionCenter(){
-  const perfDays = Math.max(1, _rkhNum(document.getElementById('rkhPerfDays')?.value) || 7);
-  const campaigns = _rkhCampaignRows();
-  const channels = _rkhDecisionChannels(perfDays);
-  const products = _rkhItemDecisionMetrics(perfDays);
-  const website = _rkhWebsiteMetrics(campaigns);
-  const adsTotals = {
-    spend: campaigns.reduce((s,r)=>s+r.spend,0),
-    actualRevenue: campaigns.reduce((s,r)=>s+r.actualRevenue,0),
-    target: campaigns.reduce((s,r)=>s+r.target,0),
-    weeklyRunRate: campaigns.reduce((s,r)=>s+r.weeklyRunRate,0),
-    weeklyRecommended: campaigns.reduce((s,r)=>s+r.weeklyRecommended,0)
-  };
-  const top = products.slice().sort((a,b) => b.qPeriod-a.qPeriod || b.revPeriod-a.revPeriod).slice(0,10);
-  const slow = products.filter(x => (x.stock+x.wip)>0)
-    .sort((a,b) => a.qPeriod-b.qPeriod || a.q30-b.q30 || (b.stock+b.wip)-(a.stock+a.wip)).slice(0,10);
-  const inventory = products.slice().sort((a,b) => a.priority-b.priority || (a.cover??9999)-(b.cover??9999) || b.q7-a.q7);
-  const risk48 = products.filter(x => x.health === 'OOS ≤48h');
-  const oosNow = products.filter(x => x.health === 'OOS Now');
-  const underChannels = channels.filter(x => x.status === 'Underperforming' || x.status === 'No Sales');
-  const underProducts = products.filter(_rkhNeedsProductAction);
-  _rakhiDecisionState = {perfDays, campaigns, channels, products, top, slow, inventory, website, adsTotals, risk48, oosNow, underChannels, underProducts};
-
-  const emp = LOGIN_ROLE === 'employee';
-  const adminPanel = document.getElementById('rakhiAdminAdsPanel');
-  if (adminPanel) adminPanel.style.display = emp ? 'none' : 'block';
-
-  const summary = document.getElementById('rakhiDecisionSummary');
-  if (summary){
-    const riskNames = risk48.slice(0,3).map(x=>x.sku).join(', ');
-    const badChannels = underChannels.map(x=>x.channel).join(', ');
-    const adActions = campaigns.length
-      ? `${campaigns.filter(x=>x.action==='Scale').length} scale · ${campaigns.filter(x=>x.action==='Pause').length} pause · ${campaigns.filter(x=>x.action==='Optimise').length} optimise`
-      : 'No rows in sheet';
-    summary.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">OOS in Next 48 Hours</div><div class="yc-val">${risk48.length.toLocaleString('en-IN')}</div><div class="yc-sub">${escHtml(riskNames || 'No immediate 48h risk')}</div></div>
-      <div class="yoy-card"><div class="yc-label">Already OOS</div><div class="yc-val">${oosNow.length.toLocaleString('en-IN')}</div><div class="yc-sub">Ready stock is zero</div></div>
-      <div class="yoy-card"><div class="yc-label">Underperforming Channels</div><div class="yc-val">${underChannels.length.toLocaleString('en-IN')}</div><div class="yc-sub">${escHtml(badChannels || 'None under current rule')}</div></div>
-      <div class="yoy-card"><div class="yc-label">Products Needing Action</div><div class="yc-val">${underProducts.length.toLocaleString('en-IN')}</div><div class="yc-sub">Slow / declining / high-return SKUs</div></div>
-      ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Ads Decision</div><div class="yc-val" style="font-size:20px">${escHtml(adActions)}</div><div class="yc-sub">ROAS-based rule</div></div>
-      <div class="yoy-card"><div class="yc-label">Weekly Ad Funds Needed</div><div class="yc-val">${fmt(adsTotals.weeklyRecommended)}</div><div class="yc-sub">All sheet campaigns after decisions</div></div>`}
-    `;
-  }
-
-  const chHost = document.getElementById('rakhiDecisionChannels');
-  if (chHost){
-    const body = channels.map(r => {
-      const targetQty = r.targetQty ? r.targetQty.toLocaleString('en-IN') : 'Not set';
-      const ach = r.targetQty ? `${(r.qty/r.targetQty*100).toFixed(1)}%` : '—';
-      return `<tr><td><b>${r.channel}</b></td><td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-        ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
-        <td>${Math.round(r.recentQty).toLocaleString('en-IN')}</td><td>${Math.round(r.prevQty).toLocaleString('en-IN')}</td>
-        <td>${_rkhPct(r.trend)}</td><td>${targetQty}</td><td>${ach}</td><td>${_rkhStatusBadge(r.status)}</td></tr>`;
-    }).join('');
-    chHost.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:900px;border-collapse:collapse"><thead><tr>
-      <th>Channel</th><th>Total Qty</th>${emp?'':'<th>Total Revenue</th>'}<th>Last ${perfDays}D Qty</th><th>Previous ${perfDays}D Qty</th>
-      <th>Trend</th><th>Season Qty Target</th><th>Target Achievement</th><th>Decision</th>
-      </tr></thead><tbody>${body}</tbody></table>`;
-  }
-
-  const productHost = document.getElementById('rakhiProductPerformance');
-  if (productHost){
-    const productTable = (title, list, slowMode) => {
-      const rows = list.map((m,i) => `<tr><td>${i+1}</td><td>${_rkhImageCell(m,78)}</td><td>${_rkhSkuCell(m)}</td>
-        <td>${Math.round(m.qPeriod).toLocaleString('en-IN')}</td><td>${Math.round(m.qPrev).toLocaleString('en-IN')}</td>
-        <td>${Math.round(m.stock).toLocaleString('en-IN')}</td><td>${_rkhPct(m.trend)}</td>
-        <td style="min-width:220px">${escHtml(_rkhProductAction(m))}</td></tr>`).join('');
-      return `<div class="ro-table-wrap" style="padding:0;overflow-x:auto"><div style="padding:13px 16px;font-weight:900">${title}</div>
-        <table class="ro rkh-grid" style="width:100%;min-width:860px;border-collapse:collapse"><thead><tr>
-        <th>#</th><th>Photo</th><th>SKU</th><th>${perfDays}D Qty</th><th>Previous Qty</th><th>Stock</th><th>Trend</th><th>Next Action</th>
-        </tr></thead><tbody>${rows || '<tr><td colspan="8">No data</td></tr>'}</tbody></table></div>`;
-    };
-    productHost.innerHTML = productTable('Top 10 Products', top, false) + productTable('Slow Movers 10', slow, true);
-  }
-
-  const invHost = document.getElementById('rakhiInventoryHealth');
-  if (invHost){
-    const urgent = inventory.filter(x => x.priority < 4);
-    const rows = urgent.map(m => `<tr><td>${_rkhImageCell(m,78)}</td><td>${_rkhSkuCell(m)}</td><td>${Math.round(m.stock)}</td><td>${Math.round(m.stock3p)}</td><td>${Math.round(m.wip)}</td>
-      <td>${Math.round(m.q3)}</td><td>${Math.round(m.q7)}</td><td>${m.velocity.toFixed(1)}</td><td>${m.demand48}</td>
-      <td>${m.cover===null?'—':m.cover.toFixed(1)}</td><td>${_rkhStatusBadge(m.health)}</td><td style="min-width:220px">${escHtml(_rkhProductAction(m))}</td></tr>`).join('');
-    invHost.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1200px;border-collapse:collapse"><thead><tr>
-      <th>Photo</th><th>SKU</th><th>Ready Stock</th><th>3P Stock</th><th>WIP</th><th>3D Sales</th><th>7D Sales</th>
-      <th>Daily Velocity</th><th>48h Demand</th><th>Days Cover</th><th>Health</th><th>Recommended Action</th>
-      </tr></thead><tbody>${rows || '<tr><td colspan="12">All Rakhi SKUs are healthy under the current rules.</td></tr>'}</tbody></table>`;
-  }
-
-  if (!emp){
-    const webHost = document.getElementById('rakhiWebsiteSummary');
-    if (webHost){
-      webHost.innerHTML = `
-        <div class="yoy-card"><div class="yc-label">Website Actual Revenue</div><div class="yc-val">${fmt(website.revenue)}</div><div class="yc-sub">${Math.round(website.qty)} Rakhi units</div></div>
-        <div class="yoy-card"><div class="yc-label">Website Revenue Target</div><div class="yc-val">${fmt(website.target)}</div><div class="yc-sub">${website.target>0?website.achievement.toFixed(1)+'% achieved':'Target not entered'}</div></div>
-        <div class="yoy-card"><div class="yc-label">Website Target Gap</div><div class="yc-val">${fmt(website.gap)}</div><div class="yc-sub">Target minus actual revenue</div></div>
-        <div class="yoy-card"><div class="yc-label">Ads Spent</div><div class="yc-val">${fmt(website.spend)}</div><div class="yc-sub">Base sheet → Rakhi</div></div>
-        <div class="yoy-card"><div class="yc-label">Website ROAS</div><div class="yc-val">${website.spend>0?website.roas.toFixed(2)+'x':'—'}</div><div class="yc-sub">Website revenue ÷ spend</div></div>
-        <div class="yoy-card"><div class="yc-label">Current Weekly Run-rate</div><div class="yc-val">${fmt(website.weeklyRunRate)}</div><div class="yc-sub">Normalised to 7 days</div></div>
-        <div class="yoy-card"><div class="yc-label">Recommended Weekly Funds</div><div class="yc-val">${fmt(website.weeklyRecommended)}</div><div class="yc-sub">After scale / pause rules</div></div>`;
-    }
-    const adsHost = document.getElementById('rakhiAdsRecommendations');
-    if (adsHost){
-      if (!campaigns.length){
-        adsHost.innerHTML = '<div class="home-empty" style="padding:24px">No ads rows found. Check Campaign, Channel, Ads Spent Amt and Revenue target in the Rakhi sheet, then click Sync Sheet.</div>';
-      } else {
-        const rows = campaigns.map(r => `<tr><td><b>${escHtml(r.campaign)}</b></td><td>${escHtml(r.channel)}</td>
-          <td>${fmt(r.spend)}</td><td>${fmt(r.target)}</td><td>${fmt(r.actualRevenue)}</td>
-          <td>${r.target>0?r.achievement.toFixed(1)+'%':'—'}</td><td>${fmt(r.gap)}</td><td>${r.roas.toFixed(2)}x</td>
-          <td>${_rkhStatusBadge(r.action)}</td><td style="min-width:260px">${escHtml(r.next)}</td>
-          <td>${escHtml(r.startDate)}</td><td>${r.elapsedDays}</td><td>${fmt(r.weeklyRunRate)}</td><td>${fmt(r.weeklyRecommended)}</td></tr>`).join('');
-        adsHost.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:1500px;border-collapse:collapse"><thead><tr>
-          <th>Campaign</th><th>Channel</th><th>Ads Spent</th><th>Revenue Target</th><th>Actual Revenue</th>
-          <th>Target Achieved</th><th>Target Gap</th><th>ROAS</th><th>Decision</th><th>Next Action</th>
-          <th>Start Date</th><th>Elapsed Days</th><th>Current Weekly Run-rate</th><th>Recommended Weekly Budget</th>
-          </tr></thead><tbody>${rows}</tbody></table>`;
-      }
-    }
-  }
-}
-function _rkhCsvCell(v){
-  const s = String(v == null ? '' : v);
-  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
-function exportRakhiDecisionCSV(){
-  const s = _rakhiDecisionState;
-  if (!s){ alert('Open or refresh the Rakhi tab first.'); return; }
-  const emp = LOGIN_ROLE === 'employee';
-  const rows = [['Section','Name','Metric 1','Metric 2','Metric 3','Status / Action']];
-  s.channels.forEach(r => rows.push(['Channel',r.channel,Math.round(r.qty),
-    emp?'':Math.round(r.rev),`${Math.round(r.recentQty)} vs ${Math.round(r.prevQty)}`,r.status]));
-  s.top.forEach((m,i) => rows.push(['Top Product',`${i+1}. ${m.sku}`,Math.round(m.qPeriod),Math.round(m.stock),_rkhPct(m.trend),_rkhProductAction(m)]));
-  s.slow.forEach((m,i) => rows.push(['Slow Mover',`${i+1}. ${m.sku}`,Math.round(m.qPeriod),Math.round(m.stock),_rkhPct(m.trend),_rkhProductAction(m)]));
-  s.inventory.filter(m=>m.priority<4).forEach(m => rows.push(['Inventory',m.sku,Math.round(m.stock),m.demand48,m.cover===null?'':m.cover.toFixed(1),`${m.health}: ${_rkhProductAction(m)}`]));
-  if (!emp){
-    rows.push(['Website','Sheet-driven report',Math.round(s.website.spend),Math.round(s.website.revenue),s.website.spend?s.website.roas.toFixed(2)+'x':'',`Target: ${Math.round(s.website.target)} · Weekly funds: ${Math.round(s.website.weeklyRecommended)}`]);
-    s.campaigns.forEach(r => rows.push(['Ads',`${r.campaign} / ${r.channel}`,Math.round(r.spend),Math.round(r.actualRevenue),r.roas.toFixed(2)+'x',`${r.action}: ${r.next} · Target ${Math.round(r.target)} · Weekly ${Math.round(r.weeklyRecommended)}`]));
-  }
-  const csv = rows.map(r => r.map(_rkhCsvCell).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_decision_report.csv'; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
-}
-window.renderRakhiDecisionCenter = renderRakhiDecisionCenter;
-window.exportRakhiDecisionCSV = exportRakhiDecisionCSV;
 
 /* ── PRODUCTION (PPC-WIP) — admin ── */
 let _prodData = null;
@@ -11774,9 +11427,6 @@ def _build_role_gz(role, force=False):
         "grand_net_revenue": grand_rev,
         "grand_final_qty":   grand_qty,
         "period_kpis":   period_kpis,
-        # Spend/target values are financial data; keep them admin-only just
-        # like revenue and selling-price fields elsewhere in this app.
-        "rakhi_ads":     CACHE.get("rakhi_ads", []) if role != "employee" else [],
     }
     with _RESP_LOCK:                      # do builders ek saath na chalein (RAM spike)
         gz = _RESP_CACHE.get(key)
