@@ -4859,10 +4859,12 @@ select.lg-in option{background:#fff;color:#1a1610}
             <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdAll()"></div>
             <div class="fc"><label class="fl">Type (tick one or more)</label>
               <div id="sdTypeChecks" class="type-checks"></div></div>
+            <div class="fc"><label class="fl">Marketplace (Type = SOR)</label>
+              <div id="sdMarketplaceChecks" class="type-checks"></div></div>
           </div>
           <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetSdFilters()">Reset Filters</button>
         </div>
-        <div class="small-note" style="margin-top:8px">Applies to the trend chart, channel &amp; marketplace charts, KPIs and the transaction table below.</div>
+        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, trend chart, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is SOR.</div>
       </div>
 
       <div class="sd-head">
@@ -5711,16 +5713,21 @@ function skuInsightBadge(item){
   if (item.best_marketplace && item.best_channel === 'Ecom'){
     parts.push(`<span class="insight-chip" style="background:#eef9f0;color:#1f7a3a;border:1px solid #c8e9d0;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🛒 ${escHtml(item.best_marketplace)}</span>`);
   }
-  // AOV per piece (average selling price per unit sold) — LOGIN_ROLE employee
-  // ke liye backend se hi 0 aata hai (revenue-sensitive), isliye >0 check kaafi hai.
+  // Default badges keep the existing per-piece metric. SKU Details passes
+  // _aov_is_order=true so AOV means the standard Average Order Value:
+  // filtered net revenue / filtered transaction count.
   const aov = parseFloat(item.aov_per_piece) || 0;
+  const aovIsOrder = !!item._aov_is_order;
   if (aov > 0){
-    parts.push(`<span class="insight-chip" title="Average selling price per piece sold" style="background:#fdf6e3;color:#8a6d3b;border:1px solid #f0e0b8;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">💰 AOV ${fmt(aov)}/pc</span>`);
+    const aovTitle = aovIsOrder ? 'Average Order Value: net revenue divided by filtered orders' : 'Average selling price per piece sold';
+    const aovSuffix = aovIsOrder ? '' : '/pc';
+    parts.push(`<span class="insight-chip" title="${aovTitle}" style="background:#fdf6e3;color:#8a6d3b;border:1px solid #f0e0b8;font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">💰 AOV ${fmt(aov)}${aovSuffix}</span>`);
   }
   const dpct = parseFloat(item.discount_pct) || 0;
   if (dpct > 0){
     const dCls = dpct >= 40 ? {bg:'#fdecea',fg:'#c0392b',bd:'#f6c6c0'} : dpct >= 20 ? {bg:'#fff4e0',fg:'#b45309',bd:'#f3d9a8'} : {bg:'#fdf6e3',fg:'#8a6d3b',bd:'#f0e0b8'};
-    parts.push(`<span class="insight-chip" title="Discount vs MRP (₹${Math.round(item.mrp||0).toLocaleString('en-IN')} → ₹${Math.round(aov||item.last_selling_price||0).toLocaleString('en-IN')})" style="background:${dCls.bg};color:${dCls.fg};border:1px solid ${dCls.bd};font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏷️ ${dpct}% off MRP</span>`);
+    const discSp = parseFloat(item._avg_sp_for_discount) || aov || item.last_selling_price || 0;
+    parts.push(`<span class="insight-chip" title="Discount vs MRP (₹${Math.round(item.mrp||0).toLocaleString('en-IN')} → ₹${Math.round(discSp).toLocaleString('en-IN')})" style="background:${dCls.bg};color:${dCls.fg};border:1px solid ${dCls.bd};font-size:.68rem;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap">🏷️ ${dpct}% off MRP</span>`);
   }
   const colorMap = {
     low_stock_high_sale: {bg:'#fdecea', fg:'#c0392b', bd:'#f6c6c0'},
@@ -5996,6 +6003,136 @@ function goBackFromDetails(){
   showTab(lastTab || 'home');
 }
 
+// SKU Details marketplace filters: these are read directly from COSA's
+// Customer Name, but ONLY when the transaction Type is SOR. Every remaining
+// SOR customer is grouped under Other SOR.
+const _SD_SOR_MARKETPLACES = [
+  {key:'Myntra',   token:'myntra'},
+  {key:'Nykaa',    token:'nykaa'},
+  {key:'Amazon',   token:'amazon'},
+  {key:'Flipkart', token:'flipkart'},
+  {key:'Ajio',     token:'ajio'},
+  {key:'Tata',     token:'tata'},
+];
+function _sdSorMarketplace(entry){
+  const typ = String(entry?.type || '').trim().toLowerCase();
+  if (typ !== 'sor') return '';
+  const cust = String(entry?.cust || '').trim().toLowerCase();
+  for (const m of _SD_SOR_MARKETPLACES){
+    if (cust.includes(m.token)) return m.key;
+  }
+  return 'Other SOR';
+}
+function _sdDisplayDate(iso){
+  if (!iso || iso === 'N/A') return '—';
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
+}
+function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
+  const emp0 = (LOGIN_ROLE === 'employee');
+  const stock = parseFloat(item.inv_stock) || 0;
+  const wip = parseFloat(item.inv_wip) || 0;
+  const avail = stock + wip;
+  const totalOrders = ents.length;
+  const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+  const aov = totalOrders ? (totalRev / totalOrders) : 0;
+
+  const dated = ents.map(e => e.date).filter(d => d && d !== 'N/A').sort();
+  const lastSoldDate = dated.length ? dated[dated.length - 1] : '';
+
+  const byChannel = {};
+  const byMarketplace = {};
+  ents.forEach(e => {
+    const ch = e.channel || 'Other';
+    if (!byChannel[ch]) byChannel[ch] = {rev:0, qty:0};
+    byChannel[ch].rev += parseFloat(e.rev) || 0;
+    byChannel[ch].qty += parseFloat(e.qty) || 0;
+    const mp = _sdSorMarketplace(e);
+    if (mp){
+      if (!byMarketplace[mp]) byMarketplace[mp] = {rev:0, qty:0};
+      byMarketplace[mp].rev += parseFloat(e.rev) || 0;
+      byMarketplace[mp].qty += parseFloat(e.qty) || 0;
+    }
+  });
+  const channelKeys = Object.keys(byChannel);
+  const hasChannelRevenue = channelKeys.some(k => byChannel[k].rev > 0);
+  const bestChannel = channelKeys.length
+    ? channelKeys.sort((a,b) => (hasChannelRevenue ? byChannel[b].rev - byChannel[a].rev : byChannel[b].qty - byChannel[a].qty))[0]
+    : '';
+  const bestChannelRevenue = bestChannel ? byChannel[bestChannel].rev : 0;
+
+  const marketplaceKeys = Object.keys(byMarketplace);
+  const hasMarketplaceRevenue = marketplaceKeys.some(k => byMarketplace[k].rev > 0);
+  const bestMarketplace = marketplaceKeys.length
+    ? marketplaceKeys.sort((a,b) => (hasMarketplaceRevenue ? byMarketplace[b].rev - byMarketplace[a].rev : byMarketplace[b].qty - byMarketplace[a].qty))[0]
+    : '';
+
+  const snapBody = document.querySelector('#sdSnapshotTable tbody');
+  if (snapBody){
+    const rows = [
+      ['Launch Date', item.launch_date || '—'],
+      ['Current Stock', stock.toLocaleString('en-IN')],
+      ['WIP', wip.toLocaleString('en-IN')],
+      ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
+      ['Reorder Qty (60D forecast)', (item.reorder_qty||0).toLocaleString('en-IN')],
+      ['Last Sold Date', _sdDisplayDate(lastSoldDate)],
+      ['Best Performing Channel', bestChannel || '—'],
+      ['Best Marketplace', bestMarketplace || '—'],
+      ['Product Status', item.status || '—'],
+    ];
+    if (!emp0){
+      rows.splice(6, 0, ['Best Channel Revenue', fmt(bestChannelRevenue)]);
+      rows.splice(1, 0, ['AOV (Filtered)', fmt(aov)]);
+      rows.splice(2, 0, ['Discount % (vs MRP)', (overallDiscPct||0) + '%']);
+    }
+    snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  }
+
+  // Filter-aware badges on SKU Details only. Other pages keep their original
+  // lifetime/per-piece badges.
+  const flagsEl = document.getElementById('sdFlags');
+  if (flagsEl){
+    const dynItem = Object.assign({}, item, {
+      best_channel: bestChannel,
+      best_channel_revenue: bestChannelRevenue,
+      best_marketplace: bestMarketplace,
+      aov_per_piece: aov,
+      discount_pct: overallDiscPct,
+      _aov_is_order: true,
+      _avg_sp_for_discount: overallAvgSp,
+    });
+    flagsEl.innerHTML = skuInsightBadge(dynItem);
+  }
+
+  // Sales-by-Type must also follow every active date/type/marketplace filter.
+  const byType = {};
+  ents.forEach(e => {
+    const t = e.type || 'Regular';
+    if (!byType[t]) byType[t] = {orders:0, qty:0, rev:0};
+    byType[t].orders += 1;
+    byType[t].qty += parseFloat(e.qty) || 0;
+    byType[t].rev += parseFloat(e.rev) || 0;
+  });
+  const types = Object.keys(byType).sort();
+  const mrp = parseFloat(item.mrp) || 0;
+  const bd = document.getElementById('sdTypeBreakdown');
+  if (bd){
+    bd.innerHTML = types.length ? types.map(t => {
+      const v = byType[t];
+      const avgSp = v.qty ? (v.rev / v.qty) : 0;
+      const dPct = (mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0;
+      return `<div class="td-card">
+        <div class="td-type">${escHtml(t)}</div>
+        <div class="td-row"><span>Orders</span><b>${v.orders}</b></div>
+        <div class="td-row"><span>Qty</span><b>${v.qty}</b></div>
+        <div class="td-row rev-only"><span>Net Rev</span><b class="green">${fmt(v.rev)}</b></div>
+        <div class="td-row rev-only"><span>Discount %</span><b>${dPct}%</b></div>
+      </div>`;
+    }).join('') : '<span class="small-note">No sales for the selected filters</span>';
+  }
+}
+
 function renderSkuDetails(sku){
   const item = (master || []).find(i => i.sku === sku);
   const emptyEl = document.getElementById('sdEmpty');
@@ -6044,14 +6181,14 @@ function renderSkuDetails(sku){
       ['WIP', wip.toLocaleString('en-IN')],
       ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
       ['Reorder Qty (60D forecast)', (item.reorder_qty||0).toLocaleString('en-IN')],
-      ['Days Since Last Sale', item.days_since_last_sale >= 0 ? item.days_since_last_sale + ' days' : '—'],
+      ['Last Sold Date', _sdDisplayDate(item.last_dispatch_date)],
       ['Best Performing Channel', item.best_channel || '—'],
       ['Best Marketplace', item.best_marketplace || '—'],
       ['Product Status', item.status || '—'],
     ];
     if (!emp0) {
       rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
-      rows.splice(1, 0, ['AOV (per piece)', fmt(item.aov_per_piece||0)]);
+      rows.splice(1, 0, ['AOV (Filtered)', fmt(item.dispatch_count ? (item.total_net_revenue / item.dispatch_count) : 0)]);
       rows.splice(2, 0, ['Discount % (vs MRP)', (item.discount_pct||0) + '%']);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -6092,8 +6229,13 @@ function renderSkuDetails(sku){
   if (tc) {
     tc.innerHTML = types.length ? types.map(t => {
       const safe = String(t).replace(/"/g,'&quot;');
-      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="renderSdAll()"><span>${t}</span></label>`;
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="renderSdAll()"><span>${escHtml(t)}</span></label>`;
     }).join('') : '<span class="small-note">No types</span>';
+  }
+  const mc = document.getElementById('sdMarketplaceChecks');
+  if (mc) {
+    const marketplaceOptions = _SD_SOR_MARKETPLACES.map(m => m.key).concat(['Other SOR']);
+    mc.innerHTML = marketplaceOptions.map(m => `<label class="type-opt"><input type="checkbox" value="${m}" onchange="renderSdAll()"><span>${m}</span></label>`).join('');
   }
 
   renderSdTable();
@@ -6130,6 +6272,8 @@ function renderSdTable(){
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
   setT('sdRetAmt', fmt(totalRetAmt));
 
+  _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp);
+
   renderSdTrend();
   renderSdChannel();
 
@@ -6150,17 +6294,19 @@ function renderSdTable(){
       <td class="rev-only green">${fmt(rv)}</td>
     </tr>`;
     }).join('')
-    : '<tr><td colspan="7" class="tno-data" style="padding:30px">No transactions for the selected type(s).</td></tr>';
+    : '<tr><td colspan="7" class="tno-data" style="padding:30px">No transactions for the selected filters.</td></tr>';
   }
 }
 
-/* ── Shared: date + type filtered entries (used by trend/channel/marketplace) ── */
+/* ── Shared: date + type + marketplace filtered entries ── */
 function _sdFilteredEntries(item){
   const d1 = document.getElementById('sdD1')?.value || '';
   const d2 = document.getElementById('sdD2')?.value || '';
   const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
+  const marketplacesPicked = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c => c.value);
   let ents = (item.sales_entries || []);
   if (typesPicked.length) ents = ents.filter(e => typesPicked.includes(e.type || 'Regular'));
+  if (marketplacesPicked.length) ents = ents.filter(e => marketplacesPicked.includes(_sdSorMarketplace(e)));
   if (d1 || d2) {
     ents = ents.filter(e => {
       if (!e.date || e.date === 'N/A') return false;
@@ -6180,6 +6326,7 @@ function resetSdFilters(){
   const d1 = document.getElementById('sdD1'); if (d1) d1.value = '';
   const d2 = document.getElementById('sdD2'); if (d2) d2.value = '';
   document.querySelectorAll('#sdTypeChecks input:checked').forEach(c => c.checked = false);
+  document.querySelectorAll('#sdMarketplaceChecks input:checked').forEach(c => c.checked = false);
   renderSdAll();
 }
 window.renderSdAll = renderSdAll; window.resetSdFilters = resetSdFilters;
