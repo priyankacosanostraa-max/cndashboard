@@ -4881,6 +4881,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
+        <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
         <div class="kpi"><div class="kpi-t">Available (Stock+WIP)</div><div class="kpi-v" id="sdAvail" style="color:#2ecc71">0</div></div>
@@ -6253,6 +6254,12 @@ function renderSdTable(){
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
   const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
+  // Return % = returned units divided by the original dispatched units.
+  // COSA Final Qty is the net sold quantity, so original dispatched qty is
+  // Final Qty + Return Qty. This stays fully filter-aware because both totals
+  // are calculated from the currently filtered transaction rows.
+  const returnBaseQty = totalQty + totalRet;
+  const totalRetPct = returnBaseQty > 0 ? (totalRet / returnBaseQty) * 100 : 0;
   const totalRetAmt = ents.reduce((s,e) => {
     const r = parseFloat(e.ret) || 0;
     if (!r) return s;
@@ -6273,6 +6280,7 @@ function renderSdTable(){
   setT('sdRev', fmt(totalRev));
   setT('sdDiscPct', overallDiscPct + '%');
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
+  setT('sdRetPct', totalRetPct.toFixed(1) + '%');
   setT('sdRetAmt', fmt(totalRetAmt));
 
   _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp);
