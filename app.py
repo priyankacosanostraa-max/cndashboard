@@ -9124,17 +9124,31 @@ function _rkhBuildTopCities(cityRows){
   const map = {};
   // Har State/UT ko 0 se seed karo pehle — taaki jinme sale hi nahi hui
   // wo bhi table me dikhein.
-  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, orders: 0}; });
+  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, orders: 0, cities: []}; });
   (cityRows || []).forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs
     const state = String(r.state || '').trim();
+    const city = String(r.city || '').trim() || 'Unknown City';
     if (!state) return;
-    if (!map[state]) map[state] = {state, qty: 0, orders: 0};
+    if (!map[state]) map[state] = {state, qty: 0, orders: 0, cities: []};
     map[state].qty += (Number(r.qty) || 0);
     map[state].orders += 1;
+    let c = map[state].cities.find(x => x.city === city);
+    if (!c){ c = {city, qty: 0, orders: 0}; map[state].cities.push(c); }
+    c.qty += (Number(r.qty) || 0);
+    c.orders += 1;
   });
-  return Object.values(map).sort((a, b) => b.qty - a.qty);
+  Object.values(map).forEach(st => st.cities.sort((a,b) => b.qty - a.qty || a.city.localeCompare(b.city)));
+  return Object.values(map).sort((a, b) => b.qty - a.qty || a.state.localeCompare(b.state));
+}
+function toggleRakhiStateCities(idx){
+  const row = document.getElementById('rkhCityRow' + idx);
+  const arrow = document.getElementById('rkhStateArrow' + idx);
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  if (arrow) arrow.textContent = open ? '▶' : '▼';
 }
 async function renderRakhiTopCities(){
   const host = document.getElementById('rakhiTopCityContent');
@@ -9162,12 +9176,29 @@ async function renderRakhiTopCities(){
     return;
   }
   const head = `<tr><th>#</th><th>State / UT</th><th>Sold Qty</th><th>Order Lines</th></tr>`;
-  const body = list.map((r, i) => `<tr>
+  const body = list.map((r, i) => {
+    const hasCities = r.cities && r.cities.length;
+    const cityRows = hasCities ? r.cities.map((c, ci) => `<tr>
+        <td style="color:#8f7a47">${ci + 1}</td>
+        <td>${escHtml(c.city)}</td>
+        <td>${Math.round(c.qty).toLocaleString('en-IN')}</td>
+        <td>${c.orders.toLocaleString('en-IN')}</td>
+      </tr>`).join('') : `<tr><td colspan="4" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
+    return `<tr ${hasCities ? `onclick="toggleRakhiStateCities(${i})" style="cursor:pointer"` : ''}>
       <td><b>${i + 1}</b></td>
-      <td>${escHtml(r.state)}</td>
-      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      <td><span id="rkhStateArrow${i}" style="display:inline-block;width:18px;color:#d4af5a">${hasCities ? '▶' : '•'}</span><b>${escHtml(r.state)}</b></td>
+      <td><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td>
       <td>${r.orders.toLocaleString('en-IN')}</td>
-    </tr>`).join('');
+    </tr>
+    <tr id="rkhCityRow${i}" style="display:none;background:rgba(212,175,90,.035)">
+      <td></td><td colspan="3" style="padding:10px 14px">
+        <table class="ro" style="width:100%;min-width:360px;border-collapse:collapse">
+          <thead><tr><th>#</th><th>City</th><th>Sold Qty</th><th>Order Lines</th></tr></thead>
+          <tbody>${cityRows}</tbody>
+        </table>
+      </td>
+    </tr>`;
+  }).join('');
   host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:420px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiTopCitiesCSV(){
@@ -9183,7 +9214,7 @@ function exportRakhiTopCitiesCSV(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'rakhi_state_ut_sold_qty.csv'; a.click();
 }
-window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesCSV = exportRakhiTopCitiesCSV;
+window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesCSV = exportRakhiTopCitiesCSV; window.toggleRakhiStateCities = toggleRakhiStateCities;
 
 /* Type filter dropdown badalte hi — orders table, pivot, Top-Selling SKUs
    aur Slow Movers, sab isi filter ke hisaab se turant refresh ho jaate
@@ -12607,16 +12638,29 @@ def _pincode_to_state(pin):
         return "Assam"
     return D2_STATE.get(d2, "")
 
-def _extract_pin_from_address(addr):
-    """'...,,MUMBAI-400071' jaisi address string ke bilkul end me jo
-    6-digit PIN hota hai wahi nikalta hai — regex end-anchored hai isliye
-    beech ke kisi bhi '-123456' se confuse nahi hota (e.g. 'Tower - 3'
-    wagera safely ignore ho jaate hain)."""
+def _extract_city_pin_from_address(addr):
+    """Final Billing Address ke end se CITY aur 6-digit PIN nikalta hai.
+    Expected tail: "...,MUMBAI-400071" / "...,New Delhi - 110001".
+    City ko sirf last comma-separated segment se liya jata hai, isliye
+    address ke beech ke locality/tower text se mix nahi hota."""
     s = str(addr or "").strip()
     if not s:
-        return ""
-    m = re.search(r'[A-Za-z][A-Za-z\s\.]*-\s*(\d{6})\s*$', s)
-    return m.group(1) if m else ""
+        return "", ""
+    tail = re.split(r'[,\n]+', s)[-1].strip()
+    m = re.search(r'^\s*(.*?)\s*-\s*(\d{6})\s*$', tail)
+    if not m:
+        return "", ""
+    city = re.sub(r'\s+', ' ', m.group(1)).strip(' .,-')
+    pin = m.group(2)
+    if not city:
+        return "", ""
+    # Sheet casing inconsistent ho sakti hai; readable title case rakho.
+    city = city.title()
+    return city, pin
+
+def _extract_pin_from_address(addr):
+    """Backward-compatible PIN-only helper."""
+    return _extract_city_pin_from_address(addr)[1]
 
 def _fetch_rkh_sku_city_rows():
     """Website order sheet ko fetch karke [{sku, qty, state}, ...] deta hai
@@ -12649,14 +12693,14 @@ def _fetch_rkh_sku_city_rows():
                 sku = str(r.get(C_SKU, "") or "").strip()
                 if not sku:
                     continue
-                pin = _extract_pin_from_address(r.get(C_ADDR, ""))
+                city, pin = _extract_city_pin_from_address(r.get(C_ADDR, ""))
                 if not pin:
                     continue
                 state = _pincode_to_state(pin)
                 if not state:
                     continue
                 qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
-                out.append({"sku": sku, "qty": qty, "state": state})
+                out.append({"sku": sku, "qty": qty, "state": state, "city": city})
                 diag["rows_used"] += 1
         else:
             diag["error"] = "Could not find SKU / Final Billing Address columns in the sheet."
