@@ -6035,8 +6035,11 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
   const wip = parseFloat(item.inv_wip) || 0;
   const avail = stock + wip;
   const totalOrders = ents.length;
+  const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-  const aov = totalOrders ? (totalRev / totalOrders) : 0;
+  // AOV is intentionally calculated per piece for every Type/filter.
+  // This keeps Purchase/B2B orders with multiple pieces mathematically correct.
+  const aovPerPiece = totalQty ? (totalRev / totalQty) : 0;
 
   const dated = ents.map(e => e.date).filter(d => d && d !== 'N/A').sort();
   const lastSoldDate = dated.length ? dated[dated.length - 1] : '';
@@ -6083,23 +6086,23 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
     ];
     if (!emp0){
       rows.splice(6, 0, ['Best Channel Revenue', fmt(bestChannelRevenue)]);
-      rows.splice(1, 0, ['AOV (Filtered)', fmt(aov)]);
+      rows.splice(1, 0, ['AOV / Piece (Filtered)', fmt(aovPerPiece)]);
       rows.splice(2, 0, ['Discount % (vs MRP)', (overallDiscPct||0) + '%']);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
 
-  // Filter-aware badges on SKU Details only. Other pages keep their original
-  // lifetime/per-piece badges.
+  // Filter-aware badges on SKU Details only. AOV remains per piece for every
+  // selected Type/date/marketplace so multi-quantity Purchase orders stay correct.
   const flagsEl = document.getElementById('sdFlags');
   if (flagsEl){
     const dynItem = Object.assign({}, item, {
       best_channel: bestChannel,
       best_channel_revenue: bestChannelRevenue,
       best_marketplace: bestMarketplace,
-      aov_per_piece: aov,
+      aov_per_piece: aovPerPiece,
       discount_pct: overallDiscPct,
-      _aov_is_order: true,
+      _aov_is_order: false,
       _avg_sp_for_discount: overallAvgSp,
     });
     flagsEl.innerHTML = skuInsightBadge(dynItem);
@@ -6188,7 +6191,7 @@ function renderSkuDetails(sku){
     ];
     if (!emp0) {
       rows.splice(6, 0, ['Best Channel Revenue', fmt(item.best_channel_revenue||0)]);
-      rows.splice(1, 0, ['AOV (Filtered)', fmt(item.dispatch_count ? (item.total_net_revenue / item.dispatch_count) : 0)]);
+      rows.splice(1, 0, ['AOV / Piece (Filtered)', fmt(item.aov_per_piece || (item.final_qty ? (item.total_net_revenue / item.final_qty) : 0))]);
       rows.splice(2, 0, ['Discount % (vs MRP)', (item.discount_pct||0) + '%']);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -6502,8 +6505,8 @@ function renderSdChannel(){
     const worst = chans[chans.length - 1];
     const rows = chans.map(c => {
       const v = byChan[c];
-      const aov = v.orders ? (v.rev / v.orders) : 0;
       const avgSp = v.qty ? (v.rev / v.qty) : 0;
+      const aov = avgSp; // per-piece AOV for every channel/type, including Purchase
       const mrp = parseFloat(item.mrp) || 0;
       const discPct = mrp > 0 ? Math.max(0, Math.round((1 - avgSp/mrp) * 100)) : 0;
       return {c, qty:v.qty, rev:v.rev, aov, discPct};
@@ -6516,7 +6519,7 @@ function renderSdChannel(){
        <table class="sd-vtable"><thead><tr>
          <td style="font-weight:800;color:var(--cn-dark)">Channel</td>
          <td style="font-weight:800;color:var(--cn-dark)">Qty</td>
-         ${emp0?'':'<td style="font-weight:800;color:var(--cn-dark)">AOV</td><td style="font-weight:800;color:var(--cn-dark)">Discount %</td>'}
+         ${emp0?'':'<td style="font-weight:800;color:var(--cn-dark)">AOV/pc</td><td style="font-weight:800;color:var(--cn-dark)">Discount %</td>'}
        </tr></thead><tbody>
        ${rows.map(r => `<tr><td>${escHtml(r.c)}</td><td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
          ${emp0?'':`<td>${fmt(r.aov)}</td><td>${r.discPct}%</td>`}</tr>`).join('')}
