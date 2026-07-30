@@ -8901,6 +8901,13 @@ function renderRakhiOverallSummary(){
   const s = _rkhBuildOverallSummary();
   _rakhiOverallSummaryData = s;
   const emp = LOGIN_ROLE === 'employee';
+  const pace = _rkhBuildTargetPace();
+  const qtyPaceSub = pace.remainingQty > 0
+    ? `${Math.ceil(pace.remainingQty).toLocaleString('en-IN')} qty remaining ÷ ${pace.daysLeft.toLocaleString('en-IN')} days • till 25 Aug 2026`
+    : 'Quantity target achieved • deadline 25 Aug 2026';
+  const revenuePaceSub = pace.remainingRevenue > 0
+    ? `${fmt(Math.ceil(pace.remainingRevenue))} remaining ÷ ${pace.daysLeft.toLocaleString('en-IN')} days • till 25 Aug 2026`
+    : 'Revenue target achieved • deadline 25 Aug 2026';
   host.innerHTML = `
     <div class="yoy-card"><div class="yc-label">Total Stock</div><div class="yc-val">${s.totalStock.toLocaleString('en-IN')}</div><div class="yc-sub">Curated Rakhi SKUs</div></div>
     <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
@@ -8908,6 +8915,8 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">units/day over ${s.daySpan} days</div></div>
     <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
+    <div class="yoy-card"><div class="yc-label">Required Qty / Day</div><div class="yc-val">${pace.qtyPerDay.toLocaleString('en-IN')}</div><div class="yc-sub">${qtyPaceSub}</div></div>
+    ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Required Revenue / Day</div><div class="yc-val">${fmt(pace.revenuePerDay)}</div><div class="yc-sub">${revenuePaceSub}</div></div>`}
   `;
   if (actHost){
     const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
@@ -9322,6 +9331,33 @@ const RAKHI_TARGETS = {
   'Ajio':      {launch: '',          spAug: 251712,   qtyAug: 138,   spJul: 0,       qtyJul: 0},
   'Others':    {launch: '',          spAug: 109592,   qtyAug: 55,    spJul: 0,       qtyJul: 0}
 };
+const RAKHI_TARGET_DEADLINE = '2026-08-25';
+function _rkhTargetDaysLeft(){
+  const rawToday = todayISO || new Date().toISOString().slice(0, 10);
+  const tp = String(rawToday).split('-').map(Number);
+  const dp = RAKHI_TARGET_DEADLINE.split('-').map(Number);
+  if (tp.length !== 3 || dp.length !== 3 || tp.some(n => !Number.isFinite(n)) || dp.some(n => !Number.isFinite(n))) return 0;
+  const todayUtc = Date.UTC(tp[0], tp[1] - 1, tp[2]);
+  const deadlineUtc = Date.UTC(dp[0], dp[1] - 1, dp[2]);
+  return Math.max(0, Math.ceil((deadlineUtc - todayUtc) / 86400000));
+}
+function _rkhBuildTargetPace(){
+  const list = _rkhBuildChannelSummary() || [];
+  const targetRevenue = Object.values(RAKHI_TARGETS).reduce((s, t) => s + (Number(t.spAug) || 0) + (Number(t.spJul) || 0), 0);
+  const targetQty = Object.values(RAKHI_TARGETS).reduce((s, t) => s + (Number(t.qtyAug) || 0) + (Number(t.qtyJul) || 0), 0);
+  const actualRevenue = list.reduce((s, r) => s + (Number(r.rev) || 0), 0);
+  const actualQty = list.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const remainingRevenue = Math.max(0, targetRevenue - actualRevenue);
+  const remainingQty = Math.max(0, targetQty - actualQty);
+  const daysLeft = _rkhTargetDaysLeft();
+  const divisor = Math.max(1, daysLeft);
+  return {
+    targetRevenue, targetQty, actualRevenue, actualQty,
+    remainingRevenue, remainingQty, daysLeft,
+    revenuePerDay: remainingRevenue > 0 ? Math.ceil(remainingRevenue / divisor) : 0,
+    qtyPerDay: remainingQty > 0 ? Math.ceil(remainingQty / divisor) : 0
+  };
+}
 const _RKH_CH_TOKENS = [
   ['blinkit', 'Blinkit'],
   ['instamart', 'Instamart'],
