@@ -9129,8 +9129,22 @@ function _rkhBuildTopCities(cityRows){
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs
     const state = String(r.state || '').trim();
-    const city = String(r.city || '').trim() || 'Unknown City';
+    let city = String(r.city || '').trim() || 'Unknown City';
     if (!state) return;
+    // Defensive cleanup: kabhi-kabhi source address me city text aur PIN-state
+    // mismatch hota hai (e.g. Delhi PIN ke saath "Mumbai"). Aise case me
+    // galat city ko selected state ke andar dikhane ke bajay state ka canonical
+    // city label use karo.
+    const cityState = {
+      'mumbai':'Maharashtra','bombay':'Maharashtra','new delhi':'Delhi','delhi':'Delhi',
+      'gurugram':'Haryana','gurgaon':'Haryana','noida':'Uttar Pradesh',
+      'bengaluru':'Karnataka','bangalore':'Karnataka','kolkata':'West Bengal',
+      'chennai':'Tamil Nadu','hyderabad':'Telangana','ahmedabad':'Gujarat',
+      'pune':'Maharashtra','jaipur':'Rajasthan','lucknow':'Uttar Pradesh'
+    };
+    const knownState = cityState[city.toLowerCase()];
+    if (knownState && knownState !== state) city = (state === 'Delhi' ? 'New Delhi' : state);
+    if (state === 'Delhi' && /^(north|south|east|west|north east|north west|south east|south west|central)$/i.test(city)) city += ' Delhi';
     if (!map[state]) map[state] = {state, qty: 0, orders: 0, cities: []};
     map[state].qty += (Number(r.qty) || 0);
     map[state].orders += 1;
@@ -12662,6 +12676,38 @@ def _extract_pin_from_address(addr):
     """Backward-compatible PIN-only helper."""
     return _extract_city_pin_from_address(addr)[1]
 
+
+def _normalize_city_for_state(city, state):
+    """PIN se nikle state aur address-city ko consistent rakhta hai.
+    Source sheet me kabhi city text galat hota hai (jaise Delhi PIN ke saath
+    Mumbai). Known cross-state mismatch ko selected state ke canonical label
+    me badal dete hain, taaki Mumbai Delhi ke andar kabhi na dikhe."""
+    city = re.sub(r'\s+', ' ', str(city or '')).strip(' .,-')
+    state = str(state or '').strip()
+    if not city:
+        return 'New Delhi' if state == 'Delhi' else state
+
+    city_state = {
+        'mumbai': 'Maharashtra', 'bombay': 'Maharashtra',
+        'new delhi': 'Delhi', 'delhi': 'Delhi',
+        'gurugram': 'Haryana', 'gurgaon': 'Haryana',
+        'noida': 'Uttar Pradesh', 'bengaluru': 'Karnataka',
+        'bangalore': 'Karnataka', 'kolkata': 'West Bengal',
+        'chennai': 'Tamil Nadu', 'hyderabad': 'Telangana',
+        'ahmedabad': 'Gujarat', 'pune': 'Maharashtra',
+        'jaipur': 'Rajasthan', 'lucknow': 'Uttar Pradesh',
+    }
+    known_state = city_state.get(city.casefold())
+    if known_state and known_state != state:
+        return 'New Delhi' if state == 'Delhi' else state
+
+    if state == 'Delhi' and city.casefold() in {
+        'north', 'south', 'east', 'west', 'north east', 'north west',
+        'south east', 'south west', 'central'
+    }:
+        city = f'{city} Delhi'
+    return city.title()
+
 def _fetch_rkh_sku_city_rows():
     """Website order sheet ko fetch karke [{sku, qty, state}, ...] deta hai
     (raw order-lines, koi Rakhi-filter yahan nahi laga — wo client-side
@@ -12699,6 +12745,7 @@ def _fetch_rkh_sku_city_rows():
                 state = _pincode_to_state(pin)
                 if not state:
                     continue
+                city = _normalize_city_for_state(city, state)
                 qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
                 out.append({"sku": sku, "qty": qty, "state": state, "city": city})
                 diag["rows_used"] += 1
