@@ -9026,7 +9026,7 @@ function renderRakhi(){
   _rakhiFilteredRows = fRows;
   const emp = LOGIN_ROLE === 'employee';
   if (sumHost){
-    const totQty = fRows.reduce((s, r) => s + (r.qty || 0), 0);
+    const totQty = fRows.reduce((s, r) => s + _rkhEffectiveQty(r), 0);
     const totRev = fRows.reduce((s, r) => s + (r.rev || 0), 0);
     const skuSet = new Set(fRows.map(r => String(r.sku || '').toUpperCase()));
     sumHost.innerHTML = `
