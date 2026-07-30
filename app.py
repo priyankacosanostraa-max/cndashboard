@@ -4834,6 +4834,9 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
   <div id="vSkudetails" style="display:none">
+    <div class="filter-box" style="margin:8px 0 10px;padding:10px 14px">
+      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least one filtered unit sold in the latest 6-month window, or Stock+WIP is below 20; <b>Slow Movers</b> = Stock+WIP is 20+ and no filtered unit was sold in that window.</div>
+    </div>
     <div class="filter-box" style="margin:8px 0 16px">
       <label class="fl" style="margin-bottom:8px;display:block">Search SKU</label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:relative">
@@ -6030,6 +6033,36 @@ function _sdDisplayDate(iso){
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
 }
+function _sdFilteredStatus(item, ents){
+  const rows = Array.isArray(ents) ? ents : [];
+  // Status is intentionally based on the currently selected Date, Type and
+  // Marketplace filters. If those filters have no transaction rows, the SKU
+  // has no record for that filtered view.
+  if (!rows.length) return 'No Record';
+
+  const selectedTo = document.getElementById('sdD2')?.value || '';
+  const now = new Date();
+  let anchor = selectedTo ? new Date(selectedTo + 'T23:59:59') : now;
+  if (Number.isNaN(anchor.getTime())) anchor = now;
+
+  const anchorMonthKey = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`;
+  if (item?.launch_key && item.launch_key === anchorMonthKey) return 'New Launch';
+
+  const sixMonthStart = new Date(anchor);
+  sixMonthStart.setMonth(sixMonthStart.getMonth() - 6);
+  let recentSoldQty = 0;
+  rows.forEach(e => {
+    if (!e?.date || e.date === 'N/A') return;
+    const d = new Date(e.date + 'T00:00:00');
+    if (Number.isNaN(d.getTime()) || d < sixMonthStart || d > anchor) return;
+    const q = parseFloat(e.qty) || 0;
+    if (q > 0) recentSoldQty += q;
+  });
+
+  const stockWip = (parseFloat(item?.inv_stock) || 0) + (parseFloat(item?.inv_wip) || 0);
+  if (stockWip >= 20 && recentSoldQty <= 0) return 'Slow Movers';
+  return 'Good Running';
+}
 function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
   const emp0 = (LOGIN_ROLE === 'employee');
   const stock = parseFloat(item.inv_stock) || 0;
@@ -6044,6 +6077,9 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
 
   const dated = ents.map(e => e.date).filter(d => d && d !== 'N/A').sort();
   const lastSoldDate = dated.length ? dated[dated.length - 1] : '';
+  const filteredStatus = _sdFilteredStatus(item, ents);
+  const metaStatusEl = document.getElementById('sdMetaStatus');
+  if (metaStatusEl) metaStatusEl.textContent = filteredStatus;
 
   const byChannel = {};
   const byMarketplace = {};
@@ -6083,7 +6119,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       ['Last Sold Date', _sdDisplayDate(lastSoldDate)],
       ['Best Performing Channel', bestChannel || '—'],
       ['Best Marketplace', bestMarketplace || '—'],
-      ['Product Status', item.status || '—'],
+      ['Product Status', filteredStatus],
     ];
     if (!emp0){
       rows.splice(6, 0, ['Best Channel Revenue', fmt(bestChannelRevenue)]);
@@ -6101,6 +6137,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       best_channel: bestChannel,
       best_channel_revenue: bestChannelRevenue,
       best_marketplace: bestMarketplace,
+      status: filteredStatus,
       aov_per_piece: aovPerPiece,
       discount_pct: overallDiscPct,
       _aov_is_order: false,
@@ -6164,7 +6201,7 @@ function renderSkuDetails(sku){
     (item.stone_color ? `<span>Stone Color: <b>${safeText(item.stone_color)}</b></span>` : '') +
     (item.dimensions ? `<span>Dimensions: <b>${safeText(item.dimensions)}</b></span>` : '') +
     (item.combo_skus ? `<span>Combo SKUs: <b>${safeText(item.combo_skus)}</b></span>` : '') +
-    `<span>Status: <b>${safeText(item.status)}</b></span>` +
+    `<span>Status: <b id="sdMetaStatus">${safeText(item.status)}</b></span>` +
     `<span>Inv Stock: <b>${item.inv_stock || 0}</b></span>` +
     `<span>Inv WIP: <b>${item.inv_wip || 0}</b></span>` +
     `<span>MRP: <b>₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</b></span>`;
