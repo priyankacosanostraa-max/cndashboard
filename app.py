@@ -8929,7 +8929,7 @@ function renderRakhiOverallSummary(){
         <td class="rkh-points">${r.points.map(p => `<span class="pt">• ${escHtml(p)}</span>`).join('')}</td>
       </tr>`;
     }).join('');
-    actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div></div>
+    actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div><button class="go-btn" type="button" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#17120d;flex:0 0 auto" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button></div>
       <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
       <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1260px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
