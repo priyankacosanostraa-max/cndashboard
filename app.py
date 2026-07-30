@@ -2561,6 +2561,18 @@ table.ro td.green{color:#2ecc71;font-weight:800}
 table.rkh-grid,table.rkh-grid th,table.rkh-grid td{border:1px solid rgba(212,175,90,.35)}
 table.rkh-grid{border-collapse:collapse}
 table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
+/* Rakhi tab: compact, wrapped and professional tables */
+#vRakhi .ro-table-wrap{max-height:68vh;border-radius:14px;box-shadow:0 8px 24px rgba(15,23,42,.07)}
+#vRakhi table.ro{table-layout:auto;min-width:100%;font-size:11px}
+#vRakhi table.ro thead th{position:sticky;top:0;z-index:3;white-space:normal;line-height:1.25;min-width:72px;max-width:180px;padding:11px 10px;vertical-align:middle}
+#vRakhi table.ro td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35;padding:10px;vertical-align:top;min-width:72px;max-width:240px}
+#vRakhi table.ro td img{display:block;margin:auto}
+#vRakhi table.ro .sku-cell{min-width:140px;max-width:230px}
+#vRakhi .rkh-sku-summary th:nth-child(1),#vRakhi .rkh-sku-summary td:nth-child(1){min-width:190px;max-width:260px}
+#vRakhi .rkh-sku-summary th:last-child,#vRakhi .rkh-sku-summary td:last-child{min-width:260px;max-width:360px}
+#vRakhi .rkh-points{font-weight:600;color:#475569}
+#vRakhi .rkh-points .pt{display:block;margin:0 0 4px}
+#vRakhi .rkh-metric{font-variant-numeric:tabular-nums;text-align:right}
 table.ro td.gold{color:#d4af5a;font-weight:800}
 table.ro td.orange{color:#e67e22;font-weight:800}
 table.ro td.red{color:#e74c3c;font-weight:800}
@@ -8788,7 +8800,6 @@ function _rkhBuildOverallSummary(){
   const totalOrders = wlRows.length;
   const totalQty = wlRows.reduce((s, r) => s + (r.qty || 0), 0);
   const totalRev = wlRows.reduce((s, r) => s + (r.rev || 0), 0);
-  // DRR — total units sold divided by the number of days the data spans so far
   const dates = wlRows.map(r => r.date).filter(d => d && d !== 'N/A').sort();
   let daySpan = 1;
   if (dates.length){
@@ -8796,7 +8807,6 @@ function _rkhBuildOverallSummary(){
     daySpan = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
   }
   const drr = totalQty / daySpan;
-  // Repeat customers — kitne unique customers ne 2+ baar order kiya
   const custMap = {};
   wlRows.forEach(r => {
     const c = (r.cust || '').trim();
@@ -8809,9 +8819,53 @@ function _rkhBuildOverallSummary(){
   const slowCount = _rkhBuildSlowMovers().length;
   let bestChannel = null;
   (_rkhBuildChannelSummary() || []).forEach(c => { if (!bestChannel || c.qty > bestChannel.qty) bestChannel = c; });
+
+  // Every curated Rakhi SKU, including SKUs with zero sales.
+  const bySku = {};
+  wlRows.forEach(r => {
+    const sku = String(r.sku || '').trim().toUpperCase();
+    if (!sku) return;
+    if (!bySku[sku]) bySku[sku] = {rows:[], qty:0, rev:0, customers:{}, dates:[]};
+    const x = bySku[sku];
+    x.rows.push(r);
+    x.qty += Number(r.qty) || 0;
+    x.rev += Number(r.rev) || 0;
+    const c = String(r.cust || '').trim().toLowerCase();
+    if (c) x.customers[c] = (x.customers[c] || 0) + 1;
+    if (r.date && r.date !== 'N/A') x.dates.push(r.date);
+  });
+  const skuRows = RAKHI_WHITELIST_SKUS.map(rawSku => {
+    const sku = String(rawSku || '').trim().toUpperCase();
+    const item = _masterSkuMap[sku] || {};
+    const x = bySku[sku] || {rows:[], qty:0, rev:0, customers:{}, dates:[]};
+    const repeatOrders = Object.values(x.customers).reduce((sum, n) => sum + Math.max(0, n - 1), 0);
+    let skuDaySpan = 1;
+    if (x.dates.length){
+      const ds = x.dates.slice().sort();
+      skuDaySpan = Math.max(1, Math.round((new Date(ds[ds.length-1]) - new Date(ds[0])) / 86400000) + 1);
+    }
+    const skuDrr = x.qty / skuDaySpan;
+    const stock = Number(item.inv_stock) || 0;
+    const wip = Number(item.inv_wip) || 0;
+    const points = [];
+    if (x.qty <= 0) points.push('No sale yet — promote, bundle or review pricing.');
+    else if (skuDrr < 0.5) points.push('Low run-rate — improve visibility and campaign support.');
+    else if (skuDrr >= 2) points.push('Strong run-rate — protect stock availability.');
+    if (stock <= 0 && wip <= 0 && x.qty > 0) points.push('Out of stock and no WIP — replenish urgently.');
+    else if (stock < Math.max(3, skuDrr * 7) && wip <= 0 && x.qty > 0) points.push('Low stock cover — start replenishment.');
+    if (wip > 0) points.push(`${Math.round(wip).toLocaleString('en-IN')} units in WIP — track completion.`);
+    if (repeatOrders > 0) points.push(`${repeatOrders} repeat order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
+    if (!points.length) points.push('Stock and sales are currently balanced.');
+    return {
+      sku, sku_name:item.sku_name || item.name || '', image_url:item.image_url || '',
+      stock, wip, sales:x.qty, orders:x.rows.length, repeatOrders, revenue:x.rev,
+      drr:skuDrr, daySpan:skuDaySpan, points
+    };
+  }).sort((a,b) => b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
+
   return {
     totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drr,
-    distinctCust, repeatCust, repeatPct, slowCount,
+    distinctCust, repeatCust, repeatPct, slowCount, skuRows,
     bestChannel: bestChannel ? bestChannel.channel : '',
     bestChannelQty: bestChannel ? bestChannel.qty : 0
   };
@@ -8836,63 +8890,42 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
   `;
-  const points = [];
-  const todayStr = todayISO || new Date().toISOString().slice(0, 10);
-  const rbDate = '2026-08-28';
-  const daysLeft = Math.round((new Date(rbDate) - new Date(todayStr)) / 86400000);
-  if (daysLeft >= 0){
-    points.push(`🗓️ <b>${daysLeft} days left</b> for Raksha Bandhan (28 Aug 2026) — plan dispatch &amp; production accordingly.`);
-  } else {
-    points.push(`🗓️ Raksha Bandhan (28 Aug 2026) has passed — review season performance and plan clearance for leftover stock.`);
-  }
-  if (s.slowCount > 0){
-    points.push(`⚠️ <b>${s.slowCount} SKU${s.slowCount > 1 ? 's' : ''}</b> from the Rakhi list have NOT sold a single unit this season — see the Slow Movers table below and consider promotion/bundling/clearance.`);
-  } else {
-    points.push(`✅ Every SKU in the curated Rakhi list has sold at least once this season.`);
-  }
-  if (s.totalWip > 0){
-    points.push(`🏭 <b>${s.totalWip.toLocaleString('en-IN')} units</b> still in WIP (production) — follow up to ensure timely delivery before Raksha Bandhan.`);
-  }
-  if (s.bestChannel){
-    points.push(`🏆 Best-performing channel so far: <b>${escHtml(s.bestChannel)}</b> (${Math.round(s.bestChannelQty).toLocaleString('en-IN')} units) — consider shifting more stock/marketing focus here.`);
-  }
-  if (s.distinctCust > 0){
-    points.push(`🔁 Repeat customer rate is <b>${s.repeatPct}%</b> (${s.repeatCust} of ${s.distinctCust}) — ${s.repeatPct >= 15 ? 'strong repeat behaviour, consider a loyalty/referral push.' : 'low repeat rate — consider post-purchase follow-ups or discount codes for repeat buyers.'}`);
-  }
   if (actHost){
-    actHost.innerHTML = `<div class="combo-box" style="max-width:100%">
-      <div class="combo-title">Actionable Points</div>
-      ${points.map(p => `<div class="combo-detail" style="font-size:.82rem;line-height:1.5">${p}</div>`).join('')}
-    </div>`;
+    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
+    const body = (s.skuRows || []).map(r => {
+      const label = skuLabel(r.sku, r.sku_name);
+      return `<tr>
+        <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(label)}</button></td>
+        <td class="rkh-metric">${Math.round(r.stock).toLocaleString('en-IN')}</td>
+        <td class="rkh-metric">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+        <td class="rkh-metric"><b>${Math.round(r.sales).toLocaleString('en-IN')}</b></td>
+        <td class="rkh-metric">${r.repeatOrders.toLocaleString('en-IN')}</td>
+        ${emp ? '' : `<td class="rkh-metric">${fmt(r.revenue)}</td>`}
+        <td class="rkh-metric">${r.drr.toFixed(2)}</td>
+        <td class="rkh-points">${r.points.map(p => `<span class="pt">• ${escHtml(p)}</span>`).join('')}</td>
+      </tr>`;
+    }).join('');
+    actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div></div>
+      <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
+      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1050px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
 function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Metric', 'Value'];
-  const data = [
-    ['Total Stock', s.totalStock],
-    ['Total WIP', s.totalWip],
-    ['Total Orders', s.totalOrders],
-    ['Total Sold Qty', Math.round(s.totalQty)],
-    ...(emp ? [] : [['Total Net Revenue', Math.round(s.totalRev)]]),
-    ['DRR (units/day)', s.drr.toFixed(2)],
-    ['Days Span', s.daySpan],
-    ['Distinct Customers', s.distinctCust],
-    ['Repeat Customers', s.repeatCust],
-    ['Repeat %', s.repeatPct + '%'],
-    ['Slow Movers (unsold SKUs)', s.slowCount],
-    ['Best Channel', s.bestChannel],
-    ['Best Channel Qty', Math.round(s.bestChannelQty)]
-  ];
+  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','Sales','Order Lines','Repeat Orders',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
+  const data = (s.skuRows || []).map(r => [
+    r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.sales),
+    r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
+  ]);
   const csv = [headers].concat(data).map(r => r.map(c => {
     const str = String(c == null ? '' : c);
     return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
   }).join(',')).join('\n');
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_overall_summary.csv'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_sku_wise_summary.csv'; a.click();
 }
 window.renderRakhiOverallSummary = renderRakhiOverallSummary;
 window.exportRakhiOverallSummaryCSV = exportRakhiOverallSummaryCSV;
