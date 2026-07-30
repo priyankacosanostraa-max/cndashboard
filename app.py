@@ -9074,10 +9074,13 @@ function _rkhBuildOverallSummary(){
     if (!sku) return;
     if (!bySku[sku]) bySku[sku] = {rows:[], qty:0, drrQty:0, rev:0, customers:{}};
     const x = bySku[sku];
-    const effectiveQty = _rkhEffectiveQty(r);
+    // SKU-wise performance table must show the actual parent SKU sale.
+    // Do NOT multiply a CMB row by its child count here; the child expansion is
+    // reserved for the overall Rakhi quantity KPIs/target pace above.
+    const skuSoldQty = Number(r.qty) || 0;
     x.rows.push(r);
-    x.qty += effectiveQty;
-    if (_rkhInDrrWindow(r.date)) x.drrQty += effectiveQty;
+    x.qty += skuSoldQty;
+    if (_rkhInDrrWindow(r.date)) x.drrQty += skuSoldQty;
     x.rev += Number(r.rev) || 0;
     const c = String(r.cust || '').trim().toLowerCase();
     if (c) x.customers[c] = (x.customers[c] || 0) + 1;
@@ -9174,10 +9177,52 @@ function exportRakhiOverallSummaryCSV(){
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
   const headers = ['Rakhi SKU','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
-  const data = (s.skuRows || []).map(r => [
-    r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
-    r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
-  ]);
+  const data = [];
+
+  (s.skuRows || []).forEach(r => {
+    // Parent SKU row: for CMBs, Sales/DRR are the actual CMB sale only.
+    data.push([
+      r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
+      r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
+    ]);
+
+    // Export-only child rows for CMB/gift sets. Each Rakhi child gets the same
+    // Sales and DRR as its parent CMB. These rows never enter _rakhiRows,
+    // skuRows, KPI cards or target calculations, so no double/triple counting.
+    if (!_rkhIsComboSku(r.sku)) return;
+    const parentItem = _masterSkuMap[String(r.sku || '').trim().toUpperCase()] || {};
+    const details = Array.isArray(parentItem.combo_details) ? parentItem.combo_details : [];
+    const taxonRakhiChildren = details.filter(c => /rakhi/i.test(String((c && c.taxon) || '')));
+    const rakhiChildren = taxonRakhiChildren.length
+      ? taxonRakhiChildren
+      : details.filter(c => _rkhIsRakhiSku(c && c.sku));
+
+    rakhiChildren.forEach(c => {
+      const childSku = String((c && c.sku) || '').trim().toUpperCase();
+      if (!childSku) return;
+      const childItem = _masterSkuMap[childSku] || {};
+      const childStock = Number(c && c.inv_stock != null ? c.inv_stock : childItem.inv_stock) || 0;
+      const childWip = Number(c && c.inv_wip != null ? c.inv_wip : childItem.inv_wip) || 0;
+      const rawWhWip = Number(childItem.wh_wip);
+      const childWhWip = Number.isFinite(rawWhWip) ? rawWhWip : (childStock + childWip);
+      const childName = (c && c.sku_name) || childItem.sku_name || childItem.name || '';
+      data.push([
+        childSku,
+        exportSkuName(childSku, childName) + ' — Set item of ' + r.sku,
+        Math.round(childStock),
+        Math.round(childWip),
+        Math.round(childWhWip),
+        Math.round(r.sales),
+        '',
+        '',
+        ...(emp ? [] : ['']),
+        r.drr.toFixed(2),
+        r.daySpan,
+        'Child SKU of ' + r.sku + ': sale inherited from parent CMB for export display only; excluded from KPI totals.'
+      ]);
+    });
+  });
+
   const csv = [headers].concat(data).map(r => r.map(c => {
     const str = String(c == null ? '' : c);
     return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
