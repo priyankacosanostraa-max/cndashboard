@@ -8834,7 +8834,7 @@ function _rkhBuildOverallSummary(){
     if (c) x.customers[c] = (x.customers[c] || 0) + 1;
     if (r.date && r.date !== 'N/A') x.dates.push(r.date);
   });
-  const skuRows = RAKHI_WHITELIST_SKUS.map(rawSku => {
+  const skuRows = Array.from(RAKHI_WHITELIST_SKUS).map(rawSku => {
     const sku = String(rawSku || '').trim().toUpperCase();
     const item = _masterSkuMap[sku] || {};
     const x = bySku[sku] || {rows:[], qty:0, rev:0, customers:{}, dates:[]};
