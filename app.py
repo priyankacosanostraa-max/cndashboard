@@ -8714,6 +8714,39 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
+/* Rakhi quantity rule:
+   - A normal RKH SKU sold as Qty 1 counts as 1 Rakhi unit.
+   - A CMB/gift-set sold as Qty 1 counts once for every Stone Details child
+     whose Taxon is Rakhi. Example: CMB-0827 with three Rakhi child SKUs =
+     3 Rakhi units sold. RKH-code fallback is used only when Taxon is blank. */
+function _rkhRakhiUnitsPerSoldQty(item){
+  const sku = String((item && item.sku) || '').trim().toUpperCase();
+  if (_rkhIsRakhiSku(sku)) return 1;
+  if (!_rkhIsComboSku(sku)) return 1;
+  const details = Array.isArray(item && item.combo_details) ? item.combo_details : [];
+  const taxonMatches = details.filter(c => /rakhi/i.test(String((c && c.taxon) || ''))).length;
+  if (taxonMatches > 0) return taxonMatches;
+  const rkhCodeMatches = details.filter(c => _rkhIsRakhiSku(c && c.sku)).length;
+  return Math.max(1, rkhCodeMatches);
+}
+function _rkhEffectiveQty(row){
+  return (Number(row && row.qty) || 0) * _rkhRakhiUnitsPerSoldQty(row);
+}
+const RAKHI_DRR_START = '2026-07-22';
+function _rkhDrrDaySpan(){
+  const rawToday = todayISO || new Date().toISOString().slice(0, 10);
+  const sp = RAKHI_DRR_START.split('-').map(Number);
+  const tp = String(rawToday).split('-').map(Number);
+  if (sp.length !== 3 || tp.length !== 3 || sp.some(n => !Number.isFinite(n)) || tp.some(n => !Number.isFinite(n))) return 1;
+  const startUtc = Date.UTC(sp[0], sp[1] - 1, sp[2]);
+  const todayUtc = Date.UTC(tp[0], tp[1] - 1, tp[2]);
+  return Math.max(1, Math.floor((todayUtc - startUtc) / 86400000) + 1);
+}
+function _rkhInDrrWindow(date){
+  const d = String(date || '');
+  const rawToday = todayISO || new Date().toISOString().slice(0, 10);
+  return d !== 'N/A' && d >= RAKHI_DRR_START && d <= rawToday;
+}
 function _rkhOrderDate(e){
   // Rakhi tab uses Order Date (cossa_orderdate sheet), NOT dispatch date —
   // every other tab in the app keeps using dispatch date (e.date) as-is.
@@ -8816,15 +8849,14 @@ function _rkhBuildOverallSummary(){
     }
   });
   const totalOrders = wlRows.length;
-  const totalQty = wlRows.reduce((s, r) => s + (r.qty || 0), 0);
+  // Gift sets are expanded into their Rakhi child-SKU quantity for all
+  // overall quantity metrics. Revenue and order-line counts stay unchanged.
+  const totalQty = wlRows.reduce((s, r) => s + _rkhEffectiveQty(r), 0);
   const totalRev = wlRows.reduce((s, r) => s + (r.rev || 0), 0);
-  const dates = wlRows.map(r => r.date).filter(d => d && d !== 'N/A').sort();
-  let daySpan = 1;
-  if (dates.length){
-    const d1 = new Date(dates[0]), d2 = new Date(dates[dates.length - 1]);
-    daySpan = Math.max(1, Math.round((d2 - d1) / 86400000) + 1);
-  }
-  const drr = totalQty / daySpan;
+  // Rakhi DRR starts from the actual season start: 22 July 2026.
+  const daySpan = _rkhDrrDaySpan();
+  const drrQty = wlRows.filter(r => _rkhInDrrWindow(r.date)).reduce((s, r) => s + _rkhEffectiveQty(r), 0);
+  const drr = drrQty / daySpan;
   const custMap = {};
   wlRows.forEach(r => {
     const c = (r.cust || '').trim();
@@ -8843,26 +8875,23 @@ function _rkhBuildOverallSummary(){
   wlRows.forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku) return;
-    if (!bySku[sku]) bySku[sku] = {rows:[], qty:0, rev:0, customers:{}, dates:[]};
+    if (!bySku[sku]) bySku[sku] = {rows:[], qty:0, drrQty:0, rev:0, customers:{}};
     const x = bySku[sku];
+    const effectiveQty = _rkhEffectiveQty(r);
     x.rows.push(r);
-    x.qty += Number(r.qty) || 0;
+    x.qty += effectiveQty;
+    if (_rkhInDrrWindow(r.date)) x.drrQty += effectiveQty;
     x.rev += Number(r.rev) || 0;
     const c = String(r.cust || '').trim().toLowerCase();
     if (c) x.customers[c] = (x.customers[c] || 0) + 1;
-    if (r.date && r.date !== 'N/A') x.dates.push(r.date);
   });
   const skuRows = Array.from(RAKHI_WHITELIST_SKUS).map(rawSku => {
     const sku = String(rawSku || '').trim().toUpperCase();
     const item = _masterSkuMap[sku] || {};
-    const x = bySku[sku] || {rows:[], qty:0, rev:0, customers:{}, dates:[]};
+    const x = bySku[sku] || {rows:[], qty:0, drrQty:0, rev:0, customers:{}};
     const repeatOrders = Object.values(x.customers).reduce((sum, n) => sum + Math.max(0, n - 1), 0);
-    let skuDaySpan = 1;
-    if (x.dates.length){
-      const ds = x.dates.slice().sort();
-      skuDaySpan = Math.max(1, Math.round((new Date(ds[ds.length-1]) - new Date(ds[0])) / 86400000) + 1);
-    }
-    const skuDrr = x.qty / skuDaySpan;
+    const skuDaySpan = _rkhDrrDaySpan();
+    const skuDrr = x.drrQty / skuDaySpan;
     const stock = Number(item.inv_stock) || 0;
     const wip = Number(item.inv_wip) || 0;
     const whWip = Number(item.wh_wip) || 0;
@@ -8883,7 +8912,7 @@ function _rkhBuildOverallSummary(){
   }).sort((a,b) => b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
 
   return {
-    totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drr,
+    totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drrQty, drr,
     distinctCust, repeatCust, repeatPct, slowCount, skuRows,
     bestChannel: bestChannel ? bestChannel.channel : '',
     bestChannelQty: bestChannel ? bestChannel.qty : 0
@@ -8912,7 +8941,7 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">Total Stock</div><div class="yc-val">${s.totalStock.toLocaleString('en-IN')}</div><div class="yc-sub">Curated Rakhi SKUs</div></div>
     <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
     <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
-    <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">units/day over ${s.daySpan} days</div></div>
+    <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">Rakhi units/day since 22 Jul 2026 (${s.daySpan} days)</div></div>
     <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
     <div class="yoy-card"><div class="yc-label">Required Qty / Day</div><div class="yc-val">${pace.qtyPerDay.toLocaleString('en-IN')}</div><div class="yc-sub">${qtyPaceSub}</div></div>
@@ -9399,9 +9428,10 @@ function _rkhBuildChannelSummary(){
     const ch = _rkhChannelOf(r);
     if (!map[ch]) map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, tRev: 0, tQty: 0};
     const m = map[ch];
-    m.rev += (r.rev || 0); m.qty += (r.qty || 0);
-    if (r.date === yestISO){ m.yRev += (r.rev || 0); m.yQty += (r.qty || 0); }
-    if (r.date === todayStr){ m.tRev += (r.rev || 0); m.tQty += (r.qty || 0); }
+    const effectiveQty = _rkhEffectiveQty(r);
+    m.rev += (r.rev || 0); m.qty += effectiveQty;
+    if (r.date === yestISO){ m.yRev += (r.rev || 0); m.yQty += effectiveQty; }
+    if (r.date === todayStr){ m.tRev += (r.rev || 0); m.tQty += effectiveQty; }
   });
   const order = RAKHI_CHANNEL_ORDER.slice();
   Object.keys(map).forEach(ch => { if (!order.includes(ch)) order.push(ch); });
