@@ -1011,6 +1011,16 @@ def _refresh_data():
                      and "customer" not in c.lower() and "sor" not in c.lower()]
         I_WIP = wip_cands[0] if wip_cands else find_col(inv.columns,"Inv (WIP)","wip")
 
+    # Exact WH+WIP value from the All Product inventory sheet (column AB).
+    # Header-match is preferred; AB is retained as a safe fallback because the
+    # sheet occasionally changes punctuation/spacing in the heading.
+    I_WH_WIP = find_col(
+        inv.columns, "WH+WIP", "WH + WIP", "WH WIP",
+        "Warehouse+WIP", "Warehouse + WIP", "Warehouse WIP"
+    )
+    if I_WH_WIP is None and len(inv.columns) > 27:
+        I_WH_WIP = inv.columns[27]  # AB
+
     # Channel-specific WIP columns
     def _find_wip_col(keywords):
         for c in inv.columns:
@@ -1056,7 +1066,7 @@ def _refresh_data():
     C_TYPE  = _at(10) or find_col(cosa.columns, "Type","channel","mode")
 
     dbg["resolved"] = {
-        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE},
+        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE},
         "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
     }
 
@@ -1342,6 +1352,7 @@ def _refresh_data():
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
         stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
         wip   = to_int(r.get(I_WIP,0))                 if I_WIP else 0
+        wh_wip = to_int(r.get(I_WH_WIP,0))             if I_WH_WIP else (stk + wip)
         wip_website  = to_int(r.get(I_WIP_WEBSITE,0))  if I_WIP_WEBSITE  else 0
         wip_designer = to_int(r.get(I_WIP_DESIGNER,0)) if I_WIP_DESIGNER else 0
         wip_customer = to_int(r.get(I_WIP_CUSTOMER,0)) if I_WIP_CUSTOMER else 0
@@ -1402,6 +1413,7 @@ def _refresh_data():
             "inv_stock":   stk,
             "inv_stock_3p": stk_3p,
             "inv_wip":     wip,
+            "wh_wip":      wh_wip,
             "inv_wip_website":  wip_website,
             "inv_wip_designer": wip_designer,
             "inv_wip_customer": wip_customer,
@@ -1489,7 +1501,7 @@ def _refresh_data():
         item = {
             "sku": orphan_key, "sku_name": cn_sku_label(orphan_key),
             "is_religious": _cn_tags_o["religious"], "is_seasonal": _cn_tags_o["seasonal"],
-            "image_url": "", "inv_stock": 0, "inv_wip": 0,
+            "image_url": "", "inv_stock": 0, "inv_wip": 0, "wh_wip": 0,
             "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0, "inv_wip_sor": 0,
             "blocked_qty": 0, "total_inv": 0, "mrp": 0.0, "cost": 0.0,
             "avg_selling_price": 0.0, "last_selling_price": 0.0, "aov_per_piece": 0.0,
@@ -8853,6 +8865,7 @@ function _rkhBuildOverallSummary(){
     const skuDrr = x.qty / skuDaySpan;
     const stock = Number(item.inv_stock) || 0;
     const wip = Number(item.inv_wip) || 0;
+    const whWip = Number(item.wh_wip) || 0;
     const points = [];
     if (x.qty <= 0) points.push('No sale yet — promote, bundle or review pricing.');
     else if (skuDrr < 0.5) points.push('Low run-rate — improve visibility and campaign support.');
@@ -8864,7 +8877,7 @@ function _rkhBuildOverallSummary(){
     if (!points.length) points.push('Stock and sales are currently balanced.');
     return {
       sku, sku_name:item.sku_name || item.name || '', image_url:item.image_url || '',
-      stock, wip, sales:x.qty, orders:x.rows.length, repeatOrders, revenue:x.rev,
+      stock, wip, whWip, sales:x.qty, orders:x.rows.length, repeatOrders, revenue:x.rev,
       drr:skuDrr, daySpan:skuDaySpan, points
     };
   }).sort((a,b) => b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
@@ -8897,7 +8910,7 @@ function renderRakhiOverallSummary(){
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
   `;
   if (actHost){
-    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
+    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
     const body = (s.skuRows || []).map(r => {
       const label = skuLabel(r.sku, r.sku_name);
       const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -8908,6 +8921,7 @@ function renderRakhiOverallSummary(){
         <td><div class="rkh-sku-cell">${photo}<div class="rkh-sku-copy"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(label)}</button></div></div></td>
         <td class="rkh-metric">${Math.round(r.stock).toLocaleString('en-IN')}</td>
         <td class="rkh-metric">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+        <td class="rkh-metric"><b>${Math.round(r.whWip).toLocaleString('en-IN')}</b></td>
         <td class="rkh-metric"><b>${Math.round(r.sales).toLocaleString('en-IN')}</b></td>
         <td class="rkh-metric">${r.repeatOrders.toLocaleString('en-IN')}</td>
         ${emp ? '' : `<td class="rkh-metric">${fmt(r.revenue)}</td>`}
@@ -8917,16 +8931,16 @@ function renderRakhiOverallSummary(){
     }).join('');
     actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div></div>
       <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
-      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1180px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1260px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
 function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','Sales','Order Lines','Repeat Orders',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
   const data = (s.skuRows || []).map(r => [
-    r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.sales),
+    r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
     r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
   ]);
   const csv = [headers].concat(data).map(r => r.map(c => {
