@@ -2568,8 +2568,14 @@ table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
 #vRakhi table.ro td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.35;padding:10px;vertical-align:top;min-width:72px;max-width:240px}
 #vRakhi table.ro td img{display:block;margin:auto}
 #vRakhi table.ro .sku-cell{min-width:140px;max-width:230px}
-#vRakhi .rkh-sku-summary th:nth-child(1),#vRakhi .rkh-sku-summary td:nth-child(1){min-width:190px;max-width:260px}
+#vRakhi .rkh-sku-summary th:nth-child(1),#vRakhi .rkh-sku-summary td:nth-child(1){min-width:300px;max-width:390px}
 #vRakhi .rkh-sku-summary th:last-child,#vRakhi .rkh-sku-summary td:last-child{min-width:260px;max-width:360px}
+#vRakhi .rkh-sku-summary .rkh-sku-cell{display:flex;align-items:center;gap:12px;min-width:0;max-width:none}
+#vRakhi .rkh-sku-summary .rkh-sku-photo,#vRakhi .rkh-sku-summary .rkh-sku-photo-ph{width:72px;height:72px;min-width:72px;border:1px solid rgba(212,175,90,.38);border-radius:9px;background:#fff;padding:4px;box-sizing:border-box;flex-shrink:0}
+#vRakhi .rkh-sku-summary .rkh-sku-photo{object-fit:contain;object-position:center;display:block;margin:0}
+#vRakhi .rkh-sku-summary .rkh-sku-photo-ph{align-items:center;justify-content:center;font-size:28px;padding:0}
+#vRakhi .rkh-sku-summary .rkh-sku-copy{min-width:0;line-height:1.35}
+#vRakhi .rkh-sku-summary .rkh-sku-copy .sku-link{white-space:normal;text-align:left;overflow-wrap:anywhere;word-break:break-word}
 #vRakhi .rkh-points{font-weight:600;color:#475569}
 #vRakhi .rkh-points .pt{display:block;margin:0 0 4px}
 #vRakhi .rkh-metric{font-variant-numeric:tabular-nums;text-align:right}
@@ -8894,8 +8900,12 @@ function renderRakhiOverallSummary(){
     const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
     const body = (s.skuRows || []).map(r => {
       const label = skuLabel(r.sku, r.sku_name);
+      const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+      const photo = hasImg
+        ? `<img class="rkh-sku-photo" src="${escHtml(r.image_url)}" alt="${escHtml(r.sku)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="rkh-sku-photo-ph" style="display:none">💎</span>`
+        : `<span class="rkh-sku-photo-ph" style="display:flex">💎</span>`;
       return `<tr>
-        <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(label)}</button></td>
+        <td><div class="rkh-sku-cell">${photo}<div class="rkh-sku-copy"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(label)}</button></div></div></td>
         <td class="rkh-metric">${Math.round(r.stock).toLocaleString('en-IN')}</td>
         <td class="rkh-metric">${Math.round(r.wip).toLocaleString('en-IN')}</td>
         <td class="rkh-metric"><b>${Math.round(r.sales).toLocaleString('en-IN')}</b></td>
@@ -8907,7 +8917,7 @@ function renderRakhiOverallSummary(){
     }).join('');
     actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div></div>
       <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
-      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1050px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1180px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
 function exportRakhiOverallSummaryCSV(){
