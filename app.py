@@ -4835,7 +4835,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vSkudetails" style="display:none">
     <div class="filter-box" style="margin:8px 0 10px;padding:10px 14px">
-      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least one filtered unit sold in the latest 6-month window, or Stock+WIP is below 20; <b>Slow Movers</b> = Stock+WIP is 20+ and no filtered unit was sold in that window.</div>
+      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least one filtered unit sold in the latest 30-day window, or Stock+WIP is below 20; <b>Slow Movers</b> = Stock+WIP is 20+ and no filtered unit was sold in that 30-day window.</div>
     </div>
     <div class="filter-box" style="margin:8px 0 16px">
       <label class="fl" style="margin-bottom:8px;display:block">Search SKU</label>
@@ -6035,11 +6035,9 @@ function _sdDisplayDate(iso){
 }
 function _sdFilteredStatus(item, ents){
   const rows = Array.isArray(ents) ? ents : [];
-  // Status is intentionally based on the currently selected Date, Type and
-  // Marketplace filters. If those filters have no transaction rows, the SKU
-  // has no record for that filtered view.
-  if (!rows.length) return 'No Record';
-
+  // Status follows the currently selected Date, Type and Marketplace filters.
+  // The running test uses only the latest 30 calendar days ending on the
+  // selected To date (or today when no To date is selected).
   const selectedTo = document.getElementById('sdD2')?.value || '';
   const now = new Date();
   let anchor = selectedTo ? new Date(selectedTo + 'T23:59:59') : now;
@@ -6048,13 +6046,16 @@ function _sdFilteredStatus(item, ents){
   const anchorMonthKey = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`;
   if (item?.launch_key && item.launch_key === anchorMonthKey) return 'New Launch';
 
-  const sixMonthStart = new Date(anchor);
-  sixMonthStart.setMonth(sixMonthStart.getMonth() - 6);
+  // Inclusive 30-day window: anchor date plus the previous 29 calendar days.
+  const thirtyDayStart = new Date(anchor);
+  thirtyDayStart.setHours(0, 0, 0, 0);
+  thirtyDayStart.setDate(thirtyDayStart.getDate() - 29);
+
   let recentSoldQty = 0;
   rows.forEach(e => {
     if (!e?.date || e.date === 'N/A') return;
     const d = new Date(e.date + 'T00:00:00');
-    if (Number.isNaN(d.getTime()) || d < sixMonthStart || d > anchor) return;
+    if (Number.isNaN(d.getTime()) || d < thirtyDayStart || d > anchor) return;
     const q = parseFloat(e.qty) || 0;
     if (q > 0) recentSoldQty += q;
   });
