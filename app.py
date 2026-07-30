@@ -5353,12 +5353,36 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU. Restricted to FY 2026-27 orders only.</div>
   <div class="filter-box" style="margin:0 0 14px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">Type</label>
-      <select class="fs" id="rkhTypeFilter" onchange="renderRakhi()">
+      <select class="fs" id="rkhTypeFilter" onchange="rkhOnTypeFilterChange()">
         <option value="All">All Types</option>
       </select></div>
   </div>
   <div id="rakhiSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Pivot (SKU × Type)</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiPivotCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">SKU-wise Sold Qty broken down by Type — follows the Type filter above.</div>
+  <div id="rakhiPivotContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Top 10 Cities</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopCitiesCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">City parsed from the Website order sheet's Final Billing Address column, matched to orders by customer name. Follows the Type filter above.</div>
+  <div id="rakhiTopCityContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
     <div>
@@ -8743,7 +8767,7 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){ renderRakhi(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
+function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
 
 /* ── RAKHI — OVERALL SUMMARY ──
    "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
@@ -8982,6 +9006,182 @@ function exportRakhi(){
 }
 window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
 
+/* ── RAKHI PIVOT (SKU × Type) ──
+   Table 1 (renderRakhi) ke transactions ka hi SKU-wise pivot — rows = SKU,
+   columns = jitne bhi distinct Type filtered data me hain (Sold Qty per
+   Type), plus Total Qty/Revenue/Stock/WIP. Type filter (rkhTypeFilter)
+   lagi ho to yahi pivot _rakhiFilteredRows (renderRakhi() me set hoti hai)
+   se banta hai — isliye filter ke hisaab se hi aata hai. */
+let _rakhiPivotRows = [];
+let _rakhiPivotTypes = [];
+function _rkhBuildPivot(rows){
+  const typeSet = new Set();
+  const map = {};
+  rows.forEach(r => {
+    const key = String(r.sku || '').trim();
+    if (!key) return;
+    const t = String(r.type || '').trim() || 'Unspecified';
+    typeSet.add(t);
+    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, inv_stock: r.inv_stock || 0, inv_wip: r.inv_wip || 0, combo_details: r.combo_details || [], byType: {}, totalQty: 0, totalRev: 0};
+    map[key].byType[t] = (map[key].byType[t] || 0) + (r.qty || 0);
+    map[key].totalQty += (r.qty || 0);
+    map[key].totalRev += (r.rev || 0);
+  });
+  const types = Array.from(typeSet).sort();
+  const list = Object.values(map).sort((a, b) => b.totalQty - a.totalQty);
+  return {types, list};
+}
+function renderRakhiPivot(){
+  const host = document.getElementById('rakhiPivotContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  const rows = _rakhiFilteredRows || _rakhiRows || [];
+  const {types, list} = _rkhBuildPivot(rows);
+  _rakhiPivotRows = list; _rakhiPivotTypes = types;
+  if (!list.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders match the selected filter.</div>';
+    return;
+  }
+  const emp = LOGIN_ROLE === 'employee';
+  const head = `<tr><th>Photo</th><th>SKU</th>${types.map(t => `<th>${escHtml(t)} Qty</th>`).join('')}<th>Total Qty</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
+  const body = list.map(r => {
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const img = hasImg
+      ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
+      : '—';
+    const stk = parseInt(r.inv_stock) || 0;
+    const wip = parseInt(r.inv_wip) || 0;
+    const comboHtml = _rkhComboBoxHtml(r.combo_details);
+    return `<tr>
+      <td>${img}</td>
+      <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        ${comboHtml}
+      </div></td>
+      ${types.map(t => `<td>${Math.round(r.byType[t] || 0).toLocaleString('en-IN')}</td>`).join('')}
+      <td><b>${Math.round(r.totalQty).toLocaleString('en-IN')}</b></td>
+      ${emp ? '' : `<td>${fmt(r.totalRev)}</td>`}
+      <td>${stk}</td>
+      <td>${wip}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:700px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiPivotCSV(){
+  const list = _rakhiPivotRows || [];
+  const types = _rakhiPivotTypes || [];
+  if (!list.length){ alert('No Rakhi pivot data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['SKU', 'SKU Name', ...types.map(t => t + ' Qty'), 'Total Qty', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const data = list.map(r => [
+    r.sku, exportSkuName(r.sku, r.sku_name),
+    ...types.map(t => Math.round(r.byType[t] || 0)),
+    Math.round(r.totalQty),
+    ...(emp ? [] : [Math.round(r.totalRev)]),
+    parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
+  ]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_pivot.csv'; a.click();
+}
+window.renderRakhiPivot = renderRakhiPivot; window.exportRakhiPivotCSV = exportRakhiPivotCSV;
+
+/* ── RAKHI TOP 10 CITIES ──
+   Website order-address sheet (server: /api/rakhi-cities) se customer
+   naam -> city ka map aata hai (server ne "Final Billing Address" column
+   se city already nikaal di hai). Yahan sirf Rakhi rows (customer naam)
+   ko usi map se match karke Final Qty city-wise jodte hain — Type filter
+   lagi ho to sirf _rakhiFilteredRows hi use hoti hain. */
+let _rkhCityMap = null;
+let _rakhiTopCityRows = [];
+function _rkhNameKey(name){
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+async function _rkhLoadCityMap(force){
+  if (_rkhCityMap && !force) return _rkhCityMap;
+  try {
+    const r = await fetch('/api/rakhi-cities', {headers:{'ngrok-skip-browser-warning':'true'}});
+    const d = await r.json();
+    _rkhCityMap = (d && d.map) || {};
+  } catch(e) { _rkhCityMap = _rkhCityMap || {}; }
+  return _rkhCityMap;
+}
+function _rkhBuildTopCities(rows, cityMap){
+  const map = {};
+  rows.forEach(r => {
+    const key = _rkhNameKey(r.cust);
+    const city = key ? cityMap[key] : '';
+    if (!city) return;
+    if (!map[city]) map[city] = {city, qty: 0, rev: 0, orders: 0};
+    map[city].qty += (r.qty || 0);
+    map[city].rev += (r.rev || 0);
+    map[city].orders += 1;
+  });
+  return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 10);
+}
+async function renderRakhiTopCities(){
+  const host = document.getElementById('rakhiTopCityContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  host.innerHTML = '<div class="home-empty" style="padding:20px">Loading city data…</div>';
+  const cityMap = await _rkhLoadCityMap();
+  const rows = _rakhiFilteredRows || _rakhiRows || [];
+  const list = _rkhBuildTopCities(rows, cityMap);
+  _rakhiTopCityRows = list;
+  if (!list.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No matching city data found for the current orders/filter.</div>';
+    return;
+  }
+  const emp = LOGIN_ROLE === 'employee';
+  const head = `<tr><th>#</th><th>City</th><th>Final Qty</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Orders</th></tr>`;
+  const body = list.map((r, i) => `<tr>
+      <td><b>${i + 1}</b></td>
+      <td>${escHtml(r.city)}</td>
+      <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
+      <td>${r.orders.toLocaleString('en-IN')}</td>
+    </tr>`).join('');
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:500px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiTopCitiesCSV(){
+  const list = _rakhiTopCityRows || [];
+  if (!list.length){ alert('No Top Cities data to export.'); return; }
+  const emp = LOGIN_ROLE === 'employee';
+  const headers = ['Rank', 'City', 'Final Qty', ...(emp ? [] : ['Net Revenue']), 'Orders'];
+  const data = list.map((r, i) => [i + 1, r.city, Math.round(r.qty), ...(emp ? [] : [Math.round(r.rev)]), r.orders]);
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_top_cities.csv'; a.click();
+}
+window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesCSV = exportRakhiTopCitiesCSV;
+
+/* Type filter dropdown badalte hi — orders table, pivot, Top-Selling SKUs
+   aur Slow Movers, sab isi filter ke hisaab se turant refresh ho jaate
+   hain (renderRakhi() sabse pehle chalta hai taaki _rakhiFilteredRows
+   set ho jaaye, baaki teeno usi ko use karte hain). */
+function rkhOnTypeFilterChange(){
+  renderRakhi();
+  renderRakhiPivot();
+  renderRakhiTopCities();
+  renderRakhiTopSkus();
+  renderRakhiSlowMovers();
+}
+window.rkhOnTypeFilterChange = rkhOnTypeFilterChange;
+
 /* ── RAKHI CHANNEL vs TARGET ──
    Channel rule (as given): Type == "Website" -> Website channel; every
    other order is classified purely from the Customer Name text. Figures
@@ -9170,7 +9370,9 @@ window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = e
 /* ── RAKHI TOP-SELLING SKUs ── */
 let _rakhiTopSkuRows = [];
 function _rkhBuildTopSkus(){
-  const rows = _rakhiRows || [];
+  // Type filter lga ho to sirf usi ke hisaab se (_rakhiFilteredRows),
+  // warna poora Rakhi data (_rakhiRows).
+  const rows = _rakhiFilteredRows || _rakhiRows || [];
   const map = {};
   rows.forEach(r => {
     const key = String(r.sku || '').trim();
@@ -9259,7 +9461,9 @@ window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = e
 let _rakhiSlowMoverRows = [];
 function _rkhBuildSlowMovers(){
   const soldMap = {};
-  (_rakhiRows || []).forEach(r => {
+  // Type filter lga ho to "sold" sirf usi Type ke hisaab se count hota
+  // hai (_rakhiFilteredRows), warna poore Rakhi season ka data (_rakhiRows).
+  (_rakhiFilteredRows || _rakhiRows || []).forEach(r => {
     const key = String(r.sku || '').trim().toUpperCase();
     if (!key) return;
     soldMap[key] = (soldMap[key] || 0) + (r.qty || 0);
@@ -12279,6 +12483,76 @@ def api_daily_revenue_glimpse():
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
+
+# ── RAKHI — Top 10 Cities ──
+# Source: "Website" order sheet (same workbook, gid=682845871) — har row me
+# ek order ki "Billing Address Name" (customer) aur "Final Billing Address"
+# hoti hai. Final Billing Address hamesha "...,,CITYNAME-PINCODE" format me
+# khatam hoti hai (6-digit PIN se pehle wala hissa city hai) — isi se city
+# nikalte hain. Isko customer-naam se Rakhi rows (sales_entries me jo
+# already "cust" field hai) ke saath match karke, client-side (Rakhi tab
+# JS) Final Qty city-wise jod deta hai — Type filter lagi ho to usi ke
+# hisaab se (filtered rows) match hota hai.
+RAKHI_WEBSITE_ADDR_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
+                           "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=682845871&single=true&output=csv")
+_RKH_CITY_CACHE = {"map": None, "ts": 0}
+
+def _extract_city_from_address(addr):
+    """'...,,MUMBAI-400071' jaisi address string ke bilkul end me jo
+    6-digit PIN se pehle wala naam/phrase hota hai wahi city hai —
+    regex end-anchored hai isliye beech ke kisi bhi '-123456' se confuse
+    nahi hota (e.g. 'Tower - 3' wagera safely ignore ho jaate hain)."""
+    s = str(addr or "").strip()
+    if not s:
+        return ""
+    m = re.search(r'([A-Za-z][A-Za-z\s\.]*)-\s*(\d{6})\s*$', s)
+    if not m:
+        return ""
+    city = re.sub(r"\s+", " ", m.group(1)).strip(" .")
+    return city.upper() if city else ""
+
+def _fetch_rkh_city_map():
+    """Website order-address sheet ko fetch karke {normalized_name: CITY}
+    map banata hai — 10 min cache (sheet baar baar fetch karna mehenga hai).
+    Fetch/columns fail ho jaayein to khaali map deta hai (feature silently
+    skip ho jaata hai, baaki dashboard par asar nahi padta)."""
+    if _RKH_CITY_CACHE["map"] is not None and (time.time() - _RKH_CITY_CACHE["ts"] < 600):
+        return _RKH_CITY_CACHE["map"]
+    out = {}
+    try:
+        df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
+        df.columns = [str(c).strip() for c in df.columns]
+        cols = list(df.columns)
+        C_NAME = find_col(cols, "Billing Address Name", "billing name", "customer name", "name") \
+                 or (cols[3] if len(cols) > 3 else None)
+        C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
+                 or (cols[4] if len(cols) > 4 else None)
+        if C_NAME and C_ADDR:
+            for _, r in df.iterrows():
+                name = str(r.get(C_NAME, "") or "").strip()
+                if not name:
+                    continue
+                city = _extract_city_from_address(r.get(C_ADDR, ""))
+                if not city:
+                    continue
+                key = re.sub(r"[^a-z0-9]", "", name.lower())
+                if key and key not in out:
+                    out[key] = city
+    except Exception as e:
+        print("Rakhi city map fetch failed:", str(e)[:160])
+    _RKH_CITY_CACHE["map"] = out
+    _RKH_CITY_CACHE["ts"] = time.time()
+    return out
+
+@app.route("/api/rakhi-cities")
+def api_rakhi_cities():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        m = _fetch_rkh_city_map()
+        return jsonify({"map": m})
+    except Exception as e:
+        return jsonify({"error": f"rakhi city map build failed: {e}"}), 500
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
 def api_daily_revenue_glimpse_export_xlsx():
