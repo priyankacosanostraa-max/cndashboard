@@ -5374,14 +5374,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:26px">
     <div>
-      <div class="insights-title">Rakhi — Top 10 Cities</div>
+      <div class="insights-title">Rakhi — State / UT-wise Sold Qty</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhi()">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopCitiesCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">City parsed from the Website order sheet's Final Billing Address column, matched directly by SKU (curated Rakhi list only) — independent of the Type filter above.</div>
+  <div class="small-note" style="margin:6px 0 14px">State/UT derived from the PIN code in the Website order sheet's Final Billing Address column, matched directly by SKU (curated Rakhi list only). Every Indian State &amp; UT is listed — independent of the Type filter above.</div>
   <div id="rakhiTopCityContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -9093,16 +9093,18 @@ function exportRakhiPivotCSV(){
 }
 window.renderRakhiPivot = renderRakhiPivot; window.exportRakhiPivotCSV = exportRakhiPivotCSV;
 
-/* ── RAKHI TOP 10 CITIES ──
+/* ── RAKHI STATE / UT-WISE SOLD QTY ──
    Server (/api/rakhi-cities) Website order-address sheet se raw order-lines
-   deta hai: [{sku, qty, city}] — city already "Final Billing Address" column
-   se nikaal ke di hui hai (jo 6-digit PIN se pehle wala naam hota hai).
-   Yahan sirf curated Rakhi SKU list (RAKHI_WHITELIST_SKUS) ke rows rakhte
-   hain, city ke hisaab se Qty jod ke top 10 city nikalte hain. Yeh apna
-   alag data-source hai (Website sheet), isliye upar wale Type filter se
-   independent hai — us filter ka is section par koi asar nahi. */
+   deta hai: [{sku, qty, state}] — state already PIN code se nikaal ke di
+   hui hai (server: _pincode_to_state). Yahan sirf curated Rakhi SKU list
+   (RAKHI_WHITELIST_SKUS) ke rows rakhte hain, state ke hisaab se Qty jod
+   dete hain — aur India ke SAARE 28 States + 8 UTs (all_states_uts) ek
+   row ke roop me hamesha dikhte hain, chahe unki Qty 0 hi kyun na ho.
+   Yeh apna alag data-source hai (Website sheet), isliye upar wale Type
+   filter se independent hai — us filter ka is section par koi asar nahi. */
 let _rkhCityRows = null;
 let _rkhCityDiag = null;
+let _rkhAllStatesUts = null;
 let _rakhiTopCityRows = [];
 async function _rkhLoadCityRows(force){
   if (_rkhCityRows && !force) return _rkhCityRows;
@@ -9110,22 +9112,29 @@ async function _rkhLoadCityRows(force){
     const r = await fetch('/api/rakhi-cities', {headers:{'ngrok-skip-browser-warning':'true'}});
     const d = await r.json();
     if (d && d.error) { _rkhCityRows = []; _rkhCityDiag = {error: d.error}; }
-    else { _rkhCityRows = (d && d.rows) || []; _rkhCityDiag = (d && d.diag) || null; }
+    else {
+      _rkhCityRows = (d && d.rows) || [];
+      _rkhCityDiag = (d && d.diag) || null;
+      _rkhAllStatesUts = (d && d.all_states_uts) || null;
+    }
   } catch(e) { _rkhCityRows = _rkhCityRows || []; _rkhCityDiag = {error: String(e && e.message || e)}; }
   return _rkhCityRows;
 }
 function _rkhBuildTopCities(cityRows){
   const map = {};
+  // Har State/UT ko 0 se seed karo pehle — taaki jinme sale hi nahi hui
+  // wo bhi table me dikhein.
+  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, orders: 0}; });
   (cityRows || []).forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs
-    const city = String(r.city || '').trim();
-    if (!city) return;
-    if (!map[city]) map[city] = {city, qty: 0, orders: 0};
-    map[city].qty += (Number(r.qty) || 0);
-    map[city].orders += 1;
+    const state = String(r.state || '').trim();
+    if (!state) return;
+    if (!map[state]) map[state] = {state, qty: 0, orders: 0};
+    map[state].qty += (Number(r.qty) || 0);
+    map[state].orders += 1;
   });
-  return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 10);
+  return Object.values(map).sort((a, b) => b.qty - a.qty);
 }
 async function renderRakhiTopCities(){
   const host = document.getElementById('rakhiTopCityContent');
@@ -9134,7 +9143,7 @@ async function renderRakhiTopCities(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
     return;
   }
-  host.innerHTML = '<div class="home-empty" style="padding:20px">Loading city data…</div>';
+  host.innerHTML = '<div class="home-empty" style="padding:20px">Loading state/UT data…</div>';
   const cityRows = await _rkhLoadCityRows();
   const list = _rkhBuildTopCities(cityRows);
   _rakhiTopCityRows = list;
@@ -9143,19 +9152,19 @@ async function renderRakhiTopCities(){
     // "not found" ki jagah — taaki root cause turant pata chal jaaye.
     let msg;
     if (_rkhCityDiag && _rkhCityDiag.error){
-      msg = `Could not load the city sheet: ${escHtml(_rkhCityDiag.error)}`;
+      msg = `Could not load the state sheet: ${escHtml(_rkhCityDiag.error)}`;
     } else if (!cityRows.length){
-      msg = `The Website address sheet loaded but 0 usable (SKU + city) rows were found. Columns detected: sku="${escHtml((_rkhCityDiag && _rkhCityDiag.sku_col) || '—')}", address="${escHtml((_rkhCityDiag && _rkhCityDiag.addr_col) || '—')}". Sheet columns seen: ${escHtml(((_rkhCityDiag && _rkhCityDiag.all_columns) || []).join(', '))}`;
+      msg = `The Website address sheet loaded but 0 usable (SKU + PIN) rows were found. Columns detected: sku="${escHtml((_rkhCityDiag && _rkhCityDiag.sku_col) || '—')}", address="${escHtml((_rkhCityDiag && _rkhCityDiag.addr_col) || '—')}". Sheet columns seen: ${escHtml(((_rkhCityDiag && _rkhCityDiag.all_columns) || []).join(', '))}`;
     } else {
       msg = `Loaded ${cityRows.length.toLocaleString('en-IN')} order-lines from the Website sheet, but none matched a curated Rakhi SKU (RKH-* or the CMB gift-set list).`;
     }
     host.innerHTML = `<div class="home-empty" style="padding:30px;text-align:left;font-size:.82rem;line-height:1.5">${msg}</div>`;
     return;
   }
-  const head = `<tr><th>#</th><th>City</th><th>Final Qty</th><th>Order Lines</th></tr>`;
+  const head = `<tr><th>#</th><th>State / UT</th><th>Sold Qty</th><th>Order Lines</th></tr>`;
   const body = list.map((r, i) => `<tr>
       <td><b>${i + 1}</b></td>
-      <td>${escHtml(r.city)}</td>
+      <td>${escHtml(r.state)}</td>
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       <td>${r.orders.toLocaleString('en-IN')}</td>
     </tr>`).join('');
@@ -9163,21 +9172,22 @@ async function renderRakhiTopCities(){
 }
 function exportRakhiTopCitiesCSV(){
   const list = _rakhiTopCityRows || [];
-  if (!list.length){ alert('No Top Cities data to export.'); return; }
-  const headers = ['Rank', 'City', 'Final Qty', 'Order Lines'];
-  const data = list.map((r, i) => [i + 1, r.city, Math.round(r.qty), r.orders]);
+  if (!list.length){ alert('No State/UT data to export.'); return; }
+  const headers = ['Rank', 'State / UT', 'Sold Qty', 'Order Lines'];
+  const data = list.map((r, i) => [i + 1, r.state, Math.round(r.qty), r.orders]);
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }).join(',')).join('\n');
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_top_cities.csv'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_state_ut_sold_qty.csv'; a.click();
 }
 window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesCSV = exportRakhiTopCitiesCSV;
 
 /* Type filter dropdown badalte hi — orders table, pivot, Top-Selling SKUs
    aur Slow Movers, sab isi filter ke hisaab se turant refresh ho jaate
+
    hain (renderRakhi() sabse pehle chalta hai taaki _rakhiFilteredRows
    set ho jaaye, baaki teeno usi ko use karte hain). Top 10 Cities apna
    alag data-source (Website sheet) use karta hai isliye is filter se
@@ -12492,37 +12502,124 @@ def api_daily_revenue_glimpse():
     except Exception as e:
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
 
-# ── RAKHI — Top 10 Cities ──
+# ── RAKHI — State/UT-wise Sold Qty ──
 # Source: "Website" order sheet (same workbook, gid=682845871) — har row
 # ek order-line hai jisme SKU, Qty aur "Final Billing Address" hoti hai.
 # Final Billing Address hamesha "...,,CITYNAME-PINCODE" format me khatam
-# hoti hai (6-digit PIN se pehle wala hissa city hai) — isi se city
-# nikalte hain. Matching ab CUSTOMER NAAM se nahi, seedha SKU se hoti hai:
-# sirf wahi rows count hoti hain jinka SKU Rakhi SKU hai (RKH-* ya RKH
-# combo wale CMB-* gift set) — yeh check client-side (Rakhi tab JS,
-# _rkhIsRakhiSku/_rkhIsComboSku/_rkhComboHasRakhi — wahi logic jo baaki
-# Rakhi tables use karte hain) hota hai, kyunki combo->RKH detection
-# master data (combo_skus) par depend karta hai jo sirf browser me hai.
+# hoti hai — us 6-digit PIN se State/UT nikalte hain (India Post ke
+# standard PIN-region ranges par based). Matching seedha SKU se hoti hai:
+# sirf wahi rows count hoti hain jinka SKU curated Rakhi SKU list me hai —
+# yeh check client-side (Rakhi tab JS, _rkhInWhitelist) hota hai.
 RAKHI_WEBSITE_ADDR_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
                            "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=682845871&single=true&output=csv")
 _RKH_CITY_CACHE = {"rows": None, "ts": 0}
 
-def _extract_city_from_address(addr):
+# Complete list of all 28 States + 8 UTs of India — Rakhi State/UT table
+# hamesha inhi 36 naamon ko dikhata hai (0 Sold Qty wale bhi), taaki
+# "jitne bhi India ke States/UT hain sab aane chaiye" poora ho.
+INDIA_STATES_UTS = [
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+    "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+    "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+    "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim",
+    "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand",
+    "West Bengal",
+    "Andaman & Nicobar Islands", "Chandigarh",
+    "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Jammu & Kashmir",
+    "Ladakh", "Lakshadweep", "Puducherry"
+]
+
+def _pincode_to_state(pin):
+    """6-digit Indian PIN code se State/UT naam deta hai — India Post ke
+    standard PIN-region (first digit/2-3 digit) ranges par based hai.
+    NOTE: kuch adjoining states/UT ki boundary par (jaise UP/Uttarakhand,
+    Bihar/Jharkhand, AP/Telangana, Gujarat/DNH-DD) PIN ranges thoda overlap
+    karte hain kyunki India Post ne har state ke liye clean-cut range
+    allot nahi ki — is liye chand boundary PINs me approximation ho sakta
+    hai, par bulk/aggregate State-wise reporting ke liye yeh kaafi accurate
+    hai."""
+    try:
+        p = int(str(pin).strip()[:6])
+    except Exception:
+        return ""
+    if not (100000 <= p <= 899999):
+        return ""   # 9xxxxx = Army Postal Service, koi state/UT nahi
+    d2 = p // 10000  # first 2 digits
+
+    # ── Chhote/UT carve-outs jo bade state-range ke andar aate hain ──
+    if 110001 <= p <= 110099: return "Delhi"
+    if 160001 <= p <= 160104: return "Chandigarh"
+    if 193501 <= p <= 194404: return "Ladakh"
+    if 246001 <= p <= 249999: return "Uttarakhand"
+    if 262001 <= p <= 263680: return "Uttarakhand"
+    if 396191 <= p <= 396240: return "Dadra & Nagar Haveli and Daman & Diu"
+    if 403001 <= p <= 403899: return "Goa"
+    if 500001 <= p <= 509999: return "Telangana"
+    if 515001 <= p <= 535999: return "Andhra Pradesh"
+    if 605001 <= p <= 605649: return "Puducherry"
+    if 609601 <= p <= 609816: return "Puducherry"
+    if 673310 <= p <= 673313: return "Puducherry"          # Mahe
+    if 682551 <= p <= 682559: return "Lakshadweep"
+    if 737001 <= p <= 737139: return "Sikkim"
+    if 744101 <= p <= 744304: return "Andaman & Nicobar Islands"
+    if 813001 <= p <= 835999: return "Jharkhand"
+
+    # ── Broad state ranges (first 2 digits) ──
+    D2_STATE = {
+        11: "Delhi", 12: "Haryana", 13: "Haryana",
+        14: "Punjab", 15: "Punjab", 16: "Punjab",
+        17: "Himachal Pradesh",
+        18: "Jammu & Kashmir", 19: "Jammu & Kashmir",
+        20: "Uttar Pradesh", 21: "Uttar Pradesh", 22: "Uttar Pradesh",
+        23: "Uttar Pradesh", 24: "Uttar Pradesh", 25: "Uttar Pradesh",
+        26: "Uttar Pradesh", 27: "Uttar Pradesh", 28: "Uttar Pradesh",
+        30: "Rajasthan", 31: "Rajasthan", 32: "Rajasthan",
+        33: "Rajasthan", 34: "Rajasthan",
+        36: "Gujarat", 37: "Gujarat", 38: "Gujarat", 39: "Gujarat",
+        40: "Maharashtra", 41: "Maharashtra", 42: "Maharashtra",
+        43: "Maharashtra", 44: "Maharashtra",
+        45: "Madhya Pradesh", 46: "Madhya Pradesh", 47: "Madhya Pradesh",
+        48: "Madhya Pradesh",
+        49: "Chhattisgarh",
+        56: "Karnataka", 57: "Karnataka", 58: "Karnataka", 59: "Karnataka",
+        60: "Tamil Nadu", 61: "Tamil Nadu", 62: "Tamil Nadu",
+        63: "Tamil Nadu", 64: "Tamil Nadu", 66: "Tamil Nadu",
+        67: "Kerala", 68: "Kerala", 69: "Kerala",
+        70: "West Bengal", 71: "West Bengal", 72: "West Bengal",
+        73: "West Bengal", 74: "West Bengal",
+        75: "Odisha", 76: "Odisha", 77: "Odisha",
+        78: "Assam",
+        79: "Assam",   # 790-792 Arunachal, 793-794 Meghalaya, 795 Manipur,
+                        # 796 Mizoram, 797-798 Nagaland, 799 Tripura — sub-split neeche
+        80: "Bihar", 81: "Bihar", 82: "Jharkhand", 83: "Jharkhand",
+        84: "Bihar", 85: "Bihar",
+    }
+    # 79x North-East sub-split (Assam ke sivaay baaki chhote states isi
+    # band me aate hain — India Post ne inhe alag 2-digit nahi diya)
+    if d2 == 79:
+        d3 = p // 1000
+        if 790 <= d3 <= 792: return "Arunachal Pradesh"
+        if 793 <= d3 <= 794: return "Meghalaya"
+        if d3 == 795: return "Manipur"
+        if d3 == 796: return "Mizoram"
+        if 797 <= d3 <= 798: return "Nagaland"
+        if d3 == 799: return "Tripura"
+        return "Assam"
+    return D2_STATE.get(d2, "")
+
+def _extract_pin_from_address(addr):
     """'...,,MUMBAI-400071' jaisi address string ke bilkul end me jo
-    6-digit PIN se pehle wala naam/phrase hota hai wahi city hai —
-    regex end-anchored hai isliye beech ke kisi bhi '-123456' se confuse
-    nahi hota (e.g. 'Tower - 3' wagera safely ignore ho jaate hain)."""
+    6-digit PIN hota hai wahi nikalta hai — regex end-anchored hai isliye
+    beech ke kisi bhi '-123456' se confuse nahi hota (e.g. 'Tower - 3'
+    wagera safely ignore ho jaate hain)."""
     s = str(addr or "").strip()
     if not s:
         return ""
-    m = re.search(r'([A-Za-z][A-Za-z\s\.]*)-\s*(\d{6})\s*$', s)
-    if not m:
-        return ""
-    city = re.sub(r"\s+", " ", m.group(1)).strip(" .")
-    return city.upper() if city else ""
+    m = re.search(r'[A-Za-z][A-Za-z\s\.]*-\s*(\d{6})\s*$', s)
+    return m.group(1) if m else ""
 
 def _fetch_rkh_sku_city_rows():
-    """Website order sheet ko fetch karke [{sku, qty, city}, ...] deta hai
+    """Website order sheet ko fetch karke [{sku, qty, state}, ...] deta hai
     (raw order-lines, koi Rakhi-filter yahan nahi laga — wo client-side
     SKU ke hisaab se hota hai) — 10 min cache. Return: (rows, diagnostics)
     — diagnostics me exact wajah hoti hai agar kuch match na ho (columns
@@ -12552,11 +12649,14 @@ def _fetch_rkh_sku_city_rows():
                 sku = str(r.get(C_SKU, "") or "").strip()
                 if not sku:
                     continue
-                city = _extract_city_from_address(r.get(C_ADDR, ""))
-                if not city:
+                pin = _extract_pin_from_address(r.get(C_ADDR, ""))
+                if not pin:
+                    continue
+                state = _pincode_to_state(pin)
+                if not state:
                     continue
                 qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
-                out.append({"sku": sku, "qty": qty, "city": city})
+                out.append({"sku": sku, "qty": qty, "state": state})
                 diag["rows_used"] += 1
         else:
             diag["error"] = "Could not find SKU / Final Billing Address columns in the sheet."
@@ -12574,7 +12674,7 @@ def api_rakhi_cities():
         return jsonify({"error": "login required"}), 401
     try:
         rows, diag = _fetch_rkh_sku_city_rows()
-        return jsonify({"rows": rows, "count": len(rows), "diag": diag})
+        return jsonify({"rows": rows, "count": len(rows), "diag": diag, "all_states_uts": INDIA_STATES_UTS})
     except Exception as e:
         return jsonify({"error": f"rakhi city rows build failed: {e}"}), 500
 
