@@ -5381,7 +5381,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopCitiesCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">City parsed from the Website order sheet's Final Billing Address column, matched to orders by customer name. Follows the Type filter above.</div>
+  <div class="small-note" style="margin:6px 0 14px">City parsed from the Website order sheet's Final Billing Address column, matched directly by SKU (curated Rakhi list only) — independent of the Type filter above.</div>
   <div id="rakhiTopCityContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -9094,34 +9094,35 @@ function exportRakhiPivotCSV(){
 window.renderRakhiPivot = renderRakhiPivot; window.exportRakhiPivotCSV = exportRakhiPivotCSV;
 
 /* ── RAKHI TOP 10 CITIES ──
-   Website order-address sheet (server: /api/rakhi-cities) se customer
-   naam -> city ka map aata hai (server ne "Final Billing Address" column
-   se city already nikaal di hai). Yahan sirf Rakhi rows (customer naam)
-   ko usi map se match karke Final Qty city-wise jodte hain — Type filter
-   lagi ho to sirf _rakhiFilteredRows hi use hoti hain. */
-let _rkhCityMap = null;
+   Server (/api/rakhi-cities) Website order-address sheet se raw order-lines
+   deta hai: [{sku, qty, city}] — city already "Final Billing Address" column
+   se nikaal ke di hui hai (jo 6-digit PIN se pehle wala naam hota hai).
+   Yahan sirf curated Rakhi SKU list (RAKHI_WHITELIST_SKUS) ke rows rakhte
+   hain, city ke hisaab se Qty jod ke top 10 city nikalte hain. Yeh apna
+   alag data-source hai (Website sheet), isliye upar wale Type filter se
+   independent hai — us filter ka is section par koi asar nahi. */
+let _rkhCityRows = null;
+let _rkhCityDiag = null;
 let _rakhiTopCityRows = [];
-function _rkhNameKey(name){
-  return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-async function _rkhLoadCityMap(force){
-  if (_rkhCityMap && !force) return _rkhCityMap;
+async function _rkhLoadCityRows(force){
+  if (_rkhCityRows && !force) return _rkhCityRows;
   try {
     const r = await fetch('/api/rakhi-cities', {headers:{'ngrok-skip-browser-warning':'true'}});
     const d = await r.json();
-    _rkhCityMap = (d && d.map) || {};
-  } catch(e) { _rkhCityMap = _rkhCityMap || {}; }
-  return _rkhCityMap;
+    if (d && d.error) { _rkhCityRows = []; _rkhCityDiag = {error: d.error}; }
+    else { _rkhCityRows = (d && d.rows) || []; _rkhCityDiag = (d && d.diag) || null; }
+  } catch(e) { _rkhCityRows = _rkhCityRows || []; _rkhCityDiag = {error: String(e && e.message || e)}; }
+  return _rkhCityRows;
 }
-function _rkhBuildTopCities(rows, cityMap){
+function _rkhBuildTopCities(cityRows){
   const map = {};
-  rows.forEach(r => {
-    const key = _rkhNameKey(r.cust);
-    const city = key ? cityMap[key] : '';
+  (cityRows || []).forEach(r => {
+    const sku = String(r.sku || '').trim().toUpperCase();
+    if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs
+    const city = String(r.city || '').trim();
     if (!city) return;
-    if (!map[city]) map[city] = {city, qty: 0, rev: 0, orders: 0};
-    map[city].qty += (r.qty || 0);
-    map[city].rev += (r.rev || 0);
+    if (!map[city]) map[city] = {city, qty: 0, orders: 0};
+    map[city].qty += (Number(r.qty) || 0);
     map[city].orders += 1;
   });
   return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 10);
@@ -9134,31 +9135,37 @@ async function renderRakhiTopCities(){
     return;
   }
   host.innerHTML = '<div class="home-empty" style="padding:20px">Loading city data…</div>';
-  const cityMap = await _rkhLoadCityMap();
-  const rows = _rakhiFilteredRows || _rakhiRows || [];
-  const list = _rkhBuildTopCities(rows, cityMap);
+  const cityRows = await _rkhLoadCityRows();
+  const list = _rkhBuildTopCities(cityRows);
   _rakhiTopCityRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No matching city data found for the current orders/filter.</div>';
+    // Diagnostics: exact wajah dikhao ki data kyun nahi aaya, generic
+    // "not found" ki jagah — taaki root cause turant pata chal jaaye.
+    let msg;
+    if (_rkhCityDiag && _rkhCityDiag.error){
+      msg = `Could not load the city sheet: ${escHtml(_rkhCityDiag.error)}`;
+    } else if (!cityRows.length){
+      msg = `The Website address sheet loaded but 0 usable (SKU + city) rows were found. Columns detected: sku="${escHtml((_rkhCityDiag && _rkhCityDiag.sku_col) || '—')}", address="${escHtml((_rkhCityDiag && _rkhCityDiag.addr_col) || '—')}". Sheet columns seen: ${escHtml(((_rkhCityDiag && _rkhCityDiag.all_columns) || []).join(', '))}`;
+    } else {
+      msg = `Loaded ${cityRows.length.toLocaleString('en-IN')} order-lines from the Website sheet, but none matched a curated Rakhi SKU (RKH-* or the CMB gift-set list).`;
+    }
+    host.innerHTML = `<div class="home-empty" style="padding:30px;text-align:left;font-size:.82rem;line-height:1.5">${msg}</div>`;
     return;
   }
-  const emp = LOGIN_ROLE === 'employee';
-  const head = `<tr><th>#</th><th>City</th><th>Final Qty</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Orders</th></tr>`;
+  const head = `<tr><th>#</th><th>City</th><th>Final Qty</th><th>Order Lines</th></tr>`;
   const body = list.map((r, i) => `<tr>
       <td><b>${i + 1}</b></td>
       <td>${escHtml(r.city)}</td>
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-      ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
       <td>${r.orders.toLocaleString('en-IN')}</td>
     </tr>`).join('');
-  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:500px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:420px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiTopCitiesCSV(){
   const list = _rakhiTopCityRows || [];
   if (!list.length){ alert('No Top Cities data to export.'); return; }
-  const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Rank', 'City', 'Final Qty', ...(emp ? [] : ['Net Revenue']), 'Orders'];
-  const data = list.map((r, i) => [i + 1, r.city, Math.round(r.qty), ...(emp ? [] : [Math.round(r.rev)]), r.orders]);
+  const headers = ['Rank', 'City', 'Final Qty', 'Order Lines'];
+  const data = list.map((r, i) => [i + 1, r.city, Math.round(r.qty), r.orders]);
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -9172,11 +9179,12 @@ window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesC
 /* Type filter dropdown badalte hi — orders table, pivot, Top-Selling SKUs
    aur Slow Movers, sab isi filter ke hisaab se turant refresh ho jaate
    hain (renderRakhi() sabse pehle chalta hai taaki _rakhiFilteredRows
-   set ho jaaye, baaki teeno usi ko use karte hain). */
+   set ho jaaye, baaki teeno usi ko use karte hain). Top 10 Cities apna
+   alag data-source (Website sheet) use karta hai isliye is filter se
+   independent hai — yahan dobara call karne ki zaroorat nahi. */
 function rkhOnTypeFilterChange(){
   renderRakhi();
   renderRakhiPivot();
-  renderRakhiTopCities();
   renderRakhiTopSkus();
   renderRakhiSlowMovers();
 }
@@ -12485,17 +12493,19 @@ def api_daily_revenue_glimpse():
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
 
 # ── RAKHI — Top 10 Cities ──
-# Source: "Website" order sheet (same workbook, gid=682845871) — har row me
-# ek order ki "Billing Address Name" (customer) aur "Final Billing Address"
-# hoti hai. Final Billing Address hamesha "...,,CITYNAME-PINCODE" format me
-# khatam hoti hai (6-digit PIN se pehle wala hissa city hai) — isi se city
-# nikalte hain. Isko customer-naam se Rakhi rows (sales_entries me jo
-# already "cust" field hai) ke saath match karke, client-side (Rakhi tab
-# JS) Final Qty city-wise jod deta hai — Type filter lagi ho to usi ke
-# hisaab se (filtered rows) match hota hai.
+# Source: "Website" order sheet (same workbook, gid=682845871) — har row
+# ek order-line hai jisme SKU, Qty aur "Final Billing Address" hoti hai.
+# Final Billing Address hamesha "...,,CITYNAME-PINCODE" format me khatam
+# hoti hai (6-digit PIN se pehle wala hissa city hai) — isi se city
+# nikalte hain. Matching ab CUSTOMER NAAM se nahi, seedha SKU se hoti hai:
+# sirf wahi rows count hoti hain jinka SKU Rakhi SKU hai (RKH-* ya RKH
+# combo wale CMB-* gift set) — yeh check client-side (Rakhi tab JS,
+# _rkhIsRakhiSku/_rkhIsComboSku/_rkhComboHasRakhi — wahi logic jo baaki
+# Rakhi tables use karte hain) hota hai, kyunki combo->RKH detection
+# master data (combo_skus) par depend karta hai jo sirf browser me hai.
 RAKHI_WEBSITE_ADDR_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
                            "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=682845871&single=true&output=csv")
-_RKH_CITY_CACHE = {"map": None, "ts": 0}
+_RKH_CITY_CACHE = {"rows": None, "ts": 0}
 
 def _extract_city_from_address(addr):
     """'...,,MUMBAI-400071' jaisi address string ke bilkul end me jo
@@ -12511,48 +12521,62 @@ def _extract_city_from_address(addr):
     city = re.sub(r"\s+", " ", m.group(1)).strip(" .")
     return city.upper() if city else ""
 
-def _fetch_rkh_city_map():
-    """Website order-address sheet ko fetch karke {normalized_name: CITY}
-    map banata hai — 10 min cache (sheet baar baar fetch karna mehenga hai).
-    Fetch/columns fail ho jaayein to khaali map deta hai (feature silently
-    skip ho jaata hai, baaki dashboard par asar nahi padta)."""
-    if _RKH_CITY_CACHE["map"] is not None and (time.time() - _RKH_CITY_CACHE["ts"] < 600):
-        return _RKH_CITY_CACHE["map"]
-    out = {}
+def _fetch_rkh_sku_city_rows():
+    """Website order sheet ko fetch karke [{sku, qty, city}, ...] deta hai
+    (raw order-lines, koi Rakhi-filter yahan nahi laga — wo client-side
+    SKU ke hisaab se hota hai) — 10 min cache. Return: (rows, diagnostics)
+    — diagnostics me exact wajah hoti hai agar kuch match na ho (columns
+    na milna, fetch fail, ya sheet khaali) taaki UI par saaf pata chale."""
+    if _RKH_CITY_CACHE["rows"] is not None and (time.time() - _RKH_CITY_CACHE["ts"] < 600):
+        return _RKH_CITY_CACHE["rows"], _RKH_CITY_CACHE.get("diag", {})
+    out = []
+    diag = {"rows_total": 0, "rows_used": 0, "columns_found": False, "error": None}
     try:
         df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
         df.columns = [str(c).strip() for c in df.columns]
         cols = list(df.columns)
-        C_NAME = find_col(cols, "Billing Address Name", "billing name", "customer name", "name") \
-                 or (cols[3] if len(cols) > 3 else None)
+        diag["rows_total"] = len(df)
+        diag["all_columns"] = cols[:20]   # debug ke liye — sheet ke pehle 20 column names
+        C_SKU = find_col(cols, "SKU", "sku code", "product sku", "item sku") \
+                or (cols[0] if len(cols) > 0 else None)
+        C_QTY = find_col(cols, "Final Qty", "final quantity", "sold qty", "qty", "quantity") \
+                or (cols[1] if len(cols) > 1 else None)
         C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
                  or (cols[4] if len(cols) > 4 else None)
-        if C_NAME and C_ADDR:
+        diag["sku_col"] = C_SKU
+        diag["qty_col"] = C_QTY
+        diag["addr_col"] = C_ADDR
+        if C_SKU and C_ADDR:
+            diag["columns_found"] = True
             for _, r in df.iterrows():
-                name = str(r.get(C_NAME, "") or "").strip()
-                if not name:
+                sku = str(r.get(C_SKU, "") or "").strip()
+                if not sku:
                     continue
                 city = _extract_city_from_address(r.get(C_ADDR, ""))
                 if not city:
                     continue
-                key = re.sub(r"[^a-z0-9]", "", name.lower())
-                if key and key not in out:
-                    out[key] = city
+                qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
+                out.append({"sku": sku, "qty": qty, "city": city})
+                diag["rows_used"] += 1
+        else:
+            diag["error"] = "Could not find SKU / Final Billing Address columns in the sheet."
     except Exception as e:
-        print("Rakhi city map fetch failed:", str(e)[:160])
-    _RKH_CITY_CACHE["map"] = out
+        diag["error"] = str(e)[:300]
+        print("Rakhi SKU-city rows fetch failed:", str(e)[:160])
+    _RKH_CITY_CACHE["rows"] = out
+    _RKH_CITY_CACHE["diag"] = diag
     _RKH_CITY_CACHE["ts"] = time.time()
-    return out
+    return out, diag
 
 @app.route("/api/rakhi-cities")
 def api_rakhi_cities():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
-        m = _fetch_rkh_city_map()
-        return jsonify({"map": m})
+        rows, diag = _fetch_rkh_sku_city_rows()
+        return jsonify({"rows": rows, "count": len(rows), "diag": diag})
     except Exception as e:
-        return jsonify({"error": f"rakhi city map build failed: {e}"}), 500
+        return jsonify({"error": f"rakhi city rows build failed: {e}"}), 500
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
 def api_daily_revenue_glimpse_export_xlsx():
