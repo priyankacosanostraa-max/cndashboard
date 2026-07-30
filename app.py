@@ -7573,7 +7573,7 @@ function applyRO(){
     const comboWip = (c) => wipOf(c);
     const wipLabel = roAnuMode ? "WIP (Anu Ma'am)" : (roInvCtx.wipLabel || 'WIP');
     // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboStock, comboWip, wipLabel, typeSel);
+    const comboHtml = _renderComboDetails(item.combo_details, comboStock, comboWip, wipLabel, typeSel, {q7:q7, q15:q15, q30:q30, sold:qty});
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
@@ -7735,7 +7735,7 @@ function applyColFilters(){
     const comboWip2 = (c) => wipOfCF(c);
     const wipLabel2 = roAnuModeCF ? "WIP (Anu Ma'am)" : (roInvCtxCF.wipLabel || 'WIP');
     // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF);
+    const comboHtml = _renderComboDetails(item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF, {q7:q7, q15:q15, q30:q30, sold:qty});
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
@@ -7904,28 +7904,14 @@ function exportRO(fmtType){
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
     });
-    // Gift set ke andar wale (stone details) SKUs — filter-aware: Type filter ke hisaab se sales
+    // Gift set ke andar wale (stone details) SKUs: export me har child SKU ko
+    // parent CMB ki wahi filtered 7D/15D/30D/Sold sale dikhani hai. Yeh sirf
+    // exported display rows hain; KPI/master totals me child rows add nahi hote.
     (item.combo_details || []).forEach(c => {
-      // Type filter active hai to combo SKU ke filtered sales nikalo
-      let c7, c15, c30, cSold;
-      if (!roNoFilterX && (typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0)) {
-        const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
-        if (masterC) {
-          const fe = (masterC.sales_entries || []).filter(e =>
-            (!typeSel.length || typeSel.includes(e.type)) &&
-            (!chanSel.length || chanSel.includes(e.channel)) &&
-            (!subChanSel.length || subChanSel.includes(e.sub_channel))
-          );
-          c7    = Math.round(winQty(fe, D7));
-          c15   = Math.round(winQty(fe, D15));
-          c30   = Math.round(winQty(fe, D30));
-          cSold = Math.round(fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
-        } else {
-          c7 = c.qty_7d||0; c15 = c.qty_15d||0; c30 = c.qty_1m||0; cSold = c.final_qty||0;
-        }
-      } else {
-        c7 = c.qty_7d||0; c15 = c.qty_15d||0; c30 = c.qty_1m||0; cSold = c.final_qty||0;
-      }
+      const c7 = Math.round(r7);
+      const c15 = Math.round(r15);
+      const c30 = Math.round(r30);
+      const cSold = Math.round(rSold);
       data.push({
         'Row Type': '— Set Item',
         SKU: c.sku,
@@ -8211,15 +8197,30 @@ function escHtml(v){
 /* ── Helper: combo SKU ka filter-aware HTML (Type filter ke hisaab se
    7D/15D/30D/Sold sales dikhata hai, warna pre-computed totals).
    WIP bhi channel-aware (comboWipFn(c) se). ── */
-function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, typeSel) {
+function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, typeSel, parentSales) {
   if (!combo_details || !combo_details.length) return '';
+  // Display-only rule for Gift Sets: every child/set-item inherits the parent CMB
+  // sale figures. Underlying master/filtered rows are NOT changed, so KPI totals
+  // continue to count the CMB sale only once.
+  const parentSaleVals = (parentSales && typeof parentSales === 'object') ? {
+    q7: Math.round(parseFloat(parentSales.q7) || 0),
+    q15: Math.round(parseFloat(parentSales.q15) || 0),
+    q30: Math.round(parseFloat(parentSales.q30) || 0),
+    sold: Math.round(parseFloat(parentSales.sold) || 0)
+  } : null;
   const now = todayISO || new Date().toISOString().slice(0,10);
   const cd7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
   const cd15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
   const cd30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
   const items_html = combo_details.map(c => {
     let cQ7, cQ15, cQ30, cSold;
-    if (typeSel && typeSel.length > 0) {
+    if (parentSaleVals) {
+      // Example: CMB-0817 Sold Qty = 10 => each child SKU shows Sold Qty = 10.
+      cQ7 = parentSaleVals.q7;
+      cQ15 = parentSaleVals.q15;
+      cQ30 = parentSaleVals.q30;
+      cSold = parentSaleVals.sold;
+    } else if (typeSel && typeSel.length > 0) {
       const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
       if (masterC) {
         const fe = (masterC.sales_entries || []).filter(e => typeSel.includes(e.type));
