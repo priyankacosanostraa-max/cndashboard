@@ -4605,8 +4605,8 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 #vBulk .bulk-money{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 #vBulk .bulk-remove{border:1px solid #efcaca;background:#fff5f5;color:#b91c1c;border-radius:9px;padding:8px 11px;font-size:10px;font-weight:850;cursor:pointer}
 #vBulk .bulk-empty{padding:48px 20px;text-align:center;color:#8c7a42;font-size:12px;font-weight:750}
-@media(max-width:900px){#vBulk .bulk-input-grid{grid-template-columns:1fr}#vBulk .bulk-summary{grid-template-columns:repeat(2,minmax(140px,1fr))}}
-@media(max-width:540px){#vBulk .bulk-summary{grid-template-columns:1fr}#vBulk .bulk-discount-row{grid-template-columns:1fr}}
+@media(max-width:900px){ #vBulk .bulk-input-grid{grid-template-columns:1fr}#vBulk .bulk-summary{grid-template-columns:repeat(2,minmax(140px,1fr))}}
+@media(max-width:540px){ #vBulk .bulk-summary{grid-template-columns:1fr}#vBulk .bulk-discount-row{grid-template-columns:1fr}}
 
 </style></head><body data-tab="home">
 
