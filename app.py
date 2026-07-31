@@ -259,6 +259,7 @@ from flask import Flask, request, jsonify, render_template_string, session
 # ── Config ───────────────────────────────────────────────────
 INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv"
 COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
+COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
 # Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
@@ -1046,10 +1047,14 @@ def _refresh_data():
     def _at(idx): return cols[idx] if len(cols) > idx else None
 
     C_DATE  = _at(0)  or find_col(cosa.columns, "Dispatch Date","date")
-    # Order Date — separate from the dispatch/COSA date above. Used ONLY for
-    # the Rakhi tab (per-entry "order_date"); every other tab in the app
-    # keeps using C_DATE (dispatch date) untouched.
-    C_ODATE = find_col(cosa.columns, "Order Date","order date","orderdate")
+    # Main COSA source stays dispatch-date based. Rakhi transactions are loaded
+    # separately from the dedicated cossa_orderdate sheet after this frame is
+    # processed, so no Rakhi metric can silently fall back to Dispatch Date.
+    C_ODATE = find_col(
+        cosa.columns,
+        "cossa_orderdate", "cosa_orderdate", "Cossa Order Date", "COSA Order Date",
+        "Order Date", "order date", "orderdate"
+    )
     C_FY    = _at(1)  or find_col(cosa.columns, "FY Year","fy","financial year")
     C_SKU   = _at(2)  or find_col(cosa.columns, "SKU","item code") or cols[0]
     # G (index 6) = Final Qty (confirmed layout). Header-match pehle "Final Qty"
@@ -1219,6 +1224,134 @@ def _refresh_data():
     except Exception:
         pass
 
+    # ── Rakhi sales source: dedicated cossa_orderdate sheet ───────────────
+    # Every Rakhi table/KPI/export must use Order Date, not Dispatch Date.
+    # Keep only RKH/CMB rows so the extra source adds very little memory.
+    rakhi_sales_exact = {}
+    try:
+        _wstage("fetching", "Downloading order-date sales sheet for Rakhi…")
+        cosa_od = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+        _DF_REFS["cosa_orderdate"] = cosa_od
+        cosa_od.columns = [str(c).strip() for c in cosa_od.columns]
+        od_cols = list(cosa_od.columns)
+        def _od_at(i): return od_cols[i] if len(od_cols) > i else None
+
+        OD_DATE = (find_col(
+            cosa_od.columns,
+            "cossa_orderdate", "cosa_orderdate", "Cossa Order Date", "COSA Order Date",
+            "Order Date", "order date", "orderdate"
+        ) or _od_at(0))
+        OD_FY   = _od_at(1) or find_col(cosa_od.columns, "FY Year", "fy", "financial year")
+        OD_SKU  = _od_at(2) or find_col(cosa_od.columns, "SKU", "item code")
+        OD_QTY  = (find_col(cosa_od.columns, "Final Qty", "final quantity", "final_qty")
+                   or _od_at(6) or find_col(cosa_od.columns, "qty", "quantity") or _od_at(5))
+        OD_RET  = find_col(cosa_od.columns, "Return Qty", "return qty", "returns", "returned qty") or _od_at(5)
+        OD_SP   = find_col(cosa_od.columns, "Selling Price", "selling price", "sp", "unit price") or _od_at(7)
+        OD_REV  = _od_at(8) or find_col(cosa_od.columns, "Net Revenue", "net rev", "revenue")
+        OD_CUST = _od_at(9) or find_col(cosa_od.columns, "Customer Name", "customer", "client", "party")
+        OD_TYPE = _od_at(10) or find_col(cosa_od.columns, "Type", "channel", "mode")
+
+        dbg["cossa_orderdate_cols"] = od_cols
+        dbg["cossa_orderdate_resolved"] = {
+            "date": OD_DATE, "fy": OD_FY, "sku": OD_SKU, "qty": OD_QTY,
+            "return": OD_RET, "sp": OD_SP, "revenue": OD_REV,
+            "customer": OD_CUST, "type": OD_TYPE,
+        }
+
+        od_total = len(cosa_od)
+        for od_i, r in enumerate(_df_chunks(cosa_od)):
+            if (od_i % 3000) == 0:
+                _wstage("processing", "Indexing Rakhi orders by Order Date…", od_i, od_total)
+
+            dt_od = parse_date_any(r.get(OD_DATE, "")) if OD_DATE else None
+            if dt_od is None:
+                continue
+            order_date_iso = dt_od.strftime("%Y-%m-%d")
+
+            raw_sku = clean(r.get(OD_SKU, "")) if OD_SKU else ""
+            if not raw_sku:
+                continue
+            n_key = re.sub(r'[^A-Z0-9]', '', raw_sku.upper())
+            mapped_sku = raw_sku.upper()
+            if n_key in inv_skus_map:
+                mapped_sku = inv_skus_map[n_key]
+            elif not FAST_LOAD:
+                cached = _fuzzy_cache.get("OD:" + n_key)
+                if cached is not None:
+                    mapped_sku = cached
+                else:
+                    cands = _prefix_buckets.get(n_key[:4]) or []
+                    matches = difflib.get_close_matches(n_key, cands, n=1, cutoff=0.8) if cands else []
+                    mapped_sku = inv_skus_map[matches[0]] if matches else raw_sku.upper()
+                    _fuzzy_cache["OD:" + n_key] = mapped_sku
+
+            # Rakhi page only needs direct Rakhi SKUs and CMB gift sets.
+            if not re.match(r"^(RKH|CMB)", str(mapped_sku or "").strip(), re.I):
+                continue
+
+            qty = to_num(r.get(OD_QTY, 0)) if OD_QTY else 0.0
+            ret = to_num(r.get(OD_RET, 0)) if OD_RET else 0.0
+            sp  = to_num(r.get(OD_SP, 0)) if OD_SP else 0.0
+            rev = to_num(r.get(OD_REV, 0)) if OD_REV else 0.0
+            if not (-100000 <= qty <= 100000): qty = 0.0
+            if not (-100000 <= ret <= 100000): ret = 0.0
+
+            fy = norm_fy(r.get(OD_FY, "")) if OD_FY else ""
+            if not fy:
+                fy = fy_bounds(dt_od)[0]
+            cust = norm_cust(r.get(OD_CUST, "Unknown")) if OD_CUST else "Unknown"
+            typ  = norm_type(r.get(OD_TYPE, "Regular")) if OD_TYPE else "Regular"
+            channel = calc_channel(cust, typ)
+            sub_channel = calc_sub_channel(cust, channel, typ)
+            if str(typ).strip().lower() == "website":
+                cust = "Website"
+
+            entry = {
+                "qty": qty, "rev": rev, "sp": sp, "ret": ret,
+                "ret_amt": float(ret * sp),
+                "date": _si(order_date_iso),
+                "order_date": _si(order_date_iso),
+                "cust": _si(cust), "type": _si(typ),
+                "channel": _si(channel), "sub_channel": _si(sub_channel),
+                "fy": _si(fy),
+            }
+            bucket = rakhi_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
+            bucket["entries"].append(entry)
+            bucket["total_rev"] += rev
+
+        dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
+        dbg["cossa_orderdate_rakhi_rows"] = sum(len(v.get("entries", [])) for v in rakhi_sales_exact.values())
+    except Exception as e:
+        dbg["errors"].append(f"cossa_orderdate: {e}")
+    finally:
+        try:
+            del cosa_od
+        except Exception:
+            pass
+        _DF_REFS.pop("cosa_orderdate", None)
+        _gc.collect()
+
+    # Safe fallback only when the main source genuinely contains an Order Date
+    # column. We never substitute Dispatch Date for Rakhi.
+    if not rakhi_sales_exact and C_ODATE:
+        for sku_key, sd in sales_exact.items():
+            if not re.match(r"^(RKH|CMB)", str(sku_key or "").strip(), re.I):
+                continue
+            od_entries = []
+            for old_e in sd.get("entries", []):
+                od = old_e.get("order_date")
+                if not od or od == "N/A":
+                    continue
+                ne = dict(old_e)
+                ne["date"] = od
+                ne["order_date"] = od
+                od_entries.append(ne)
+            if od_entries:
+                rakhi_sales_exact[sku_key] = {
+                    "entries": od_entries,
+                    "total_rev": sum(float(e.get("rev") or 0) for e in od_entries),
+                }
+
     _lm = float(kpi_last_month); _ly = float(kpi_last_year_month)
     _yoy = round(((_lm - _ly) / _ly * 100), 1) if _ly else None
     period_kpis = {
@@ -1363,6 +1496,8 @@ def _refresh_data():
 
         sd  = sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
         ent = sd["entries"]
+        rkh_sd = rakhi_sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
+        rkh_ent = rkh_sd["entries"]
 
         # Selling Price = COSA col H ka ACTUAL value (latest dated non-zero).
         _sps = [float(e.get("sp") or 0) for e in ent if float(e.get("sp") or 0) > 0]
@@ -1437,6 +1572,7 @@ def _refresh_data():
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
             "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
+            "rakhi_sales_entries": rkh_ent,
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -1493,6 +1629,7 @@ def _refresh_data():
         ent = sd["entries"]
         if not ent:
             continue
+        rkh_ent = rakhi_sales_exact.get(orphan_key, {"entries": []}).get("entries", [])
         seen_skus.add(orphan_key)
         sku_list.append(orphan_key)
         A = _agg_entries(ent)
@@ -1508,6 +1645,7 @@ def _refresh_data():
             "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
             "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
             "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
+            "rakhi_sales_entries": rkh_ent,
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -8980,9 +9118,9 @@ function exportDiscount(){
 window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
 
 /* ── RAKHI ── SKUs starting with RKH, + CMB (gift set) SKUs whose Stone
-   Details/Remarks mention an RKH SKU. Built entirely client-side from
-   `master` (already-loaded compiled data) — order-date level (one row
-   per sales transaction), same source `master` uses everywhere else. */
+   Details/Remarks mention an RKH SKU. Built client-side from dedicated `rakhi_sales_entries`, loaded from the
+   cossa_orderdate sheet — one row per Order Date transaction. Dispatch Date
+   is not used anywhere in the Rakhi sales calculations. */
 let _rakhiRows = [];
 let _rakhiFilteredRows = [];
 /* ── Curated Rakhi SKU whitelist ──
@@ -9102,7 +9240,7 @@ function _rkhBuildRows(){
   const rows = [];
   (master || []).forEach(item => {
     if (!item || !_rkhMatchItem(item)) return;
-    const entries = item.sales_entries || [];
+    const entries = Array.isArray(item.rakhi_sales_entries) ? item.rakhi_sales_entries : [];
     entries.forEach(e => {
       if (!_rkhIsFy2627(e)) return;
       rows.push({
@@ -12580,8 +12718,13 @@ def _employee_view(comp, period_kpis):
     (512MB free tier par permanent duplicate OOM kara raha tha)."""
     safe_comp = []
     for i in comp:
-        d = {k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items() if k != "sales_entries"}
+        d = {k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items()
+             if k not in ("sales_entries", "rakhi_sales_entries")}
         d["sales_entries"] = [{**e, "rev": 0, "sp": 0, "ret_amt": 0} for e in i.get("sales_entries", [])]
+        d["rakhi_sales_entries"] = [
+            {**e, "rev": 0, "sp": 0, "ret_amt": 0}
+            for e in i.get("rakhi_sales_entries", [])
+        ]
         safe_comp.append(d)
     safe_kpis = {k: (0 if k in ("total", "yesterday", "this_month", "this_fy", "prev_fy",
                                 "last_month", "last_year_month", "mom_yoy_pct") else v)
@@ -13118,8 +13261,8 @@ _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
 # "Order Date" hai (Dispatch Date nahi). Baaki dashboard (Target vs Actual,
 # Inventory, etc.) COSA (dispatch date) wale se hi chalta rahega — sirf
 # yeh ek feature Order Date wali sheet use karta hai.
-COSA_ORDERDATE_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
-                       "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
+# COSA_ORDERDATE_URL is configured with the main sheet URLs near the top so
+# Rakhi and Daily Revenue Glimpse share the same dedicated Order Date source.
 _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 
 def _fetch_drg_source_rows():
