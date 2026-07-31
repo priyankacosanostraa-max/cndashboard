@@ -452,7 +452,7 @@ def base_sku(s): return str(s).strip().upper().split("_")[0]
 #  (bina chhede) dikhega.
 # ════════════════════════════════════════════════════════════════
 CN_STORE_URL = "https://cosanostraa.com"
-CN_CATALOG = {"exact": {}, "base": {}, "ts": 0.0, "count": 0}
+CN_CATALOG = {"exact": {}, "base": {}, "price_exact": {}, "price_base": {}, "ts": 0.0, "count": 0}
 CN_REFRESH_INTERVAL = 6 * 3600  # 6 ghante — catalog kam badalta hai
 
 def _cn_normalize(s):
@@ -515,6 +515,7 @@ def cn_build_catalog(force=False):
     try:
         products = _cn_fetch_all_products()
         exact, base = {}, {}
+        price_exact, price_base = {}, {}
         for p in products:
             title = clean(p.get("title", ""))
             if not title:
@@ -524,14 +525,22 @@ def cn_build_catalog(force=False):
                 if not sku:
                     continue
                 ns = _cn_normalize(sku)
+                website_price = to_num(v.get("price", 0))
                 if ns and ns not in exact:
                     exact[ns] = title
+                if ns and website_price > 0 and ns not in price_exact:
+                    # Shopify variant `price` is the current storefront selling price.
+                    price_exact[ns] = round(float(website_price), 2)
                 b = _cn_base_code(ns)
                 if b and b not in base:
                     base[b] = title
+                if b and website_price > 0 and b not in price_base:
+                    price_base[b] = round(float(website_price), 2)
         if exact:
             CN_CATALOG["exact"] = exact
             CN_CATALOG["base"] = base
+            CN_CATALOG["price_exact"] = price_exact
+            CN_CATALOG["price_base"] = price_base
             CN_CATALOG["count"] = len(exact)
         CN_CATALOG["ts"] = time.time()
         print(f"cosanostraa.com catalog loaded: {CN_CATALOG['count']} SKUs")
@@ -552,6 +561,25 @@ def cn_display_name(sku):
     if b:
         return CN_CATALOG["base"].get(b)
     return None
+
+def cn_website_selling_price(sku):
+    """SKU ka current cosanostraa.com storefront selling price.
+    Exact variant SKU ko priority milti hai; suffix mismatch par base-SKU
+    fallback use hota hai. Website price unavailable ho to 0 return hota hai.
+    COSA order-history selling price ka koi fallback jaan-bujhkar nahi hai."""
+    if not sku:
+        return 0.0
+    ns = _cn_normalize(sku)
+    price = to_num(CN_CATALOG.get("price_exact", {}).get(ns, 0))
+    if price > 0:
+        return round(float(price), 2)
+    b = _cn_base_code(ns)
+    if b:
+        price = to_num(CN_CATALOG.get("price_base", {}).get(b, 0))
+        if price > 0:
+            return round(float(price), 2)
+    return 0.0
+
 
 def cn_sku_label(sku):
     """Display label: cosanostraa.com par mila to Product Name, warna
@@ -1557,6 +1585,7 @@ def _refresh_data():
             "total_inv":   stk + wip,
             "mrp":         mrp,
             "cost":        cost,
+            "website_selling_price": cn_website_selling_price(raw),
             "avg_selling_price":  avg_sp,
             "last_selling_price": last_sp,
             "aov_per_piece":      avg_sp,       # per-piece average order value (avg selling price/unit)
@@ -1641,6 +1670,7 @@ def _refresh_data():
             "image_url": "", "inv_stock": 0, "inv_wip": 0, "wh_wip": 0,
             "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0, "inv_wip_sor": 0,
             "blocked_qty": 0, "total_inv": 0, "mrp": 0.0, "cost": 0.0,
+            "website_selling_price": cn_website_selling_price(orphan_key),
             "avg_selling_price": 0.0, "last_selling_price": 0.0, "aov_per_piece": 0.0,
             "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
             "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
@@ -5653,7 +5683,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="insights-head">
       <div>
         <div class="insights-title">Bulk — Make Combo</div>
-        <div class="insights-sub">Add one or multiple SKUs to instantly build a combo using each SKU's latest COSA selling price and product photo.</div>
+        <div class="insights-sub">Add one or multiple SKUs to instantly build a combo using each SKU's current cosanostraa.com selling price and product photo.</div>
       </div>
     </div>
 
@@ -5693,7 +5723,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="bulkSummary" class="bulk-summary">
       <div class="bulk-sum-card"><div class="bulk-sum-label">Combo Pieces</div><div class="bulk-sum-value" id="bulkPieces">0</div><div class="bulk-sum-sub" id="bulkSkuCount">0 unique SKUs</div></div>
-      <div class="bulk-sum-card"><div class="bulk-sum-label">Original Total</div><div class="bulk-sum-value" id="bulkOriginal">₹0.00</div><div class="bulk-sum-sub">Latest COSA selling prices</div></div>
+      <div class="bulk-sum-card"><div class="bulk-sum-label">Original Total</div><div class="bulk-sum-value" id="bulkOriginal">₹0.00</div><div class="bulk-sum-sub">Website price; All Product MRP fallback</div></div>
       <div class="bulk-sum-card"><div class="bulk-sum-label">Discount Amount</div><div class="bulk-sum-value" id="bulkDiscountAmount">₹0.00</div><div class="bulk-sum-sub" id="bulkDiscountLabel">0% discount</div></div>
       <div class="bulk-sum-card bulk-final-card"><div class="bulk-sum-label">Final Combo Price</div><div class="bulk-sum-value" id="bulkFinal">₹0.00</div><div class="bulk-sum-sub">Total after discount</div></div>
     </div>
@@ -12029,7 +12059,12 @@ function bulkFmtMoney(n){
 
 function bulkPriceOf(item){
   if (!item) return 0;
-  return Number(item.last_selling_price) || Number(item.avg_selling_price) || 0;
+  // First priority: current cosanostraa.com storefront selling price.
+  // If the website price is unavailable, use MRP from the All Product
+  // inventory sheet. Historical COSA order selling prices are never used.
+  const websitePrice = Number(item.website_selling_price) || 0;
+  if (websitePrice > 0) return websitePrice;
+  return Number(item.mrp) || 0;
 }
 
 function bulkFindItem(rawSku){
@@ -12191,10 +12226,19 @@ function bulkRenderCombo(forcedMessage){
     const image = hasImg
       ? `<img class="bulk-photo" src="${escHtml(imageUrl)}" alt="${escHtml(it.sku)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="bulk-photo-ph" style="display:none">💎</span>`
       : '<span class="bulk-photo-ph">💎</span>';
-    const priceMissing = r.price <= 0 ? '<div class="bulk-product-meta" style="color:#b45309">Selling price not found in COSA</div>' : '';
+    const websitePrice = Number(it.website_selling_price) || 0;
+    const inventoryMrp = Number(it.mrp) || 0;
+    let priceSource = '';
+    if (websitePrice > 0) {
+      priceSource = '<div class="bulk-product-meta" style="color:#15803d">Price source: cosanostraa.com</div>';
+    } else if (inventoryMrp > 0) {
+      priceSource = '<div class="bulk-product-meta" style="color:#b45309">Website price unavailable · using All Product MRP</div>';
+    } else {
+      priceSource = '<div class="bulk-product-meta" style="color:#b91c1c">Website price and All Product MRP not found</div>';
+    }
     return `<tr>
       <td style="width:104px">${image}</td>
-      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(it.sku)}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceMissing}</td>
+      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(it.sku)}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
       <td style="width:115px"><input class="bulk-qty" type="number" min="1" step="1" value="${r.qty}" data-sku="${escHtml(it.sku)}" onchange="bulkUpdateQty(this.dataset.sku,this.value)"></td>
       <td class="bulk-money" style="width:145px">${bulkFmtMoney(r.price)}</td>
       <td class="bulk-money" style="width:155px;color:#15803d">${bulkFmtMoney(r.line)}</td>
@@ -12706,7 +12750,7 @@ def home():
     return render_template_string(HTML)
 
 REV_ITEM_KEYS = ("total_net_revenue", "rev_yesterday", "rev_month", "rev_fy", "rev_prev_fy",
-                 "avg_selling_price", "last_selling_price", "return_amount",
+                 "avg_selling_price", "last_selling_price", "website_selling_price", "return_amount",
                  "aov_per_piece", "discount_pct")
 
 def _employee_view(comp, period_kpis):
@@ -15797,6 +15841,13 @@ def _cn_catalog_loop():
         time.sleep(CN_REFRESH_INTERVAL)
         try:
             cn_build_catalog(force=True)
+            try:
+                # Recompile dashboard data so refreshed website prices reach Bulk immediately.
+                get_data(True)
+                _build_role_gz("admin")
+                print("CN catalog names + website prices refreshed ✔")
+            except Exception as e:
+                print("post-CN price refresh failed:", str(e)[:120])
         except Exception as e:
             print("CN catalog refresh failed:", str(e)[:120])
 
