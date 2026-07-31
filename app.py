@@ -9262,13 +9262,13 @@ function _rkhStrictRakhiChildDetails(item){
   });
   return out;
 }
-/* Channel-vs-target quantity is a Rakhi-piece count, not a CMB order count:
-   direct RKH Qty 1 = 1; CMB Qty 1 = one unit for each unique Rakhi child. */
+/* Channel-vs-target quantity is the actual sold order quantity:
+   direct RKH Qty 1 = 1 and CMB Qty 1 = 1. Child SKUs are intentionally
+   not expanded here, so target KPIs and exports never double/triple count. */
 function _rkhTargetRakhiQty(row){
   const soldQty = Number(row && row.qty) || 0;
   const sku = String((row && row.sku) || '').trim().toUpperCase();
-  if (_rkhIsRakhiSku(sku)) return soldQty;
-  if (_rkhIsComboSku(sku)) return soldQty * _rkhStrictRakhiChildDetails(row).length;
+  if (_rkhIsRakhiSku(sku) || _rkhIsComboSku(sku)) return soldQty;
   return 0;
 }
 /* For Rakhi stock/WIP totals, a CMB's own inventory is not used. We use
