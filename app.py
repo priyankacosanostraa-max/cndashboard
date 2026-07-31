@@ -2787,6 +2787,15 @@ table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
 }
 #vRakhi .rkh-sku-summary th:nth-child(1),
 #vRakhi .rkh-sku-summary td:nth-child(1){min-width:350px;max-width:440px}
+#vRakhi .rkh-common-summary .rkh-common-photo-ph{
+  width:96px;height:96px;min-width:96px;align-items:center;justify-content:center;
+  margin:auto;background:#fff;border:1px solid rgba(212,175,90,.42);border-radius:11px;
+  box-sizing:border-box;font-size:30px;color:#c0ad76;box-shadow:0 3px 10px rgba(15,23,42,.08)
+}
+#vRakhi .rkh-common-summary th:nth-child(1),#vRakhi .rkh-common-summary td:nth-child(1){min-width:118px;max-width:118px}
+#vRakhi .rkh-common-summary th:nth-child(2),#vRakhi .rkh-common-summary td:nth-child(2){min-width:150px;max-width:190px}
+#vRakhi .rkh-common-summary th:nth-child(3),#vRakhi .rkh-common-summary td:nth-child(3){min-width:110px;max-width:130px}
+#vRakhi .rkh-common-summary th:nth-child(4),#vRakhi .rkh-common-summary td:nth-child(4){min-width:300px;max-width:none}
 @media (max-width:700px){
   #vRakhi table.ro td img{
     width:84px !important;
@@ -10273,7 +10282,8 @@ function _rkhBuildCommonSkus(){
     _rkhStrictRakhiChildDetails(parent).forEach(child => {
       const childSku = String((child && child.sku) || '').trim().toUpperCase();
       if (!childSku) return;
-      const childItem = _masterSkuMap[childSku] || {};
+      const compactChildSku = childSku.replace(/[^A-Z0-9]/g, '');
+      const childItem = _masterSkuMap[childSku] || _bulkSkuLookup[compactChildSku] || {};
       if (!map[childSku]){
         map[childSku] = {
           sku: childSku,
@@ -10281,6 +10291,8 @@ function _rkhBuildCommonSkus(){
           image_url: childItem.image_url || child.image_url || '',
           parents: []
         };
+      } else if (!map[childSku].image_url && (childItem.image_url || child.image_url)) {
+        map[childSku].image_url = childItem.image_url || child.image_url || '';
       }
       if (!map[childSku].parents.some(p => p.sku === parentSku)){
         map[childSku].parents.push({sku: parentSku, sku_name: parent.sku_name || ''});
@@ -10306,30 +10318,36 @@ function renderRakhiCommonSkus(){
   }
   const rows = list.map(r => {
     const skuEsc = String(r.sku).replace(/'/g, "\\'");
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const photo = hasImg
+      ? `<img src="${escHtml(r.image_url)}" alt="${escHtml(r.sku)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="rkh-common-photo-ph" style="display:none">💎</span>`
+      : `<span class="rkh-common-photo-ph" style="display:flex">💎</span>`;
     const parents = r.parents.map(p => {
       const pEsc = String(p.sku).replace(/'/g, "\\'");
       return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(p.sku)}</button>`;
     }).join(', ');
     return `<tr>
+      <td style="width:118px;text-align:center">${photo}</td>
       <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td>
       <td style="text-align:center"><b>${r.parents.length}</b></td>
       <td style="white-space:normal;line-height:1.7">${parents}</td>
     </tr>`;
   }).join('');
   host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> common Rakhi child SKUs found.</div>
-    <table class="ro rkh-grid" style="width:100%;min-width:650px;border-collapse:collapse">
-      <thead><tr><th>Child SKU (RKH)</th><th>No. of CMBs</th><th>CMB SKUs</th></tr></thead>
+    <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:780px;border-collapse:collapse">
+      <thead><tr><th>Photo</th><th>Child SKU (RKH)</th><th>No. of CMBs</th><th>CMB SKUs</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
 function exportRakhiCommonSkusCSV(){
   const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
   if (!list.length){ alert('No common Rakhi child SKU summary to export.'); return; }
-  const headers = ['Child SKU (RKH)', 'No. of CMBs', 'CMB SKUs'];
+  const headers = ['Child SKU (RKH)', 'No. of CMBs', 'CMB SKUs', 'Image Link'];
   const data = list.map(r => [
     r.sku,
     r.parents.length,
-    r.parents.map(p => p.sku).join(', ')
+    r.parents.map(p => p.sku).join(', '),
+    r.image_url || ''
   ]);
   const csv = [headers].concat(data).map(row => row.map(c => {
     const s = String(c == null ? '' : c);
