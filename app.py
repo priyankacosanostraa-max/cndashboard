@@ -201,7 +201,7 @@ SPACE_ID    = "mayuresh2026/cosa-embedder"
 CF_ACCOUNT_ID = "975ea2d6d03cfa63e40b32a683d472df"
 CF_API_TOKEN  = "cfut_lYVrtys6IQLlG0P6Db5sQyIesEjEhKxxQoP9LSWb548628c7"
 
-import os, re, io, sys, time, glob, base64, pickle, shutil, threading, subprocess, difflib, uuid, json
+import os, re, io, sys, time, glob, base64, pickle, shutil, threading, subprocess, difflib, uuid, json, hashlib
 import gzip as _gzip_mod
 import gc as _gc
 from sys import intern as _intern_raw
@@ -1114,6 +1114,84 @@ def _refresh_data():
             if n_key not in inv_skus_map:
                 inv_skus_map[n_key] = raw_inv.upper()
 
+    # ── Website repeat-customer identity index ─────────────────────────
+    # Billing Address Name + Final Billing Address together identify one
+    # Website customer. Multiple order-lines/orders for the same customer
+    # on the same date are collapsed into one customer-session. Only a short
+    # SHA-1 token is sent to the browser; names/addresses themselves are not.
+    website_customer_events = {}
+    try:
+        _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
+        web_orders = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
+        _DF_REFS["website_repeat"] = web_orders
+        web_orders.columns = [str(c).strip() for c in web_orders.columns]
+        wcols = list(web_orders.columns)
+        def _wat(i): return wcols[i] if len(wcols) > i else None
+
+        W_DATE = (find_col(web_orders.columns, "Dispatch Date", "Display Order Date",
+                           "Order Date", "order date", "date") or _wat(1))
+        W_NAME = (find_col(web_orders.columns, "Billing Address Name",
+                           "Billing Name", "Customer Name", "customer name") or _wat(3))
+        W_ADDR = (find_col(web_orders.columns, "Final Billing Address",
+                           "Billing Address", "final address", "address") or _wat(4))
+        W_SKU = (find_col(web_orders.columns, "New SKU", "SKU", "sku code",
+                          "product sku", "item sku") or _wat(7))
+        W_STATUS = find_col(web_orders.columns, "Sale Order Status", "Order Status", "status")
+
+        dbg["website_repeat_cols"] = wcols
+        dbg["website_repeat_resolved"] = {
+            "date": W_DATE, "name": W_NAME, "address": W_ADDR,
+            "sku": W_SKU, "status": W_STATUS,
+        }
+
+        # sku -> {(customer_token, date_iso): compact event}
+        _web_event_sets = {}
+        if W_DATE and W_NAME and W_ADDR and W_SKU:
+            for r in _df_chunks(web_orders):
+                status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
+                if status and any(x in status for x in ("cancel", "void", "failed")):
+                    continue
+                dt_web = parse_date_any(r.get(W_DATE, ""))
+                if dt_web is None:
+                    continue
+                date_iso = dt_web.strftime("%Y-%m-%d")
+                raw_web_sku = clean(r.get(W_SKU, ""))
+                if not raw_web_sku:
+                    continue
+                n_web = re.sub(r"[^A-Z0-9]", "", raw_web_sku.upper())
+                mapped_web_sku = inv_skus_map.get(n_web, raw_web_sku.upper())
+
+                raw_name = str(r.get(W_NAME, "") or "").strip()
+                raw_addr = str(r.get(W_ADDR, "") or "").strip()
+                name_norm = re.sub(r"[^a-z0-9]+", " ", raw_name.casefold()).strip()
+                addr_norm = re.sub(r"[^a-z0-9]+", " ", raw_addr.casefold()).strip()
+                if not name_norm or not addr_norm:
+                    continue
+                identity = name_norm + "|" + addr_norm
+                customer_token = hashlib.sha1(identity.encode("utf-8", errors="ignore")).hexdigest()[:16]
+                event_key = (customer_token, date_iso)
+                _web_event_sets.setdefault(mapped_web_sku, {})[event_key] = {
+                    "c": _si(customer_token), "d": _si(date_iso),
+                    "s": _si(customer_token + "|" + date_iso),
+                }
+
+        website_customer_events = {
+            sku: sorted(events.values(), key=lambda x: (x["d"], x["c"]))
+            for sku, events in _web_event_sets.items()
+        }
+        dbg["website_repeat_skus"] = len(website_customer_events)
+        dbg["website_repeat_sessions"] = sum(len(v) for v in website_customer_events.values())
+    except Exception as e:
+        dbg["errors"].append(f"website repeat: {e}")
+        website_customer_events = {}
+    finally:
+        try:
+            del web_orders
+        except Exception:
+            pass
+        _DF_REFS.pop("website_repeat", None)
+        _gc.collect()
+
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
     channels_ = set()
@@ -1602,6 +1680,7 @@ def _refresh_data():
             "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
             "rakhi_sales_entries": rkh_ent,
+            "website_customer_events": website_customer_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -1676,6 +1755,7 @@ def _refresh_data():
             "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
             "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
             "rakhi_sales_entries": rkh_ent,
+            "website_customer_events": website_customer_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -5147,6 +5227,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div></div>
+        <div class="kpi" id="sdWebsiteRepeatCard" style="display:none"><div class="kpi-t">Website Repeat Rate</div><div class="kpi-v" id="sdWebsiteRepeatRate" style="color:#b68b00">0%</div><div class="small-note" id="sdWebsiteRepeatMeta" style="margin-top:4px;white-space:normal">0 repeat customers</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
         <div class="kpi"><div class="kpi-t">Available (Stock+WIP)</div><div class="kpi-v" id="sdAvail" style="color:#2ecc71">0</div></div>
@@ -6397,6 +6478,35 @@ function _sdFilteredStatus(item, ents){
   if (stockWip >= 20 && recentSoldQty <= 0) return 'Slow Movers';
   return 'Good Running';
 }
+function _sdWebsiteRepeatStats(item){
+  const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => String(c.value || '').trim().toLowerCase());
+  const show = typesPicked.includes('website');
+  if (!show) return {show:false, distinct:0, repeat:0, repeatOrders:0, rate:0};
+
+  const d1 = document.getElementById('sdD1')?.value || '';
+  const d2 = document.getElementById('sdD2')?.value || '';
+  const customerDates = {};
+  const seenSessions = new Set();
+  (item?.website_customer_events || []).forEach(ev => {
+    const d = String(ev?.d || '');
+    const c = String(ev?.c || '');
+    const session = String(ev?.s || (c + '|' + d));
+    if (!d || !c) return;
+    if (d1 && d < d1) return;
+    if (d2 && d > d2) return;
+    if (seenSessions.has(session)) return;
+    seenSessions.add(session);
+    if (!customerDates[c]) customerDates[c] = new Set();
+    customerDates[c].add(d);
+  });
+  const customers = Object.values(customerDates);
+  const distinct = customers.length;
+  const repeat = customers.filter(ds => ds.size >= 2).length;
+  const repeatOrders = customers.reduce((sum, ds) => sum + Math.max(0, ds.size - 1), 0);
+  const rate = distinct ? Math.round((repeat / distinct) * 1000) / 10 : 0;
+  return {show:true, distinct, repeat, repeatOrders, rate};
+}
+
 function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
   const emp0 = (LOGIN_ROLE === 'employee');
   const stock = parseFloat(item.inv_stock) || 0;
@@ -6459,6 +6569,10 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       rows.splice(6, 0, ['Best Channel Revenue', fmt(bestChannelRevenue)]);
       rows.splice(1, 0, ['AOV / Piece (Filtered)', fmt(aovPerPiece)]);
       rows.splice(2, 0, ['Discount % (vs MRP)', (overallDiscPct||0) + '%']);
+    }
+    const websiteRepeat = _sdWebsiteRepeatStats(item);
+    if (websiteRepeat.show){
+      rows.push(['Website Repeat Rate', `${websiteRepeat.rate.toFixed(1)}% (${websiteRepeat.repeat} of ${websiteRepeat.distinct} customers)`]);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
@@ -6653,6 +6767,14 @@ function renderSdTable(){
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
   setT('sdRetPct', totalRetPct.toFixed(1) + '%');
   setT('sdRetAmt', fmt(totalRetAmt));
+
+  const websiteRepeat = _sdWebsiteRepeatStats(item);
+  const websiteRepeatCard = document.getElementById('sdWebsiteRepeatCard');
+  if (websiteRepeatCard) websiteRepeatCard.style.display = websiteRepeat.show ? '' : 'none';
+  if (websiteRepeat.show){
+    setT('sdWebsiteRepeatRate', websiteRepeat.rate.toFixed(1) + '%');
+    setT('sdWebsiteRepeatMeta', `${websiteRepeat.repeat.toLocaleString('en-IN')} repeat of ${websiteRepeat.distinct.toLocaleString('en-IN')} customers · same-day orders counted once`);
+  }
 
   _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp);
 
@@ -9445,6 +9567,32 @@ function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities();
    dynamic Actionable Points. Depends on _rakhiRows (renderRakhi() se banta
    hai) — isliye loadRakhi() me renderRakhi() ke turant baad call hota hai. */
 let _rakhiOverallSummaryData = null;
+function _rkhWebsiteRepeatStatsForSkus(rawSkus){
+  const customerDates = {};
+  const seenSessions = new Set();
+  (rawSkus || []).forEach(rawSku => {
+    const sku = String(rawSku || '').trim().toUpperCase();
+    const item = _masterSkuMap[sku] || {};
+    (item.website_customer_events || []).forEach(ev => {
+      const d = String(ev?.d || '');
+      const c = String(ev?.c || '');
+      const session = String(ev?.s || (c + '|' + d));
+      if (!d || !c || d < '2026-04-01' || d > '2027-03-31') return;
+      // Across the whole Rakhi tab, one customer buying several Rakhi SKUs
+      // on the same day is still one Website customer-session.
+      if (seenSessions.has(session)) return;
+      seenSessions.add(session);
+      if (!customerDates[c]) customerDates[c] = new Set();
+      customerDates[c].add(d);
+    });
+  });
+  const customers = Object.values(customerDates);
+  const distinct = customers.length;
+  const repeat = customers.filter(ds => ds.size >= 2).length;
+  const repeatOrders = customers.reduce((sum, ds) => sum + Math.max(0, ds.size - 1), 0);
+  const rate = distinct ? Math.round((repeat / distinct) * 1000) / 10 : 0;
+  return {distinct, repeat, repeatOrders, rate};
+}
 function _rkhBuildOverallSummary(){
   const wlRows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
 
@@ -9492,15 +9640,10 @@ function _rkhBuildOverallSummary(){
   const daySpan = _rkhDrrDaySpan();
   const drrQty = wlRows.filter(r => _rkhInDrrWindow(r.date)).reduce((s, r) => s + _rkhEffectiveQty(r), 0);
   const drr = drrQty / daySpan;
-  const custMap = {};
-  wlRows.forEach(r => {
-    const c = (r.cust || '').trim();
-    if (!c) return;
-    custMap[c] = (custMap[c] || 0) + 1;
-  });
-  const distinctCust = Object.keys(custMap).length;
-  const repeatCust = Object.values(custMap).filter(n => n >= 2).length;
-  const repeatPct = distinctCust ? Math.round((repeatCust / distinctCust) * 1000) / 10 : 0;
+  const overallWebsiteRepeat = _rkhWebsiteRepeatStatsForSkus(Array.from(RAKHI_WHITELIST_SKUS));
+  const distinctCust = overallWebsiteRepeat.distinct;
+  const repeatCust = overallWebsiteRepeat.repeat;
+  const repeatPct = overallWebsiteRepeat.rate;
   const slowCount = _rkhBuildSlowMovers().length;
   let bestChannel = null;
   (_rkhBuildChannelSummary() || []).forEach(c => { if (!bestChannel || c.qty > bestChannel.qty) bestChannel = c; });
@@ -9527,7 +9670,8 @@ function _rkhBuildOverallSummary(){
     const sku = String(rawSku || '').trim().toUpperCase();
     const item = _masterSkuMap[sku] || {};
     const x = bySku[sku] || {rows:[], qty:0, drrQty:0, rev:0, customers:{}};
-    const repeatOrders = Object.values(x.customers).reduce((sum, n) => sum + Math.max(0, n - 1), 0);
+    const websiteRepeat = _rkhWebsiteRepeatStatsForSkus([sku]);
+    const repeatOrders = websiteRepeat.repeatOrders;
     const skuDaySpan = _rkhDrrDaySpan();
     const skuDrr = x.drrQty / skuDaySpan;
     const stock = Number(item.inv_stock) || 0;
@@ -9540,11 +9684,14 @@ function _rkhBuildOverallSummary(){
     if (stock <= 0 && wip <= 0 && x.qty > 0) points.push('Out of stock and no WIP — replenish urgently.');
     else if (stock < Math.max(3, skuDrr * 7) && wip <= 0 && x.qty > 0) points.push('Low stock cover — start replenishment.');
     if (wip > 0) points.push(`${Math.round(wip).toLocaleString('en-IN')} units in WIP — track completion.`);
-    if (repeatOrders > 0) points.push(`${repeatOrders} repeat order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
+    if (repeatOrders > 0) points.push(`${repeatOrders} repeat Website order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
+    if (websiteRepeat.rate > 0) points.push(`${websiteRepeat.rate.toFixed(1)}% Website repeat rate.`);
     if (!points.length) points.push('Stock and sales are currently balanced.');
     return {
       sku, sku_name:item.sku_name || item.name || '', image_url:item.image_url || '',
-      stock, wip, whWip, sales:x.qty, orders:x.rows.length, repeatOrders, revenue:x.rev,
+      stock, wip, whWip, sales:x.qty, orders:x.rows.length, repeatOrders,
+      repeatCustomers:websiteRepeat.repeat, distinctCustomers:websiteRepeat.distinct,
+      repeatRate:websiteRepeat.rate, revenue:x.rev,
       drr:skuDrr, daySpan:skuDaySpan, points
     };
   }).sort((a,b) => b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
@@ -9580,13 +9727,13 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
     <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
     <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">Rakhi units/day since 22 Jul 2026 (${s.daySpan} days)</div></div>
-    <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers</div></div>
+    <div class="yoy-card"><div class="yc-label">Website Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers · same name + address; same-day orders counted once</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
     <div class="yoy-card"><div class="yc-label">Required Qty / Day</div><div class="yc-val">${pace.qtyPerDay.toLocaleString('en-IN')}</div><div class="yc-sub">${qtyPaceSub}</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Required Revenue / Day</div><div class="yc-val">${fmt(pace.revenuePerDay)}</div><div class="yc-sub">${revenuePaceSub}</div></div>`}
   `;
   if (actHost){
-    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
+    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th><th>Website Repeat Rate</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
     const body = (s.skuRows || []).map(r => {
       const label = skuLabel(r.sku, r.sku_name);
       const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -9600,13 +9747,14 @@ function renderRakhiOverallSummary(){
         <td class="rkh-metric"><b>${Math.round(r.whWip).toLocaleString('en-IN')}</b></td>
         <td class="rkh-metric"><b>${Math.round(r.sales).toLocaleString('en-IN')}</b></td>
         <td class="rkh-metric">${r.repeatOrders.toLocaleString('en-IN')}</td>
+        <td class="rkh-metric"><b>${r.repeatRate.toFixed(1)}%</b><div class="small-note" style="white-space:nowrap">${r.repeatCustomers}/${r.distinctCustomers} customers</div></td>
         ${emp ? '' : `<td class="rkh-metric">${fmt(r.revenue)}</td>`}
         <td class="rkh-metric">${r.drr.toFixed(2)}</td>
         <td class="rkh-points">${r.points.map(p => `<span class="pt">• ${escHtml(p)}</span>`).join('')}</td>
       </tr>`;
     }).join('');
     actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div><button class="go-btn" type="button" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#17120d;flex:0 0 auto" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button></div>
-      <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
+      <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Website customer = same Billing Address Name + Final Billing Address; multiple orders on the same date count once. Repeat Rate = customers buying the SKU on 2+ different dates ÷ distinct Website customers.</div>
       <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1280px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
@@ -9614,7 +9762,7 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
@@ -9622,7 +9770,8 @@ function exportRakhiOverallSummaryCSV(){
     data.push([
       r.sku, exportSkuName(r.sku, r.sku_name),
       Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
-      r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
+      r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
+      ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
     ]);
 
     // Export-only child rows for CMB/gift sets. Each Rakhi child gets the same
