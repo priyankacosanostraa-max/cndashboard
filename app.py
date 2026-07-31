@@ -9464,7 +9464,7 @@ function _rkhBuildTopCities(cityRows){
   (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, orders: 0, cities: []}; });
   (cityRows || []).forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
-    if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs
+    if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs / CMBs
     const state = String(r.state || '').trim();
     let city = String(r.city || '').trim() || 'Unknown City';
     if (!state) return;
@@ -9483,15 +9483,51 @@ function _rkhBuildTopCities(cityRows){
     if (knownState && knownState !== state) city = (state === 'Delhi' ? 'New Delhi' : state);
     if (state === 'Delhi' && /^(north|south|east|west|north east|north west|south east|south west|central)$/i.test(city)) city += ' Delhi';
     if (!map[state]) map[state] = {state, qty: 0, orders: 0, cities: []};
-    map[state].qty += (Number(r.qty) || 0);
+    const soldQty = Number(r.qty) || 0;
+    map[state].qty += soldQty;
     map[state].orders += 1;
     let c = map[state].cities.find(x => x.city === city);
-    if (!c){ c = {city, qty: 0, orders: 0}; map[state].cities.push(c); }
-    c.qty += (Number(r.qty) || 0);
+    if (!c){ c = {city, qty: 0, orders: 0, productMap: {}, products: []}; map[state].cities.push(c); }
+    c.qty += soldQty;
     c.orders += 1;
+    if (!c.productMap[sku]) c.productMap[sku] = {sku, qty: 0, orders: 0};
+    c.productMap[sku].qty += soldQty;
+    c.productMap[sku].orders += 1;
   });
-  Object.values(map).forEach(st => st.cities.sort((a,b) => b.qty - a.qty || a.city.localeCompare(b.city)));
+  Object.values(map).forEach(st => {
+    st.cities.forEach(c => {
+      c.products = Object.values(c.productMap || {})
+        .sort((a,b) => b.qty - a.qty || b.orders - a.orders || a.sku.localeCompare(b.sku))
+        .slice(0, 3);
+      delete c.productMap;
+    });
+    st.cities.sort((a,b) => b.qty - a.qty || a.city.localeCompare(b.city));
+  });
   return Object.values(map).sort((a, b) => b.qty - a.qty || a.state.localeCompare(b.state));
+}
+function _rkhCityTopProductsHtml(cityRow){
+  const products = (cityRow && cityRow.products) || [];
+  if (!products.length) return '<span class="muted">—</span>';
+  return `<div style="display:flex;flex-direction:column;gap:8px;min-width:350px">${products.map((p, pi) => {
+    const sku = String(p.sku || '').trim().toUpperCase();
+    const item = _masterSkuMap[sku] || {};
+    const name = item.sku_name || item.name || '';
+    const label = skuLabel(sku, name);
+    const imageUrl = String(item.image_url || '').trim();
+    const hasImg = imageUrl && imageUrl.toLowerCase() !== 'nan';
+    const photo = hasImg
+      ? `<img src="${escHtml(imageUrl)}" alt="${escHtml(sku)}" loading="lazy" decoding="async" style="width:58px;height:58px;object-fit:contain;background:#fff;border:1px solid rgba(212,175,90,.35);border-radius:9px;padding:3px;flex:0 0 58px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none;width:58px;height:58px;align-items:center;justify-content:center;background:#fff;border:1px solid rgba(212,175,90,.35);border-radius:9px;flex:0 0 58px">💎</span>`
+      : `<span style="display:flex;width:58px;height:58px;align-items:center;justify-content:center;background:#fff;border:1px solid rgba(212,175,90,.35);border-radius:9px;flex:0 0 58px">💎</span>`;
+    const skuEsc = sku.replace(/'/g, "\\'");
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 9px;background:#fff;border:1px solid rgba(212,175,90,.24);border-radius:10px;min-width:0">
+      <div style="font-size:.68rem;font-weight:800;color:#b99000;width:18px;flex:0 0 18px">#${pi + 1}</div>
+      ${photo}
+      <div style="min-width:0;line-height:1.3">
+        <button class="sku-link" onclick="openSkuDetails('${skuEsc}')" style="text-align:left;white-space:normal;overflow-wrap:anywhere">${escHtml(label)}</button>
+        <div style="margin-top:5px;font-size:.72rem;color:#4a5568"><b>Sold Qty: ${Math.round(Number(p.qty) || 0).toLocaleString('en-IN')}</b> &nbsp;•&nbsp; ${Math.round(Number(p.orders) || 0).toLocaleString('en-IN')} order line${Number(p.orders) === 1 ? '' : 's'}</div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
 }
 function toggleRakhiStateCities(idx){
   const row = document.getElementById('rkhCityRow' + idx);
@@ -9530,11 +9566,12 @@ async function renderRakhiTopCities(){
   const body = list.map((r, i) => {
     const hasCities = r.cities && r.cities.length;
     const cityRows = hasCities ? r.cities.map((c, ci) => `<tr>
-        <td style="color:#8f7a47">${ci + 1}</td>
-        <td>${escHtml(c.city)}</td>
-        <td>${Math.round(c.qty).toLocaleString('en-IN')}</td>
-        <td>${c.orders.toLocaleString('en-IN')}</td>
-      </tr>`).join('') : `<tr><td colspan="4" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
+        <td style="color:#8f7a47;vertical-align:top">${ci + 1}</td>
+        <td style="vertical-align:top"><b>${escHtml(c.city)}</b></td>
+        <td style="vertical-align:top"><b>${Math.round(c.qty).toLocaleString('en-IN')}</b></td>
+        <td style="vertical-align:top">${c.orders.toLocaleString('en-IN')}</td>
+        <td style="vertical-align:top">${_rkhCityTopProductsHtml(c)}</td>
+      </tr>`).join('') : `<tr><td colspan="5" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
     return `<tr ${hasCities ? `onclick="toggleRakhiStateCities(${i})" style="cursor:pointer"` : ''}>
       <td><b>${i + 1}</b></td>
       <td><span id="rkhStateArrow${i}" style="display:inline-block;width:18px;color:#d4af5a">${hasCities ? '▶' : '•'}</span><b>${escHtml(r.state)}</b></td>
@@ -9543,8 +9580,8 @@ async function renderRakhiTopCities(){
     </tr>
     <tr id="rkhCityRow${i}" style="display:none;background:rgba(212,175,90,.035)">
       <td></td><td colspan="3" style="padding:10px 14px">
-        <table class="ro" style="width:100%;min-width:360px;border-collapse:collapse">
-          <thead><tr><th>#</th><th>City</th><th>Sold Qty</th><th>Order Lines</th></tr></thead>
+        <table class="ro" style="width:100%;min-width:900px;border-collapse:collapse">
+          <thead><tr><th>#</th><th>City</th><th>Sold Qty</th><th>Order Lines</th><th>Top 3 Rakhi / CMB Products</th></tr></thead>
           <tbody>${cityRows}</tbody>
         </table>
       </td>
