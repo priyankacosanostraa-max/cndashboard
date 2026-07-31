@@ -5630,6 +5630,18 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="rakhiOverallSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiActionable" style="margin-bottom:26px"></div>
 
+  <div class="insights-head" style="margin-top:8px">
+    <div>
+      <div class="insights-title">Rakhi — Common Child SKU Summary</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Only Rakhi child SKUs used in more than one CMB (combo) are shown, with the number and names of those CMB SKUs.</div>
+  <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:26px"></div>
+
   <div class="insights-head">
     <div>
       <div class="insights-title">Rakhi</div>
@@ -5685,18 +5697,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Revenue and quantity use only the curated Rakhi list; CMB quantity is expanded only into its Rakhi child SKUs. Columns run Yesterday → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
   <div id="rakhiChSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiChContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-
-  <div class="insights-head" style="margin-top:26px">
-    <div>
-      <div class="insights-title">Rakhi — Child SKU to CMB Mapping</div>
-    </div>
-    <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusCSV()">Export CSV</button>
-    </div>
-  </div>
-  <div class="small-note" style="margin:6px 0 14px">One consolidated table showing every Rakhi child SKU and all curated CMB (combo) SKUs in which it is used. Child-to-CMB usage is not repeated inside the other Rakhi tables.</div>
-  <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
     <div>
@@ -10288,6 +10288,7 @@ function _rkhBuildCommonSkus(){
     });
   });
   return Object.values(map)
+    .filter(r => r.parents.length > 1)
     .sort((a, b) => (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
 function renderRakhiCommonSkus(){
@@ -10300,44 +10301,35 @@ function renderRakhiCommonSkus(){
   const list = _rkhBuildCommonSkus();
   _rakhiCommonSkuRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU to CMB mapping found.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No child Rakhi SKU is used in more than one CMB.</div>';
     return;
   }
-  const rows = list.map((r, i) => {
+  const rows = list.map(r => {
     const skuEsc = String(r.sku).replace(/'/g, "\\'");
-    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
-    const photo = hasImg
-      ? `<img src="${escHtml(r.image_url)}" alt="${escHtml(r.sku)}" loading="lazy" decoding="async" style="width:68px;height:68px;object-fit:contain;background:#fff;border:1px solid #eadfca;border-radius:9px;padding:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none;width:68px;height:68px;align-items:center;justify-content:center;background:#fff;border:1px solid #eadfca;border-radius:9px">💎</span>`
-      : '<span style="display:flex;width:68px;height:68px;align-items:center;justify-content:center;background:#fff;border:1px solid #eadfca;border-radius:9px">💎</span>';
     const parents = r.parents.map(p => {
       const pEsc = String(p.sku).replace(/'/g, "\\'");
-      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuLabel(p.sku, p.sku_name))}</button>`;
-    }).join('<br>');
+      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(p.sku)}</button>`;
+    }).join(', ');
     return `<tr>
-      <td><b>${i + 1}</b></td>
-      <td style="width:88px">${photo}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td>
       <td style="text-align:center"><b>${r.parents.length}</b></td>
-      <td style="white-space:normal;line-height:1.65">${parents}</td>
+      <td style="white-space:normal;line-height:1.7">${parents}</td>
     </tr>`;
   }).join('');
-  const commonCount = list.filter(r => r.parents.length > 1).length;
-  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs mapped • <b>${commonCount.toLocaleString('en-IN')}</b> used in more than one CMB.</div>
-    <table class="ro rkh-grid" style="width:100%;min-width:820px;border-collapse:collapse">
-      <thead><tr><th>#</th><th>Photo</th><th>Rakhi Child SKU</th><th>Used in No. of CMBs</th><th>CMB (Combo) SKUs</th></tr></thead>
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> common Rakhi child SKUs found.</div>
+    <table class="ro rkh-grid" style="width:100%;min-width:650px;border-collapse:collapse">
+      <thead><tr><th>Child SKU (RKH)</th><th>No. of CMBs</th><th>CMB SKUs</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
 function exportRakhiCommonSkusCSV(){
   const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
-  if (!list.length){ alert('No Rakhi child SKU mapping to export.'); return; }
-  const headers = ['Rakhi Child SKU', 'SKU Name', 'Used in No. of CMBs', 'CMB (Combo) SKUs', 'Image Link'];
+  if (!list.length){ alert('No common Rakhi child SKU summary to export.'); return; }
+  const headers = ['Child SKU (RKH)', 'No. of CMBs', 'CMB SKUs'];
   const data = list.map(r => [
     r.sku,
-    exportSkuName(r.sku, r.sku_name),
     r.parents.length,
-    r.parents.map(p => p.sku).join(' | '),
-    r.image_url || ''
+    r.parents.map(p => p.sku).join(', ')
   ]);
   const csv = [headers].concat(data).map(row => row.map(c => {
     const s = String(c == null ? '' : c);
@@ -10345,7 +10337,7 @@ function exportRakhiCommonSkusCSV(){
   }).join(',')).join('\n');
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_child_sku_to_cmb_mapping.csv'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_common_child_sku_summary.csv'; a.click();
 }
 window.renderRakhiCommonSkus = renderRakhiCommonSkus;
 window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
