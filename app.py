@@ -2759,6 +2759,51 @@ table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
 #vRakhi .rkh-points{font-weight:600;color:#475569}
 #vRakhi .rkh-points .pt{display:block;margin:0 0 4px}
 #vRakhi .rkh-metric{font-variant-numeric:tabular-nums;text-align:right}
+/* Rakhi tab product photos: larger, complete and clear in every table. */
+#vRakhi table.ro td img{
+  width:96px !important;
+  height:96px !important;
+  min-width:96px !important;
+  max-width:96px !important;
+  flex:0 0 96px !important;
+  object-fit:contain !important;
+  object-position:center !important;
+  background:#fff !important;
+  border:1px solid rgba(212,175,90,.42) !important;
+  border-radius:11px !important;
+  padding:5px !important;
+  box-sizing:border-box !important;
+  image-rendering:auto;
+  box-shadow:0 3px 10px rgba(15,23,42,.08);
+}
+#vRakhi .rkh-sku-summary .rkh-sku-photo,
+#vRakhi .rkh-sku-summary .rkh-sku-photo-ph{
+  width:104px !important;
+  height:104px !important;
+  min-width:104px !important;
+  max-width:104px !important;
+  flex:0 0 104px !important;
+  border-radius:12px;
+}
+#vRakhi .rkh-sku-summary th:nth-child(1),
+#vRakhi .rkh-sku-summary td:nth-child(1){min-width:350px;max-width:440px}
+@media (max-width:700px){
+  #vRakhi table.ro td img{
+    width:84px !important;
+    height:84px !important;
+    min-width:84px !important;
+    max-width:84px !important;
+    flex-basis:84px !important;
+  }
+  #vRakhi .rkh-sku-summary .rkh-sku-photo,
+  #vRakhi .rkh-sku-summary .rkh-sku-photo-ph{
+    width:90px !important;
+    height:90px !important;
+    min-width:90px !important;
+    max-width:90px !important;
+    flex-basis:90px !important;
+  }
+}
 table.ro td.gold{color:#d4af5a;font-weight:800}
 table.ro td.orange{color:#e67e22;font-weight:800}
 table.ro td.red{color:#e74c3c;font-weight:800}
@@ -5637,9 +5682,21 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiChannelCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Columns run Yesterday → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
+  <div class="small-note" style="margin:6px 0 14px">Website = Type "Website"; every other channel is detected from the Customer Name. Revenue and quantity use only the curated Rakhi list; CMB quantity is expanded only into its Rakhi child SKUs. Columns run Yesterday → Today, then Revenue/Qty Till Now against the fixed target with Short % (green = target met/exceeded).</div>
   <div id="rakhiChSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiChContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Rakhi — Common Child SKUs Across CMBs</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Shows each Rakhi child SKU that is used in two or more curated CMB gift sets, together with every parent CMB in which it appears.</div>
+  <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
     <div>
@@ -9155,9 +9212,8 @@ let _rakhiFilteredRows = [];
    Priyanka ne khud jo exact SKU list di hai — "Top-Selling SKUs" aur
    "Slow Movers" (Rakhi tab ke andar) SIRF inhi SKUs me se dikhne chahiye,
    RKH/CMB pattern-match wale broader set se nahi. List me duplicate SKUs
-   the — Set apne aap ek baar hi count karta hai. Baaki Rakhi tables (main
-   Rakhi orders, Channel vs Target, Return Rate) is whitelist se unaffected
-   hain — wahi purana RKH/CMB pattern-match wala logic use karte hain. */
+   the — Set apne aap ek baar hi count karta hai. Main Rakhi tables use this
+   curated list where required; Channel vs Target is also restricted to it. */
 const RAKHI_WHITELIST_SKUS = new Set([
   'RKH-0012','RKH-0017','RKH-0021','RKH-0027','RKH-0030','RKH-0031','RKH-0033',
   'RKH-0049','RKH-0052','RKH-0070','RKH-0075','RKH-0091',
@@ -9179,6 +9235,32 @@ function _rkhIsComboSku(sku){
 function _rkhComboHasRakhi(item){
   const stone = String((item && (item.combo_skus || item.gift_set_stone_details)) || '');
   return /rkh/i.test(stone);
+}
+/* Exact Rakhi children of a CMB. A child is treated as Rakhi when its
+   inventory Taxon says Rakhi OR its SKU starts with RKH. Duplicate child
+   codes inside the same CMB are returned only once. */
+function _rkhStrictRakhiChildDetails(item){
+  const details = Array.isArray(item && item.combo_details) ? item.combo_details : [];
+  const out = [];
+  const seen = new Set();
+  details.forEach(c => {
+    const sku = String((c && c.sku) || '').trim().toUpperCase();
+    if (!sku || seen.has(sku)) return;
+    const isRakhi = /rakhi/i.test(String((c && c.taxon) || '')) || _rkhIsRakhiSku(sku);
+    if (!isRakhi) return;
+    seen.add(sku);
+    out.push(c);
+  });
+  return out;
+}
+/* Channel-vs-target quantity is a Rakhi-piece count, not a CMB order count:
+   direct RKH Qty 1 = 1; CMB Qty 1 = one unit for each unique Rakhi child. */
+function _rkhTargetRakhiQty(row){
+  const soldQty = Number(row && row.qty) || 0;
+  const sku = String((row && row.sku) || '').trim().toUpperCase();
+  if (_rkhIsRakhiSku(sku)) return soldQty;
+  if (_rkhIsComboSku(sku)) return soldQty * _rkhStrictRakhiChildDetails(row).length;
+  return 0;
 }
 /* For Rakhi stock/WIP totals, a CMB's own inventory is not used. We use
    its Rakhi child SKUs from Stone Details. Taxon=Rakhi is preferred; when
@@ -9314,7 +9396,7 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
+function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiCommonSkus(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
 
 /* ── RAKHI — OVERALL SUMMARY ──
    "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
@@ -10011,7 +10093,8 @@ function _rkhShortNum(target, actual){
   return Math.round(((target - actual) / target) * 100) + '%';
 }
 function _rkhBuildChannelSummary(){
-  const rows = _rakhiRows || [];
+  // Fixed Rakhi target belongs to the curated Rakhi SKU list only.
+  const rows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
   const [yestISO] = _rkhYdDates();
   const todayStr = todayISO || new Date().toISOString().slice(0, 10);
   const map = {};
@@ -10022,7 +10105,7 @@ function _rkhBuildChannelSummary(){
     const ch = _rkhChannelOf(r);
     if (!map[ch]) map[ch] = {channel: ch, rev: 0, qty: 0, yRev: 0, yQty: 0, tRev: 0, tQty: 0};
     const m = map[ch];
-    const effectiveQty = _rkhEffectiveQty(r);
+    const effectiveQty = _rkhTargetRakhiQty(r);
     m.rev += (r.rev || 0); m.qty += effectiveQty;
     if (r.date === yestISO){ m.yRev += (r.rev || 0); m.yQty += effectiveQty; }
     if (r.date === todayStr){ m.tRev += (r.rev || 0); m.tQty += effectiveQty; }
@@ -10146,6 +10229,93 @@ function exportRakhiChannelCSV(){
 }
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
+
+/* ── COMMON RAKHI CHILD SKUs ACROSS CURATED CMBs ── */
+let _rakhiCommonSkuRows = [];
+function _rkhBuildCommonSkus(){
+  const map = {};
+  (master || []).forEach(parent => {
+    const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
+    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku) || !_rkhComboHasRakhi(parent)) return;
+    _rkhStrictRakhiChildDetails(parent).forEach(child => {
+      const childSku = String((child && child.sku) || '').trim().toUpperCase();
+      if (!childSku) return;
+      const childItem = _masterSkuMap[childSku] || {};
+      if (!map[childSku]){
+        map[childSku] = {
+          sku: childSku,
+          sku_name: childItem.sku_name || child.sku_name || '',
+          image_url: childItem.image_url || child.image_url || '',
+          parents: []
+        };
+      }
+      if (!map[childSku].parents.some(p => p.sku === parentSku)){
+        map[childSku].parents.push({sku: parentSku, sku_name: parent.sku_name || ''});
+      }
+    });
+  });
+  return Object.values(map)
+    .filter(r => r.parents.length > 1)
+    .sort((a, b) => (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
+}
+function renderRakhiCommonSkus(){
+  const host = document.getElementById('rakhiCommonSkuContent');
+  if (!host) return;
+  if (!master || !master.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';
+    return;
+  }
+  const list = _rkhBuildCommonSkus();
+  _rakhiCommonSkuRows = list;
+  if (!list.length){
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is common across two or more curated CMBs.</div>';
+    return;
+  }
+  const rows = list.map((r, i) => {
+    const skuEsc = String(r.sku).replace(/'/g, "\\'");
+    const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
+    const photo = hasImg
+      ? `<img src="${escHtml(r.image_url)}" alt="${escHtml(r.sku)}" loading="lazy" decoding="async" style="width:68px;height:68px;object-fit:contain;background:#fff;border:1px solid #eadfca;border-radius:9px;padding:4px" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none;width:68px;height:68px;align-items:center;justify-content:center;background:#fff;border:1px solid #eadfca;border-radius:9px">💎</span>`
+      : '<span style="display:flex;width:68px;height:68px;align-items:center;justify-content:center;background:#fff;border:1px solid #eadfca;border-radius:9px">💎</span>';
+    const parents = r.parents.map(p => {
+      const pEsc = String(p.sku).replace(/'/g, "\\'");
+      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuLabel(p.sku, p.sku_name))}</button>`;
+    }).join('<br>');
+    return `<tr>
+      <td><b>${i + 1}</b></td>
+      <td style="width:88px">${photo}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></td>
+      <td style="text-align:center"><b>${r.parents.length}</b></td>
+      <td style="white-space:normal;line-height:1.65">${parents}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> common Rakhi child SKUs found.</div>
+    <table class="ro rkh-grid" style="width:100%;min-width:760px;border-collapse:collapse">
+      <thead><tr><th>#</th><th>Photo</th><th>Common Rakhi Child SKU</th><th>CMB Count</th><th>Used In CMBs</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+function exportRakhiCommonSkusCSV(){
+  const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
+  if (!list.length){ alert('No common Rakhi child SKUs to export.'); return; }
+  const headers = ['Rakhi Child SKU', 'SKU Name', 'CMB Count', 'Used In CMB SKUs', 'Image Link'];
+  const data = list.map(r => [
+    r.sku,
+    exportSkuName(r.sku, r.sku_name),
+    r.parents.length,
+    r.parents.map(p => p.sku).join(' | '),
+    r.image_url || ''
+  ]);
+  const csv = [headers].concat(data).map(row => row.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_common_child_skus.csv'; a.click();
+}
+window.renderRakhiCommonSkus = renderRakhiCommonSkus;
+window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
 
 /* ── RAKHI TOP-SELLING SKUs ── */
 let _rakhiTopSkuRows = [];
