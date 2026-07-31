@@ -5695,6 +5695,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div class="small-note" style="margin-top:7px">You may also paste two columns as SKU + Qty. Repeated SKUs are automatically combined into one row with the correct quantity.</div>
           <div class="bulk-actions">
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px" onclick="bulkMakeCombo()">Make Combo</button>
+            <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#1d6f42" onclick="bulkExportExcel()">Export Excel Quotation</button>
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#eceff4;color:#111" onclick="bulkClearCombo()">Clear</button>
           </div>
         </div>
@@ -12179,6 +12180,76 @@ async function bulkHandleUpload(inp){
   }
 }
 
+async function bulkExportExcel(){
+  const msg = document.getElementById('bulkMessage');
+  let discount = Number(document.getElementById('bulkDiscount')?.value || 0);
+  if (!Number.isFinite(discount)) discount = 0;
+  discount = Math.max(0, Math.min(100, discount));
+
+  const rows = (bulkComboRows || []).map(r => {
+    const item = bulkFindItem(r.sku);
+    if (!item) return null;
+    const qty = Math.max(1, Math.round(Number(r.qty) || 1));
+    const basePrice = bulkPriceOf(item);
+    return {
+      sku: String(item.sku || r.sku || '').trim(),
+      qty: qty,
+      mrp: basePrice,
+      image_url: String(item.image_url || '').trim()
+    };
+  }).filter(Boolean);
+
+  if (!rows.length) {
+    if (msg) {
+      msg.textContent = 'Please make a combo before exporting the quotation.';
+      msg.className = 'bulk-message warn';
+    }
+    return;
+  }
+
+  if (msg) {
+    msg.textContent = 'Preparing Excel quotation...';
+    msg.className = 'bulk-message';
+  }
+
+  try {
+    const resp = await fetch('/api/bulk-combo-export.xlsx', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json', 'ngrok-skip-browser-warning':'true'},
+      body: JSON.stringify({discount: discount, rows: rows})
+    });
+    if (!resp.ok) {
+      let errText = 'Excel export failed';
+      try {
+        const err = await resp.json();
+        errText = err.error || errText;
+      } catch(e) {}
+      throw new Error(errText);
+    }
+    const blob = await resp.blob();
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const m = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    const filename = m ? m[1] : 'Cosa_Nostraa_Combo_Quotation.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    if (msg) {
+      msg.textContent = 'Excel quotation exported successfully.';
+      msg.className = 'bulk-message ok';
+    }
+  } catch(err) {
+    if (msg) {
+      msg.textContent = err.message || 'Excel export failed.';
+      msg.className = 'bulk-message warn';
+    }
+  }
+}
+
 function bulkRenderCombo(forcedMessage){
   const host = document.getElementById('bulkComboContent');
   const msg = document.getElementById('bulkMessage');
@@ -15372,6 +15443,185 @@ def api_smart_search():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bulk-combo-export.xlsx", methods=["POST"])
+def api_bulk_combo_export_xlsx():
+    """Create a professional Excel quotation from the Bulk / Make Combo tab."""
+    if session.get("role") != "admin":
+        return jsonify({"error": "Admin login required"}), 403
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.comments import Comment
+        from openpyxl.utils import get_column_letter
+
+        payload = request.get_json(silent=True) or {}
+        raw_rows = payload.get("rows") or []
+        discount_pct = max(0.0, min(100.0, to_num(payload.get("discount"))))
+
+        rows = []
+        for raw in raw_rows[:5000]:
+            if not isinstance(raw, dict):
+                continue
+            sku = clean(raw.get("sku"))
+            if not sku:
+                continue
+            qty = max(1, int(round(to_num(raw.get("qty")) or 1)))
+            mrp = max(0.0, to_num(raw.get("mrp")))
+            image_url = clean(raw.get("image_url"))
+            rows.append({"sku": sku, "qty": qty, "mrp": mrp, "image_url": image_url})
+
+        if not rows:
+            return jsonify({"error": "No combo SKUs were provided for export."}), 400
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Combo Quotation"
+        ws.sheet_view.showGridLines = False
+        ws.freeze_panes = "A7"
+
+        dark = "17120D"
+        gold = "C39B16"
+        light_gold = "F7F0DC"
+        ivory = "FFFCF5"
+        green = "1D6F42"
+        border_color = "DCCFAF"
+        white = "FFFFFF"
+        gray = "64748B"
+        thin = Side(style="thin", color=border_color)
+        medium = Side(style="medium", color=gold)
+        border = Border(bottom=thin)
+
+        ws.merge_cells("A1:E1")
+        ws["A1"] = "COSA NOSTRAA"
+        ws["A1"].font = Font(name="Aptos Display", size=20, bold=True, color=gold)
+        ws["A1"].fill = PatternFill("solid", fgColor=dark)
+        ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 32
+
+        ws.merge_cells("A2:E2")
+        ws["A2"] = "BULK COMBO QUOTATION"
+        ws["A2"].font = Font(name="Aptos", size=12, bold=True, color=dark)
+        ws["A2"].fill = PatternFill("solid", fgColor=light_gold)
+        ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[2].height = 24
+
+        ws["A4"] = "Quotation Date"
+        ws["A4"].font = Font(bold=True, color=gray)
+        ws["B4"] = datetime.now().date()
+        ws["B4"].number_format = "dd-mmm-yyyy"
+        ws["B4"].font = Font(color="0000FF")
+        ws["D4"] = "Discount"
+        ws["D4"].font = Font(bold=True, color=gray)
+        ws["E4"] = discount_pct / 100.0
+        ws["E4"].number_format = "0.0%"
+        ws["E4"].font = Font(color="0000FF", bold=True)
+        ws["E4"].alignment = Alignment(horizontal="right")
+
+        headers = ["SKU", "MRP", "Discount", "Final Price", "Image Link"]
+        header_row = 6
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=header_row, column=col_idx, value=header)
+            cell.font = Font(bold=True, color=white)
+            cell.fill = PatternFill("solid", fgColor=dark)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(top=medium, bottom=medium)
+        ws["B6"].comment = Comment(
+            "The value exported here is the price used by Make Combo: current website selling price first, with All Product MRP as fallback.",
+            "Cosa Nostraa",
+        )
+        ws.row_dimensions[header_row].height = 24
+
+        start_row = 7
+        for idx, item in enumerate(rows, start=start_row):
+            qty = item["qty"]
+            sku_label = item["sku"] if qty == 1 else f'{item["sku"]} x {qty}'
+            ws.cell(row=idx, column=1, value=sku_label)
+            ws.cell(row=idx, column=2, value=item["mrp"])
+            ws.cell(row=idx, column=3, value="=$E$4")
+            ws.cell(row=idx, column=4, value=f"=ROUND(B{idx}*(1-C{idx})*F{idx},2)")
+            ws.cell(row=idx, column=5, value=item["image_url"])
+            ws.cell(row=idx, column=6, value=qty)
+
+            ws.cell(row=idx, column=2).number_format = '₹#,##0.00'
+            ws.cell(row=idx, column=3).number_format = '0.0%'
+            ws.cell(row=idx, column=4).number_format = '₹#,##0.00'
+            ws.cell(row=idx, column=6).number_format = '0'
+
+            if item["image_url"]:
+                ws.cell(row=idx, column=5).hyperlink = item["image_url"]
+                ws.cell(row=idx, column=5).style = "Hyperlink"
+
+            fill = PatternFill("solid", fgColor=ivory if (idx - start_row) % 2 == 0 else white)
+            for col_idx in range(1, 6):
+                c = ws.cell(row=idx, column=col_idx)
+                c.fill = fill
+                c.border = border
+                c.alignment = Alignment(
+                    horizontal="right" if col_idx in (2, 3, 4) else "left",
+                    vertical="center",
+                    wrap_text=(col_idx in (1, 5)),
+                )
+            ws.row_dimensions[idx].height = 30
+
+        end_row = start_row + len(rows) - 1
+        total_row = end_row + 1
+        ws.cell(row=total_row, column=3, value="TOTAL")
+        ws.cell(row=total_row, column=4, value=f"=SUM(D{start_row}:D{end_row})")
+        ws.cell(row=total_row, column=3).font = Font(bold=True, color=white)
+        ws.cell(row=total_row, column=4).font = Font(bold=True, color=white, size=12)
+        ws.cell(row=total_row, column=4).number_format = '₹#,##0.00'
+        for col_idx in range(1, 6):
+            c = ws.cell(row=total_row, column=col_idx)
+            c.fill = PatternFill("solid", fgColor=green)
+            c.border = Border(top=medium, bottom=medium)
+        ws.cell(row=total_row, column=3).alignment = Alignment(horizontal="right")
+        ws.cell(row=total_row, column=4).alignment = Alignment(horizontal="right")
+        ws.row_dimensions[total_row].height = 27
+
+        note_row = total_row + 2
+        ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=5)
+        ws.cell(row=note_row, column=1, value="Prices are subject to final confirmation and product availability.")
+        ws.cell(row=note_row, column=1).font = Font(italic=True, size=9, color=gray)
+        ws.cell(row=note_row, column=1).alignment = Alignment(horizontal="left")
+
+        widths = {"A": 34, "B": 16, "C": 14, "D": 18, "E": 58, "F": 10}
+        for col, width in widths.items():
+            ws.column_dimensions[col].width = width
+        ws.column_dimensions["F"].hidden = True
+
+        ws.auto_filter.ref = f"A{header_row}:E{end_row}"
+        ws.print_area = f"A1:E{note_row}"
+        ws.page_setup.orientation = "portrait"
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.oddFooter.center.text = "COSA NOSTRAA - COMBO QUOTATION"
+        ws.oddFooter.right.text = "Page &P of &N"
+
+        try:
+            wb.calculation.calcMode = "auto"
+            wb.calculation.fullCalcOnLoad = True
+            wb.calculation.forceFullCalc = True
+        except Exception:
+            pass
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        filename = f"Cosa_Nostraa_Combo_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        response = app.response_class(
+            output.getvalue(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Excel quotation export failed: {e}"}), 500
 
 
 @app.route("/api/bulk-combo-upload", methods=["POST"])
