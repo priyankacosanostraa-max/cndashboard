@@ -4677,14 +4677,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m3" onclick="showTab('repeat')">Repeat Orders</button>
   <button class="menu-item" id="m4" onclick="showTab('finder')">SKU Finder</button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')">SKU Details</button>
-  <button class="menu-item" id="m6" onclick="showTab('insights')">Insights</button>
   <button class="menu-item" id="m10" onclick="showTab('target')">Target</button>
   <button class="menu-item" id="m12" onclick="showTab('discount')">Discount Leakage</button>
   <button class="menu-item" id="m13" onclick="showTab('production')">Production</button>
   <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
-  <button class="menu-item" id="m19" onclick="showTab('stockstatus')">Stock Status</button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')">Rakhi</button>
   <button class="menu-item" id="m21" onclick="showTab('bulk')">Bulk</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
@@ -4703,7 +4701,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="tab"        id="t2" onclick="showTab('repeat')">Repeat Orders</button>
   <button class="tab"        id="t3" onclick="showTab('finder')">SKU Finder</button>
   <button class="tab"        id="t4" onclick="showTab('skudetails')">SKU Details</button>
-  <button class="tab"        id="t5" onclick="showTab('insights')">Insights</button>
 </div>
 
 
@@ -12290,8 +12287,8 @@ function renderProUI(){
 
 const __origShowTab = showTab;
 showTab = function(t){
-  // Marketplaces aur Smart Search ab band hain (admin + employee dono ke liye).
-  if (t === 'marketplaces' || t === 'smart') t = 'home';
+  // Removed tabs and disabled views are redirected to Home.
+  if (t === 'marketplaces' || t === 'smart' || t === 'insights' || t === 'stockstatus') t = 'home';
   if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
