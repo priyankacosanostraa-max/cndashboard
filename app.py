@@ -5356,7 +5356,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div><div class="insights-title">Payments</div>
       <div style="color:var(--cn-mid);font-size:.8rem" id="payAsOf"></div></div>
     <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadPayments(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadPayments(true);loadPaymentsPlanning(true)">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportPayments()">Export CSV</button>
     </div>
   </div>
@@ -14621,6 +14621,10 @@ PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
 PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
+# Payments data changes throughout the day. Keep only a very short cache so
+# the Payments + Planning API calls can share one build, while Refresh always
+# pulls the latest published-sheet data immediately.
+_PAY_CACHE_TTL = max(0, int(os.environ.get("PAY_CACHE_TTL_SECONDS", "30") or 30))
 _PAY_RAW_LEDGER = {"data": None}
 # Month-start pe overdue target freeze hota hai (poore month fixed). Key = "YYYY-MM".
 # Ek baar set hone ke baad month bhar wahi rehta hai (target reference).
@@ -14637,11 +14641,23 @@ def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
 
 def _build_payments():
-    if _PAY_CACHE["data"] is not None and (time.time() - _PAY_CACHE["ts"] < 600):
+    if (_PAY_CACHE_TTL > 0 and _PAY_CACHE["data"] is not None
+            and (time.time() - _PAY_CACHE["ts"] < _PAY_CACHE_TTL)):
         return _PAY_CACHE["data"]
 
     # ---- Payment terms (Customer -> days, tag) ----
     term_map = {}; tag_map = {}
+    # One canonical spelling per case-insensitive tag. The same helper is used
+    # for both Terms and Full_Ledger_Main so Designer/DESIGNER/designer merge.
+    _tag_canon = {}
+    def _canon_pay_tag(v):
+        raw = clean(v).strip()
+        if not raw:
+            return ""
+        key = raw.lower()
+        if key not in _tag_canon:
+            _tag_canon[key] = raw
+        return _tag_canon[key]
     try:
         terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
         tcols = list(terms_df.columns)
@@ -14651,24 +14667,13 @@ def _build_payments():
         tc = terms_df[T_CUST].tolist() if T_CUST else []
         tt = terms_df[T_TERM].tolist() if T_TERM else [0]*len(tc)
         tg = terms_df[T_TAG].tolist()  if T_TAG  else [""]*len(tc)
-        # Tag/Type ab CASE-INSENSITIVE — "Designer", "designer", "DESIGNER" sab
-        # ek hi tag maane jayenge. Canonical spelling = jo pehli baar mila
-        # (isse "SOR" jaisे all-caps tags bhi bigadte nahi, sirf case-variants
-        # ek dusre me fold ho jate hain).
-        _tag_canon = {}
+        # Tag/Type CASE-INSENSITIVE hai; canonical spelling shared helper se.
         for i in range(len(tc)):
             nm = _norm_name(tc[i])
             if not nm:
                 continue
             term_map[nm] = to_int(tt[i])
-            _tg_raw = clean(tg[i]).strip()
-            if _tg_raw:
-                _tg_key = _tg_raw.lower()
-                if _tg_key not in _tag_canon:
-                    _tag_canon[_tg_key] = _tg_raw
-                tag_map[nm] = _tag_canon[_tg_key]
-            else:
-                tag_map[nm] = ""
+            tag_map[nm] = _canon_pay_tag(tg[i])
     except Exception as e:
         print("payments terms fetch error:", str(e)[:200])
 
@@ -14685,6 +14690,10 @@ def _build_payments():
     L_VTYPE = find_col(led_df.columns, "Vch Type", "voucher type", "vch_type")
     L_DUE  = find_col(led_df.columns, "Due Date", "due date", "duedate")
     L_CMP  = find_col(led_df.columns, "Company Details", "company")
+    # Full_Ledger_Main ka Tag authoritative hai. Terms-sheet tag sirf fallback
+    # rahega, kyunki latest credits/payment rows isi ledger me update hote hain.
+    L_TAG  = find_col(led_df.columns, "Tag", "tag", "Customer Tag", "customer tag",
+                      "Category", "category", "Type", "type")
 
     if not L_CUST:
         raise ValueError(f"'Customer Name' column not found in Ledger. Columns: {lcols[:12]}")
@@ -14703,6 +14712,8 @@ def _build_payments():
     vtyps = led_df[L_VTYPE].tolist() if L_VTYPE else [""]*n
     dues  = led_df[L_DUE].tolist()  if L_DUE  else [None]*n
     cmps  = led_df[L_CMP].tolist()  if L_CMP  else [""]*n
+    ltags = led_df[L_TAG].tolist() if L_TAG else [""]*n
+    ledger_tag_map = {}
     _date_cache = {}
     def _fast_date(v):
         key = str(v)
@@ -14721,11 +14732,16 @@ def _build_payments():
         if not nm:
             continue
         dt = _fast_date(dates[i])
+        row_tag = _canon_pay_tag(ltags[i])
+        if row_tag:
+            # Last non-empty ledger tag wins; Full_Ledger_Main is the live source.
+            ledger_tag_map[nm] = row_tag
         by_cust.setdefault(nm, []).append({
             "date": dt,
             "inv":  clean(invs[i]),
             "debit":  to_num(debs[i]),
             "credit": to_num(creds[i]),
+            "tag": row_tag,
         })
         due_v = _fast_date(dues[i]) if dues[i] not in (None, "") else None
         raw_by_cust.setdefault(nm, []).append({
@@ -14749,6 +14765,26 @@ def _build_payments():
         month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
     month_start_g = date(today.year, today.month, 1)
 
+    # IMPORTANT: Planning Actual must include every current-month Credit row.
+    # Earlier it was derived from outstanding-customer rows only, so customers
+    # whose balance became zero were skipped and Designer Actual was understated.
+    collected_month_by_customer = {}
+    collected_month_by_tag = {}
+    for i in range(n):
+        credit_amt = to_num(creds[i])
+        if credit_amt <= 0.009:
+            continue
+        cd = _fast_date(dates[i])
+        if not cd or not (month_start_g <= cd <= month_end):
+            continue
+        nm = _norm_name(custs[i])
+        if not nm:
+            continue
+        row_tag = (_canon_pay_tag(ltags[i]) or ledger_tag_map.get(nm)
+                   or tag_map.get(nm) or "Unknown")
+        collected_month_by_customer[nm] = collected_month_by_customer.get(nm, 0.0) + credit_amt
+        collected_month_by_tag[row_tag] = collected_month_by_tag.get(row_tag, 0.0) + credit_amt
+
     AG_LABELS = ["0 Days", "0-30 Days", "31-60 Days", "61-90 Days", "91-180 Days", ">180 Days"]
     def _ag_bucket(days):
         if days <= 0:   return "0 Days"
@@ -14769,21 +14805,20 @@ def _build_payments():
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
-        tag = tag_map.get(nm, "") or "Unknown"
+        tag = ledger_tag_map.get(nm) or tag_map.get(nm, "") or "Unknown"
         tags_set.add(tag)
 
         # FIFO: open invoices queue (oldest first), payments knock them off
         ents = sorted(entries, key=lambda e: (e["date"] or date(1900,1,1)))
         open_inv = []   # list of {date, amt_remaining}
         credit_pool = 0.0
-        cust_collected_month = 0.0
+        # All month credits were calculated before outstanding filtering, so a
+        # fully-paid customer is still counted in Planning Actual.
+        cust_collected_month = collected_month_by_customer.get(nm, 0.0)
         for e in ents:
             credit_pool += e["credit"]
             if e["debit"] > 0:
                 open_inv.append({"date": e["date"], "amt": e["debit"]})
-            # is month me aaya payment (credit) — "collected this month"
-            if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
-                cust_collected_month += e["credit"]
         # apply credit pool FIFO
         cp = credit_pool
         for inv in open_inv:
@@ -14914,7 +14949,8 @@ def _build_payments():
         cd = _fast_date(dates[i])
         payments_log.append({
             "customer": nm.title(),
-            "tag": tag_map.get(nm, "") or "Unknown",
+            "tag": (_canon_pay_tag(ltags[i]) or ledger_tag_map.get(nm)
+                    or tag_map.get(nm, "") or "Unknown"),
             "date": cd.strftime("%d-%b-%y") if cd else clean(dates[i]),
             "date_sort": cd.strftime("%Y-%m-%d") if cd else "",
             "amount": round(credit_amt, 2),
@@ -14997,14 +15033,20 @@ def _build_payments():
                   "end": we_.strftime("%Y-%m-%d")} for wi, (ws_, we_) in enumerate(week_bounds)]
 
     # ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
+    # Due/overdue/balance naturally come from outstanding rows. Collected Month
+    # comes from ALL live ledger Credit rows, including customers now at ₹0 balance.
     tag_summary = {}
     for r in rows:
         tg = r.get("tag") or "Unknown"
         s = tag_summary.setdefault(tg, {"tag": tg, "due": 0.0, "overdue": 0.0,
                                         "collected_month": 0.0, "balance": 0.0, "customers": 0})
         s["due"] += r["due"]; s["overdue"] += r["overdue"]
-        s["collected_month"] += r.get("collected_month", 0)
         s["balance"] += r["balance"]; s["customers"] += 1
+    for tg, amt in collected_month_by_tag.items():
+        s = tag_summary.setdefault(tg, {"tag": tg, "due": 0.0, "overdue": 0.0,
+                                        "collected_month": 0.0, "balance": 0.0, "customers": 0})
+        s["collected_month"] = amt
+        tags_set.add(tg)
     tag_summary_list = sorted(tag_summary.values(), key=lambda x: x["balance"], reverse=True)
     for s in tag_summary_list:
         for k in ("due", "overdue", "collected_month", "balance"):
@@ -15027,6 +15069,7 @@ def _build_payments():
         "overdue_target_total": frozen["total"],
         "carry_over_overdue_total": round(carry_over_total, 0),
         "tag_summary": tag_summary_list,
+        "collected_by_tag": {k: round(v, 0) for k, v in collected_month_by_tag.items()},
         "tags": sorted([t for t in tags_set if t]),
         "payments_log": payments_log,
     }
@@ -15063,6 +15106,7 @@ PAY_PLANNING_URL = os.environ.get("PAY_PLANNING_URL",
 
 _PLAN_CATS = ["Designer", "SOR", "Online & Website"]
 _PLAN_CACHE = {"data": None, "ts": 0}
+_PLAN_CACHE_TTL = max(0, int(os.environ.get("PAY_PLAN_CACHE_TTL_SECONDS", "30") or 30))
 
 def _plan_bucket(cat_raw):
     c = str(cat_raw or "").strip().lower()
@@ -15099,7 +15143,8 @@ def _plan_month_matches(val, today):
     return any(c.replace(" ", "") in sl or sl in c.replace(" ", "") for c in candidates)
 
 def _build_payments_planning():
-    if _PLAN_CACHE["data"] is not None and (time.time() - _PLAN_CACHE["ts"] < 600):
+    if (_PLAN_CACHE_TTL > 0 and _PLAN_CACHE["data"] is not None
+            and (time.time() - _PLAN_CACHE["ts"] < _PLAN_CACHE_TTL)):
         return _PLAN_CACHE["data"]
 
     import calendar
@@ -15130,11 +15175,17 @@ def _build_payments_planning():
     except Exception as e:
         plan_err = f"Planning sheet fetch nahi ho payi: {str(e)[:200]} — pehle PAY_PLANNING_URL sahi gid ke saath set karein."
 
-    # ---- Actual: Payments tab ke tag-wise "collected this month" se ----
+    # ---- Actual: Full_Ledger_Main ke ALL current-month Credit rows se ----
     pay_data = _build_payments()
     tag_collected = {}
-    for s in pay_data.get("tag_summary", []):
-        tag_collected[(s.get("tag") or "").strip().lower()] = s.get("collected_month", 0) or 0
+    direct_collected = pay_data.get("collected_by_tag") or {}
+    if direct_collected:
+        for tg, amt in direct_collected.items():
+            tag_collected[(tg or "").strip().lower()] = amt or 0
+    else:
+        # Backward-safe fallback for an older cached/API shape.
+        for s in pay_data.get("tag_summary", []):
+            tag_collected[(s.get("tag") or "").strip().lower()] = s.get("collected_month", 0) or 0
 
     actual = {c: 0.0 for c in _PLAN_CATS}
     actual["Designer"] = (tag_collected.get("purchase", 0) or 0) + (tag_collected.get("designer", 0) or 0)
@@ -15189,6 +15240,7 @@ def api_payments_planning():
     try:
         if request.args.get("force", "").lower() == "true":
             _PLAN_CACHE["data"] = None
+            _PAY_CACHE["data"] = None
         return jsonify(_build_payments_planning())
     except Exception as e:
         return jsonify({"error": f"planning build failed: {e}"}), 500
@@ -15200,6 +15252,7 @@ def api_payments():
     try:
         if request.args.get("force", "").lower() == "true":
             _PAY_CACHE["data"] = None
+            _PLAN_CACHE["data"] = None
         return jsonify(_build_payments())
     except Exception as e:
         import traceback
