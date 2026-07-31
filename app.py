@@ -4732,6 +4732,31 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
 
 /* ── Bulk / Make Combo ───────────────────────────────────── */
+
+/* OOS tab — projected stockout risk from latest 30-day sales velocity. */
+#vOos .oos-summary{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin:0 0 16px}
+#vOos .oos-card{background:#fff;border:1px solid var(--cn-line);border-radius:16px;padding:17px 18px;box-shadow:0 8px 24px rgba(15,23,42,.05)}
+#vOos .oos-card-label{font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8c7a42;font-weight:850;margin-bottom:8px}
+#vOos .oos-card-value{font-family:'Cormorant Garamond',serif;font-size:29px;line-height:1;color:var(--cn-gold);font-weight:750}
+#vOos .oos-card-sub{font-size:10px;color:#64748b;font-weight:650;margin-top:7px;line-height:1.35}
+#vOos .oos-photo,#vOos .oos-photo-ph{width:88px;height:88px;min-width:88px;border:1px solid #e6dcc4;border-radius:11px;background:#fff;padding:5px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;margin:auto}
+#vOos .oos-photo{object-fit:contain;object-position:center}
+#vOos .oos-photo-ph{font-size:28px;color:#bda96e}
+#vOos .oos-risk{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:5px 9px;font-size:9px;font-weight:850;letter-spacing:.4px;white-space:nowrap;border:1px solid transparent}
+#vOos .oos-risk-oos{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+#vOos .oos-risk-critical{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
+#vOos .oos-risk-high{background:#fef3c7;color:#92400e;border-color:#fde68a}
+#vOos .oos-risk-watch{background:#e0f2fe;color:#075985;border-color:#bae6fd}
+#vOos table.ro td,#vOos table.ro th{vertical-align:middle}
+#vOos table.ro td:nth-child(2){min-width:230px;max-width:340px;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:800px){
+  #vOos .oos-summary{grid-template-columns:repeat(2,minmax(140px,1fr))}
+  #vOos .oos-photo,#vOos .oos-photo-ph{width:76px;height:76px;min-width:76px}
+}
+@media(max-width:480px){
+  #vOos .oos-summary{grid-template-columns:1fr}
+}
+
 #vBulk .bulk-builder{background:#fff;border:1px solid var(--cn-line);border-radius:18px;padding:20px;box-shadow:0 12px 34px rgba(15,23,42,.06);margin-bottom:18px}
 #vBulk .bulk-input-grid{display:grid;grid-template-columns:minmax(320px,1.7fr) minmax(220px,.8fr);gap:18px;align-items:start}
 #vBulk .bulk-textarea{width:100%;min-height:150px;resize:vertical;border:1px solid #d9d3c4;border-radius:12px;padding:14px 15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.55;background:#fffdf8;color:var(--cn-dark);outline:none;box-sizing:border-box}
@@ -4849,6 +4874,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')">Rakhi</button>
   <button class="menu-item" id="m21" onclick="showTab('bulk')">Bulk</button>
+  <button class="menu-item" id="m22" onclick="showTab('oos')">OOS</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -5879,6 +5905,34 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="bulkComboContent" class="bulk-table-wrap">
       <div class="bulk-empty">Paste or upload SKUs, then click <b>Make Combo</b>.</div>
     </div>
+  </div>
+
+
+  <div id="vOos" style="display:none">
+    <div class="insights-head">
+      <div>
+        <div class="insights-title">OOS — Stockout Risk</div>
+        <div class="insights-sub">SKUs likely to run out of inventory based on their latest 30-day sales velocity. Stock-cover risk is calculated from sellable inventory stock; WIP is shown separately as incoming support.</div>
+      </div>
+      <div class="insight-toolbar-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadOOS()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportOOS()">Export CSV</button>
+      </div>
+    </div>
+
+    <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div class="fc"><label class="fl">Product Group</label>
+        <select class="fs" id="oosGroup" onchange="renderOOS()">
+          <option value="All">All</option>
+          <option value="Rakhi">Rakhi (RKH + Rakhi CMB)</option>
+          <option value="Others">Others</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="oosSummary" class="oos-summary"></div>
+    <div id="oosContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:70vh"></div>
+    <div class="small-note" style="margin-top:9px">Risk rule: latest 30-day sold qty must be above 0 and inventory-stock cover must be 30 days or less. WIP is not treated as immediately sellable stock.</div>
   </div>
 
 
@@ -11368,6 +11422,163 @@ function exportTaxonTop50(){
 window.showTaxonTop50 = showTaxonTop50; window.backToTaxonList = backToTaxonList;
 window.renderTaxonTop50 = renderTaxonTop50; window.exportTaxonTop50 = exportTaxonTop50;
 
+
+/* ── OOS / STOCKOUT RISK — latest 30-day velocity, client-side ── */
+let _oosRows = [];
+
+function _oosNum(v){
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function _oosProductGroup(it){
+  try {
+    return (_rkhInWhitelist(it && it.sku) || _rkhMatchItem(it)) ? 'Rakhi' : 'Others';
+  } catch(e) {
+    const sku = String((it && it.sku) || '').trim().toUpperCase();
+    return (/^RKH/.test(sku) || /^CMB/.test(sku) && /RKH/i.test(String((it && (it.combo_skus || it.gift_set_stone_details)) || ''))) ? 'Rakhi' : 'Others';
+  }
+}
+
+function _oosRiskMeta(stock, coverDays){
+  if (stock <= 0) return {key:'oos', label:'Currently OOS', rank:0};
+  if (coverDays <= 7) return {key:'critical', label:'Critical · ≤7 days', rank:1};
+  if (coverDays <= 15) return {key:'high', label:'High · ≤15 days', rank:2};
+  return {key:'watch', label:'Watch · ≤30 days', rank:3};
+}
+
+function _oosBuildRows(){
+  _oosRows = (master || []).map(it => {
+    const sale30 = Math.max(0, _oosNum(it && it.qty_1m));
+    if (sale30 <= 0) return null;
+
+    const stock = Math.max(0, _oosNum(it && it.inv_stock));
+    const wip = Math.max(0, _oosNum(it && it.inv_wip));
+    const drr = sale30 / 30;
+    if (drr <= 0) return null;
+
+    const stockCover = stock / drr;
+    if (stock > 0 && stockCover > 30) return null;
+
+    const totalCover = (stock + wip) / drr;
+    const risk = _oosRiskMeta(stock, stockCover);
+    return {
+      item: it,
+      sku: String((it && it.sku) || '').trim(),
+      skuName: String((it && it.sku_name) || '').trim(),
+      image: String((it && it.image_url) || '').trim(),
+      group: _oosProductGroup(it),
+      sale30,
+      drr,
+      stock,
+      wip,
+      stockCover,
+      totalCover,
+      risk
+    };
+  }).filter(Boolean).sort((a,b) => {
+    if (a.risk.rank !== b.risk.rank) return a.risk.rank - b.risk.rank;
+    if (a.stockCover !== b.stockCover) return a.stockCover - b.stockCover;
+    return b.sale30 - a.sale30;
+  });
+  return _oosRows;
+}
+
+function _oosFilteredRows(){
+  const group = document.getElementById('oosGroup')?.value || 'All';
+  const rows = _oosRows.length ? _oosRows : _oosBuildRows();
+  return rows.filter(r => group === 'All' || r.group === group);
+}
+
+function _oosPhotoHtml(url){
+  const u = String(url || '').trim();
+  if (!u || u.toLowerCase() === 'nan') return '<div class="oos-photo-ph">💎</div>';
+  return `<img class="oos-photo" src="${escHtml(u)}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=&quot;oos-photo-ph&quot;>💎</div>'">`;
+}
+
+function _oosDaysText(v){
+  if (!Number.isFinite(v)) return '—';
+  if (v <= 0) return '0 days';
+  if (v < 1) return '<1 day';
+  return `${v.toFixed(v < 10 ? 1 : 0)} days`;
+}
+
+function loadOOS(){
+  _oosBuildRows();
+  renderOOS();
+}
+
+function renderOOS(){
+  const rows = _oosFilteredRows();
+  const summary = document.getElementById('oosSummary');
+  const host = document.getElementById('oosContent');
+  if (!host) return;
+
+  const oosCount = rows.filter(r => r.risk.key === 'oos').length;
+  const criticalCount = rows.filter(r => r.risk.key === 'critical').length;
+  const sale30Total = rows.reduce((s,r) => s + r.sale30, 0);
+  const finiteCovers = rows.map(r => r.stockCover).filter(Number.isFinite);
+  const avgCover = finiteCovers.length ? finiteCovers.reduce((s,v)=>s+v,0) / finiteCovers.length : 0;
+
+  if (summary) summary.innerHTML = `
+    <div class="oos-card"><div class="oos-card-label">At-Risk SKUs</div><div class="oos-card-value">${rows.length.toLocaleString('en-IN')}</div><div class="oos-card-sub">30 days or less inventory-stock cover</div></div>
+    <div class="oos-card"><div class="oos-card-label">Currently OOS</div><div class="oos-card-value">${oosCount.toLocaleString('en-IN')}</div><div class="oos-card-sub">Inventory stock is zero</div></div>
+    <div class="oos-card"><div class="oos-card-label">Critical ≤7 Days</div><div class="oos-card-value">${criticalCount.toLocaleString('en-IN')}</div><div class="oos-card-sub">Positive stock but very low cover</div></div>
+    <div class="oos-card"><div class="oos-card-label">30D Demand</div><div class="oos-card-value">${Math.round(sale30Total).toLocaleString('en-IN')}</div><div class="oos-card-sub">Avg stock cover ${avgCover.toFixed(1)} days</div></div>`;
+
+  const body = rows.map((r, idx) => {
+    const it = r.item || {};
+    const safeSku = String(r.sku || '').replace(/'/g,"\\'");
+    return `<tr>
+      <td style="text-align:center">${idx + 1}</td>
+      <td>${_oosPhotoHtml(r.image)}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${safeSku}')">${escHtml(skuLabel(r.sku, r.skuName))}</button></td>
+      <td>${escHtml(r.group)}</td>
+      <td style="text-align:right">${Math.round(r.sale30).toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${r.drr.toFixed(2)}</td>
+      <td style="text-align:right;font-weight:850">${Math.round(r.stock).toLocaleString('en-IN')}</td>
+      <td style="text-align:right">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+      <td style="text-align:right;font-weight:800">${_oosDaysText(r.stockCover)}</td>
+      <td style="text-align:right">${_oosDaysText(r.totalCover)}</td>
+      <td style="text-align:center"><span class="oos-risk oos-risk-${r.risk.key}">${escHtml(r.risk.label)}</span></td>
+    </tr>`;
+  }).join('');
+
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:1080px">
+    <thead><tr>
+      <th style="text-align:center">#</th><th>Photo</th><th>SKU</th><th>Group</th>
+      <th style="text-align:right">30D Sale</th><th style="text-align:right">DRR</th>
+      <th style="text-align:right">Inv Stock</th><th style="text-align:right">Inv WIP</th>
+      <th style="text-align:right">Stock Cover</th><th style="text-align:right">Cover incl. WIP</th><th style="text-align:center">Risk</th>
+    </tr></thead>
+    <tbody>${body || '<tr><td colspan="11" style="text-align:center;padding:28px;color:#8c7a42;font-weight:750">No SKUs currently match this stockout-risk rule.</td></tr>'}</tbody>
+  </table>`;
+}
+
+function exportOOS(){
+  const rows = _oosFilteredRows();
+  if (!rows.length){ alert('No OOS risk rows to export'); return; }
+  const headers = ['SKU','SKU Name','Product Group','Image Link','30D Sale','DRR','Inv Stock','Inv WIP','Stock Cover Days','Cover incl WIP Days','Risk'];
+  const data = rows.map(r => [
+    r.sku,
+    exportSkuName(r.sku, r.skuName),
+    r.group,
+    r.image || '',
+    Math.round(r.sale30),
+    Number(r.drr.toFixed(2)),
+    Math.round(r.stock),
+    Math.round(r.wip),
+    Number(r.stockCover.toFixed(2)),
+    Number(r.totalCover.toFixed(2)),
+    r.risk.label
+  ]);
+  const group = (document.getElementById('oosGroup')?.value || 'All').toLowerCase();
+  _dlCsv(headers, data, `oos_stockout_risk_${group}`);
+}
+window.loadOOS = loadOOS;
+window.renderOOS = renderOOS;
+window.exportOOS = exportOOS;
+
 /* ── STOCK STATUS — client-side (all fields already in master) ── */
 function loadStockStatus(){
   const sel = document.getElementById('ssTaxon');
@@ -12785,6 +12996,7 @@ showTab = function(t){
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
     rakhi: {id: 'vRakhi', btn: 'm20'},
     bulk: {id: 'vBulk', btn: 'm21'},
+    oos: {id: 'vOos', btn: 'm22'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -12828,6 +13040,7 @@ showTab = function(t){
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
       bulk: 'BULK — MAKE COMBO',
+      oos: 'OOS — STOCKOUT RISK',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -12854,6 +13067,7 @@ showTab = function(t){
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
   if (t === 'bulk') setTimeout(()=>{ try{ bulkRenderCombo(); }catch(e){console.error(e);} }, 0);
+  if (t === 'oos') setTimeout(()=>{ try{ loadOOS(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
