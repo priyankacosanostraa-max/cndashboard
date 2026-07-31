@@ -5752,7 +5752,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div class="small-note" style="margin-top:7px">You may also paste two columns as SKU + Qty. Repeated SKUs are automatically combined into one row with the correct quantity.</div>
           <div class="bulk-actions">
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px" onclick="bulkMakeCombo()">Make Combo</button>
-            <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#1d6f42" onclick="bulkExportExcel()">Export Excel Quotation</button>
+            <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#1d6f42" onclick="bulkExportPDF()">Export PDF Quotation</button>
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#eceff4;color:#111" onclick="bulkClearCombo()">Clear</button>
           </div>
         </div>
@@ -12350,7 +12350,7 @@ async function bulkHandleUpload(inp){
   }
 }
 
-async function bulkExportExcel(){
+async function bulkExportPDF(){
   const msg = document.getElementById('bulkMessage');
   let discount = Number(document.getElementById('bulkDiscount')?.value || 0);
   if (!Number.isFinite(discount)) discount = 0;
@@ -12363,6 +12363,7 @@ async function bulkExportExcel(){
     const basePrice = bulkPriceOf(item);
     return {
       sku: String(item.sku || r.sku || '').trim(),
+      product_name: String(item.sku_name || '').trim(),
       qty: qty,
       mrp: basePrice,
       image_url: String(item.image_url || '').trim()
@@ -12378,18 +12379,18 @@ async function bulkExportExcel(){
   }
 
   if (msg) {
-    msg.textContent = 'Preparing Excel quotation...';
+    msg.textContent = 'Preparing PDF quotation with product photos...';
     msg.className = 'bulk-message';
   }
 
   try {
-    const resp = await fetch('/api/bulk-combo-export.xlsx', {
+    const resp = await fetch('/api/bulk-combo-export.pdf', {
       method: 'POST',
       headers: {'Content-Type':'application/json', 'ngrok-skip-browser-warning':'true'},
       body: JSON.stringify({discount: discount, rows: rows})
     });
     if (!resp.ok) {
-      let errText = 'Excel export failed';
+      let errText = 'PDF export failed';
       try {
         const err = await resp.json();
         errText = err.error || errText;
@@ -12398,8 +12399,8 @@ async function bulkExportExcel(){
     }
     const blob = await resp.blob();
     const disposition = resp.headers.get('Content-Disposition') || '';
-    const m = disposition.match(/filename=\"?([^\";]+)\"?/i);
-    const filename = m ? m[1] : 'Cosa_Nostraa_Combo_Quotation.xlsx';
+    const m = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = m ? m[1] : 'Cosa_Nostraa_Combo_Quotation.pdf';
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -12409,12 +12410,12 @@ async function bulkExportExcel(){
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     if (msg) {
-      msg.textContent = 'Excel quotation exported successfully.';
+      msg.textContent = 'PDF quotation exported successfully with product photos.';
       msg.className = 'bulk-message ok';
     }
   } catch(err) {
     if (msg) {
-      msg.textContent = err.message || 'Excel export failed.';
+      msg.textContent = err.message || 'PDF export failed.';
       msg.className = 'bulk-message warn';
     }
   }
@@ -15615,24 +15616,45 @@ def api_smart_search():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/bulk-combo-export.xlsx", methods=["POST"])
-def api_bulk_combo_export_xlsx():
-    """Create a professional Excel quotation from the Bulk / Make Combo tab."""
+@app.route("/api/bulk-combo-export.pdf", methods=["POST"])
+def api_bulk_combo_export_pdf():
+    """Create a professional PDF quotation with embedded product photos."""
     if session.get("role") != "admin":
         return jsonify({"error": "Admin login required"}), 403
 
     try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.comments import Comment
-        from openpyxl.utils import get_column_letter
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+            from reportlab.lib.units import mm
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+            from reportlab.platypus import (
+                Image as RLImage,
+                Paragraph,
+                SimpleDocTemplate,
+                Spacer,
+                Table,
+                TableStyle,
+            )
+        except ImportError:
+            return jsonify({
+                "error": "PDF export requires the reportlab package. Add reportlab to requirements.txt and redeploy."
+            }), 500
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from PIL import Image as PILImage, ImageOps
+        import base64
+        from xml.sax.saxutils import escape as xml_escape
 
         payload = request.get_json(silent=True) or {}
         raw_rows = payload.get("rows") or []
         discount_pct = max(0.0, min(100.0, to_num(payload.get("discount"))))
 
         rows = []
-        for raw in raw_rows[:5000]:
+        for raw in raw_rows[:1000]:
             if not isinstance(raw, dict):
                 continue
             sku = clean(raw.get("sku"))
@@ -15641,157 +15663,381 @@ def api_bulk_combo_export_xlsx():
             qty = max(1, int(round(to_num(raw.get("qty")) or 1)))
             mrp = max(0.0, to_num(raw.get("mrp")))
             image_url = clean(raw.get("image_url"))
-            rows.append({"sku": sku, "qty": qty, "mrp": mrp, "image_url": image_url})
+            product_name = clean(raw.get("product_name"))
+            rows.append({
+                "sku": sku,
+                "product_name": product_name,
+                "qty": qty,
+                "mrp": mrp,
+                "image_url": image_url,
+            })
 
         if not rows:
             return jsonify({"error": "No combo SKUs were provided for export."}), 400
 
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Combo Quotation"
-        ws.sheet_view.showGridLines = False
-        ws.freeze_panes = "A7"
-
-        dark = "17120D"
-        gold = "C39B16"
-        light_gold = "F7F0DC"
-        ivory = "FFFCF5"
-        green = "1D6F42"
-        border_color = "DCCFAF"
-        white = "FFFFFF"
-        gray = "64748B"
-        thin = Side(style="thin", color=border_color)
-        medium = Side(style="medium", color=gold)
-        border = Border(bottom=thin)
-
-        ws.merge_cells("A1:E1")
-        ws["A1"] = "COSA NOSTRAA"
-        ws["A1"].font = Font(name="Aptos Display", size=20, bold=True, color=gold)
-        ws["A1"].fill = PatternFill("solid", fgColor=dark)
-        ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
-        ws.row_dimensions[1].height = 32
-
-        ws.merge_cells("A2:E2")
-        ws["A2"] = "BULK COMBO QUOTATION"
-        ws["A2"].font = Font(name="Aptos", size=12, bold=True, color=dark)
-        ws["A2"].fill = PatternFill("solid", fgColor=light_gold)
-        ws["A2"].alignment = Alignment(horizontal="center", vertical="center")
-        ws.row_dimensions[2].height = 24
-
-        ws["A4"] = "Quotation Date"
-        ws["A4"].font = Font(bold=True, color=gray)
-        ws["B4"] = datetime.now().date()
-        ws["B4"].number_format = "dd-mmm-yyyy"
-        ws["B4"].font = Font(color="0000FF")
-        ws["D4"] = "Discount"
-        ws["D4"].font = Font(bold=True, color=gray)
-        ws["E4"] = discount_pct / 100.0
-        ws["E4"].number_format = "0.0%"
-        ws["E4"].font = Font(color="0000FF", bold=True)
-        ws["E4"].alignment = Alignment(horizontal="right")
-
-        headers = ["SKU", "MRP", "Discount", "Final Price", "Image Link"]
-        header_row = 6
-        for col_idx, header in enumerate(headers, start=1):
-            cell = ws.cell(row=header_row, column=col_idx, value=header)
-            cell.font = Font(bold=True, color=white)
-            cell.fill = PatternFill("solid", fgColor=dark)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = Border(top=medium, bottom=medium)
-        ws["B6"].comment = Comment(
-            "The value exported here is the price used by Make Combo: current website selling price first, with All Product MRP as fallback.",
-            "Cosa Nostraa",
-        )
-        ws.row_dimensions[header_row].height = 24
-
-        start_row = 7
-        for idx, item in enumerate(rows, start=start_row):
-            qty = item["qty"]
-            sku_label = item["sku"] if qty == 1 else f'{item["sku"]} x {qty}'
-            ws.cell(row=idx, column=1, value=sku_label)
-            ws.cell(row=idx, column=2, value=item["mrp"])
-            ws.cell(row=idx, column=3, value="=$E$4")
-            ws.cell(row=idx, column=4, value=f"=ROUND(B{idx}*(1-C{idx})*F{idx},2)")
-            ws.cell(row=idx, column=5, value=item["image_url"])
-            ws.cell(row=idx, column=6, value=qty)
-
-            ws.cell(row=idx, column=2).number_format = '₹#,##0.00'
-            ws.cell(row=idx, column=3).number_format = '0.0%'
-            ws.cell(row=idx, column=4).number_format = '₹#,##0.00'
-            ws.cell(row=idx, column=6).number_format = '0'
-
-            if item["image_url"]:
-                ws.cell(row=idx, column=5).hyperlink = item["image_url"]
-                ws.cell(row=idx, column=5).style = "Hyperlink"
-
-            fill = PatternFill("solid", fgColor=ivory if (idx - start_row) % 2 == 0 else white)
-            for col_idx in range(1, 6):
-                c = ws.cell(row=idx, column=col_idx)
-                c.fill = fill
-                c.border = border
-                c.alignment = Alignment(
-                    horizontal="right" if col_idx in (2, 3, 4) else "left",
-                    vertical="center",
-                    wrap_text=(col_idx in (1, 5)),
-                )
-            ws.row_dimensions[idx].height = 30
-
-        end_row = start_row + len(rows) - 1
-        total_row = end_row + 1
-        ws.cell(row=total_row, column=3, value="TOTAL")
-        ws.cell(row=total_row, column=4, value=f"=SUM(D{start_row}:D{end_row})")
-        ws.cell(row=total_row, column=3).font = Font(bold=True, color=white)
-        ws.cell(row=total_row, column=4).font = Font(bold=True, color=white, size=12)
-        ws.cell(row=total_row, column=4).number_format = '₹#,##0.00'
-        for col_idx in range(1, 6):
-            c = ws.cell(row=total_row, column=col_idx)
-            c.fill = PatternFill("solid", fgColor=green)
-            c.border = Border(top=medium, bottom=medium)
-        ws.cell(row=total_row, column=3).alignment = Alignment(horizontal="right")
-        ws.cell(row=total_row, column=4).alignment = Alignment(horizontal="right")
-        ws.row_dimensions[total_row].height = 27
-
-        note_row = total_row + 2
-        ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=5)
-        ws.cell(row=note_row, column=1, value="Prices are subject to final confirmation and product availability.")
-        ws.cell(row=note_row, column=1).font = Font(italic=True, size=9, color=gray)
-        ws.cell(row=note_row, column=1).alignment = Alignment(horizontal="left")
-
-        widths = {"A": 34, "B": 16, "C": 14, "D": 18, "E": 58, "F": 10}
-        for col, width in widths.items():
-            ws.column_dimensions[col].width = width
-        ws.column_dimensions["F"].hidden = True
-
-        ws.auto_filter.ref = f"A{header_row}:E{end_row}"
-        ws.print_area = f"A1:E{note_row}"
-        ws.page_setup.orientation = "portrait"
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 0
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-        ws.oddFooter.center.text = "COSA NOSTRAA - COMBO QUOTATION"
-        ws.oddFooter.right.text = "Page &P of &N"
-
+        # Register a Unicode font so the rupee symbol and product names render correctly.
+        regular_font = "Helvetica"
+        bold_font = "Helvetica-Bold"
+        regular_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         try:
-            wb.calculation.calcMode = "auto"
-            wb.calculation.fullCalcOnLoad = True
-            wb.calculation.forceFullCalc = True
+            if os.path.exists(regular_path) and "CNDejaVu" not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont("CNDejaVu", regular_path))
+            if os.path.exists(bold_path) and "CNDejaVu-Bold" not in pdfmetrics.getRegisteredFontNames():
+                pdfmetrics.registerFont(TTFont("CNDejaVu-Bold", bold_path))
+            if "CNDejaVu" in pdfmetrics.getRegisteredFontNames():
+                regular_font = "CNDejaVu"
+            if "CNDejaVu-Bold" in pdfmetrics.getRegisteredFontNames():
+                bold_font = "CNDejaVu-Bold"
+            if regular_font == "CNDejaVu" and bold_font == "CNDejaVu-Bold":
+                pdfmetrics.registerFontFamily(
+                    "CNDejaVu",
+                    normal="CNDejaVu",
+                    bold="CNDejaVu-Bold",
+                    italic="CNDejaVu",
+                    boldItalic="CNDejaVu-Bold",
+                )
         except Exception:
-            pass
+            regular_font = "Helvetica"
+            bold_font = "Helvetica-Bold"
+
+        def _inr(value):
+            value = float(value or 0.0)
+            sign = "-" if value < 0 else ""
+            whole, dec = f"{abs(value):.2f}".split(".")
+            if len(whole) > 3:
+                tail = whole[-3:]
+                head = whole[:-3]
+                groups = []
+                while head:
+                    groups.append(head[-2:])
+                    head = head[:-2]
+                whole = ",".join(reversed(groups)) + "," + tail
+            symbol = "₹" if regular_font == "CNDejaVu" else "Rs. "
+            return f"{sign}{symbol}{whole}.{dec}"
+
+        # Download each unique product image only once, in parallel. Convert every
+        # source format (including WebP/transparent PNG) to a compact RGB JPEG so
+        # ReportLab embeds the actual photo instead of an image link.
+        def _download_photo(url):
+            url = str(url or "").strip()
+            if not url or url.lower() == "nan":
+                return None
+            try:
+                raw = None
+                if url.lower().startswith("data:image/") and "," in url:
+                    meta, encoded = url.split(",", 1)
+                    raw = base64.b64decode(encoded) if ";base64" in meta.lower() else None
+                else:
+                    for candidate in _img_url_candidates(url):
+                        try:
+                            response = requests.get(
+                                candidate,
+                                timeout=(4, 12),
+                                allow_redirects=True,
+                                headers=_browser_headers(candidate),
+                            )
+                            if not response.ok or len(response.content) < 300:
+                                continue
+                            if len(response.content) > 12 * 1024 * 1024:
+                                continue
+                            raw = response.content
+                            break
+                        except Exception:
+                            continue
+                if not raw:
+                    return None
+
+                with PILImage.open(io.BytesIO(raw)) as opened:
+                    image = ImageOps.exif_transpose(opened)
+                    if image.mode in ("RGBA", "LA") or (image.mode == "P" and "transparency" in image.info):
+                        rgba = image.convert("RGBA")
+                        background = PILImage.new("RGB", rgba.size, "white")
+                        background.paste(rgba, mask=rgba.getchannel("A"))
+                        image = background
+                    else:
+                        image = image.convert("RGB")
+                    resampling = getattr(PILImage, "Resampling", PILImage)
+                    image.thumbnail((700, 700), resampling.LANCZOS)
+                    width_px, height_px = image.size
+                    output = io.BytesIO()
+                    image.save(output, format="JPEG", quality=90, optimize=True)
+                    return {"bytes": output.getvalue(), "width": width_px, "height": height_px}
+            except Exception:
+                return None
+
+        unique_urls = []
+        seen_urls = set()
+        for item in rows:
+            url = item.get("image_url") or ""
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_urls.append(url)
+
+        photo_cache = {}
+        if unique_urls:
+            with ThreadPoolExecutor(max_workers=min(8, len(unique_urls))) as executor:
+                futures = {executor.submit(_download_photo, url): url for url in unique_urls}
+                for future in as_completed(futures):
+                    url = futures[future]
+                    try:
+                        photo_cache[url] = future.result()
+                    except Exception:
+                        photo_cache[url] = None
+
+        dark = colors.HexColor("#17120D")
+        gold = colors.HexColor("#C39B16")
+        light_gold = colors.HexColor("#F7F0DC")
+        ivory = colors.HexColor("#FFFCF5")
+        green = colors.HexColor("#1D6F42")
+        line_color = colors.HexColor("#DCCFAF")
+        gray = colors.HexColor("#64748B")
+        red = colors.HexColor("#B91C1C")
+        white = colors.white
+
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            "ComboTitle",
+            parent=styles["Title"],
+            fontName=bold_font,
+            fontSize=19,
+            leading=23,
+            textColor=gold,
+            alignment=TA_CENTER,
+            spaceAfter=2 * mm,
+        )
+        subtitle_style = ParagraphStyle(
+            "ComboSubtitle",
+            parent=styles["Normal"],
+            fontName=bold_font,
+            fontSize=10,
+            leading=13,
+            textColor=dark,
+            alignment=TA_CENTER,
+        )
+        normal_style = ParagraphStyle(
+            "ComboNormal",
+            parent=styles["Normal"],
+            fontName=regular_font,
+            fontSize=8.5,
+            leading=11,
+            textColor=dark,
+        )
+        sku_style = ParagraphStyle(
+            "ComboSku",
+            parent=normal_style,
+            fontName=regular_font,
+            fontSize=8.2,
+            leading=10.5,
+            wordWrap="CJK",
+        )
+        small_style = ParagraphStyle(
+            "ComboSmall",
+            parent=normal_style,
+            fontSize=7.3,
+            leading=9.2,
+            textColor=gray,
+        )
+        center_small_style = ParagraphStyle(
+            "ComboCenterSmall",
+            parent=small_style,
+            alignment=TA_CENTER,
+        )
+        note_style = ParagraphStyle(
+            "ComboNote",
+            parent=small_style,
+            fontSize=7.6,
+            leading=10,
+            textColor=gray,
+            spaceBefore=3 * mm,
+        )
+
+        def _photo_flowable(url):
+            photo = photo_cache.get(url)
+            if not photo:
+                return Paragraph("Photo<br/>unavailable", center_small_style)
+            try:
+                max_w = 22 * mm
+                max_h = 22 * mm
+                width_px = max(1, int(photo.get("width") or 1))
+                height_px = max(1, int(photo.get("height") or 1))
+                scale = min(max_w / width_px, max_h / height_px)
+                width = max(5 * mm, width_px * scale)
+                height = max(5 * mm, height_px * scale)
+                image = RLImage(io.BytesIO(photo["bytes"]), width=width, height=height)
+                image.hAlign = "CENTER"
+                return image
+            except Exception:
+                return Paragraph("Photo<br/>unavailable", center_small_style)
+
+        original_total = sum(item["mrp"] * item["qty"] for item in rows)
+        discount_amount = original_total * discount_pct / 100.0
+        final_total = max(0.0, original_total - discount_amount)
+        total_pieces = sum(item["qty"] for item in rows)
 
         output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-        filename = f"Cosa_Nostraa_Combo_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
-        response = app.response_class(
-            output.getvalue(),
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        doc = SimpleDocTemplate(
+            output,
+            pagesize=A4,
+            rightMargin=14 * mm,
+            leftMargin=14 * mm,
+            topMargin=13 * mm,
+            bottomMargin=17 * mm,
+            title="COSA NOSTRAA Bulk Combo Quotation",
+            author="COSA NOSTRAA",
         )
+
+        elements = []
+        brand_box = Table(
+            [[Paragraph("COSA NOSTRAA", title_style)], [Paragraph("BULK COMBO QUOTATION", subtitle_style)]],
+            colWidths=[182 * mm],
+        )
+        brand_box.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), dark),
+            ("BACKGROUND", (0, 1), (0, 1), light_gold),
+            ("BOX", (0, 0), (-1, -1), 0.8, gold),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6 * mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 3.2 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3.2 * mm),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        elements.append(brand_box)
+        elements.append(Spacer(1, 5 * mm))
+
+        info_data = [
+            [Paragraph("Quotation Date", small_style), Paragraph(datetime.now().strftime("%d %b %Y"), normal_style),
+             Paragraph("Discount", small_style), Paragraph(f"{discount_pct:g}%", normal_style)],
+            [Paragraph("Unique SKUs", small_style), Paragraph(str(len(rows)), normal_style),
+             Paragraph("Total Pieces", small_style), Paragraph(str(total_pieces), normal_style)],
+        ]
+        info_table = Table(info_data, colWidths=[30 * mm, 61 * mm, 30 * mm, 61 * mm])
+        info_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), ivory),
+            ("BOX", (0, 0), (-1, -1), 0.5, line_color),
+            ("INNERGRID", (0, 0), (-1, -1), 0.35, line_color),
+            ("FONTNAME", (0, 0), (-1, -1), regular_font),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
+        ]))
+        elements.append(info_table)
+        elements.append(Spacer(1, 5 * mm))
+
+        headers = ["PHOTO", "SKU / PRODUCT", "QTY", "MRP", "DISCOUNT", "FINAL PRICE"]
+        table_data = [headers]
+        for item in rows:
+            name = item.get("product_name") or ""
+            safe_sku = xml_escape(str(item["sku"]))
+            safe_name = xml_escape(str(name))
+            product_parts = [f"<b>{safe_sku}</b>"]
+            if name and name.strip().upper() != item["sku"].strip().upper():
+                product_parts.append(f"<font color='#64748B'>{safe_name}</font>")
+            product_text = "<br/>".join(product_parts)
+            line_final = item["mrp"] * item["qty"] * (1.0 - discount_pct / 100.0)
+            table_data.append([
+                _photo_flowable(item.get("image_url")),
+                Paragraph(product_text, sku_style),
+                str(item["qty"]),
+                _inr(item["mrp"]),
+                f"{discount_pct:g}%",
+                _inr(line_final),
+            ])
+
+        table_data.append(["", "", "", "", "TOTAL", _inr(final_total)])
+        quote_table = Table(
+            table_data,
+            colWidths=[25 * mm, 64 * mm, 13 * mm, 27 * mm, 20 * mm, 33 * mm],
+            repeatRows=1,
+            splitByRow=1,
+            hAlign="LEFT",
+        )
+        last_row = len(table_data) - 1
+        quote_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), dark),
+            ("TEXTCOLOR", (0, 0), (-1, 0), white),
+            ("FONTNAME", (0, 0), (-1, 0), bold_font),
+            ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+            ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("FONTNAME", (0, 1), (-1, -2), regular_font),
+            ("FONTSIZE", (0, 1), (-1, -2), 8),
+            ("GRID", (0, 0), (-1, -2), 0.4, line_color),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -2), [white, ivory]),
+            ("ALIGN", (0, 1), (0, -2), "CENTER"),
+            ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 2.4 * mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 2.4 * mm),
+            ("TOPPADDING", (0, 0), (-1, 0), 2.7 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 2.7 * mm),
+            ("TOPPADDING", (0, 1), (-1, -2), 2.6 * mm),
+            ("BOTTOMPADDING", (0, 1), (-1, -2), 2.6 * mm),
+            ("SPAN", (0, last_row), (3, last_row)),
+            ("BACKGROUND", (0, last_row), (-1, last_row), green),
+            ("TEXTCOLOR", (0, last_row), (-1, last_row), white),
+            ("FONTNAME", (0, last_row), (-1, last_row), bold_font),
+            ("FONTSIZE", (0, last_row), (-1, last_row), 10),
+            ("BOX", (0, last_row), (-1, last_row), 0.8, gold),
+            ("TOPPADDING", (0, last_row), (-1, last_row), 3 * mm),
+            ("BOTTOMPADDING", (0, last_row), (-1, last_row), 3 * mm),
+        ]
+        quote_table.setStyle(TableStyle(quote_style))
+        elements.append(quote_table)
+        elements.append(Spacer(1, 4 * mm))
+
+        summary_data = [
+            [Paragraph("Original Total", small_style), Paragraph(_inr(original_total), normal_style)],
+            [Paragraph(f"Discount ({discount_pct:g}%)", small_style), Paragraph(f"- {_inr(discount_amount)}", normal_style)],
+            [Paragraph("Final Combo Price", ParagraphStyle(
+                "FinalLabel", parent=normal_style, fontName=bold_font, textColor=white, alignment=TA_RIGHT
+            )), Paragraph(_inr(final_total), ParagraphStyle(
+                "FinalValue", parent=normal_style, fontName=bold_font, fontSize=11, textColor=white, alignment=TA_RIGHT
+            ))],
+        ]
+        summary_table = Table(summary_data, colWidths=[52 * mm, 36 * mm], hAlign="RIGHT")
+        summary_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 1), light_gold),
+            ("BACKGROUND", (0, 2), (-1, 2), dark),
+            ("BOX", (0, 0), (-1, -1), 0.6, line_color),
+            ("INNERGRID", (0, 0), (-1, 1), 0.35, line_color),
+            ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 3 * mm),
+            ("TOPPADDING", (0, 0), (-1, -1), 2.3 * mm),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2.3 * mm),
+        ]))
+        elements.append(summary_table)
+        elements.append(Paragraph(
+            "Prices are subject to final confirmation and product availability. Product photos are embedded for reference.",
+            note_style,
+        ))
+
+        def _page_footer(canvas, document):
+            canvas.saveState()
+            page_width, _ = A4
+            canvas.setStrokeColor(line_color)
+            canvas.setLineWidth(0.4)
+            canvas.line(14 * mm, 11.5 * mm, page_width - 14 * mm, 11.5 * mm)
+            canvas.setFont(regular_font, 7)
+            canvas.setFillColor(gray)
+            canvas.drawString(14 * mm, 7.5 * mm, "COSA NOSTRAA - COMBO QUOTATION")
+            canvas.drawRightString(page_width - 14 * mm, 7.5 * mm, f"Page {document.page}")
+            canvas.restoreState()
+
+        doc.build(elements, onFirstPage=_page_footer, onLaterPages=_page_footer)
+        output.seek(0)
+        filename = f"Cosa_Nostraa_Combo_Quotation_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        response = app.response_class(output.getvalue(), mimetype="application/pdf")
         response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response.headers["Cache-Control"] = "no-store"
         return response
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Excel quotation export failed: {e}"}), 500
+        return jsonify({"error": f"PDF quotation export failed: {e}"}), 500
 
 
 @app.route("/api/bulk-combo-upload", methods=["POST"])
