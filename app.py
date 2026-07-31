@@ -8905,6 +8905,18 @@ function _rkhComboHasRakhi(item){
   const stone = String((item && (item.combo_skus || item.gift_set_stone_details)) || '');
   return /rkh/i.test(stone);
 }
+/* For Rakhi stock/WIP totals, a CMB's own inventory is not used. We use
+   its Rakhi child SKUs from Stone Details. Taxon=Rakhi is preferred; when
+   Taxon is missing, RKH-code children are used; as a final data fallback,
+   all available Stone Details children are used. */
+function _rkhRakhiChildDetails(item){
+  const details = Array.isArray(item && item.combo_details) ? item.combo_details : [];
+  if (!details.length) return [];
+  const taxonMatches = details.filter(c => /rakhi/i.test(String((c && c.taxon) || '')));
+  if (taxonMatches.length) return taxonMatches;
+  const rkhMatches = details.filter(c => _rkhIsRakhiSku(c && c.sku));
+  return rkhMatches.length ? rkhMatches : details;
+}
 function _rkhMatchItem(item){
   const sku = item && item.sku;
   if (_rkhIsRakhiSku(sku)) return true;
@@ -9037,12 +9049,40 @@ function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities();
 let _rakhiOverallSummaryData = null;
 function _rkhBuildOverallSummary(){
   const wlRows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
+
+  // Overall Rakhi Stock/WIP inventory rule:
+  // 1) Standalone RKH SKU -> use its own inventory.
+  // 2) CMB/Gift Set -> use its Rakhi child SKUs' inventory, not CMB stock.
+  // 3) A child SKU present in multiple CMBs (or also directly whitelisted)
+  //    is counted only once, preventing duplicate Stock/WIP totals.
   let totalStock = 0, totalWip = 0;
-  RAKHI_WHITELIST_SKUS.forEach(sk => {
-    const item = _masterSkuMap[sk];
-    if (item){
-      totalStock += Number(item.inv_stock) || 0;
-      totalWip += Number(item.inv_wip) || 0;
+  const countedInventorySkus = new Set();
+  const addUniqueInventorySku = (rawSku, fallbackDetail) => {
+    const sku = String(rawSku || '').trim().toUpperCase();
+    if (!sku || countedInventorySkus.has(sku)) return;
+    countedInventorySkus.add(sku);
+    const masterItem = _masterSkuMap[sku] || {};
+    const detail = fallbackDetail || {};
+    const stockRaw = masterItem.inv_stock != null ? masterItem.inv_stock : detail.inv_stock;
+    const wipRaw = masterItem.inv_wip != null ? masterItem.inv_wip : detail.inv_wip;
+    totalStock += Number(stockRaw) || 0;
+    totalWip += Number(wipRaw) || 0;
+  };
+
+  RAKHI_WHITELIST_SKUS.forEach(rawSku => {
+    const sku = String(rawSku || '').trim().toUpperCase();
+    const item = _masterSkuMap[sku];
+    if (!item) return;
+    if (_rkhIsComboSku(sku)) {
+      const children = _rkhRakhiChildDetails(item);
+      if (children.length) {
+        children.forEach(c => addUniqueInventorySku(c && c.sku, c));
+      } else {
+        // Data-safety fallback for a malformed CMB with no parsed Stone Details.
+        addUniqueInventorySku(sku, item);
+      }
+    } else {
+      addUniqueInventorySku(sku, item);
     }
   });
   const totalOrders = wlRows.length;
