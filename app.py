@@ -4428,6 +4428,48 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
 
 
+
+/* ── Bulk / Make Combo ───────────────────────────────────── */
+#vBulk .bulk-builder{background:#fff;border:1px solid var(--cn-line);border-radius:18px;padding:20px;box-shadow:0 12px 34px rgba(15,23,42,.06);margin-bottom:18px}
+#vBulk .bulk-input-grid{display:grid;grid-template-columns:minmax(320px,1.7fr) minmax(220px,.8fr);gap:18px;align-items:start}
+#vBulk .bulk-textarea{width:100%;min-height:150px;resize:vertical;border:1px solid #d9d3c4;border-radius:12px;padding:14px 15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.55;background:#fffdf8;color:var(--cn-dark);outline:none;box-sizing:border-box}
+#vBulk .bulk-textarea:focus,#vBulk .bulk-discount:focus{border-color:var(--cn-gold);box-shadow:0 0 0 3px rgba(184,150,12,.12)}
+#vBulk .bulk-side{display:flex;flex-direction:column;gap:12px}
+#vBulk .bulk-upload-box{border:1px dashed #cdbd91;border-radius:13px;padding:16px;background:var(--cn-ivory)}
+#vBulk .bulk-discount-row{display:grid;grid-template-columns:1fr 110px;gap:12px;align-items:end}
+#vBulk .bulk-discount{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #d9d3c4;border-radius:10px;background:#fff;font-size:13px;font-weight:800;color:var(--cn-dark);outline:none}
+#vBulk .bulk-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}
+#vBulk .bulk-message{min-height:22px;margin:10px 0 0;font-size:11px;font-weight:750;color:#64748b;line-height:1.45}
+#vBulk .bulk-message.warn{color:#b45309}
+#vBulk .bulk-message.ok{color:#15803d}
+#vBulk .bulk-summary{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin:0 0 18px}
+#vBulk .bulk-sum-card{background:#fff;border:1px solid var(--cn-line);border-radius:16px;padding:17px 18px;box-shadow:0 8px 24px rgba(15,23,42,.05)}
+#vBulk .bulk-sum-label{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#8c7a42;font-weight:800;margin-bottom:8px}
+#vBulk .bulk-sum-value{font-family:'Cormorant Garamond',serif;font-size:28px;line-height:1;color:var(--cn-gold);font-weight:700}
+#vBulk .bulk-sum-sub{font-size:10px;color:#64748b;font-weight:650;margin-top:7px}
+#vBulk .bulk-final-card{background:linear-gradient(135deg,#1a1610,#2b2418);border-color:#1a1610}
+#vBulk .bulk-final-card .bulk-sum-label{color:#d9c78f}
+#vBulk .bulk-final-card .bulk-sum-value{color:#f2d778}
+#vBulk .bulk-final-card .bulk-sum-sub{color:#d8d1c2}
+#vBulk .bulk-table-wrap{overflow:auto;max-height:66vh;border:1px solid var(--cn-line);border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.05)}
+#vBulk table.bulk-table{width:100%;border-collapse:collapse;min-width:820px;table-layout:fixed}
+#vBulk table.bulk-table thead th{position:sticky;top:0;z-index:3;background:var(--cn-ivory);color:var(--cn-gold);font-size:9px;letter-spacing:1.8px;text-transform:uppercase;text-align:left;padding:12px;border-bottom:1px solid var(--cn-line)}
+#vBulk table.bulk-table td{padding:11px 12px;border-bottom:1px solid #eee9df;vertical-align:middle;font-size:12px;color:#334155;font-weight:700}
+#vBulk table.bulk-table tbody tr:hover td{background:#fffdf8}
+#vBulk table.bulk-table tfoot td{background:#fffaf0;border-top:1px solid #d9c99d;border-bottom:none;font-weight:850}
+#vBulk table.bulk-table tfoot tr:last-child td{background:#1a1610;color:#f2d778;font-size:13px}
+#vBulk .bulk-photo,#vBulk .bulk-photo-ph{width:78px;height:78px;border:1px solid #e5dcc8;border-radius:11px;background:#fff;padding:4px;box-sizing:border-box;display:flex;align-items:center;justify-content:center}
+#vBulk .bulk-photo{object-fit:contain;object-position:center}
+#vBulk .bulk-photo-ph{font-size:26px;color:#c0ad76}
+#vBulk .bulk-product-name{color:#9d7800;font-weight:850;line-height:1.35;overflow-wrap:anywhere}
+#vBulk .bulk-product-meta{font-size:10px;color:#64748b;margin-top:4px;font-weight:650}
+#vBulk .bulk-qty{width:82px;padding:9px 8px;border:1px solid #d9d3c4;border-radius:9px;text-align:center;font-weight:800;background:#fff;box-sizing:border-box}
+#vBulk .bulk-money{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+#vBulk .bulk-remove{border:1px solid #efcaca;background:#fff5f5;color:#b91c1c;border-radius:9px;padding:8px 11px;font-size:10px;font-weight:850;cursor:pointer}
+#vBulk .bulk-empty{padding:48px 20px;text-align:center;color:#8c7a42;font-size:12px;font-weight:750}
+@media(max-width:900px){#vBulk .bulk-input-grid{grid-template-columns:1fr}#vBulk .bulk-summary{grid-template-columns:repeat(2,minmax(140px,1fr))}}
+@media(max-width:540px){#vBulk .bulk-summary{grid-template-columns:1fr}#vBulk .bulk-discount-row{grid-template-columns:1fr}}
+
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -4506,6 +4548,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
   <button class="menu-item" id="m19" onclick="showTab('stockstatus')">Stock Status</button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')">Rakhi</button>
+  <button class="menu-item" id="m21" onclick="showTab('bulk')">Bulk</button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -5471,6 +5514,61 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
+  <div id="vBulk" style="display:none">
+    <div class="insights-head">
+      <div>
+        <div class="insights-title">Bulk — Make Combo</div>
+        <div class="insights-sub">Add one or multiple SKUs to instantly build a combo using each SKU's latest COSA selling price and product photo.</div>
+      </div>
+    </div>
+
+    <div class="bulk-builder">
+      <div class="bulk-input-grid">
+        <div>
+          <label class="fl">Paste SKUs</label>
+          <textarea id="bulkSkuInput" class="bulk-textarea" placeholder="Paste one SKU per line, or separate SKUs with commas/spaces.\nExample:\nBH-1320\nCMB-0817\nBT-0057"></textarea>
+          <div class="small-note" style="margin-top:7px">You may also paste two columns as SKU + Qty. Repeated SKUs are automatically combined into one row with the correct quantity.</div>
+          <div class="bulk-actions">
+            <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px" onclick="bulkMakeCombo()">Make Combo</button>
+            <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#eceff4;color:#111" onclick="bulkClearCombo()">Clear</button>
+          </div>
+        </div>
+        <div class="bulk-side">
+          <div class="bulk-upload-box">
+            <label class="fl">Upload SKU File</label>
+            <div class="small-note" style="margin-bottom:10px">CSV, TXT, XLS or XLSX. Use a SKU column; Qty/Quantity is optional.</div>
+            <input type="file" id="bulkUploadFile" accept=".csv,.txt,.xls,.xlsx" style="display:none" onchange="bulkHandleUpload(this)">
+            <button class="go-btn" style="width:auto;padding:9px 14px;letter-spacing:1.2px" onclick="document.getElementById('bulkUploadFile').click()">Upload File</button>
+            <div id="bulkUploadInfo" class="small-note" style="margin-top:9px"></div>
+          </div>
+          <div class="bulk-discount-row">
+            <div>
+              <label class="fl">Discount on Combo Total</label>
+              <div class="small-note">Applied after adding all SKU line totals.</div>
+            </div>
+            <div>
+              <label class="fl">Discount %</label>
+              <input id="bulkDiscount" class="bulk-discount" type="number" value="0" min="0" max="100" step="0.1" oninput="bulkRenderCombo()">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="bulkMessage" class="bulk-message"></div>
+    </div>
+
+    <div id="bulkSummary" class="bulk-summary">
+      <div class="bulk-sum-card"><div class="bulk-sum-label">Combo Pieces</div><div class="bulk-sum-value" id="bulkPieces">0</div><div class="bulk-sum-sub" id="bulkSkuCount">0 unique SKUs</div></div>
+      <div class="bulk-sum-card"><div class="bulk-sum-label">Original Total</div><div class="bulk-sum-value" id="bulkOriginal">₹0.00</div><div class="bulk-sum-sub">Latest COSA selling prices</div></div>
+      <div class="bulk-sum-card"><div class="bulk-sum-label">Discount Amount</div><div class="bulk-sum-value" id="bulkDiscountAmount">₹0.00</div><div class="bulk-sum-sub" id="bulkDiscountLabel">0% discount</div></div>
+      <div class="bulk-sum-card bulk-final-card"><div class="bulk-sum-label">Final Combo Price</div><div class="bulk-sum-value" id="bulkFinal">₹0.00</div><div class="bulk-sum-sub">Total after discount</div></div>
+    </div>
+
+    <div id="bulkComboContent" class="bulk-table-wrap">
+      <div class="bulk-empty">Paste or upload SKUs, then click <b>Make Combo</b>.</div>
+    </div>
+  </div>
+
+
   <div id="vTarget" style="display:none">
   <div class="insights-head">
     <div>
@@ -5591,6 +5689,9 @@ let grandNetRevenue = 0, grandFinalQty = 0;
 let marketplaceData = null;
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
+let bulkComboRows = [];
+let bulkMissingSkus = [];
+let _bulkSkuLookup = {};
 
 let selectedSkuSet = new Set();
 let roRemarks = {};   // sku -> remark text (admin/employee dono likh sakte hain)
@@ -6809,10 +6910,15 @@ function loadData(force){
       master = d.inventory || [];
       _masterSkuMap = {};
       _giftSetStoneMap = {};
+      _bulkSkuLookup = {};
       master.forEach(it => {
         if (it && it.sku) {
           const skuKey = String(it.sku).trim().toUpperCase();
           _masterSkuMap[skuKey] = it;
+          const compactKey = skuKey.replace(/[^A-Z0-9]/g, '');
+          const baseKey = String(skuKey.split('_')[0] || '').replace(/[^A-Z0-9]/g, '');
+          if (compactKey && !_bulkSkuLookup[compactKey]) _bulkSkuLookup[compactKey] = it;
+          if (baseKey && !_bulkSkuLookup[baseKey]) _bulkSkuLookup[baseKey] = it;
           const stone = String(it.gift_set_stone_details || '').trim().replace(/[<>]/g, '');
           if (stone) _giftSetStoneMap[skuKey] = stone;
         }
@@ -8096,6 +8202,9 @@ function applyRoleUI(){
   // Profit Margin SIRF admin ko (cost/margin sensitive).
   const pmBtn = document.getElementById('m14');
   if (pmBtn) pmBtn.style.display = isEmployee ? 'none' : '';
+  // Bulk Make Combo contains selling-price information, so keep it admin-only.
+  const bulkBtn = document.getElementById('m21');
+  if (bulkBtn) bulkBtn.style.display = isEmployee ? 'none' : '';
   // Insights "Sort By" me revenue option employee ko na dikhe → sirf Qty.
   const iSort = document.getElementById('iSort');
   if (iSort) {
@@ -11777,6 +11886,198 @@ function exportInsights(fmtType){
   downloadTable(headers, data, 'insights_filtered', fmtType);
 }
 
+
+function bulkFmtMoney(n){
+  const v = Number(n) || 0;
+  return '₹' + v.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+function bulkPriceOf(item){
+  if (!item) return 0;
+  return Number(item.last_selling_price) || Number(item.avg_selling_price) || 0;
+}
+
+function bulkFindItem(rawSku){
+  const cleanSku = String(rawSku || '').trim().replace(/^['"]+|['"]+$/g, '').toUpperCase();
+  if (!cleanSku) return null;
+  if (_masterSkuMap[cleanSku]) return _masterSkuMap[cleanSku];
+  const compact = cleanSku.replace(/[^A-Z0-9]/g, '');
+  if (compact && _bulkSkuLookup[compact]) return _bulkSkuLookup[compact];
+  const baseCompact = String(cleanSku.split('_')[0] || '').replace(/[^A-Z0-9]/g, '');
+  return baseCompact ? (_bulkSkuLookup[baseCompact] || null) : null;
+}
+
+function bulkIsHeaderToken(v){
+  const n = String(v || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+  return ['sku','sku no','sku number','product sku','item code','code','qty','quantity','total qty'].includes(n);
+}
+
+function bulkRowsFromText(raw){
+  const out = [];
+  String(raw || '').split(/\r?\n/).forEach(line => {
+    const t = line.trim();
+    if (!t) return;
+    const cells = t.split(/[\t,;|]+/).map(x => x.trim()).filter(Boolean);
+    if (cells.length >= 2 && !bulkIsHeaderToken(cells[0])) {
+      const q = Number(String(cells[1]).replace(/,/g,''));
+      if (Number.isFinite(q) && q > 0) {
+        out.push({sku: cells[0], qty: Math.max(1, Math.round(q))});
+        for (let i=2; i<cells.length; i++) if (!bulkIsHeaderToken(cells[i])) out.push({sku:cells[i], qty:1});
+        return;
+      }
+    }
+    t.split(/[\s,;|\t]+/).map(x => x.trim()).filter(Boolean).forEach(tok => {
+      if (!bulkIsHeaderToken(tok)) out.push({sku:tok, qty:1});
+    });
+  });
+  return out;
+}
+
+function bulkSetRows(rows){
+  const agg = new Map();
+  const missing = [];
+  (rows || []).forEach(r => {
+    const rawSku = String((r && r.sku) || '').trim();
+    if (!rawSku || bulkIsHeaderToken(rawSku)) return;
+    const qty = Math.max(1, Math.round(Number(r.qty) || 1));
+    const item = bulkFindItem(rawSku);
+    if (!item) {
+      missing.push(rawSku);
+      return;
+    }
+    const key = String(item.sku || '').toUpperCase();
+    if (!agg.has(key)) agg.set(key, {sku:item.sku, qty:0});
+    agg.get(key).qty += qty;
+  });
+  bulkComboRows = Array.from(agg.values());
+  bulkMissingSkus = Array.from(new Set(missing.map(x => String(x).toUpperCase())));
+  bulkRenderCombo();
+}
+
+function bulkMakeCombo(){
+  const raw = document.getElementById('bulkSkuInput')?.value || '';
+  const rows = bulkRowsFromText(raw);
+  if (!rows.length) {
+    bulkComboRows = [];
+    bulkMissingSkus = [];
+    bulkRenderCombo('Please paste at least one SKU.');
+    return;
+  }
+  bulkSetRows(rows);
+}
+
+function bulkUpdateQty(sku, value){
+  const q = Math.max(1, Math.round(Number(value) || 1));
+  const row = bulkComboRows.find(r => String(r.sku).toUpperCase() === String(sku).toUpperCase());
+  if (row) row.qty = q;
+  bulkRenderCombo();
+}
+
+function bulkRemoveSku(sku){
+  bulkComboRows = bulkComboRows.filter(r => String(r.sku).toUpperCase() !== String(sku).toUpperCase());
+  bulkRenderCombo();
+}
+
+function bulkClearCombo(){
+  bulkComboRows = [];
+  bulkMissingSkus = [];
+  const ta = document.getElementById('bulkSkuInput'); if (ta) ta.value = '';
+  const di = document.getElementById('bulkDiscount'); if (di) di.value = '0';
+  const fi = document.getElementById('bulkUploadFile'); if (fi) fi.value = '';
+  const ui = document.getElementById('bulkUploadInfo'); if (ui) ui.textContent = '';
+  bulkRenderCombo();
+}
+
+async function bulkHandleUpload(inp){
+  const file = inp.files && inp.files[0];
+  const info = document.getElementById('bulkUploadInfo');
+  if (!file) return;
+  if (info) { info.textContent = 'Reading ' + file.name + '...'; info.style.color = '#64748b'; }
+  try {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const resp = await fetch('/api/bulk-combo-upload', {method:'POST', body:fd, headers:{'ngrok-skip-browser-warning':'true'}});
+    const data = await resp.json();
+    if (!resp.ok || data.error) throw new Error(data.error || 'Could not read file');
+    const rows = data.rows || [];
+    const ta = document.getElementById('bulkSkuInput');
+    if (ta) ta.value = rows.map(r => `${r.sku}${Number(r.qty||1)!==1 ? '\t'+r.qty : ''}`).join('\n');
+    bulkSetRows(rows);
+    if (info) { info.textContent = `${rows.length} file rows loaded from ${file.name}`; info.style.color = '#15803d'; }
+  } catch(err) {
+    if (info) { info.textContent = err.message || 'Upload failed'; info.style.color = '#b91c1c'; }
+  }
+}
+
+function bulkRenderCombo(forcedMessage){
+  const host = document.getElementById('bulkComboContent');
+  const msg = document.getElementById('bulkMessage');
+  if (!host) return;
+
+  let discount = Number(document.getElementById('bulkDiscount')?.value || 0);
+  if (!Number.isFinite(discount)) discount = 0;
+  discount = Math.max(0, Math.min(100, discount));
+
+  const rows = (bulkComboRows || []).map(r => {
+    const item = bulkFindItem(r.sku);
+    const qty = Math.max(1, Math.round(Number(r.qty) || 1));
+    const price = bulkPriceOf(item);
+    return {item, sku:r.sku, qty, price, line:price*qty};
+  }).filter(r => r.item);
+
+  const pieces = rows.reduce((s,r) => s + r.qty, 0);
+  const original = rows.reduce((s,r) => s + r.line, 0);
+  const discountAmount = original * discount / 100;
+  const finalTotal = Math.max(0, original - discountAmount);
+
+  const setTxt = (id, value) => { const el=document.getElementById(id); if (el) el.textContent=value; };
+  setTxt('bulkPieces', pieces.toLocaleString('en-IN'));
+  setTxt('bulkSkuCount', `${rows.length} unique SKU${rows.length===1?'':'s'}`);
+  setTxt('bulkOriginal', bulkFmtMoney(original));
+  setTxt('bulkDiscountAmount', bulkFmtMoney(discountAmount));
+  setTxt('bulkDiscountLabel', `${discount.toLocaleString('en-IN',{maximumFractionDigits:1})}% discount`);
+  setTxt('bulkFinal', bulkFmtMoney(finalTotal));
+
+  if (msg) {
+    const notFoundText = bulkMissingSkus.length ? `Not found: ${bulkMissingSkus.slice(0,12).join(', ')}${bulkMissingSkus.length>12?'...':''}` : '';
+    msg.textContent = forcedMessage || (notFoundText || (rows.length ? `${rows.length} SKU${rows.length===1?'':'s'} added successfully.` : ''));
+    msg.className = 'bulk-message ' + ((forcedMessage || bulkMissingSkus.length) ? 'warn' : (rows.length ? 'ok' : ''));
+  }
+
+  if (!rows.length) {
+    host.innerHTML = '<div class="bulk-empty">Paste or upload SKUs, then click <b>Make Combo</b>.</div>';
+    return;
+  }
+
+  const body = rows.map(r => {
+    const it = r.item;
+    const imageUrl = String(it.image_url || '').trim();
+    const hasImg = imageUrl && imageUrl.toLowerCase() !== 'nan';
+    const image = hasImg
+      ? `<img class="bulk-photo" src="${escHtml(imageUrl)}" alt="${escHtml(it.sku)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="bulk-photo-ph" style="display:none">💎</span>`
+      : '<span class="bulk-photo-ph">💎</span>';
+    const priceMissing = r.price <= 0 ? '<div class="bulk-product-meta" style="color:#b45309">Selling price not found in COSA</div>' : '';
+    return `<tr>
+      <td style="width:104px">${image}</td>
+      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(it.sku)}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceMissing}</td>
+      <td style="width:115px"><input class="bulk-qty" type="number" min="1" step="1" value="${r.qty}" data-sku="${escHtml(it.sku)}" onchange="bulkUpdateQty(this.dataset.sku,this.value)"></td>
+      <td class="bulk-money" style="width:145px">${bulkFmtMoney(r.price)}</td>
+      <td class="bulk-money" style="width:155px;color:#15803d">${bulkFmtMoney(r.line)}</td>
+      <td style="width:105px;text-align:center"><button class="bulk-remove" data-sku="${escHtml(it.sku)}" onclick="bulkRemoveSku(this.dataset.sku)">Remove</button></td>
+    </tr>`;
+  }).join('');
+
+  host.innerHTML = `<table class="bulk-table">
+    <thead><tr><th style="width:104px">Photo</th><th>SKU / Product</th><th style="width:115px">Qty</th><th style="width:145px;text-align:right">Selling Price</th><th style="width:155px;text-align:right">Line Total</th><th style="width:105px;text-align:center">Action</th></tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot>
+      <tr><td colspan="4" style="text-align:right">Original Total</td><td class="bulk-money">${bulkFmtMoney(original)}</td><td></td></tr>
+      <tr><td colspan="4" style="text-align:right">Discount (${discount.toLocaleString('en-IN',{maximumFractionDigits:1})}%)</td><td class="bulk-money">- ${bulkFmtMoney(discountAmount)}</td><td></td></tr>
+      <tr><td colspan="4" style="text-align:right">Final Combo Price</td><td class="bulk-money">${bulkFmtMoney(finalTotal)}</td><td></td></tr>
+    </tfoot>
+  </table>`;
+}
+
 function renderMarketplaces(){
   const root = document.getElementById('marketplaceRoot');
   if (!root) return;
@@ -11853,7 +12154,7 @@ const __origShowTab = showTab;
 showTab = function(t){
   // Marketplaces aur Smart Search ab band hain (admin + employee dono ke liye).
   if (t === 'marketplaces' || t === 'smart') t = 'home';
-  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit')) t = 'home';
+  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
     home: {id: 'vHome', btn: 'm1'},
@@ -11870,6 +12171,7 @@ showTab = function(t){
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
     rakhi: {id: 'vRakhi', btn: 'm20'},
+    bulk: {id: 'vBulk', btn: 'm21'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -11912,6 +12214,7 @@ showTab = function(t){
       taxon: 'TAXON DETAILS',
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
+      bulk: 'BULK — MAKE COMBO',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -11937,6 +12240,7 @@ showTab = function(t){
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
+  if (t === 'bulk') setTimeout(()=>{ try{ bulkRenderCombo(); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
@@ -14884,6 +15188,65 @@ def api_smart_search():
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bulk-combo-upload", methods=["POST"])
+def api_bulk_combo_upload():
+    """Read SKU + optional Qty from CSV/TXT/XLS/XLSX for the Bulk combo tab."""
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    filename = f.filename or "bulk_skus"
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in (".csv", ".txt", ".xls", ".xlsx"):
+        return jsonify({"error": "Please upload a CSV, TXT, XLS or XLSX file."}), 400
+
+    try:
+        raw = f.read()
+        bio = io.BytesIO(raw)
+        if ext in (".xls", ".xlsx"):
+            df = pd.read_excel(bio, header=None, dtype=str)
+        else:
+            # Only split on actual spreadsheet delimiters. Auto-detection can
+            # incorrectly treat a character inside a one-column SKU (for
+            # example the H in BH-1320) as the delimiter.
+            df = pd.read_csv(bio, header=None, dtype=str, sep=r"[,\t;|]",
+                             engine="python", on_bad_lines="skip")
+    except Exception as e:
+        return jsonify({"error": f"Could not read file: {e}"}), 400
+
+    if df is None or df.empty:
+        return jsonify({"error": "Uploaded file is empty"}), 400
+
+    def _head_norm(v):
+        return re.sub(r"[^a-z0-9]+", " ", str(v or "").strip().lower()).strip()
+
+    sku_aliases = {"sku", "sku no", "sku number", "product sku", "item code", "code"}
+    qty_aliases = {"qty", "quantity", "total qty", "combo qty", "pieces", "pcs"}
+    first = [clean(x) for x in list(df.iloc[0])]
+    sku_idx = next((i for i, v in enumerate(first) if _head_norm(v) in sku_aliases), None)
+    qty_idx = next((i for i, v in enumerate(first) if _head_norm(v) in qty_aliases), None)
+    start_row = 1 if sku_idx is not None else 0
+    if sku_idx is None:
+        sku_idx = 0
+
+    rows = []
+    for ridx in range(start_row, min(len(df), 5000)):
+        row = df.iloc[ridx]
+        raw_sku = clean(row.iloc[sku_idx]) if sku_idx < len(row) else ""
+        if not raw_sku or _head_norm(raw_sku) in sku_aliases:
+            continue
+        qty = 1
+        if qty_idx is not None and qty_idx < len(row):
+            q = to_num(row.iloc[qty_idx])
+            if q > 0:
+                qty = max(1, int(round(q)))
+        rows.append({"sku": raw_sku, "qty": qty})
+
+    if not rows:
+        return jsonify({"error": "No SKU values were found in the uploaded file."}), 400
+    return jsonify({"rows": rows, "filename": filename})
 
 @app.route("/api/upload-report", methods=["POST"])
 def api_upload_report():
