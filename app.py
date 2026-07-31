@@ -5688,14 +5688,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:26px">
     <div>
-      <div class="insights-title">Rakhi — Common Child SKUs Across CMBs</div>
+      <div class="insights-title">Rakhi — Child SKU to CMB Mapping</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Shows each Rakhi child SKU that is used in two or more curated CMB gift sets, together with every parent CMB in which it appears.</div>
+  <div class="small-note" style="margin:6px 0 14px">One consolidated table showing every Rakhi child SKU and all curated CMB (combo) SKUs in which it is used. Child-to-CMB usage is not repeated inside the other Rakhi tables.</div>
   <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -9320,12 +9320,44 @@ function _rkhOrderDate(e){
   if (od && od !== 'N/A') return od;
   return (e && e.date) || 'N/A';
 }
+/* Build one authoritative mapping: Rakhi child SKU -> unique curated parent CMBs.
+   The same child repeated inside one CMB is counted once. This is display/export
+   metadata only and never changes sales, stock, KPI or target totals. */
+let _rkhChildCmbUsageMasterRef = null;
+let _rkhChildCmbUsageCache = {};
+function _rkhChildCmbUsageIndex(){
+  if (_rkhChildCmbUsageMasterRef === master) return _rkhChildCmbUsageCache;
+  const idx = {};
+  (master || []).forEach(parent => {
+    const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
+    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku) || !_rkhComboHasRakhi(parent)) return;
+    _rkhStrictRakhiChildDetails(parent).forEach(child => {
+      const childSku = String((child && child.sku) || '').trim().toUpperCase();
+      if (!childSku) return;
+      if (!idx[childSku]) idx[childSku] = {sku: childSku, parents: []};
+      if (!idx[childSku].parents.some(x => x.sku === parentSku)){
+        idx[childSku].parents.push({sku: parentSku, sku_name: parent.sku_name || ''});
+      }
+    });
+  });
+  Object.values(idx).forEach(rec => rec.parents.sort((a, b) => a.sku.localeCompare(b.sku)));
+  _rkhChildCmbUsageMasterRef = master;
+  _rkhChildCmbUsageCache = idx;
+  return idx;
+}
+function _rkhChildCmbUsage(childSku){
+  const sku = String(childSku || '').trim().toUpperCase();
+  const rec = _rkhChildCmbUsageIndex()[sku];
+  const parents = rec ? rec.parents.slice() : [];
+  return {count: parents.length, parents};
+}
 function _rkhComboBoxHtml(combo_details){
   // Gift Set (CMB) SKUs — Stone Details ke andar jo sub-SKUs hain unki
   // apni Inv Stock / Inv WIP dikhane ke liye chhota inline box (Rakhi tab).
+  // Child-to-CMB mapping sirf dedicated mapping table mein dikhayi jati hai.
   if (!combo_details || !combo_details.length) return '';
   const items = combo_details.map(c => {
-    const skuEsc = String(c.sku).replace(/'/g, "\\\\'");
+    const skuEsc = String(c.sku).replace(/'/g, "\\'");
     return '<div class="combo-detail">'
       + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEsc + '\')">' + escHtml(skuLabel(c.sku, c.sku_name)) + '</button>'
       + (c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>')
@@ -9566,7 +9598,7 @@ function renderRakhiOverallSummary(){
     }).join('');
     actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div><button class="go-btn" type="button" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#17120d;flex:0 0 auto" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button></div>
       <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Repeat Orders = additional orders by the same customer for that SKU.</div>
-      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1260px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+      <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1280px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
 function exportRakhiOverallSummaryCSV(){
@@ -9579,7 +9611,8 @@ function exportRakhiOverallSummaryCSV(){
   (s.skuRows || []).forEach(r => {
     // Parent SKU row: for CMBs, Sales/DRR are the actual CMB sale only.
     data.push([
-      r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
+      r.sku, exportSkuName(r.sku, r.sku_name),
+      Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
       r.orders, r.repeatOrders, ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
     ]);
 
@@ -10230,7 +10263,7 @@ function exportRakhiChannelCSV(){
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
 
-/* ── COMMON RAKHI CHILD SKUs ACROSS CURATED CMBs ── */
+/* ── RAKHI CHILD SKU → CURATED CMB MAPPING (CENTRAL TABLE) ── */
 let _rakhiCommonSkuRows = [];
 function _rkhBuildCommonSkus(){
   const map = {};
@@ -10255,7 +10288,6 @@ function _rkhBuildCommonSkus(){
     });
   });
   return Object.values(map)
-    .filter(r => r.parents.length > 1)
     .sort((a, b) => (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
 function renderRakhiCommonSkus(){
@@ -10268,7 +10300,7 @@ function renderRakhiCommonSkus(){
   const list = _rkhBuildCommonSkus();
   _rakhiCommonSkuRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is common across two or more curated CMBs.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU to CMB mapping found.</div>';
     return;
   }
   const rows = list.map((r, i) => {
@@ -10289,16 +10321,17 @@ function renderRakhiCommonSkus(){
       <td style="white-space:normal;line-height:1.65">${parents}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> common Rakhi child SKUs found.</div>
-    <table class="ro rkh-grid" style="width:100%;min-width:760px;border-collapse:collapse">
-      <thead><tr><th>#</th><th>Photo</th><th>Common Rakhi Child SKU</th><th>CMB Count</th><th>Used In CMBs</th></tr></thead>
+  const commonCount = list.filter(r => r.parents.length > 1).length;
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs mapped • <b>${commonCount.toLocaleString('en-IN')}</b> used in more than one CMB.</div>
+    <table class="ro rkh-grid" style="width:100%;min-width:820px;border-collapse:collapse">
+      <thead><tr><th>#</th><th>Photo</th><th>Rakhi Child SKU</th><th>Used in No. of CMBs</th><th>CMB (Combo) SKUs</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
 function exportRakhiCommonSkusCSV(){
   const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
-  if (!list.length){ alert('No common Rakhi child SKUs to export.'); return; }
-  const headers = ['Rakhi Child SKU', 'SKU Name', 'CMB Count', 'Used In CMB SKUs', 'Image Link'];
+  if (!list.length){ alert('No Rakhi child SKU mapping to export.'); return; }
+  const headers = ['Rakhi Child SKU', 'SKU Name', 'Used in No. of CMBs', 'CMB (Combo) SKUs', 'Image Link'];
   const data = list.map(r => [
     r.sku,
     exportSkuName(r.sku, r.sku_name),
@@ -10312,7 +10345,7 @@ function exportRakhiCommonSkusCSV(){
   }).join(',')).join('\n');
   const blob = new Blob([csv], {type: 'text/csv'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_common_child_skus.csv'; a.click();
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_child_sku_to_cmb_mapping.csv'; a.click();
 }
 window.renderRakhiCommonSkus = renderRakhiCommonSkus;
 window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
