@@ -1,5 +1,5 @@
 # ============================================================
-# COSA NOSTRAA — V23.3 (STABLE FINAL — no-crash build)
+# Cosa Nostraa — V23.3 (STABLE FINAL — no-crash build)
 # V23.3:
 #   • CRASH FIX (512MB OOM): data ab chunks mein process hota hai (full
 #     copy nahi banti), sales dataframe kaam khatam hote hi free, bg
@@ -7,7 +7,7 @@
 #   • EMPLOYEE: MRP wapas dikhega (cards, details, AI, exports) —
 #     sirf REVENUE har jagah hidden rahega.
 # ============================================================
-# COSA NOSTRAA — V23.2 (PRODUCTION FINAL)
+# Cosa Nostraa — V23.2 (PRODUCTION FINAL)
 # V23.2:
 #   • Repeat Orders TRANSACTIONS view: har row par checkbox + select-all
 #     (multi-select karke export), Dimensions column table mein bhi.
@@ -19,13 +19,13 @@
 #     + /api/vision-status diagnostic endpoint.
 #   • Saare typing/search inputs: white field + BLACK bold text.
 # ============================================================
-# COSA NOSTRAA — V23.1 (PRODUCTION / cosanostraamanagement.com)
+# Cosa Nostraa — V23.1 (PRODUCTION / cosanostraamanagement.com)
 # V23.1: SKU FINDER ab LITE servers (bina torch, 512MB free tier) par
 #   bhi chalta hai — query image ki DINOv2 embedding Hugging Face API
 #   se banti hai (HF_TOKEN), catalog matching local numpy se. Torch
 #   installed ho to pehle jaisa local mode hi chalega.
 # ============================================================
-# COSA NOSTRAA — V23 (PRODUCTION / cosanostraamanagement.com)
+# Cosa Nostraa — V23 (PRODUCTION / cosanostraamanagement.com)
 # NEW in V23:
 #   • REAL SERVER-SIDE LOGIN: credentials ab server par verify hote
 #     hain (session cookies, 14 din). Public internet par bhi data
@@ -41,7 +41,7 @@
 #     AI encoding fail hui to ab SAHI error dikhega (pehle galat
 #     "links failed" aata tha) + exact fix command.
 # ============================================================
-# COSA NOSTRAA — V22 (OBSIDIAN PRO + EMPLOYEE PRIVACY)
+# Cosa Nostraa — V22 (OBSIDIAN PRO + EMPLOYEE PRIVACY)
 # NEW in V22:
 #   • EMPLOYEE ROLE LOCKDOWN: Insights tab hidden; revenue NEVER sent
 #     to employee browsers (/api/data strips it server-side); revenue
@@ -52,9 +52,9 @@
 #     protection pass) + exact per-link failure reasons (HTTP code etc.)
 #     shown in the error so root cause turant dikhe.
 # ============================================================
-# COSA NOSTRAA — V21 (OBSIDIAN PRO)
+# Cosa Nostraa — V21 (OBSIDIAN PRO)
 # NEW in V21:
-#   • New login page: floating COSA NOSTRAA watermarks drifting across
+#   • New login page: floating Cosa Nostraa watermarks drifting across
 #     the screen, dark-glass sign-in card, violet glow.
 #   • SMART SEARCH is now its OWN tab (menu -> Smart Search) with a
 #     hero header — removed from Repeat Orders.
@@ -66,7 +66,7 @@
 #     after every answer.
 #   • Entrance animations: staggered card/KPI reveal, view transitions.
 # ============================================================
-# COSA NOSTRAA — V20 (OBSIDIAN EDITION)
+# Cosa Nostraa — V20 (OBSIDIAN EDITION)
 # NEW in V20:
 #   • OBSIDIAN UI: bold modern dark theme — Space Grotesk display,
 #     heavy weights everywhere, platinum + violet accents, true 3D
@@ -77,7 +77,7 @@
 #   • Multi-device ready: threaded server + data-refresh lock so 4-5
 #     users ek saath chala sakte hain bina atke.
 # ============================================================
-# COSA NOSTRAA — V19 (ROYAL ATELIER EDITION)
+# Cosa Nostraa — V19 (ROYAL ATELIER EDITION)
 # NEW in V19:
 #   • ROYAL ATELIER UI: quiet-luxury redesign — champagne gold +
 #     charcoal, Playfair serif display, hairline borders, editorial
@@ -86,7 +86,7 @@
 #     after Gemini) — FREE ~100+ images/day.
 #   • Live sheet sync (cache-busted) from V18 included.
 # ============================================================
-# COSA NOSTRAA — V18 (3D LUXE + CLOUDFLARE + LIVE SYNC FIX)
+# Cosa Nostraa — V18 (3D LUXE + CLOUDFLARE + LIVE SYNC FIX)
 # NEW in V18:
 #   • LIVE SYNC FIX: Google published-CSV ka CDN cache bypass (cache-
 #     buster + no-cache headers + 3 retries) — Sync dabate hi sheet ka
@@ -95,7 +95,7 @@
 #     CF_ACCOUNT_ID + CF_API_TOKEN bharo (steps line ~22 par likhe hain).
 #     Chain: Gemini -> Cloudflare -> Pollinations -> HuggingFace.
 # ============================================================
-# COSA NOSTRAA — V17 (3D LUXE UI)
+# Cosa Nostraa — V17 (3D LUXE UI)
 # NEW in V17:
 #   • Pura UI 3D luxury overhaul: animated ambient background, glass
 #     panels (blur), layered depth shadows, 3D hover lift + tilt on
@@ -103,7 +103,7 @@
 #     neumorphic inputs, glow buttons, slim gold scrollbar.
 #   • Saari functionality 100% same — sirf look upgrade.
 # ============================================================
-# COSA NOSTRAA — V16 (AI STUDIO ULTIMATE)
+# Cosa Nostraa — V16 (AI STUDIO ULTIMATE)
 # NEW in V16:
 #   • SMART SEARCH ab 100% OFFLINE: CLIP model text ko seedha aapke
 #     catalog images se match karta hai (internet image-gen par koi
@@ -116,7 +116,7 @@
 #     top/list) ya specific SKU pucho — totals ke saath nahi.
 #   • Aur bhi strict concise answers.
 # ============================================================
-# COSA NOSTRAA — V15 (AI STUDIO ULTRA)
+# Cosa Nostraa — V15 (AI STUDIO ULTRA)
 # NEW in V15:
 #   • Concise answers — jo poocha sirf wahi (extra stats nahi).
 #   • AI FORECASTING (Prophet): "is mahine Website me kitni sale ho
@@ -128,14 +128,14 @@
 #     designs images ke saath — free AI image + DINOv2 visual match.
 #   • Free design engine ab zyada robust (retries, 2 models, variants).
 # ============================================================
-# COSA NOSTRAA — V14 (AI STUDIO PRO MAX + FREE DESIGN ENGINE)
+# Cosa Nostraa — V14 (AI STUDIO PRO MAX + FREE DESIGN ENGINE)
 # NEW in V14:
 #   • Design generation ka FREE fallback: Pollinations.ai (FLUX) — koi
 #     API key nahi chahiye, koi quota nahi. Gemini quota khatam ho ya
 #     key na ho, design phir bhi banegi (sirf reference images skip
 #     hoti hain free engine mein).
 # ============================================================
-# COSA NOSTRAA — V13 (AI STUDIO PRO MAX)
+# Cosa Nostraa — V13 (AI STUDIO PRO MAX)
 # NEW in V13:
 #   • Design generation ab Gemini 3 "Nano Banana Pro" use karta hai
 #     (gemini-3-pro-image-preview), fallback: Nano Banana (2.5-flash-image)
@@ -146,7 +146,7 @@
 #     "kal kya kya SKU bika?", "aaj ki sale", specific month/date/FY,
 #     sales Type (channel) aur customer-wise — sab supported.
 # ============================================================
-# COSA NOSTRAA — V12 (AI STUDIO PRO)
+# Cosa Nostraa — V12 (AI STUDIO PRO)
 # NEW in V12:
 #   • Follow-up memory: SKU poochne ke baad "last 7 days?", "30 din ka?",
 #     "iska revenue?" jaise follow-ups usi SKU par answer hote hain.
@@ -156,7 +156,7 @@
 #     best-sellers se style inspiration leta hai. POST /api/ai-design
 #     (NOTE: design generation ke liye VALID Gemini key zaroori hai.)
 # ============================================================
-# COSA NOSTRAA — V11 (AI STUDIO EDITION)
+# Cosa Nostraa — V11 (AI STUDIO EDITION)
 # NEW in this version:
 #   1. ✦ AI STUDIO tab — chat assistant (Hinglish) for all dashboard
 #      data: top sellers, stock, revenue, SKU details with image cards.
@@ -166,7 +166,7 @@
 #   2. Fixed quote-escaping bug in SKU card onclick handlers.
 #   3. Fixed period_kpis tuple index in data unpacking.
 # ============================================================
-# COSA NOSTRAA — V2 (Overall Details + SKU Finder + Repeat Orders)
+# Cosa Nostraa — V2 (Overall Details + SKU Finder + Repeat Orders)
 # Changes from V1:
 #   1. Taxon filter added in Overall Details (from inventory sheet)
 #   2. Net Revenue ONLY from COSA "Net Revenue" column — no calc
@@ -4086,7 +4086,7 @@ body:not([data-tab="home"]) .app-bar{
 
 
 /* ═══════════════════════════════════════════════════════════
-   COSA NOSTRAA — OBSIDIAN THEME
+   Cosa Nostraa — OBSIDIAN THEME
    Bold modern dark · platinum & violet accents · real 3D depth
    ═══════════════════════════════════════════════════════════ */
 :root{
@@ -5130,7 +5130,7 @@ table.ro img,
 }
 
 /* ========================================================================
-   COSA NOSTRAA — LIGHT LUXURY 3D UI (integrated production theme)
+   Cosa Nostraa — LIGHT LUXURY 3D UI (integrated production theme)
    ======================================================================== */
 :root{
   --cnx-bg:#f6f2e9;--cnx-bg2:#ebe3d3;--cnx-panel:#fffefb;--cnx-panel2:#f7f0e3;
@@ -5156,7 +5156,7 @@ body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparen
   animation:cnxSidebarIn .7s cubic-bezier(.2,.8,.2,1) both;
 }
 #navMenu:before{
-  content:"COSA NOSTRAA\A MANAGEMENT SYSTEM";white-space:pre;display:block;
+  content:"Cosa Nostraa\A MANAGEMENT SYSTEM";white-space:pre;display:block;
   font-family:'Cormorant Garamond',Georgia,serif;font-size:21px;line-height:1.3;letter-spacing:3.5px;
   color:#281f13;font-weight:800;padding:8px 12px 22px;margin-bottom:15px;border-bottom:1px solid var(--cnx-line);
 }
@@ -5181,6 +5181,7 @@ body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparen
 .app-bar{height:82px!important;padding:0 28px!important;background:rgba(246,242,233,.88)!important;border-bottom:0!important;box-shadow:none!important;backdrop-filter:blur(18px)!important}
 .app-bar-brand{font-family:'Cormorant Garamond',Georgia,serif!important;font-size:17px!important;letter-spacing:3.5px!important;color:#281f13!important}
 .app-bar-sub{font-size:9px!important;letter-spacing:2px!important;color:var(--cnx-muted)!important}
+.app-bar-brand,.hero-title,.hero-dev,.lg-wm,.fb,.fd{text-transform:none!important}
 .menu-btn{display:none!important}
 .app-chip{background:#fffefb!important;color:#8f2626!important;border:1px solid rgba(170,54,54,.2)!important;border-radius:13px!important;box-shadow:0 8px 22px rgba(86,64,24,.08)!important}
 .app-chip:hover{background:#fff3f1!important;color:#b42318!important}
@@ -5312,14 +5313,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 @keyframes cnxLoginIn{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:none}}
 @media(max-width:820px){ #loginGate{padding:14px;align-items:flex-start!important;overflow:auto!important}.lg-layout{width:100%;min-height:0;grid-template-columns:1fr;margin:auto 0;border-radius:23px}.lg-showcase{min-height:235px;padding:76px 27px 27px;justify-content:flex-start}.lg-showcase:before{inset:11px;border-radius:17px}.lg-brand-chip{left:27px;top:24px;width:42px;height:42px;border-radius:13px;font-size:18px}.lg-show-kicker{margin-bottom:9px}.lg-show-title{font-size:38px}.lg-show-sub{font-size:10px;margin-top:12px}.lg-feature-grid{display:none}.lg-secure{display:none}.lg-card{padding:31px 26px 33px}.lg-card-title{font-size:34px}.lg-card-sub{margin-bottom:22px}}
 </style>
-  <div class="lg-wm" style="top:6%;left:4%;font-size:clamp(20px,3.2vw,44px);animation:lgFloatA 14s ease-in-out infinite">COSA NOSTRAA</div>
-  <div class="lg-wm" style="top:14%;right:-2%;font-size:clamp(14px,2.2vw,30px);opacity:.7;animation:lgFloatB 18s ease-in-out infinite">COSA NOSTRAA</div>
-  <div class="lg-wm" style="top:34%;left:-4%;font-size:clamp(28px,4.5vw,64px);opacity:.5;filter:blur(1px);animation:lgFloatC 20s ease-in-out infinite">COSA NOSTRAA</div>
-  <div class="lg-wm" style="top:48%;right:3%;font-size:clamp(18px,3vw,40px);animation:lgFloatA 16s ease-in-out infinite 2s">COSA NOSTRAA</div>
-  <div class="lg-wm" style="bottom:26%;left:6%;font-size:clamp(13px,2vw,26px);opacity:.6;animation:lgFloatB 22s ease-in-out infinite 1s">COSA NOSTRAA</div>
-  <div class="lg-wm" style="bottom:12%;right:-3%;font-size:clamp(26px,4vw,58px);opacity:.45;filter:blur(1.5px);animation:lgFloatC 17s ease-in-out infinite 3s">COSA NOSTRAA</div>
-  <div class="lg-wm" style="bottom:4%;left:30%;font-size:clamp(12px,1.8vw,24px);opacity:.55;animation:lgFloatA 19s ease-in-out infinite 4s">COSA NOSTRAA</div>
-  <div class="lg-wm" style="top:2%;left:42%;font-size:clamp(12px,1.6vw,22px);opacity:.5;animation:lgFloatB 15s ease-in-out infinite 2.5s">COSA NOSTRAA</div>
+  <div class="lg-wm" style="top:6%;left:4%;font-size:clamp(20px,3.2vw,44px);animation:lgFloatA 14s ease-in-out infinite">Cosa Nostraa</div>
+  <div class="lg-wm" style="top:14%;right:-2%;font-size:clamp(14px,2.2vw,30px);opacity:.7;animation:lgFloatB 18s ease-in-out infinite">Cosa Nostraa</div>
+  <div class="lg-wm" style="top:34%;left:-4%;font-size:clamp(28px,4.5vw,64px);opacity:.5;filter:blur(1px);animation:lgFloatC 20s ease-in-out infinite">Cosa Nostraa</div>
+  <div class="lg-wm" style="top:48%;right:3%;font-size:clamp(18px,3vw,40px);animation:lgFloatA 16s ease-in-out infinite 2s">Cosa Nostraa</div>
+  <div class="lg-wm" style="bottom:26%;left:6%;font-size:clamp(13px,2vw,26px);opacity:.6;animation:lgFloatB 22s ease-in-out infinite 1s">Cosa Nostraa</div>
+  <div class="lg-wm" style="bottom:12%;right:-3%;font-size:clamp(26px,4vw,58px);opacity:.45;filter:blur(1.5px);animation:lgFloatC 17s ease-in-out infinite 3s">Cosa Nostraa</div>
+  <div class="lg-wm" style="bottom:4%;left:30%;font-size:clamp(12px,1.8vw,24px);opacity:.55;animation:lgFloatA 19s ease-in-out infinite 4s">Cosa Nostraa</div>
+  <div class="lg-wm" style="top:2%;left:42%;font-size:clamp(12px,1.6vw,22px);opacity:.5;animation:lgFloatB 15s ease-in-out infinite 2.5s">Cosa Nostraa</div>
 
   <div class="lg-layout">
     <section class="lg-showcase">
@@ -5361,7 +5362,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="menu-btn-label">Menu</span>
   </button>
   <div class="app-bar-copy">
-    <div class="app-bar-brand">COSA NOSTRAA</div>
+    <div class="app-bar-brand">Cosa Nostraa</div>
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
@@ -5400,8 +5401,8 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 <div class="hero" id="siteHero">
   <div class="hero-only">
-    <div class="hero-title">COSA NOSTRAA</div>
-    <div class="hero-dev">MANAGEMENT SYSTEM • DEVELOPED BY TEAM COSA NOSTRAA</div>
+    <div class="hero-title">Cosa Nostraa</div>
+    <div class="hero-dev">MANAGEMENT SYSTEM • DEVELOPED BY TEAM Cosa Nostraa</div>
   </div>
 </div>
 
@@ -19196,13 +19197,13 @@ def api_bulk_combo_export_pdf():
             leftMargin=14 * mm,
             topMargin=13 * mm,
             bottomMargin=17 * mm,
-            title="COSA NOSTRAA Bulk Combo Quotation",
-            author="COSA NOSTRAA",
+            title="Cosa Nostraa Bulk Combo Quotation",
+            author="Cosa Nostraa",
         )
 
         elements = []
         brand_box = Table(
-            [[Paragraph("COSA NOSTRAA", title_style)], [Paragraph("BULK COMBO QUOTATION", subtitle_style)]],
+            [[Paragraph("Cosa Nostraa", title_style)], [Paragraph("BULK COMBO QUOTATION", subtitle_style)]],
             colWidths=[182 * mm],
         )
         brand_box.setStyle(TableStyle([
@@ -19336,7 +19337,7 @@ def api_bulk_combo_export_pdf():
             canvas.line(14 * mm, 11.5 * mm, page_width - 14 * mm, 11.5 * mm)
             canvas.setFont(regular_font, 7)
             canvas.setFillColor(gray)
-            canvas.drawString(14 * mm, 7.5 * mm, "COSA NOSTRAA - COMBO QUOTATION")
+            canvas.drawString(14 * mm, 7.5 * mm, "Cosa Nostraa - COMBO QUOTATION")
             canvas.drawRightString(page_width - 14 * mm, 7.5 * mm, f"Page {document.page}")
             canvas.restoreState()
 
@@ -19725,7 +19726,7 @@ def start_cloudflare_tunnel(port):
                 if m:
                     public_url["v"] = m.group(0)
                     print("\n" + "="*60)
-                    print("COSA NOSTRAA LIVE:", public_url["v"])
+                    print("Cosa Nostraa LIVE:", public_url["v"])
                     print("="*60 + "\n")
     threading.Thread(target=_reader, daemon=True).start()
 
