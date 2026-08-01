@@ -5275,6 +5275,13 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .ro-table-wrap,.ops-page .ops-table-wrap{border:1px solid rgba(123,91,33,.14)!important;border-radius:19px!important;background:#fffefb!important;box-shadow:var(--cnx-shadow)!important;overflow:auto!important}.ro-table-wrap table.ro,.ops-page table.ops-table{background:#fffefb!important}.ro-table-wrap table.ro thead th,.ops-page table.ops-table th{background:#f2e5cf!important;color:#7d5614!important;border-bottom:1px solid rgba(123,91,33,.16)!important;font-weight:950!important}.ro-table-wrap table.ro tbody tr:nth-child(even) td,.ops-page table.ops-table tbody tr:nth-child(even) td{background:rgba(248,240,225,.45)!important}.ro-table-wrap table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{background:#fff3d9!important}
 .type-checks,.sku-checklist{border:1px solid rgba(123,91,33,.13)!important;border-radius:12px!important;background:#fffdf8!important}.type-opt,.sku-opt{border-color:rgba(123,91,33,.1)!important;background:#fbf6eb!important;border-radius:10px!important}.card,.top-card,.yoy-card,.td-card,.insight-card{border:1px solid rgba(123,91,33,.14)!important;background:linear-gradient(145deg,#fffefb,#f6ecda)!important;border-radius:20px!important;box-shadow:var(--cnx-shadow)!important}
 footer{background:#201a12!important;border-top:0!important}.fb{color:#d8b75f!important}.fd{color:#9f917b!important}
+/* Global table sorting — every ordinary table header is clickable. Tables
+   with their own sort handlers keep their existing arrows and logic. */
+table thead th:not(.sort-arrow):not([onclick*="sort"]):not([data-sort-disabled]){cursor:pointer;user-select:none;white-space:nowrap}
+table thead th:not(.sort-arrow):not([onclick*="sort"]):not([data-sort-disabled]):after{content:' ⇅';color:#b8a06a;font-size:.82em;opacity:.72}
+table thead th.cnx-sort-asc:after{content:' ▲'!important;color:var(--cnx-gold,#a87920)!important;opacity:1!important}
+table thead th.cnx-sort-desc:after{content:' ▼'!important;color:var(--cnx-gold,#a87920)!important;opacity:1!important}
+table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;color:#201a12!important}
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 @media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
@@ -11100,60 +11107,38 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Rakhi SKU','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['CMB / Direct SKU','Rakhi Child SKU(s)','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
-    // Parent SKU row: for CMBs, Sales/DRR are the actual CMB sale only.
-    data.push([
-      r.sku, exportSkuName(r.sku, r.sku_name),
-      Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
-      r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
-      ...(emp ? [] : [Math.round(r.revenue)]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
-    ]);
-
-    // Export-only child rows for CMB/gift sets. Each Rakhi child gets the same
-    // Sales and DRR as its parent CMB. These rows never enter _rakhiRows,
-    // skuRows, KPI cards or target calculations, so no double/triple counting.
-    if (!_rkhIsComboSku(r.sku)) return;
+    // One export row per direct SKU/CMB. A CMB's Rakhi child SKUs stay in the
+    // same row (column B), so Sales, Revenue and DRR can never shift into the
+    // wrong columns or be duplicated by export-only child rows.
     const parentItem = _masterSkuMap[String(r.sku || '').trim().toUpperCase()] || {};
     const details = Array.isArray(parentItem.combo_details) ? parentItem.combo_details : [];
     const taxonRakhiChildren = details.filter(c => /rakhi/i.test(String((c && c.taxon) || '')));
     const rakhiChildren = taxonRakhiChildren.length
       ? taxonRakhiChildren
       : details.filter(c => _rkhIsRakhiSku(c && c.sku));
-
-    rakhiChildren.forEach(c => {
-      const childSku = String((c && c.sku) || '').trim().toUpperCase();
-      if (!childSku) return;
-      const childItem = _masterSkuMap[childSku] || {};
-      const childStock = Number(c && c.inv_stock != null ? c.inv_stock : childItem.inv_stock) || 0;
-      const childWip = Number(c && c.inv_wip != null ? c.inv_wip : childItem.inv_wip) || 0;
-      const rawWhWip = Number(childItem.wh_wip);
-      const childWhWip = Number.isFinite(rawWhWip) ? rawWhWip : (childStock + childWip);
-      const childName = (c && c.sku_name) || childItem.sku_name || childItem.name || '';
-      data.push([
-        childSku,
-        exportSkuName(childSku, childName) + ' — Set item of ' + r.sku,
-        Math.round(childStock),
-        Math.round(childWip),
-        Math.round(childWhWip),
-        Math.round(r.sales),
-        '',
-        '',
-        ...(emp ? [] : ['']),
-        r.drr.toFixed(2),
-        r.daySpan,
-        'Child SKU of ' + r.sku + ': sale inherited from parent CMB for export display only; excluded from KPI totals.'
-      ]);
-    });
+    const childSkus = Array.from(new Set(rakhiChildren
+      .map(c => String((c && c.sku) || '').trim().toUpperCase())
+      .filter(Boolean)));
+    const exactRevenue = Math.round((Number(r.revenue) || 0) * 100) / 100;
+    data.push([
+      r.sku, childSkus.join(' | '), exportSkuName(r.sku, r.sku_name),
+      Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
+      r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
+      ...(emp ? [] : [exactRevenue]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
+    ]);
   });
 
   const csv = [headers].concat(data).map(r => r.map(c => {
     const str = String(c == null ? '' : c);
     return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
   }).join(',')).join('\n');
-  const blob = new Blob([csv], {type: 'text/csv'});
+  // UTF-8 BOM keeps rupee signs, em-dashes and Hindi/English punctuation
+  // readable when the CSV is opened directly in Microsoft Excel.
+  const blob = new Blob(['\ufeff', csv], {type: 'text/csv;charset=utf-8'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'rakhi_sku_wise_summary.csv'; a.click();
 }
@@ -15589,6 +15574,104 @@ function exportOosLostSales(){
 window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;
 window.loadDemandPatterns=loadDemandPatterns;window.renderDemandPatterns=renderDemandPatterns;window.exportDemandPatterns=exportDemandPatterns;
 window.loadOosLostSales=loadOosLostSales;window.renderOosLostSales=renderOosLostSales;window.exportOosLostSales=exportOosLostSales;
+
+/* ===== GLOBAL TABLE SORTING =====
+   Event delegation makes every current and future table sortable without
+   rebinding after a tab/filter render. Existing table-specific sort handlers
+   are deliberately left in control of their own headers. */
+const _cnxTableCollator = new Intl.Collator('en-IN',{numeric:true,sensitivity:'base'});
+function cnxTableSortValue(raw){
+  const text=String(raw==null?'':raw).replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+  if(!text || /^(?:—|–|-|n\/?a|null|undefined)$/i.test(text)) return {blank:true,kind:'text',value:'',text};
+
+  let m=text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:\s|$)/);
+  if(m){
+    const time=Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]));
+    if(Number.isFinite(time)) return {blank:false,kind:'date',value:time,text};
+  }
+  m=text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s|$)/);
+  if(m){
+    const time=Date.UTC(Number(m[3]),Number(m[2])-1,Number(m[1]));
+    if(Number.isFinite(time)) return {blank:false,kind:'date',value:time,text};
+  }
+  if(/^\d{1,2}[ -](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[ ,-]+\d{4}/i.test(text)){
+    const time=Date.parse(text);
+    if(Number.isFinite(time)) return {blank:false,kind:'date',value:time,text};
+  }
+
+  let numeric=text.replace(/^\((.*)\)$/,'-$1').replace(/[₹$,]/g,'').replace(/^INR\s*/i,'').trim();
+  m=numeric.match(/^([-+]?\d+(?:\.\d+)?)\s*(CR|CRORE|L|LAKH|K|THOUSAND|M|MN|B|BN)?(?=\s|%|$)/i);
+  if(m){
+    const unit=String(m[2]||'').toUpperCase();
+    const factor={CR:1e7,CRORE:1e7,L:1e5,LAKH:1e5,K:1e3,THOUSAND:1e3,M:1e6,MN:1e6,B:1e9,BN:1e9}[unit]||1;
+    const value=Number(m[1])*factor;
+    if(Number.isFinite(value)) return {blank:false,kind:'number',value,text};
+  }
+  return {blank:false,kind:'text',value:text.toLocaleLowerCase('en-IN'),text};
+}
+function cnxCompareTableSortValues(a,b,dir){
+  if(a.blank!==b.blank) return a.blank?1:-1; // blanks always remain at the bottom
+  if(a.blank&&b.blank) return 0;
+  let cmp=0;
+  if(a.kind===b.kind && (a.kind==='number'||a.kind==='date')) cmp=a.value-b.value;
+  else cmp=_cnxTableCollator.compare(a.text,b.text);
+  return dir==='desc'?-cmp:cmp;
+}
+function cnxTableRowIsFixed(row){
+  if(!row) return true;
+  if(row.dataset&&String(row.dataset.sortFixed||'').toLowerCase()==='true') return true;
+  const cells=Array.from(row.cells||[]);
+  if(!cells.length) return true;
+  if(cells.length===1 && Number(cells[0].colSpan||1)>1) return true;
+  const first=String(cells[0].innerText||cells[0].textContent||'').replace(/\s+/g,' ').trim();
+  return /^(?:grand\s+total|sub\s*total|subtotal|total\b|showing\b|no\s+(?:data|rows?|records?)\b|data still loading|loading)/i.test(first);
+}
+function cnxSortTableByHeader(th){
+  const table=th&&th.closest?th.closest('table'):null;
+  if(!table) return false;
+  const col=Number(th.cellIndex);
+  if(!Number.isInteger(col)||col<0) return false;
+  const same=String(table.dataset.cnxSortIndex||'')===String(col);
+  const dir=same&&table.dataset.cnxSortDir==='desc'?'asc':'desc';
+  table.dataset.cnxSortIndex=String(col);
+  table.dataset.cnxSortDir=dir;
+  Array.from(table.querySelectorAll('thead th')).forEach(h=>{
+    h.classList.remove('cnx-sort-asc','cnx-sort-desc');
+    h.removeAttribute('aria-sort');
+  });
+  th.classList.add(dir==='desc'?'cnx-sort-desc':'cnx-sort-asc');
+  th.setAttribute('aria-sort',dir==='desc'?'descending':'ascending');
+
+  Array.from(table.tBodies||[]).forEach(tbody=>{
+    const rows=Array.from(tbody.rows||[]);
+    const movable=[],fixed=[];
+    rows.forEach((row,index)=>{
+      if(cnxTableRowIsFixed(row)){fixed.push(row);return;}
+      const cell=(row.cells||[])[col];
+      const raw=cell&&cell.dataset&&cell.dataset.sortValue!=null
+        ? cell.dataset.sortValue
+        : (cell?(cell.innerText||cell.textContent||''):'');
+      movable.push({row,index,key:cnxTableSortValue(raw)});
+    });
+    movable.sort((a,b)=>cnxCompareTableSortValues(a.key,b.key,dir)||(a.index-b.index));
+    const ordered=movable.map(x=>x.row).concat(fixed);
+    const frag=document.createDocumentFragment?document.createDocumentFragment():null;
+    if(frag){ordered.forEach(row=>frag.appendChild(row));tbody.appendChild(frag);}
+    else ordered.forEach(row=>tbody.appendChild(row));
+  });
+  return true;
+}
+window.cnxSortTableByHeader=cnxSortTableByHeader;
+document.addEventListener('click',function(ev){
+  const target=ev.target;
+  if(!target||!target.closest) return;
+  if(target.closest('input,button,a,select,textarea,label')) return;
+  const th=target.closest('th');
+  if(!th||!th.closest('table')||th.dataset.sortDisabled==='true') return;
+  const ownHandler=th.getAttribute('onclick')||'';
+  if(th.classList.contains('sort-arrow')||/sort/i.test(ownHandler)) return;
+  cnxSortTableByHeader(th);
+});
 
 /* ===== 3D tilt (KPIs + home cards only — light) ===== */
 (function(){
