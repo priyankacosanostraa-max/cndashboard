@@ -1145,12 +1145,22 @@ def _refresh_data():
             c for c in web_orders.columns
             if re.sub(r"[^a-z0-9]", "", str(c).lower()) in _website_qty_keys
         ), None)
+        W_REV = find_col(
+            web_orders.columns,
+            "Net Revenue", "Final Revenue", "Order Revenue", "Line Revenue",
+            "Order Value", "Line Amount", "Total Amount", "Amount"
+        )
+        W_SP = find_col(
+            web_orders.columns,
+            "Selling Price", "Sale Price", "Unit Selling Price", "Unit Price", "SP"
+        )
         W_STATUS = find_col(web_orders.columns, "Sale Order Status", "Order Status", "status")
 
         dbg["website_repeat_cols"] = wcols
         dbg["website_repeat_resolved"] = {
             "date": W_DATE, "name": W_NAME, "address": W_ADDR,
-            "sku": W_SKU, "qty": W_QTY, "status": W_STATUS,
+            "sku": W_SKU, "qty": W_QTY, "revenue": W_REV,
+            "selling_price": W_SP, "status": W_STATUS,
         }
 
         # Repeat-rate sessions and Website/D2C city sales are built from the
@@ -1189,9 +1199,16 @@ def _refresh_data():
                     qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
                     if qty_web <= 0:
                         qty_web = 1.0
+                    rev_web = to_num(r.get(W_REV, 0)) if W_REV else 0.0
+                    if rev_web <= 0 and W_SP:
+                        unit_sp_web = to_num(r.get(W_SP, 0))
+                        if unit_sp_web > 0:
+                            rev_web = float(unit_sp_web) * float(qty_web)
                     city_key = (date_iso, city_web)
                     sku_city_map = _web_city_sums.setdefault(mapped_web_sku, {})
-                    sku_city_map[city_key] = sku_city_map.get(city_key, 0.0) + float(qty_web)
+                    city_bucket = sku_city_map.setdefault(city_key, {"q": 0.0, "r": 0.0})
+                    city_bucket["q"] += float(qty_web)
+                    city_bucket["r"] += float(rev_web)
 
                 name_norm = re.sub(r"[^a-z0-9]+", " ", raw_name.casefold()).strip()
                 addr_norm = re.sub(r"[^a-z0-9]+", " ", raw_addr.casefold()).strip()
@@ -1211,8 +1228,12 @@ def _refresh_data():
         }
         website_city_events = {
             sku: [
-                {"d": _si(day), "c": _si(city), "q": round(float(qty), 4)}
-                for (day, city), qty in sorted(city_map.items(), key=lambda x: (x[0][0], x[0][1]))
+                {
+                    "d": _si(day), "c": _si(city),
+                    "q": round(float(vals.get("q", 0.0)), 4),
+                    "r": round(float(vals.get("r", 0.0)), 2),
+                }
+                for (day, city), vals in sorted(city_map.items(), key=lambda x: (x[0][0], x[0][1]))
             ]
             for sku, city_map in _web_city_sums.items()
         }
@@ -4883,6 +4904,18 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 @media(max-width:820px){.ops-page .ops-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.ops-page .ops-filters{grid-template-columns:repeat(2,minmax(135px,1fr))}.ops-page .ops-photo,.ops-page .ops-photo-ph{width:68px;height:68px;min-width:68px}}
 @media(max-width:520px){.ops-page .ops-kpis,.ops-page .ops-filters{grid-template-columns:1fr}}
 
+.ops-page .opp-score{display:inline-flex;align-items:center;justify-content:center;min-width:58px;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:950;letter-spacing:.3px;border:1px solid transparent}
+.ops-page .opp-score-high{background:#dcfce7;color:#166534;border-color:#bbf7d0}
+.ops-page .opp-score-mid{background:#e0f2fe;color:#075985;border-color:#bae6fd}
+.ops-page .opp-score-watch{background:#fef3c7;color:#92400e;border-color:#fde68a}
+.ops-page .opp-score-low{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.ops-page .opp-growth-up{color:#15803d;font-weight:900}.ops-page .opp-growth-down{color:#b3261e;font-weight:900}.ops-page .opp-growth-flat{color:#64748b;font-weight:850}
+
+.ops-page .anom-metric{font-weight:950;color:#b3261e;white-space:nowrap}
+.ops-page .anom-detail{min-width:300px;max-width:520px;white-space:normal;line-height:1.55;color:#475569}
+.ops-page .anom-type{font-weight:900;color:#1f2937;white-space:nowrap}
+.ops-page .anom-receipt{font-size:9px;color:#64748b;margin-top:4px}
+
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -4964,6 +4997,11 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m23" onclick="showTab('repeatplanner')">Auto Repeat Planner</button>
   <button class="menu-item" id="m24" onclick="showTab('comborisk')">Combo Production Risk</button>
   <button class="menu-item" id="m25" onclick="showTab('smartops')">Smart Alerts &amp; Ageing</button>
+  <button class="menu-item" id="m26" onclick="showTab('opportunity')">SKU Opportunity Score</button>
+  <button class="menu-item" id="m27" onclick="showTab('salesanomaly')">Sales Anomaly</button>
+  <button class="menu-item" id="m28" onclick="showTab('concentration')">Sales Concentration <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
+  <button class="menu-item" id="m29" onclick="showTab('demandpatterns')">Demand Patterns <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
+  <button class="menu-item" id="m30" onclick="showTab('ooslost')">OOS Lost Sales <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
   <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
   <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
 </div>
@@ -6035,7 +6073,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">Auto Repeat Order Recommendation</div>
-        <div class="ops-sub">Recommended Repeat Qty = Lead-time Demand + Safety Stock − Inv Stock − Confirmed WIP. Sales velocity and planning assumptions can be changed below; negative recommendations are shown as zero.</div>
+        <div class="ops-sub">Recommended Repeat Qty = Lead-time Demand + Safety Stock − Inv Stock − Inv WIP. Window Sale means total sold quantity inside the selected Sales Velocity period (7/15/30/90 days); negative recommendations are shown as zero.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRepeatPlanner()">Refresh</button>
@@ -6054,7 +6092,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="rpSummary" class="ops-kpis"></div>
     <div id="rpContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Confirmed WIP is taken from the current Inventory sheet. This is a planning recommendation; MOQ, vendor capacity, cancellations and production lead-time variability should be reviewed before placing the order.</div>
+    <div class="ops-note">Inv WIP is taken from the current Inventory sheet. Window Sale is the total sold quantity inside the selected Sales Velocity period. This is a planning recommendation; MOQ, vendor capacity, cancellations and production lead-time variability should be reviewed before placing the order.</div>
   </div>
 
   <div id="vComboRisk" class="ops-page" style="display:none">
@@ -6102,8 +6140,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Taxon</label><select class="fs" id="saTaxon" onchange="renderSmartAlerts()"><option value="All">All Taxons</option></select></div>
         <div class="fc"><label class="fl">Search</label><input class="fi" id="saSearch" placeholder="SKU / channel…" oninput="renderSmartAlerts()"></div>
         <div class="fc"><label class="fl">Old WIP Threshold</label><select class="fs" id="saWipDays" onchange="renderSmartAlerts()"><option value="15">15+ Days</option><option value="30" selected>30+ Days</option><option value="45">45+ Days</option><option value="60">60+ Days</option></select></div>
-        <div class="fc"><label class="fl">High Return Threshold</label><select class="fs" id="saReturnPct" onchange="renderSmartAlerts()"><option value="5">5%+</option><option value="10" selected>10%+</option><option value="15">15%+</option><option value="20">20%+</option></select></div>
-        <div class="fc"><label class="fl">Target Behind Threshold</label><select class="fs" id="saTargetPct" onchange="renderSmartAlerts()"><option value="60">Below 60% projected</option><option value="75">Below 75% projected</option><option value="80" selected>Below 80% projected</option><option value="90">Below 90% projected</option></select></div>
       </div>
       <div id="saSummary" class="ops-kpis"></div>
       <div id="saContent" class="ops-table-wrap"></div>
@@ -6124,6 +6160,142 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="iaContent" class="ops-table-wrap"></div>
       <div class="ops-note">Age basis uses the latest PPC-WIP receiving date when available, then Launch Date, then Last Sale Date as fallback. Dead-stock value uses product Cost; MRP is used only where Cost is unavailable.</div>
     </div>
+  </div>
+
+
+  <div id="vOpportunity" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">SKU Opportunity Score</div>
+        <div class="ops-sub">Opportunity Score (0–100) combines Sales Growth (40 points), Stock Availability (30 points) and Return Health (30 points). Sales growth compares the selected latest window with the immediately preceding equal window.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadOpportunityScore()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportOpportunityScore()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="oppSearch" placeholder="Search SKU…" oninput="renderOpportunityScore()"></div>
+      <div class="fc"><label class="fl">Product Group</label><select class="fs" id="oppGroup" onchange="renderOpportunityScore()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="oppTaxon" onchange="renderOpportunityScore()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Sales Growth Window</label><select class="fs" id="oppWindow" onchange="loadOpportunityScore()"><option value="30" selected>Latest 30D vs Previous 30D</option><option value="15">Latest 15D vs Previous 15D</option><option value="7">Latest 7D vs Previous 7D</option><option value="90">Latest 90D vs Previous 90D</option></select></div>
+      <div class="fc"><label class="fl">Opportunity Action</label><select class="fs" id="oppAction" onchange="renderOpportunityScore()"><option value="All">All Actions</option><option value="Push Now">Push Now</option><option value="Replenish & Push">Replenish &amp; Push</option><option value="Maintain">Maintain</option><option value="Watch">Watch</option><option value="Fix Returns">Fix Returns</option><option value="Pause / Fix">Pause / Fix</option></select></div>
+      <div class="fc"><label class="fl">Minimum Score</label><input class="fi" id="oppMinScore" type="number" min="0" max="100" value="0" oninput="renderOpportunityScore()"></div>
+      <div class="fc"><label class="fl">Rows</label><select class="fs" id="oppRows" onchange="renderOpportunityScore()"><option value="selling">Selling / Recently Selling SKUs</option><option value="all">All Inventory SKUs</option></select></div>
+    </div>
+    <div id="oppSummary" class="ops-kpis"></div>
+    <div id="oppContent" class="ops-table-wrap"></div>
+    <div class="ops-note">Scoring: Sales Growth = 40 points; Stock Availability = 30 points based on Inv Stock + Inv WIP versus the selected-window demand; Return Health = 30 points, reducing to zero at a 20% return rate. This is an opportunity-prioritisation signal, not a purchase-order approval.</div>
+  </div>
+
+
+  <div id="vSalesAnomaly" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Sales Anomaly Detection</div>
+        <div class="ops-sub">Automatically flags sudden sales drops, unusual sales spikes, return-rate increases, recent stock receipts without sales, and negative or structurally incorrect revenue entries.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadSalesAnomalies(true)">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportSalesAnomalies()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Anomaly Type</label><select class="fs" id="anomType" onchange="renderSalesAnomalies()"><option value="All">All Anomalies</option><option value="SALE_DROP">Sudden Sale Drop</option><option value="SALE_SPIKE">Unusual Sale Spike</option><option value="RETURN_INCREASE">Unexpected Return Increase</option><option value="STOCK_NO_SALE">Stock Movement Without Sale</option><option value="REVENUE_ISSUE">Negative / Incorrect Revenue</option></select></div>
+      <div class="fc"><label class="fl">Product Group</label><select class="fs" id="anomGroup" onchange="renderSalesAnomalies()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="anomTaxon" onchange="renderSalesAnomalies()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Analysis Window</label><select class="fs" id="anomWindow" onchange="loadSalesAnomalies(false)"><option value="7">Latest 7D vs Previous 7D</option><option value="15">Latest 15D vs Previous 15D</option><option value="30" selected>Latest 30D vs Previous 30D</option><option value="60">Latest 60D vs Previous 60D</option></select></div>
+      <div class="fc"><label class="fl">Severity</label><select class="fs" id="anomSeverity" onchange="renderSalesAnomalies()"><option value="All">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select></div>
+      <div class="fc"><label class="fl">Minimum Baseline Sale</label><input class="fi" id="anomBaseline" type="number" min="1" value="5" oninput="loadSalesAnomalies(false)"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="anomSearch" placeholder="Search SKU..." oninput="renderSalesAnomalies()"></div>
+    </div>
+    <div id="anomSummary" class="ops-kpis"></div>
+    <div id="anomContent" class="ops-table-wrap"></div>
+    <div class="ops-note">Detection basis: current selected window is compared with the immediately preceding equal window. Sale drop requires at least the selected baseline sale and a 50%+ decline; spike requires at least 2x growth with a meaningful unit increase; return increase requires a 10%+ current return rate and a material rise. Stock movement without sale uses the latest PPC-WIP receiving date as the stock-movement signal. Revenue checks are available to Admin because employee payloads intentionally hide revenue.</div>
+  </div>
+
+
+  <div id="vConcentration" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Sales Concentration Risk</div>
+        <div class="ops-sub">Measures how much selected-period business depends on a small number of SKUs, channels, cities and taxons. Single-SKU dependency and Revenue-at-Risk update with every filter.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadConcentrationRisk()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportConcentrationRisk()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="concD1" onchange="renderConcentrationRisk()"></div>
+      <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
+      <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
+      <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
+      <div class="fc"><label class="fl">SKU Dependency Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk()"></div>
+    </div>
+    <div id="concSummary" class="ops-kpis"></div>
+    <div id="concAlert"></div>
+    <div id="concContent"></div>
+    <div class="ops-note">Top-city contribution is based on Website/D2C billing-city rows. Revenue uses the Website sheet where available; otherwise it is estimated from city quantity × that SKU’s filtered Website average selling price. Revenue-at-Risk is the top SKU’s selected-period revenue when its contribution crosses the chosen dependency threshold, avoiding double-counting across dimensions.</div>
+  </div>
+
+
+  <div id="vDemandPatterns" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Demand Pattern Intelligence</div>
+        <div class="ops-sub">Finds Monday–Sunday demand, weekend behaviour, month-start versus month-end movement, payday impact, custom festival uplift and the best sale day for every SKU.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDemandPatterns()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDemandPatterns()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Analysis From</label><input class="fi" type="date" id="dpD1" onchange="renderDemandPatterns()"></div>
+      <div class="fc"><label class="fl">Analysis To</label><input class="fi" type="date" id="dpD2" onchange="renderDemandPatterns()"></div>
+      <div class="fc"><label class="fl">Product Group</label><select class="fs" id="dpGroup" onchange="renderDemandPatterns()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="dpTaxon" onchange="renderDemandPatterns()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="dpType" onchange="renderDemandPatterns()"><option value="All">All Types</option></select></div>
+      <div class="fc"><label class="fl">Channel</label><select class="fs" id="dpChannel" onchange="renderDemandPatterns()"><option value="All">All Channels</option></select></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="dpSearch" placeholder="Search SKU / product…" oninput="renderDemandPatterns()"></div>
+      <div class="fc"><label class="fl">Metric</label><select class="fs" id="dpMetric" onchange="renderDemandPatterns()"><option value="qty">Sold Qty</option><option value="revenue">Revenue</option></select></div>
+      <div class="fc"><label class="fl">Festival From</label><input class="fi" type="date" id="dpFestD1" onchange="renderDemandPatterns()"></div>
+      <div class="fc"><label class="fl">Festival To</label><input class="fi" type="date" id="dpFestD2" onchange="renderDemandPatterns()"></div>
+    </div>
+    <div id="dpSummary" class="ops-kpis"></div>
+    <div id="dpContent"></div>
+    <div class="ops-note">Weekend = Saturday–Sunday. Month-start = day 1–10; month-end = day 21–month-end. Payday window = day 25–month-end plus day 1–5. Festival uplift compares the custom festival range with the immediately preceding equal-length period. Average/day uses all calendar days, including zero-sale days.</div>
+  </div>
+
+
+  <div id="vOosLost" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">OOS Lost Sales &amp; Revenue</div>
+        <div class="ops-sub">Estimates missed quantity and revenue for currently out-of-stock SKUs using pre-OOS daily sales velocity, estimated OOS duration and average selling price.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadOosLostSales(true)">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportOosLostSales()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Product Group</label><select class="fs" id="olsGroup" onchange="renderOosLostSales()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="olsTaxon" onchange="renderOosLostSales()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="olsType" onchange="renderOosLostSales()"><option value="All">All Types</option></select></div>
+      <div class="fc"><label class="fl">Channel</label><select class="fs" id="olsChannel" onchange="renderOosLostSales()"><option value="All">All Channels</option></select></div>
+      <div class="fc"><label class="fl">Pre-OOS Sales Window</label><select class="fs" id="olsWindow" onchange="renderOosLostSales()"><option value="30">30 Days</option><option value="60">60 Days</option><option value="90" selected>90 Days</option><option value="180">180 Days</option></select></div>
+      <div class="fc"><label class="fl">OOS Days Cap</label><select class="fs" id="olsCap" onchange="renderOosLostSales()"><option value="30">Maximum 30 Days</option><option value="60" selected>Maximum 60 Days</option><option value="90">Maximum 90 Days</option><option value="180">Maximum 180 Days</option></select></div>
+      <div class="fc"><label class="fl">Minimum Daily Sale</label><input class="fi" id="olsMinDrr" type="number" min="0" step="0.01" value="0.05" oninput="renderOosLostSales()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="olsSearch" placeholder="Search SKU / product…" oninput="renderOosLostSales()"></div>
+    </div>
+    <div id="olsSummary" class="ops-kpis"></div>
+    <div id="olsContent" class="ops-table-wrap"></div>
+    <div class="ops-note">Because the Inventory sheet contains the current stock snapshot rather than daily historical stock, Estimated OOS Days uses the number of days since the SKU’s last positive sale, capped by the selected limit. Average Daily Sale is calculated from the selected pre-OOS window ending on that last-sale date. Potential Target Support equals estimated lost revenue; its target percentage uses the current total monthly target when available.</div>
   </div>
 
 
@@ -7689,6 +7861,7 @@ function loadData(force){
       }
 
       master = d.inventory || [];
+      _bizEventCache = null;
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
@@ -12088,15 +12261,15 @@ function _repeatPlannerFiltered(){
 function loadRepeatPlanner(){ _rpRows=[]; _buildRepeatPlannerRows(); renderRepeatPlanner(); }
 function renderRepeatPlanner(){
   _rpRows=[]; _buildRepeatPlannerRows();
-  const rows=_repeatPlannerFiltered(); const sum=document.getElementById('rpSummary'); const host=document.getElementById('rpContent'); if(!host)return;
+  const rows=_repeatPlannerFiltered(); const win=Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30')); const sum=document.getElementById('rpSummary'); const host=document.getElementById('rpContent'); if(!host)return;
   const recQty=rows.reduce((s,r)=>s+r.recommended,0); const leadDemand=rows.reduce((s,r)=>s+r.leadDemand,0); const avail=rows.reduce((s,r)=>s+r.stock+r.wip,0); const urgent=rows.filter(r=>r.risk.key==='critical'||r.risk.key==='high').length;
   if(sum) sum.innerHTML=_opsKpi('SKUs Needing Repeat',rows.filter(r=>r.recommended>0).length.toLocaleString('en-IN'),'Current filter')+_opsKpi('Recommended Repeat Qty',Math.round(recQty).toLocaleString('en-IN'),'Rounded up SKU-wise')+_opsKpi('Lead-Time Demand',Math.round(leadDemand).toLocaleString('en-IN'),'Selected velocity × lead days')+_opsKpi('Urgent SKUs',urgent.toLocaleString('en-IN'),`Available stock/WIP ${Math.round(avail).toLocaleString('en-IN')}`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.sold).toLocaleString('en-IN')}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.leadDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.safetyStock).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.recommended>0?'#b3261e':'#15803d'}">${r.recommended.toLocaleString('en-IN')}</td><td class="ops-num">${r.cover===null?'—':_oosDaysText(r.cover)}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Taxon</th><th>Window Sale</th><th>DRR</th><th>Inv Stock</th><th>Confirmed WIP</th><th>Lead Demand</th><th>Safety Stock</th><th>Recommended Repeat Qty</th><th>Stock Cover</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No SKUs match the current planning filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.sold).toLocaleString('en-IN')}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.leadDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.safetyStock).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.recommended>0?'#b3261e':'#15803d'}">${r.recommended.toLocaleString('en-IN')}</td><td class="ops-num">${r.cover===null?'—':_oosDaysText(r.cover)}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th title="Total sold quantity inside the selected Sales Velocity period">Window Sale (${win}D)</th><th>DRR</th><th>Inv Stock</th><th>Inv WIP</th><th>Lead Demand</th><th>Safety Stock</th><th>Recommended Repeat Qty</th><th>Stock Cover</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="13" class="ops-empty">No SKUs match the current planning filters.</td></tr>'}</tbody></table>`;
 }
 function exportRepeatPlanner(){
   const rows=_repeatPlannerFiltered(); if(!rows.length){alert('No repeat-planner rows to export');return;}
-  _dlCsv(['SKU','SKU Name','Group','Taxon','Image Link','Window Sale','DRR','Inv Stock','Confirmed WIP','Lead-Time Demand','Safety Stock','Recommended Repeat Qty','Stock Cover Days','Status'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]),'auto_repeat_order_recommendation');
+  _dlCsv(['SKU','SKU Name','Taxon','Image Link','Window Sale','DRR','Inv Stock','Inv WIP','Lead-Time Demand','Safety Stock','Recommended Repeat Qty','Stock Cover Days','Status'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.image,Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]),'auto_repeat_order_recommendation');
 }
 
 function _buildComboRiskRows(){
@@ -12151,14 +12324,14 @@ function _buildSmartAlertRows(){
   const rows=[];
   (master||[]).forEach(it=>{
     const sku=String(it.sku||''); if(!sku)return; const name=String(it.sku_name||''); const image=String(it.image_url||''); const group=_opsGroup(it); const taxon=String(it.taxon||'General'); const sale30=Math.max(0,_opsNum(it.qty_1m)); const drr=sale30/30; const stock=Math.max(0,_opsNum(it.inv_stock)); const wip=Math.max(0,_opsNum(it.inv_wip)); const cover=drr>0?stock/drr:null;
-    if(drr>0&&cover!==null&&cover<=7) rows.push({type:'OOS_7',typeLabel:'OOS within 7 Days',entityType:'SKU',entity:sku,name,image,group,taxon,severity:stock<=0?'critical':'high',metric:stock<=0?'OOS':_oosDaysText(cover),detail:`30D sale ${Math.round(sale30)}, DRR ${drr.toFixed(2)}, Inv Stock ${Math.round(stock)}, WIP ${Math.round(wip)}`});
-    const sevenDayNeed=drr*7; if(sale30>=10&&wip<sevenDayNeed) rows.push({type:'HIGH_SALE_LOW_WIP',typeLabel:'High Sale, Low WIP',entityType:'SKU',entity:sku,name,image,group,taxon,severity:wip<=0?'high':'medium',metric:`${Math.round(wip)} WIP`,detail:`30D sale ${Math.round(sale30)}; seven-day demand ${Math.ceil(sevenDayNeed)}; stock ${Math.round(stock)}`});
-    const ret=Math.max(0,_opsNum(it.return_qty)); const sold=Math.max(0,_opsNum(it.final_qty)); const retPct=(sold+ret)>0?ret/(sold+ret)*100:0; const threshold=Math.max(0,_opsNum(document.getElementById('saReturnPct')?.value||10)); if((sold+ret)>=5&&retPct>=threshold) rows.push({type:'HIGH_RETURN',typeLabel:'High Return Rate',entityType:'SKU',entity:sku,name,image,group,taxon,severity:retPct>=20?'critical':'medium',metric:`${retPct.toFixed(1)}%`,detail:`Return Qty ${Math.round(ret)} of ${Math.round(sold+ret)} gross units`});
+    if(drr>0&&cover!==null&&cover<=7) rows.push({type:'OOS_7',typeLabel:'OOS within 7 Days',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:stock<=0?'critical':'high',metric:stock<=0?'OOS':_oosDaysText(cover),detail:`30D sale ${Math.round(sale30)}, DRR ${drr.toFixed(2)}, Inv Stock ${Math.round(stock)}, WIP ${Math.round(wip)}`});
+    const sevenDayNeed=drr*7; if(sale30>=10&&wip<sevenDayNeed) rows.push({type:'HIGH_SALE_LOW_WIP',typeLabel:'High Sale, Low WIP',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:wip<=0?'high':'medium',metric:`${Math.round(wip)} WIP`,detail:`30D sale ${Math.round(sale30)}; seven-day demand ${Math.ceil(sevenDayNeed)}; stock ${Math.round(stock)}`});
+    const ret=Math.max(0,_opsNum(it.return_qty)); const sold=Math.max(0,_opsNum(it.final_qty)); const retPct=(sold+ret)>0?ret/(sold+ret)*100:0; const threshold=10; if((sold+ret)>=5&&retPct>=threshold) rows.push({type:'HIGH_RETURN',typeLabel:'High Return Rate',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:retPct>=20?'critical':'medium',metric:`${retPct.toFixed(1)}%`,detail:`Return Qty ${Math.round(ret)} of ${Math.round(sold+ret)} gross units`});
   });
   const wipDays=Math.max(1,_opsNum(document.getElementById('saWipDays')?.value||30));
-  (_opsSupport.production_pending||[]).forEach(p=>{const age=_opsDateDays(p.oldest_order_date);if(age!==null&&age>=wipDays&&_opsNum(p.balance_qty)>0){const it=_masterSkuMap[_opsSkuKey(p.sku)]||{};rows.push({type:'WIP_OLD',typeLabel:'WIP Pending Too Long',entityType:'SKU',entity:String(p.sku||''),name:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),severity:age>=60?'critical':'high',metric:`${age} days`,detail:`Pending balance ${Math.round(_opsNum(p.balance_qty))}; oldest order ${p.oldest_order_date||'—'}; orders ${(p.order_nos||[]).join(', ')}`});}});
-  const targetPct=Math.max(0,_opsNum(document.getElementById('saTargetPct')?.value||80));
-  (_opsSupport.target_rows||[]).forEach(t=>{const pp=_opsNum(t.proj_pct);if(_opsNum(t.sp_target)>0&&pp<targetPct){rows.push({type:'TARGET_BEHIND',typeLabel:'Target Significantly Behind',entityType:'Channel',entity:String(t.channel||t.stakeholder||'Channel'),name:String(t.stakeholder||''),image:'',group:'All',taxon:'Channel Target',severity:pp<60?'critical':'high',metric:`${pp.toFixed(1)}% projected`,detail:`Actual ${fmt(t.sp_actual||0)} of ${fmt(t.sp_target||0)} target; short ${fmt(t.sp_short||0)}`});}});
+  (_opsSupport.production_pending||[]).forEach(p=>{const age=_opsDateDays(p.oldest_order_date);if(age!==null&&age>=wipDays&&_opsNum(p.balance_qty)>0){const it=_masterSkuMap[_opsSkuKey(p.sku)]||{};rows.push({type:'WIP_OLD',typeLabel:'WIP Pending Too Long',entityType:'SKU',entity:String(p.sku||''),name:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock:Math.max(0,_opsNum(it.inv_stock)),wip:Math.max(0,_opsNum(it.inv_wip)),severity:age>=60?'critical':'high',metric:`${age} days`,detail:`Pending balance ${Math.round(_opsNum(p.balance_qty))}; oldest order ${p.oldest_order_date||'—'}; orders ${(p.order_nos||[]).join(', ')}`});}});
+  const targetPct=80;
+  (_opsSupport.target_rows||[]).forEach(t=>{const pp=_opsNum(t.proj_pct);if(_opsNum(t.sp_target)>0&&pp<targetPct){rows.push({type:'TARGET_BEHIND',typeLabel:'Target Significantly Behind',entityType:'Channel',entity:String(t.channel||t.stakeholder||'Channel'),name:String(t.stakeholder||''),image:'',group:'All',taxon:'Channel Target',stock:null,wip:null,severity:pp<60?'critical':'high',metric:`${pp.toFixed(1)}% projected`,detail:`Actual ${fmt(t.sp_actual||0)} of ${fmt(t.sp_target||0)} target; short ${fmt(t.sp_short||0)}`});}});
   const order={critical:0,high:1,medium:2,good:3}; _smartAlertRows=rows.sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9)||a.typeLabel.localeCompare(b.typeLabel)||a.entity.localeCompare(b.entity));
   _opsFillTaxon('saTaxon',_smartAlertRows.filter(r=>r.entityType==='SKU'),r=>r.taxon); return _smartAlertRows;
 }
@@ -12169,10 +12342,10 @@ function _smartAlertsFiltered(){
 function renderSmartAlerts(){
   const rows=_smartAlertsFiltered();const sum=document.getElementById('saSummary');const host=document.getElementById('saContent');if(!host)return;
   const count=t=>rows.filter(r=>r.type===t).length;if(sum)sum.innerHTML=_opsKpi('OOS ≤7 Days',count('OOS_7').toLocaleString('en-IN'),'Immediate stockout risk')+_opsKpi('High Sale / Low WIP',count('HIGH_SALE_LOW_WIP').toLocaleString('en-IN'),'WIP below 7-day demand')+_opsKpi('Old Pending WIP',count('WIP_OLD').toLocaleString('en-IN'),'Based on selected age')+_opsKpi('Other Alerts',(count('TARGET_BEHIND')+count('HIGH_RETURN')).toLocaleString('en-IN'),'Target + return exceptions');
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${r.entityType==='SKU'?_opsPhoto(r.image):'<div class="ops-photo-ph">🎯</div>'}</td><td>${r.entityType==='SKU'?`<button class="sku-link" onclick="openSkuDetails('${String(r.entity).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.entity,r.name))}</button>`:`<b>${escHtml(r.entity)}</b><div style="font-size:9px;color:#64748b">${escHtml(r.name)}</div>`}</td><td>${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity==='critical'?'Critical':r.severity==='high'?'High':'Watch')}</td><td style="font-weight:900">${escHtml(r.metric)}</td><td class="ops-list">${escHtml(r.detail)}</td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU / Channel</th><th>Alert</th><th>Severity</th><th>Metric</th><th>Action Detail</th><th>Group</th><th>Taxon</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="ops-empty">No smart alerts match the selected filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${r.entityType==='SKU'?_opsPhoto(r.image):'<div class="ops-photo-ph">🎯</div>'}</td><td>${r.entityType==='SKU'?`<button class="sku-link" onclick="openSkuDetails('${String(r.entity).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.entity,r.name))}</button>`:`<b>${escHtml(r.entity)}</b><div style="font-size:9px;color:#64748b">${escHtml(r.name)}</div>`}</td><td>${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity==='critical'?'Critical':r.severity==='high'?'High':'Watch')}</td><td style="font-weight:900">${escHtml(r.metric)}</td><td class="ops-list">${escHtml(r.detail)}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.stock)).toLocaleString('en-IN'):'—'}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.wip)).toLocaleString('en-IN'):'—'}</td><td>${escHtml(r.taxon)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU / Channel</th><th>Alert</th><th>Severity</th><th>Metric</th><th>Action Detail</th><th>Inv Stock</th><th>Inv WIP</th><th>Taxon</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No smart alerts match the selected filters.</td></tr>'}</tbody></table>`;
 }
-function exportSmartAlerts(){const rows=_smartAlertsFiltered();if(!rows.length){alert('No alert rows to export');return;}_dlCsv(['Entity Type','SKU / Channel','Name / Stakeholder','Alert Type','Severity','Metric','Detail','Group','Taxon','Image Link'],rows.map(r=>[r.entityType,r.entity,exportSkuName(r.entity,r.name),r.typeLabel,r.severity,r.metric,r.detail,r.group,r.taxon,r.image||'']),'smart_alerts');}
+function exportSmartAlerts(){const rows=_smartAlertsFiltered();if(!rows.length){alert('No alert rows to export');return;}_dlCsv(['Entity Type','SKU / Channel','Name / Stakeholder','Alert Type','Severity','Metric','Detail','Inv Stock','Inv WIP','Taxon','Image Link'],rows.map(r=>[r.entityType,r.entity,exportSkuName(r.entity,r.name),r.typeLabel,r.severity,r.metric,r.detail,r.entityType==='SKU'?Math.round(_opsNum(r.stock)):'',r.entityType==='SKU'?Math.round(_opsNum(r.wip)):'',r.taxon,r.image||'']),'smart_alerts');}
 
 function _ageBucket(days){if(days===null)return'Unknown';if(days<=30)return'0-30';if(days<=60)return'31-60';if(days<=90)return'61-90';return'90+';}
 function _buildInventoryAgeRows(){
@@ -12193,6 +12366,222 @@ function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.len
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
 window.loadSmartOps=loadSmartOps;window.renderSmartAlerts=renderSmartAlerts;window.exportSmartAlerts=exportSmartAlerts;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
+
+
+/* ── SKU OPPORTUNITY SCORE ─────────────────────────────── */
+let _oppRows = [];
+function _oppClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, Number(v)||0)); }
+function _oppEntryAgeDays(dateValue){
+  const s=String(dateValue||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t=String(todayISO||new Date().toISOString().slice(0,10)).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const a=Date.parse(s+'T00:00:00Z'), b=Date.parse(t+'T00:00:00Z');
+  if(!Number.isFinite(a)||!Number.isFinite(b)) return null;
+  const d=Math.floor((b-a)/86400000);
+  return d<0?null:d;
+}
+function _oppWindowStats(it, win){
+  let currentQty=0, previousQty=0, currentRet=0, previousRet=0;
+  for(const e of (it.sales_entries||[])){
+    const age=_oppEntryAgeDays(e.date); if(age===null) continue;
+    const q=Math.max(0,_opsNum(e.qty)), r=Math.max(0,_opsNum(e.ret));
+    if(age<win){ currentQty+=q; currentRet+=r; }
+    else if(age<win*2){ previousQty+=q; previousRet+=r; }
+  }
+  return {currentQty,previousQty,currentRet,previousRet};
+}
+function _oppScoreClass(score){ return score>=75?'high':score>=55?'mid':score>=35?'watch':'low'; }
+function _oppScoreHtml(score){ return `<span class="opp-score opp-score-${_oppScoreClass(score)}">${Math.round(score)}</span>`; }
+function _oppGrowthText(r){
+  if(r.currentSale<=0 && r.previousSale<=0) return '<span class="opp-growth-flat">No sales</span>';
+  if(r.previousSale<=0 && r.currentSale>0) return '<span class="opp-growth-up">New ↑</span>';
+  const cls=r.growthPct>0?'opp-growth-up':r.growthPct<0?'opp-growth-down':'opp-growth-flat';
+  const sign=r.growthPct>0?'+':'';
+  return `<span class="${cls}">${sign}${r.growthPct.toFixed(1)}%</span>`;
+}
+function _oppActionFor(score, growthPct, currentSale, stockCover, stock, returnRate){
+  if(returnRate>=15 && currentSale>0) return {label:'Fix Returns',key:'critical'};
+  if(currentSale>0 && (stock<=0 || (Number.isFinite(stockCover)&&stockCover<14)) && (growthPct>=0 || score>=55)) return {label:'Replenish & Push',key:'high'};
+  if(score>=75) return {label:'Push Now',key:'good'};
+  if(score>=55) return {label:'Maintain',key:'blue'};
+  if(score>=35) return {label:'Watch',key:'medium'};
+  return {label:'Pause / Fix',key:'critical'};
+}
+function _buildOpportunityRows(){
+  const win=Math.max(1,parseInt(document.getElementById('oppWindow')?.value||'30'));
+  _oppRows=(master||[]).map(it=>{
+    const sku=String(it.sku||''); if(!sku) return null;
+    const st=_oppWindowStats(it,win);
+    const current=st.currentQty, previous=st.previousQty;
+    let growthPct=0;
+    if(previous>0) growthPct=((current-previous)/previous)*100;
+    else if(current>0) growthPct=100;
+    const rawGrowth=current<=0?0:(previous<=0?Math.min(40,20+current*4):_oppClamp(20+growthPct*0.20,0,40));
+    const salesScore=_oppClamp(rawGrowth,0,40);
+    const stock=Math.max(0,_opsNum(it.inv_stock)), wip=Math.max(0,_opsNum(it.inv_wip)), available=stock+wip;
+    const drr=current/win;
+    const stockCover=drr>0?stock/drr:null;
+    const totalCover=drr>0?available/drr:null;
+    const stockScore=current>0?_oppClamp((available/current)*30,0,30):0;
+    const returnDen=current+st.currentRet;
+    const returnRate=returnDen>0?(st.currentRet/returnDen*100):0;
+    const returnScore=_oppClamp(30*(1-returnRate/20),0,30);
+    const score=_oppClamp(salesScore+stockScore+returnScore,0,100);
+    const action=_oppActionFor(score,growthPct,current,stockCover,stock,returnRate);
+    return {item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,currentSale:current,previousSale:previous,growthPct,salesScore,stock,wip,available,drr,stockCover,totalCover,returnQty:st.currentRet,returnRate,returnScore,stockScore,score,action};
+  }).filter(Boolean).sort((a,b)=>b.score-a.score||b.growthPct-a.growthPct||b.currentSale-a.currentSale);
+  _opsFillTaxon('oppTaxon',_oppRows,r=>r.taxon);
+  return _oppRows;
+}
+function _opportunityFiltered(){
+  if(!_oppRows.length) _buildOpportunityRows();
+  const q=String(document.getElementById('oppSearch')?.value||'').trim().toLowerCase();
+  const group=document.getElementById('oppGroup')?.value||'All';
+  const taxon=document.getElementById('oppTaxon')?.value||'All';
+  const action=document.getElementById('oppAction')?.value||'All';
+  const minScore=_oppClamp(document.getElementById('oppMinScore')?.value||0,0,100);
+  const rowMode=document.getElementById('oppRows')?.value||'selling';
+  return _oppRows.filter(r=>(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentSale>0||r.previousSale>0));
+}
+function loadOpportunityScore(){ _oppRows=[]; _buildOpportunityRows(); renderOpportunityScore(); }
+function renderOpportunityScore(){
+  _oppRows=[]; _buildOpportunityRows();
+  const rows=_opportunityFiltered(), sum=document.getElementById('oppSummary'), host=document.getElementById('oppContent'); if(!host)return;
+  const push=rows.filter(r=>r.action.label==='Push Now'||r.action.label==='Replenish & Push').length;
+  const highGrowth=rows.filter(r=>(r.previousSale<=0&&r.currentSale>0)||r.growthPct>=20).length;
+  const lowReturn=rows.filter(r=>r.currentSale>0&&r.returnRate<5).length;
+  const avg=rows.length?rows.reduce((s,r)=>s+r.score,0)/rows.length:0;
+  if(sum) sum.innerHTML=_opsKpi('SKUs Scored',rows.length.toLocaleString('en-IN'),'Current filters')+_opsKpi('Push Opportunities',push.toLocaleString('en-IN'),'Push Now + Replenish & Push')+_opsKpi('High Growth SKUs',highGrowth.toLocaleString('en-IN'),'Growth 20%+ or newly selling')+_opsKpi('Average Score',avg.toFixed(1),`${lowReturn.toLocaleString('en-IN')} SKUs below 5% return`);
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.currentSale).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.previousSale).toLocaleString('en-IN')}</td><td class="ops-num">${_oppGrowthText(r)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.stockCover===null?'—':_oosDaysText(r.stockCover)}</td><td class="ops-num">${Math.round(r.returnQty).toLocaleString('en-IN')}</td><td class="ops-num">${r.returnRate.toFixed(1)}%</td><td class="ops-num">${r.salesScore.toFixed(1)} / 40</td><td class="ops-num">${r.stockScore.toFixed(1)} / 30</td><td class="ops-num">${r.returnScore.toFixed(1)} / 30</td><td class="ops-num">${_oppScoreHtml(r.score)}</td><td>${_opsRiskBadge(r.action.key,r.action.label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Current ${parseInt(document.getElementById('oppWindow')?.value||'30')}D Sale</th><th>Previous Window Sale</th><th>Sales Growth</th><th>Inv Stock</th><th>Inv WIP</th><th>Stock Cover</th><th>Return Qty</th><th>Return Rate</th><th>Sales Score</th><th>Stock Score</th><th>Return Score</th><th>Opportunity Score</th><th>Recommended Action</th></tr></thead><tbody>${body||'<tr><td colspan="17" class="ops-empty">No SKUs match the current opportunity filters.</td></tr>'}</tbody></table>`;
+}
+function exportOpportunityScore(){
+  const rows=_opportunityFiltered(); if(!rows.length){alert('No opportunity-score rows to export');return;}
+  _dlCsv(['SKU','SKU Name','Taxon','Image Link','Window Days','Current Window Sale','Previous Window Sale','Sales Growth %','Inv Stock','Inv WIP','Stock Cover Days','Cover incl WIP Days','Return Qty','Return Rate %','Sales Score /40','Stock Score /30','Return Score /30','Opportunity Score /100','Recommended Action'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.image,r.window,Math.round(r.currentSale),Math.round(r.previousSale),Number(r.growthPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.stockCover===null?'':Number(r.stockCover.toFixed(2)),r.totalCover===null?'':Number(r.totalCover.toFixed(2)),Math.round(r.returnQty),Number(r.returnRate.toFixed(2)),Number(r.salesScore.toFixed(2)),Number(r.stockScore.toFixed(2)),Number(r.returnScore.toFixed(2)),Number(r.score.toFixed(2)),r.action.label]),'sku_opportunity_score');
+}
+window.loadOpportunityScore=loadOpportunityScore;window.renderOpportunityScore=renderOpportunityScore;window.exportOpportunityScore=exportOpportunityScore;
+
+
+/* ---- SALES ANOMALY DETECTION -------------------------------- */
+let _anomRows = [];
+function _anomSeverityRank(v){ return v==='critical'?0:v==='high'?1:v==='medium'?2:9; }
+function _anomPct(v){ return Number.isFinite(Number(v)) ? Number(v).toFixed(1)+'%' : '-'; }
+function _anomDateAge(dateValue){ return _oppEntryAgeDays(dateValue); }
+function _anomWindowStats(it, win){
+  let currentQty=0, previousQty=0, currentRet=0, previousRet=0, currentRev=0, previousRev=0;
+  const currentEntries=[], previousEntries=[];
+  for(const e of (it.sales_entries||[])){
+    const age=_anomDateAge(e.date); if(age===null) continue;
+    const q=_opsNum(e.qty), ret=Math.max(0,_opsNum(e.ret)), rev=_opsNum(e.rev);
+    if(age<win){ currentQty+=Math.max(0,q); currentRet+=ret; currentRev+=rev; currentEntries.push(e); }
+    else if(age<win*2){ previousQty+=Math.max(0,q); previousRet+=ret; previousRev+=rev; previousEntries.push(e); }
+  }
+  const currentGross=currentQty+currentRet, previousGross=previousQty+previousRet;
+  return {
+    currentQty,previousQty,currentRet,previousRet,currentRev,previousRev,currentEntries,previousEntries,
+    currentReturnRate:currentGross>0?currentRet/currentGross*100:0,
+    previousReturnRate:previousGross>0?previousRet/previousGross*100:0
+  };
+}
+function _anomAdd(rows, base, type, typeLabel, severity, metric, detail){
+  rows.push({...base,type,typeLabel,severity,metric,detail});
+}
+function _buildSalesAnomalyRows(){
+  const win=Math.max(1,parseInt(document.getElementById('anomWindow')?.value||'30'));
+  const baseline=Math.max(1,_opsNum(document.getElementById('anomBaseline')?.value||5));
+  const receiptMap={};
+  (_opsSupport.latest_receipts||[]).forEach(x=>{ receiptMap[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||''); });
+  const rows=[];
+  for(const it of (master||[])){
+    const sku=String(it.sku||'').trim(); if(!sku) continue;
+    const st=_anomWindowStats(it,win);
+    const stock=Math.max(0,_opsNum(it.inv_stock)), wip=Math.max(0,_opsNum(it.inv_wip));
+    const base={item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,currentSale:st.currentQty,previousSale:st.previousQty,currentRevenue:st.currentRev,previousRevenue:st.previousRev,currentReturnRate:st.currentReturnRate,previousReturnRate:st.previousReturnRate,stock,wip,latestReceipt:receiptMap[_opsSkuKey(sku)]||''};
+
+    if(st.previousQty>=baseline && st.currentQty<=st.previousQty*0.5){
+      const decline=(st.previousQty-st.currentQty)/st.previousQty*100;
+      const severity=(st.currentQty<=0||decline>=80)?'critical':decline>=65?'high':'medium';
+      _anomAdd(rows,base,'SALE_DROP','Sudden Sale Drop',severity,`${decline.toFixed(1)}% drop`,`Current ${win}D sale ${Math.round(st.currentQty)} versus previous ${win}D sale ${Math.round(st.previousQty)}.`);
+    }
+
+    const spikeDelta=st.currentQty-st.previousQty;
+    const spikeRatio=st.previousQty>0?st.currentQty/st.previousQty:null;
+    const isSpike=(st.previousQty>0 && st.currentQty>=Math.max(baseline,st.previousQty*2) && spikeDelta>=baseline) || (st.previousQty<=0 && st.currentQty>=baseline*2);
+    if(isSpike){
+      const severity=(spikeRatio===null?st.currentQty>=baseline*4:spikeRatio>=3)?'high':'medium';
+      const metric=spikeRatio===null?'New spike':`${spikeRatio.toFixed(1)}x sale`;
+      _anomAdd(rows,base,'SALE_SPIKE','Unusual Sale Spike',severity,metric,`Current ${win}D sale ${Math.round(st.currentQty)} versus previous ${win}D sale ${Math.round(st.previousQty)}; increase ${Math.round(spikeDelta)} units.`);
+    }
+
+    const returnRise=st.currentReturnRate-st.previousReturnRate;
+    const currentGross=st.currentQty+st.currentRet;
+    if(currentGross>=baseline && st.currentReturnRate>=10 && (returnRise>=5 || (st.previousReturnRate>0 && st.currentReturnRate>=st.previousReturnRate*1.5))){
+      const severity=st.currentReturnRate>=20?'critical':st.currentReturnRate>=15?'high':'medium';
+      _anomAdd(rows,base,'RETURN_INCREASE','Unexpected Return Increase',severity,`${st.currentReturnRate.toFixed(1)}% return`,`Current return rate ${st.currentReturnRate.toFixed(1)}% versus previous ${st.previousReturnRate.toFixed(1)}% (${returnRise>=0?'+':''}${returnRise.toFixed(1)} percentage points).`);
+    }
+
+    const receiptAge=base.latestReceipt?_anomDateAge(base.latestReceipt):null;
+    if(base.latestReceipt && receiptAge!==null && receiptAge<win && st.currentQty<=0 && (stock>0||wip>0)){
+      const severity=stock>=50?'high':'medium';
+      _anomAdd(rows,base,'STOCK_NO_SALE','Stock Movement Without Sale',severity,`${receiptAge}D since receipt`,`Latest receiving date ${base.latestReceipt}; no sale in latest ${win} days; Inv Stock ${Math.round(stock)}, Inv WIP ${Math.round(wip)}.`);
+    }
+
+    if(String(LOGIN_ROLE||'').toLowerCase()==='admin'){
+      let negCount=0, negTotal=0, zeroRevenueQty=0, aboveMrpCount=0, orphanRevenue=0;
+      const mrp=Math.max(0,_opsNum(it.mrp));
+      for(const e of st.currentEntries){
+        const q=_opsNum(e.qty), ret=Math.max(0,_opsNum(e.ret)), rev=_opsNum(e.rev);
+        if(rev<0){ negCount++; negTotal+=rev; }
+        if(q>0 && rev<=0) zeroRevenueQty+=q;
+        if(q>0 && rev>0 && mrp>0 && rev/q>mrp*1.25) aboveMrpCount++;
+        if(Math.abs(q)<0.0001 && ret<=0 && Math.abs(rev)>0.01) orphanRevenue+=rev;
+      }
+      const reasons=[];
+      if(negCount) reasons.push(`${negCount} negative-revenue line(s), total ${fmt(negTotal)}`);
+      if(zeroRevenueQty>0) reasons.push(`${Math.round(zeroRevenueQty)} sold unit(s) with zero/negative revenue`);
+      if(aboveMrpCount) reasons.push(`${aboveMrpCount} line(s) above 125% of MRP per unit`);
+      if(Math.abs(orphanRevenue)>0.01) reasons.push(`revenue ${fmt(orphanRevenue)} with zero sold and zero return quantity`);
+      if(st.currentRev<0 && !negCount) reasons.push(`negative window revenue ${fmt(st.currentRev)}`);
+      if(reasons.length){
+        const severity=(negCount||st.currentRev<0)?'critical':zeroRevenueQty>0?'high':'medium';
+        _anomAdd(rows,base,'REVENUE_ISSUE','Negative / Incorrect Revenue',severity,negCount?`${negCount} negative line(s)`:`${reasons.length} issue(s)`,reasons.join('; ')+'.');
+      }
+    }
+  }
+  _anomRows=rows.sort((a,b)=>_anomSeverityRank(a.severity)-_anomSeverityRank(b.severity)||a.typeLabel.localeCompare(b.typeLabel)||b.currentSale-a.currentSale||a.sku.localeCompare(b.sku));
+  _opsFillTaxon('anomTaxon',_anomRows,r=>r.taxon);
+  return _anomRows;
+}
+function _salesAnomalyFiltered(){
+  if(!_anomRows.length) _buildSalesAnomalyRows();
+  const type=document.getElementById('anomType')?.value||'All';
+  const group=document.getElementById('anomGroup')?.value||'All';
+  const taxon=document.getElementById('anomTaxon')?.value||'All';
+  const severity=document.getElementById('anomSeverity')?.value||'All';
+  const q=String(document.getElementById('anomSearch')?.value||'').trim().toLowerCase();
+  return _anomRows.filter(r=>(type==='All'||r.type===type)&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(severity==='All'||r.severity===severity)&&(!q||`${r.sku} ${r.skuName} ${r.typeLabel}`.toLowerCase().includes(q)));
+}
+function loadSalesAnomalies(fresh){
+  const host=document.getElementById('anomContent'); if(host) host.innerHTML='<div class="ops-empty">Analysing sales, returns, revenue and recent stock receipts...</div>';
+  return _loadOpsSupport(!!fresh).catch(()=>_opsSupport).then(()=>{_anomRows=[];_buildSalesAnomalyRows();renderSalesAnomalies();});
+}
+function renderSalesAnomalies(){
+  _anomRows=[];_buildSalesAnomalyRows();
+  const rows=_salesAnomalyFiltered(), sum=document.getElementById('anomSummary'), host=document.getElementById('anomContent'); if(!host)return;
+  const affected=new Set(rows.map(r=>r.sku));
+  const critical=rows.filter(r=>r.severity==='critical').length;
+  const sales=rows.filter(r=>r.type==='SALE_DROP'||r.type==='SALE_SPIKE').length;
+  const quality=rows.filter(r=>r.type==='RETURN_INCREASE'||r.type==='REVENUE_ISSUE').length;
+  if(sum) sum.innerHTML=_opsKpi('Total Anomalies',rows.length.toLocaleString('en-IN'),'Current filters')+_opsKpi('Affected SKUs',affected.size.toLocaleString('en-IN'),'Unique SKUs')+_opsKpi('Critical Alerts',critical.toLocaleString('en-IN'),'Immediate review')+_opsKpi('Sales / Data Exceptions',(sales+quality).toLocaleString('en-IN'),`${sales} sales pattern, ${quality} return/revenue`);
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button>${r.latestReceipt?`<div class="anom-receipt">Latest receipt: ${escHtml(r.latestReceipt)}</div>`:''}</td><td>${escHtml(r.taxon)}</td><td class="anom-type">${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity.charAt(0).toUpperCase()+r.severity.slice(1))}</td><td class="anom-metric">${escHtml(r.metric)}</td><td class="ops-num">${Math.round(r.currentSale).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.previousSale).toLocaleString('en-IN')}</td><td class="ops-num">${_anomPct(r.currentReturnRate)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="anom-detail">${escHtml(r.detail)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Anomaly</th><th>Severity</th><th>Metric</th><th>Current Sale</th><th>Previous Sale</th><th>Current Return Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Detection Detail</th></tr></thead><tbody>${body||'<tr><td colspan="13" class="ops-empty">No anomalies match the current filters.</td></tr>'}</tbody></table>`;
+}
+function exportSalesAnomalies(){
+  const rows=_salesAnomalyFiltered(); if(!rows.length){alert('No anomaly rows to export');return;}
+  _dlCsv(['SKU','SKU Name','Taxon','Product Group','Image Link','Anomaly Type','Severity','Window Days','Metric','Current Sale','Previous Sale','Current Revenue','Previous Revenue','Current Return Rate %','Previous Return Rate %','Inv Stock','Inv WIP','Latest Receipt Date','Detection Detail'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.typeLabel,r.severity,r.window,r.metric,Math.round(r.currentSale),Math.round(r.previousSale),Number(r.currentRevenue.toFixed(2)),Number(r.previousRevenue.toFixed(2)),Number(r.currentReturnRate.toFixed(2)),Number(r.previousReturnRate.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.latestReceipt,r.detail]),'sales_anomaly_detection');
+}
+window.loadSalesAnomalies=loadSalesAnomalies;window.renderSalesAnomalies=renderSalesAnomalies;window.exportSalesAnomalies=exportSalesAnomalies;
 
 /* ── STOCK STATUS — client-side (all fields already in master) ── */
 function loadStockStatus(){
@@ -13593,6 +13982,7 @@ const __origShowTab = showTab;
 showTab = function(t){
   // Removed tabs and disabled views are redirected to Home.
   if (t === 'marketplaces' || t === 'smart' || t === 'insights' || t === 'stockstatus') t = 'home';
+  if (t === 'anomaly') t = 'salesanomaly';
   if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
@@ -13615,6 +14005,11 @@ showTab = function(t){
     repeatplanner: {id: 'vRepeatPlanner', btn: 'm23'},
     comborisk: {id: 'vComboRisk', btn: 'm24'},
     smartops: {id: 'vSmartOps', btn: 'm25'},
+    opportunity: {id: 'vOpportunity', btn: 'm26'},
+    salesanomaly: {id: 'vSalesAnomaly', btn: 'm27'},
+    concentration: {id: 'vConcentration', btn: 'm28'},
+    demandpatterns: {id: 'vDemandPatterns', btn: 'm29'},
+    ooslost: {id: 'vOosLost', btn: 'm30'},
     payments: {id: 'vPayments', btn: 'm17'},
     help: {id: 'vHelp', btn: 'm11'},
     marketplaces: {id: 'vMarketplaces', btn: 'm7'},
@@ -13662,6 +14057,11 @@ showTab = function(t){
       repeatplanner: 'AUTO REPEAT PLANNER',
       comborisk: 'COMBO PRODUCTION RISK',
       smartops: 'SMART ALERTS & AGEING',
+      opportunity: 'SKU OPPORTUNITY SCORE',
+      salesanomaly: 'SALES ANOMALY DETECTION',
+      concentration: 'SALES CONCENTRATION RISK',
+      demandpatterns: 'DEMAND PATTERN INTELLIGENCE',
+      ooslost: 'OOS LOST SALES & REVENUE',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
@@ -13692,6 +14092,11 @@ showTab = function(t){
   if (t === 'repeatplanner') setTimeout(()=>{ try{ loadRepeatPlanner(); }catch(e){console.error(e);} }, 0);
   if (t === 'comborisk') setTimeout(()=>{ try{ loadComboRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'smartops') setTimeout(()=>{ try{ loadSmartOps(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'opportunity') setTimeout(()=>{ try{ loadOpportunityScore(); }catch(e){console.error(e);} }, 0);
+  if (t === 'salesanomaly') setTimeout(()=>{ try{ loadSalesAnomalies(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'concentration') setTimeout(()=>{ try{ loadConcentrationRisk(); }catch(e){console.error(e);} }, 0);
+  if (t === 'demandpatterns') setTimeout(()=>{ try{ loadDemandPatterns(); }catch(e){console.error(e);} }, 0);
+  if (t === 'ooslost') setTimeout(()=>{ try{ loadOosLostSales(false); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
   if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
 };
@@ -13860,6 +14265,300 @@ function smartClear(){
   const note = document.getElementById('smartNote'); if (note) note.style.display = 'none';
 }
 window.smartClear = smartClear;
+
+/* ===== BUSINESS INTELLIGENCE: CONCENTRATION, DEMAND PATTERNS, OOS LOSS ===== */
+let _bizEventCache = null;
+let _concExportRows = [];
+let _dpExportRows = [];
+let _olsRows = [];
+
+function _bizIso(v){
+  const s = String(v || '').slice(0,10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+}
+function _bizDate(iso){
+  const s = _bizIso(iso); if(!s) return null;
+  const p = s.split('-').map(Number);
+  return new Date(Date.UTC(p[0], p[1]-1, p[2]));
+}
+function _bizShift(iso, days){
+  const d = _bizDate(iso); if(!d) return '';
+  d.setUTCDate(d.getUTCDate() + Number(days || 0));
+  return d.toISOString().slice(0,10);
+}
+function _bizDaysInclusive(a,b){
+  const d1=_bizDate(a), d2=_bizDate(b); if(!d1||!d2||d2<d1) return 0;
+  return Math.floor((d2-d1)/86400000)+1;
+}
+function _bizPct(part,total){ return total>0 ? (part/total*100) : 0; }
+function _bizPctText(v){ return Number.isFinite(v) ? v.toFixed(1)+'%' : '—'; }
+function _bizMoney(v){ return '₹'+Math.round(Number(v)||0).toLocaleString('en-IN'); }
+function _bizNum(v,d=0){ return (Number(v)||0).toLocaleString('en-IN',{minimumFractionDigits:d,maximumFractionDigits:d}); }
+function _bizBar(pct){
+  const w=Math.max(0,Math.min(100,Number(pct)||0));
+  return `<div style="height:7px;background:#efe8d8;border-radius:999px;overflow:hidden;min-width:90px"><div style="height:100%;width:${w}%;background:linear-gradient(90deg,#b8960c,#d4af37);border-radius:999px"></div></div>`;
+}
+function _bizSetSelect(id, values, allLabel){
+  const el=document.getElementById(id); if(!el)return;
+  const cur=el.value||'All';
+  const vals=Array.from(new Set((values||[]).map(v=>String(v||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+  el.innerHTML=`<option value="All">${escHtml(allLabel||'All')}</option>`+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  el.value=vals.includes(cur)?cur:'All';
+}
+function _bizInitFilters(prefix){
+  _bizSetSelect(prefix+'Taxon', allTaxons, 'All Taxons');
+  _bizSetSelect(prefix+'Type', allTypes, 'All Types');
+  _bizSetSelect(prefix+'Channel', allChannels, 'All Channels');
+}
+function _bizInitDateRange(id1,id2,days){
+  const e1=document.getElementById(id1), e2=document.getElementById(id2); if(!e1||!e2)return;
+  const end=_bizIso(todayISO)||new Date().toISOString().slice(0,10);
+  if(!e2.value)e2.value=end;
+  if(!e1.value)e1.value=_bizShift(end,-Math.max(1,Number(days)||180)+1);
+}
+function _bizEvents(){
+  if(_bizEventCache) return _bizEventCache;
+  const out=[];
+  (master||[]).forEach(it=>{
+    const sku=String(it.sku||'').trim(); if(!sku)return;
+    const base={
+      item:it, sku, skuName:String(it.sku_name||''), taxon:String(it.taxon||'General')||'General',
+      group:_opsGroup(it), image:String(it.image_url||'')
+    };
+    (it.sales_entries||[]).forEach(e=>{
+      const date=_bizIso(e.order_date||e.date); if(!date)return;
+      out.push({...base,date,qty:_opsNum(e.qty),rev:_opsNum(e.rev),ret:_opsNum(e.ret),sp:_opsNum(e.sp),type:String(e.type||''),channel:String(e.channel||''),subChannel:String(e.sub_channel||'')});
+    });
+  });
+  _bizEventCache=out;
+  return out;
+}
+function _bizBaseFilter(prefix, includeDates=true){
+  const group=document.getElementById(prefix+'Group')?.value||'All';
+  const taxon=document.getElementById(prefix+'Taxon')?.value||'All';
+  const type=document.getElementById(prefix+'Type')?.value||'All';
+  const channel=document.getElementById(prefix+'Channel')?.value||'All';
+  const search=String(document.getElementById(prefix+'Search')?.value||'').trim().toLowerCase();
+  const d1=includeDates?_bizIso(document.getElementById(prefix+'D1')?.value):'';
+  const d2=includeDates?_bizIso(document.getElementById(prefix+'D2')?.value):'';
+  return e=>{
+    if(group!=='All'&&e.group!==group)return false;
+    if(taxon!=='All'&&e.taxon!==taxon)return false;
+    if(type!=='All'&&e.type!==type)return false;
+    if(channel!=='All'&&e.channel!==channel)return false;
+    if(search&&!`${e.sku} ${e.skuName}`.toLowerCase().includes(search))return false;
+    if(d1&&e.date<d1)return false;
+    if(d2&&e.date>d2)return false;
+    return true;
+  };
+}
+function _bizRankMap(map,total){
+  return Array.from(map.entries()).map(([name,v])=>({name,...v,share:_bizPct(v.rev,total)})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty||a.name.localeCompare(b.name));
+}
+function _bizRankTable(title,rows,nameLabel='Name',limit=10){
+  const shown=(rows||[]).slice(0,limit);
+  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td style="font-weight:750">${escHtml(r.name)}</td><td class="ops-num">${_bizMoney(r.rev)}</td><td class="ops-num">${_bizNum(r.qty,0)}</td><td class="ops-num" style="font-weight:850">${_bizPctText(r.share)}</td><td>${_bizBar(r.share)}</td></tr>`).join('');
+  return `<div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">${escHtml(title)}</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>#</th><th>${escHtml(nameLabel)}</th><th>Revenue</th><th>Qty</th><th>Contribution</th><th>Share</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="ops-empty">No matching data.</td></tr>'}</tbody></table></div></div>`;
+}
+
+function _concCityRanks(filterMeta,totalRevenue){
+  const city=new Map();
+  const d1=_bizIso(document.getElementById('concD1')?.value), d2=_bizIso(document.getElementById('concD2')?.value);
+  const type=document.getElementById('concType')?.value||'All';
+  const channel=document.getElementById('concChannel')?.value||'All';
+  const cityAllowed=(type==='All'||/website|online|d2c|direct/i.test(type))&&(channel==='All'||/d2c|website|online|direct/i.test(channel));
+  if(!cityAllowed)return {rows:[],total:0,coverage:0};
+  (master||[]).forEach(it=>{
+    const meta={group:_opsGroup(it),taxon:String(it.taxon||'General'),sku:String(it.sku||''),skuName:String(it.sku_name||'')};
+    if(!filterMeta(meta))return;
+    const webSales=(it.sales_entries||[]).filter(e=>{
+      const date=_bizIso(e.order_date||e.date); if(!date)return false;
+      if(d1&&date<d1)return false; if(d2&&date>d2)return false;
+      return /website|online/i.test(String(e.type||''))||/d2c/i.test(String(e.channel||''));
+    });
+    const webQty=webSales.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0);
+    const webRev=webSales.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
+    const fallbackSp=webQty>0&&webRev>0?webRev/webQty:Math.max(0,_opsNum(it.website_selling_price)||_opsNum(it.avg_selling_price)||_opsNum(it.mrp));
+    (it.website_city_events||[]).forEach(ev=>{
+      const date=_bizIso(ev.d); if(!date)return;
+      if(d1&&date<d1)return; if(d2&&date>d2)return;
+      const name=String(ev.c||'').trim(); if(!name)return;
+      const qty=Math.max(0,_opsNum(ev.q));
+      const directRev=Math.max(0,_opsNum(ev.r));
+      const rev=directRev>0?directRev:qty*fallbackSp;
+      const x=city.get(name)||{rev:0,qty:0}; x.rev+=rev; x.qty+=qty; city.set(name,x);
+    });
+  });
+  const total=Array.from(city.values()).reduce((s,v)=>s+v.rev,0);
+  const rows=Array.from(city.entries()).map(([name,v])=>({name,...v,share:_bizPct(v.rev,total)})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
+  return {rows,total,coverage:totalRevenue>0?_bizPct(total,totalRevenue):0};
+}
+function loadConcentrationRisk(){
+  _bizInitFilters('conc'); _bizInitDateRange('concD1','concD2',180); renderConcentrationRisk();
+}
+function renderConcentrationRisk(){
+  const host=document.getElementById('concContent'), sum=document.getElementById('concSummary'), alertHost=document.getElementById('concAlert'); if(!host)return;
+  const predicate=_bizBaseFilter('conc',true);
+  const events=_bizEvents().filter(predicate);
+  const sku=new Map(), channel=new Map(), taxon=new Map(); let totalRev=0,totalQty=0;
+  events.forEach(e=>{
+    const rev=Math.max(0,e.rev), qty=Math.max(0,e.qty); totalRev+=rev; totalQty+=qty;
+    const s=sku.get(e.sku)||{rev:0,qty:0,item:e.item}; s.rev+=rev;s.qty+=qty;sku.set(e.sku,s);
+    const ch=e.channel||'Other'; const c=channel.get(ch)||{rev:0,qty:0};c.rev+=rev;c.qty+=qty;channel.set(ch,c);
+    const tx=e.taxon||'General'; const t=taxon.get(tx)||{rev:0,qty:0};t.rev+=rev;t.qty+=qty;taxon.set(tx,t);
+  });
+  const revenueMode=totalRev>0;
+  if(!revenueMode&&totalQty>0){
+    // Employee role hides revenue. Use quantity as a clearly labelled proxy so the tab remains operational.
+    totalRev=totalQty;
+    sku.forEach(v=>v.rev=v.qty); channel.forEach(v=>v.rev=v.qty); taxon.forEach(v=>v.rev=v.qty);
+  }
+  const skuRows=Array.from(sku.entries()).map(([name,v])=>({name,display:skuLabel(name,v.item?.sku_name),rev:v.rev,qty:v.qty,share:_bizPct(v.rev,totalRev),item:v.item})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
+  const channelRows=_bizRankMap(channel,totalRev), taxonRows=_bizRankMap(taxon,totalRev);
+  const group=document.getElementById('concGroup')?.value||'All', tax=document.getElementById('concTaxon')?.value||'All', q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
+  const cityMetaFilter=m=>(group==='All'||m.group===group)&&(tax==='All'||m.taxon===tax)&&(!q||`${m.sku} ${m.skuName}`.toLowerCase().includes(q));
+  const cityInfo=_concCityRanks(cityMetaFilter,revenueMode?totalRev:0);
+  const top5=skuRows.slice(0,5).reduce((s,r)=>s+r.rev,0), topSku=skuRows[0], topChannel=channelRows[0], topTaxon=taxonRows[0], topCity=cityInfo.rows[0];
+  const threshold=Math.max(0,_opsNum(document.getElementById('concThreshold')?.value||20));
+  const dependent=!!topSku&&topSku.share>=threshold;
+  const atRisk=dependent?topSku.rev:0;
+  const metricLabel=revenueMode?'Revenue':'Qty Proxy';
+  if(sum)sum.innerHTML=
+    _opsKpi(`Total ${metricLabel}`,revenueMode?_bizMoney(totalRev):_bizNum(totalRev,0),`${events.length.toLocaleString('en-IN')} transaction lines`)+
+    _opsKpi('Top 5 SKU Contribution',_bizPctText(_bizPct(top5,totalRev)),`${skuRows.length.toLocaleString('en-IN')} active SKUs`)+
+    _opsKpi('Top Channel',topChannel?`${escHtml(topChannel.name)} · ${_bizPctText(topChannel.share)}`:'—',topChannel?(revenueMode?_bizMoney(topChannel.rev):_bizNum(topChannel.rev,0)):'No data')+
+    _opsKpi('Top City (Website/D2C)',topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% overall coverage`:'No city rows')+
+    _opsKpi('Top Taxon',topTaxon?`${escHtml(topTaxon.name)} · ${_bizPctText(topTaxon.share)}`:'—',topTaxon?(revenueMode?_bizMoney(topTaxon.rev):_bizNum(topTaxon.rev,0)):'No data')+
+    _opsKpi('Revenue at Risk',revenueMode?_bizMoney(atRisk):_bizNum(atRisk,0),dependent?`Top SKU above ${threshold}% dependency`:`No SKU above ${threshold}%`);
+  if(alertHost){
+    alertHost.innerHTML=dependent?`<div style="margin:14px 0;padding:14px 16px;border:1px solid #f1b8b3;background:#fff0ef;border-radius:14px;color:#8f1d16;font-weight:800">⚠ Single-SKU Dependency: <button class="sku-link" onclick="openSkuDetails('${String(topSku.name).replace(/'/g,"\\'")}')">${escHtml(topSku.display)}</button> contributes ${_bizPctText(topSku.share)} of selected ${metricLabel.toLowerCase()}. ${revenueMode?`Revenue-at-Risk: ${_bizMoney(topSku.rev)}.`:''}</div>`:`<div style="margin:14px 0;padding:14px 16px;border:1px solid #cbe8d3;background:#effaf2;border-radius:14px;color:#176b36;font-weight:800">✓ No single SKU crosses the selected ${threshold}% dependency threshold.</div>`;
+  }
+  const skuTableRows=skuRows.slice(0,10).map(r=>({...r,name:r.display}));
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable('Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable('City Concentration — Website/D2C',cityInfo.rows,'City',12)}</div>`;
+  _concExportRows=[];
+  skuRows.forEach(r=>_concExportRows.push(['SKU',r.name,r.item?.sku_name||'',r.rev,r.qty,r.share]));
+  channelRows.forEach(r=>_concExportRows.push(['Channel',r.name,'',r.rev,r.qty,r.share]));
+  taxonRows.forEach(r=>_concExportRows.push(['Taxon',r.name,'',r.rev,r.qty,r.share]));
+  cityInfo.rows.forEach(r=>_concExportRows.push(['City',r.name,'',r.rev,r.qty,r.share]));
+}
+function exportConcentrationRisk(){
+  if(!_concExportRows.length)renderConcentrationRisk(); if(!_concExportRows.length){alert('No concentration rows to export');return;}
+  _dlCsv(['Dimension','Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[2],Number(r[3].toFixed(2)),Number(r[4].toFixed(2)),Number(r[5].toFixed(2))]),'sales_concentration_risk');
+}
+
+const _DP_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+function _dpDayIndex(iso){const d=_bizDate(iso);return d?(d.getUTCDay()+6)%7:null;}
+function _dpCalendarCounts(d1,d2){
+  const days=Array(7).fill(0); let weekday=0,weekend=0,start=0,end=0,pay=0,nonpay=0;
+  const a=_bizDate(d1),b=_bizDate(d2); if(!a||!b||b<a)return {days,weekday,weekend,start,end,pay,nonpay};
+  for(let d=new Date(a);d<=b;d.setUTCDate(d.getUTCDate()+1)){
+    const idx=(d.getUTCDay()+6)%7;days[idx]++; if(idx>=5)weekend++;else weekday++;
+    const dom=d.getUTCDate(); if(dom<=10)start++; if(dom>=21)end++; if(dom<=5||dom>=25)pay++;else nonpay++;
+  }
+  return {days,weekday,weekend,start,end,pay,nonpay};
+}
+function _dpUplift(a,b){return b>0?(a/b-1)*100:null;}
+function _dpUpliftText(v){return v===null||!Number.isFinite(v)?'—':`${v>=0?'+':''}${v.toFixed(1)}%`;}
+function _dpBaseEvents(includeDates=true){return _bizEvents().filter(_bizBaseFilter('dp',includeDates));}
+function loadDemandPatterns(){_bizInitFilters('dp');_bizInitDateRange('dpD1','dpD2',180);renderDemandPatterns();}
+function renderDemandPatterns(){
+  const host=document.getElementById('dpContent'),sum=document.getElementById('dpSummary');if(!host)return;
+  const d1=_bizIso(document.getElementById('dpD1')?.value),d2=_bizIso(document.getElementById('dpD2')?.value); const events=_dpBaseEvents(true);
+  const metric=document.getElementById('dpMetric')?.value||'qty'; const value=e=>metric==='revenue'?Math.max(0,e.rev):Math.max(0,e.qty); const metricMoney=metric==='revenue';
+  const cal=_dpCalendarCounts(d1,d2); const dayAgg=_DP_DAYS.map((name,i)=>({name,qty:0,rev:0,lines:0,calendarDays:cal.days[i]}));
+  let weekdayValue=0,weekendValue=0,startValue=0,endValue=0,payValue=0,nonpayValue=0;
+  const skuMap=new Map();
+  events.forEach(e=>{
+    const idx=_dpDayIndex(e.date);if(idx===null)return;const v=value(e);dayAgg[idx].qty+=Math.max(0,e.qty);dayAgg[idx].rev+=Math.max(0,e.rev);dayAgg[idx].lines++;
+    if(idx>=5)weekendValue+=v;else weekdayValue+=v;
+    const dom=Number(e.date.slice(8,10));if(dom<=10)startValue+=v;if(dom>=21)endValue+=v;if(dom<=5||dom>=25)payValue+=v;else nonpayValue+=v;
+    const s=skuMap.get(e.sku)||{item:e.item,totalQty:0,totalRev:0,days:Array(7).fill(0),weekend:0,weekday:0,pay:0,nonpay:0};
+    s.totalQty+=Math.max(0,e.qty);s.totalRev+=Math.max(0,e.rev);s.days[idx]+=Math.max(0,e.qty);if(idx>=5)s.weekend+=Math.max(0,e.qty);else s.weekday+=Math.max(0,e.qty);if(dom<=5||dom>=25)s.pay+=Math.max(0,e.qty);else s.nonpay+=Math.max(0,e.qty);skuMap.set(e.sku,s);
+  });
+  const averages=dayAgg.map((r,i)=>({...r,avg:(metricMoney?r.rev:r.qty)/Math.max(1,r.calendarDays)}));
+  const best=averages.slice().sort((a,b)=>b.avg-a.avg)[0]; const maxAvg=Math.max(0,...averages.map(r=>r.avg));
+  const weekdayAvg=weekdayValue/Math.max(1,cal.weekday),weekendAvg=weekendValue/Math.max(1,cal.weekend),weekendUplift=_dpUplift(weekendAvg,weekdayAvg);
+  const startAvg=startValue/Math.max(1,cal.start),endAvg=endValue/Math.max(1,cal.end),endUplift=_dpUplift(endAvg,startAvg);
+  const payAvg=payValue/Math.max(1,cal.pay),nonpayAvg=nonpayValue/Math.max(1,cal.nonpay),payUplift=_dpUplift(payAvg,nonpayAvg);
+  const fd1=_bizIso(document.getElementById('dpFestD1')?.value),fd2=_bizIso(document.getElementById('dpFestD2')?.value);let festUplift=null,festAvg=0,prevFestAvg=0,festDays=0;
+  if(fd1&&fd2&&(festDays=_bizDaysInclusive(fd1,fd2))>0){
+    const prevEnd=_bizShift(fd1,-1),prevStart=_bizShift(fd1,-festDays);const all=_dpBaseEvents(false);
+    const fVal=all.filter(e=>e.date>=fd1&&e.date<=fd2).reduce((s,e)=>s+value(e),0);const pVal=all.filter(e=>e.date>=prevStart&&e.date<=prevEnd).reduce((s,e)=>s+value(e),0);
+    festAvg=fVal/festDays;prevFestAvg=pVal/festDays;festUplift=_dpUplift(festAvg,prevFestAvg);
+  }
+  const fmtMetric=v=>metricMoney?_bizMoney(v):_bizNum(v,2);
+  if(sum)sum.innerHTML=
+    _opsKpi('Best Sale Day',best?best.name:'—',best?`${fmtMetric(best.avg)} average/day`:'No data')+
+    _opsKpi('Weekend vs Weekday',_dpUpliftText(weekendUplift),`${fmtMetric(weekendAvg)} vs ${fmtMetric(weekdayAvg)} avg/day`)+
+    _opsKpi('Month-End Uplift',_dpUpliftText(endUplift),`${fmtMetric(endAvg)} vs ${fmtMetric(startAvg)} avg/day`)+
+    _opsKpi('Payday Impact',_dpUpliftText(payUplift),`${fmtMetric(payAvg)} vs ${fmtMetric(nonpayAvg)} avg/day`)+
+    _opsKpi('Festival Uplift',festDays?_dpUpliftText(festUplift):'Select dates',festDays?`${fmtMetric(festAvg)} vs ${fmtMetric(prevFestAvg)} avg/day`:'Custom festival period')+
+    _opsKpi('Analysed Demand',fmtMetric(events.reduce((s,e)=>s+value(e),0)),`${_bizDaysInclusive(d1,d2)} calendar days`);
+  const dayRows=averages.map((r,i)=>`<tr><td style="font-weight:800">${r.name}</td><td class="ops-num">${metricMoney?_bizMoney(r.rev):_bizNum(r.qty,0)}</td><td class="ops-num">${fmtMetric(r.avg)}</td><td class="ops-num">${r.calendarDays}</td><td><div style="display:flex;align-items:center;gap:8px">${_bizBar(maxAvg?100*r.avg/maxAvg:0)}<span style="font-size:11px;font-weight:800">${maxAvg?_bizPctText(100*r.avg/maxAvg):'0%'}</span></div></td></tr>`).join('');
+  const skuRows=Array.from(skuMap.entries()).map(([sku,s])=>{
+    const idx=s.days.indexOf(Math.max(...s.days));const weekendDaily=s.weekend/Math.max(1,cal.weekend),weekdayDaily=s.weekday/Math.max(1,cal.weekday),payDaily=s.pay/Math.max(1,cal.pay),nonpayDaily=s.nonpay/Math.max(1,cal.nonpay);
+    return {sku,item:s.item,bestDay:_DP_DAYS[idx]||'—',bestQty:s.days[idx]||0,totalQty:s.totalQty,totalRev:s.totalRev,weekendShare:_bizPct(s.weekend,s.totalQty),weekendUplift:_dpUplift(weekendDaily,weekdayDaily),payUplift:_dpUplift(payDaily,nonpayDaily)};
+  }).filter(r=>r.totalQty>0).sort((a,b)=>b.totalQty-a.totalQty||a.sku.localeCompare(b.sku));
+  const skuBody=skuRows.slice(0,300).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.item?.sku_name))}</button></td><td style="font-weight:850">${r.bestDay}</td><td class="ops-num">${_bizNum(r.bestQty,0)}</td><td class="ops-num">${_bizNum(r.totalQty,0)}</td><td class="ops-num">${_bizMoney(r.totalRev)}</td><td class="ops-num">${_bizPctText(r.weekendShare)}</td><td class="ops-num">${_dpUpliftText(r.payUplift)}</td></tr>`).join('');
+  const periodRows=[['Weekend vs Weekday',weekendAvg,weekdayAvg,weekendUplift],['Month-End vs Month-Start',endAvg,startAvg,endUplift],['Payday Window vs Other Days',payAvg,nonpayAvg,payUplift],['Festival vs Previous Equal Period',festAvg,prevFestAvg,festUplift]].map(r=>`<tr><td style="font-weight:800">${r[0]}</td><td class="ops-num">${fmtMetric(r[1])}</td><td class="ops-num">${fmtMetric(r[2])}</td><td class="ops-num" style="font-weight:900;color:${r[3]===null?'#777':r[3]>=0?'#15803d':'#b3261e'}">${_dpUpliftText(r[3])}</td></tr>`).join('');
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px"><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Monday–Sunday Sale Pattern</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Day</th><th>Total</th><th>Average / Day</th><th>Calendar Days</th><th>Relative Demand</th></tr></thead><tbody>${dayRows}</tbody></table></div></div><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Period Behaviour</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Comparison</th><th>Focus Avg / Day</th><th>Base Avg / Day</th><th>Uplift</th></tr></thead><tbody>${periodRows}</tbody></table></div></div></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Best Sale Day by SKU</div><div class="small-note">Showing ${Math.min(300,skuRows.length).toLocaleString('en-IN')} of ${skuRows.length.toLocaleString('en-IN')} SKUs</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Best Day</th><th>Best-Day Qty</th><th>Total Qty</th><th>Revenue</th><th>Weekend Share</th><th>Payday Uplift</th></tr></thead><tbody>${skuBody||'<tr><td colspan="9" class="ops-empty">No demand pattern rows.</td></tr>'}</tbody></table></div></div>`;
+  _dpExportRows=skuRows;
+}
+function exportDemandPatterns(){
+  if(!_dpExportRows.length)renderDemandPatterns();if(!_dpExportRows.length){alert('No demand-pattern rows to export');return;}
+  _dlCsv(['SKU','SKU Name','Taxon','Product Group','Best Sale Day','Best-Day Qty','Total Qty','Revenue','Weekend Share %','Weekend Uplift %','Payday Uplift %'],_dpExportRows.map(r=>[r.sku,exportSkuName(r.sku,r.item?.sku_name),r.item?.taxon||'',_opsGroup(r.item),r.bestDay,Number(r.bestQty.toFixed(2)),Number(r.totalQty.toFixed(2)),Number(r.totalRev.toFixed(2)),Number(r.weekendShare.toFixed(2)),r.weekendUplift===null?'':Number(r.weekendUplift.toFixed(2)),r.payUplift===null?'':Number(r.payUplift.toFixed(2))]),'demand_pattern_intelligence');
+}
+
+function _olsMatchesMeta(it){
+  const group=document.getElementById('olsGroup')?.value||'All',taxon=document.getElementById('olsTaxon')?.value||'All',q=String(document.getElementById('olsSearch')?.value||'').trim().toLowerCase();
+  if(group!=='All'&&_opsGroup(it)!==group)return false;if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;return true;
+}
+function _olsEntryAllowed(e){
+  const type=document.getElementById('olsType')?.value||'All',channel=document.getElementById('olsChannel')?.value||'All';
+  return (type==='All'||String(e.type||'')===type)&&(channel==='All'||String(e.channel||'')===channel);
+}
+function _buildOosLostRows(){
+  const end=_bizIso(todayISO)||new Date().toISOString().slice(0,10),win=Math.max(1,parseInt(document.getElementById('olsWindow')?.value||'90')),cap=Math.max(1,parseInt(document.getElementById('olsCap')?.value||'60'));
+  const target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target)); const rows=[];
+  (master||[]).forEach(it=>{
+    if(!_olsMatchesMeta(it)||Math.max(0,_opsNum(it.inv_stock))>0)return;
+    const entries=(it.sales_entries||[]).filter(e=>{const d=_bizIso(e.order_date||e.date);return d&&d<=end&&_olsEntryAllowed(e);});
+    const positive=entries.filter(e=>_opsNum(e.qty)>0).sort((a,b)=>String(a.order_date||a.date).localeCompare(String(b.order_date||b.date)));
+    if(!positive.length)return;
+    const last=positive[positive.length-1],lastSale=_bizIso(last.order_date||last.date); if(!lastSale)return;
+    const oosDays=Math.max(1,Math.min(cap,_bizDaysInclusive(_bizShift(lastSale,1),end)||1));
+    const baseEnd=lastSale,baseStart=_bizShift(baseEnd,-win+1);
+    const baseline=entries.filter(e=>{const d=_bizIso(e.order_date||e.date);return d>=baseStart&&d<=baseEnd;});
+    const qty=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0),rev=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0); const drr=qty/win;if(drr<=0)return;
+    const avgSp=qty>0&&rev>0?rev/qty:Math.max(0,_opsNum(it.last_selling_price)||_opsNum(it.avg_selling_price)||_opsNum(it.website_selling_price)||_opsNum(it.mrp));
+    const chMap=new Map();baseline.forEach(e=>{const name=(String(e.channel||'')==='Ecom'&&e.sub_channel)?String(e.sub_channel):String(e.channel||e.type||'Other');chMap.set(name,(chMap.get(name)||0)+Math.max(0,_opsNum(e.qty)));});
+    const affected=Array.from(chMap.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'; const lostQty=drr*oosDays,lostRevenue=lostQty*avgSp;
+    rows.push({item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),lastSale,oosDays,window:win,baselineQty:qty,drr,avgSp,lostQty,lostRevenue,affected,targetPct:target>0?lostRevenue/target*100:null,wip:Math.max(0,_opsNum(it.inv_wip))});
+  });
+  _olsRows=rows.sort((a,b)=>b.lostRevenue-a.lostRevenue||b.lostQty-a.lostQty||a.sku.localeCompare(b.sku));return _olsRows;
+}
+function loadOosLostSales(fresh){
+  _bizInitFilters('ols');
+  return _loadOpsSupport(!!fresh).catch(()=>_opsSupport).then(()=>{_olsRows=[];renderOosLostSales();});
+}
+function renderOosLostSales(){
+  const host=document.getElementById('olsContent'),sum=document.getElementById('olsSummary');if(!host)return;const minDrr=Math.max(0,_opsNum(document.getElementById('olsMinDrr')?.value||0));const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
+  const lostQty=rows.reduce((s,r)=>s+r.lostQty,0),lostRev=rows.reduce((s,r)=>s+r.lostRevenue,0),avgDays=rows.length?rows.reduce((s,r)=>s+r.oosDays,0)/rows.length:0,target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target));
+  if(sum)sum.innerHTML=_opsKpi('Current OOS SKUs',rows.length.toLocaleString('en-IN'),'With positive pre-OOS demand')+_opsKpi('Estimated Lost Qty',_bizNum(lostQty,0),'Average daily sale × OOS days')+_opsKpi('Estimated Lost Revenue',_bizMoney(lostRev),'Average selling price basis')+_opsKpi('Average OOS Days',avgDays.toFixed(1),'Estimated from last positive sale')+_opsKpi('Potential Target Support',_bizMoney(lostRev),target>0?`${_bizPctText(lostRev/target*100)} of current monthly target`:'Current target unavailable')+_opsKpi('Inv WIP Support',Math.round(rows.reduce((s,r)=>s+r.wip,0)).toLocaleString('en-IN'),'Incoming stock shown separately');
+  const body=rows.slice(0,500).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td>${escHtml(r.affected)}</td><td class="ops-num">${escHtml(r.lastSale)}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${r.oosDays}</td><td class="ops-num">${_bizNum(r.baselineQty,0)}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${_bizMoney(r.avgSp)}</td><td class="ops-num" style="font-weight:900">${_bizNum(r.lostQty,1)}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${_bizMoney(r.lostRevenue)}</td><td class="ops-num">${r.targetPct===null?'—':_bizPctText(r.targetPct)}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No currently OOS SKU matches the selected demand filters.</td></tr>'}</tbody></table>${rows.length>500?`<div class="ops-note">Showing first 500 of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  _olsRows=rows;
+}
+function exportOosLostSales(){
+  const minDrr=Math.max(0,_opsNum(document.getElementById('olsMinDrr')?.value||0));
+  const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
+  if(!rows.length){alert('No OOS lost-sales rows to export');return;}
+  _dlCsv(['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Baseline Sold Qty','Average Daily Sale','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number(r.drr.toFixed(3)),Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),0,Math.round(r.wip)]),'oos_lost_sales_revenue');
+}
+
+window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;
+window.loadDemandPatterns=loadDemandPatterns;window.renderDemandPatterns=renderDemandPatterns;window.exportDemandPatterns=exportDemandPatterns;
+window.loadOosLostSales=loadOosLostSales;window.renderOosLostSales=renderOosLostSales;window.exportOosLostSales=exportOosLostSales;
 
 /* ===== 3D tilt (KPIs + home cards only — light) ===== */
 (function(){
