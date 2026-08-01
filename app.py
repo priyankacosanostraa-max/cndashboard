@@ -6268,7 +6268,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="dpSummary" class="ops-kpis"></div>
     <div id="dpContent"></div>
-    <div class="ops-note">Weekend = Saturday–Sunday. Month-start = day 1–10; month-end = day 21–month-end. Payday window = day 25–month-end plus day 1–5. Festival uplift compares the custom festival range with the immediately preceding equal-length period. Average/day uses all calendar days, including zero-sale days.</div>
+    <div class="ops-note">Weekend = Saturday–Sunday. Month-start = day 1–10; month-end = day 21–month-end. Payday window = day 25–month-end plus day 1–5. Festival uplift compares the custom festival range with the immediately preceding equal-length period. Average/day uses all calendar days, including zero-sale days. Demand uses valid Order Date first and automatically falls back to Dispatch Date when Order Date is blank; the first-open range ends on the latest available transaction date.</div>
   </div>
 
 
@@ -6290,12 +6290,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="olsChannel" onchange="renderOosLostSales()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Pre-OOS Sales Window</label><select class="fs" id="olsWindow" onchange="renderOosLostSales()"><option value="30">30 Days</option><option value="60">60 Days</option><option value="90" selected>90 Days</option><option value="180">180 Days</option></select></div>
       <div class="fc"><label class="fl">OOS Days Cap</label><select class="fs" id="olsCap" onchange="renderOosLostSales()"><option value="30">Maximum 30 Days</option><option value="60" selected>Maximum 60 Days</option><option value="90">Maximum 90 Days</option><option value="180">Maximum 180 Days</option></select></div>
-      <div class="fc"><label class="fl">Minimum Daily Sale</label><input class="fi" id="olsMinDrr" type="number" min="0" step="0.01" value="0.05" oninput="renderOosLostSales()"></div>
+      <div class="fc"><label class="fl">Minimum Daily Sale</label><input class="fi" id="olsMinDrr" type="number" min="0" step="0.01" value="0" oninput="renderOosLostSales()"></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="olsSearch" placeholder="Search SKU / product…" oninput="renderOosLostSales()"></div>
     </div>
     <div id="olsSummary" class="ops-kpis"></div>
     <div id="olsContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Because the Inventory sheet contains the current stock snapshot rather than daily historical stock, Estimated OOS Days uses the number of days since the SKU’s last positive sale, capped by the selected limit. Average Daily Sale is calculated from the selected pre-OOS window ending on that last-sale date. Potential Target Support equals estimated lost revenue; its target percentage uses the current total monthly target when available.</div>
+    <div class="ops-note">Every SKU with current Inv Stock at 0 is listed, even when detailed dated sales are unavailable. Average Daily Sale first uses filtered dated transactions; when Type and Channel are both All, it automatically falls back to the SKU’s 30/90/180/365-day sales summaries. Rows without usable history remain visible with zero estimated loss and a clear Demand Basis. Estimated OOS Days is capped by the selected limit. Potential Target Support equals estimated lost revenue; its target percentage uses the current total monthly target when available.</div>
   </div>
 
 
@@ -14273,8 +14273,38 @@ let _dpExportRows = [];
 let _olsRows = [];
 
 function _bizIso(v){
-  const s = String(v || '').slice(0,10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : '';
+  // Sales sheets can contain ISO dates, pandas timestamps, Indian DD/MM/YYYY
+  // values, or placeholders such as N/A. Convert every supported form to one
+  // comparable YYYY-MM-DD value so demand-pattern filters do not silently
+  // discard valid transaction rows.
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString().slice(0,10);
+  const raw = String(v == null ? '' : v).trim();
+  if (!raw || /^(?:n\/?a|nan|null|none|undefined|-)$/i.test(raw)) return '';
+
+  let m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if (m){
+    const y=Number(m[1]), mo=Number(m[2]), d=Number(m[3]);
+    const dt=new Date(Date.UTC(y,mo-1,d));
+    if(dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo-1&&dt.getUTCDate()===d)
+      return `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+
+  // Indian source sheets are day-first whenever the year is at the end.
+  m = raw.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);
+  if (m){
+    const d=Number(m[1]), mo=Number(m[2]), y=Number(m[3]);
+    const dt=new Date(Date.UTC(y,mo-1,d));
+    if(dt.getUTCFullYear()===y&&dt.getUTCMonth()===mo-1&&dt.getUTCDate()===d)
+      return `${String(y).padStart(4,'0')}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  }
+  return '';
+}
+function _bizEntryDate(e){
+  // Prefer Order Date when it is actually valid. "N/A" is truthy in
+  // JavaScript, so using e.order_date || e.date previously hid every row whose
+  // Order Date was blank even though Dispatch Date was available.
+  return _bizIso(e && e.order_date) || _bizIso(e && e.date) ||
+         _bizIso(e && e.dispatch_date) || _bizIso(e && e.orderDate);
 }
 function _bizDate(iso){
   const s = _bizIso(iso); if(!s) return null;
@@ -14326,7 +14356,7 @@ function _bizEvents(){
       group:_opsGroup(it), image:String(it.image_url||'')
     };
     (it.sales_entries||[]).forEach(e=>{
-      const date=_bizIso(e.order_date||e.date); if(!date)return;
+      const date=_bizEntryDate(e); if(!date)return;
       out.push({...base,date,qty:_opsNum(e.qty),rev:_opsNum(e.rev),ret:_opsNum(e.ret),sp:_opsNum(e.sp),type:String(e.type||''),channel:String(e.channel||''),subChannel:String(e.sub_channel||'')});
     });
   });
@@ -14372,7 +14402,7 @@ function _concCityRanks(filterMeta,totalRevenue){
     const meta={group:_opsGroup(it),taxon:String(it.taxon||'General'),sku:String(it.sku||''),skuName:String(it.sku_name||'')};
     if(!filterMeta(meta))return;
     const webSales=(it.sales_entries||[]).filter(e=>{
-      const date=_bizIso(e.order_date||e.date); if(!date)return false;
+      const date=_bizEntryDate(e); if(!date)return false;
       if(d1&&date<d1)return false; if(d2&&date>d2)return false;
       return /website|online/i.test(String(e.type||''))||/d2c/i.test(String(e.channel||''));
     });
@@ -14393,54 +14423,151 @@ function _concCityRanks(filterMeta,totalRevenue){
   const rows=Array.from(city.entries()).map(([name,v])=>({name,...v,share:_bizPct(v.rev,total)})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
   return {rows,total,coverage:totalRevenue>0?_bizPct(total,totalRevenue):0};
 }
+function _concRangeDays(){
+  const d1=_bizIso(document.getElementById('concD1')?.value);
+  const d2=_bizIso(document.getElementById('concD2')?.value);
+  return Math.max(1,_bizDaysInclusive(d1,d2)||180);
+}
+function _concSummaryQty(it,days){
+  // Inventory payload already carries recent rolling sales totals. Use the
+  // closest available window and scale its daily rate to the selected range.
+  // This keeps concentration useful when transaction rows have blank dates or
+  // the employee-safe payload has only summary demand for a SKU.
+  const windows=[
+    [7,_opsNum(it.qty_7d)],[15,_opsNum(it.qty_15d)],[30,_opsNum(it.qty_1m)],
+    [90,_opsNum(it.qty_3m)],[180,_opsNum(it.qty_6m)],[365,_opsNum(it.qty_1y)]
+  ];
+  let chosen=windows[windows.length-1];
+  for(const w of windows){ if(days<=w[0]){chosen=w;break;} }
+  const baseDays=Math.max(1,chosen[0]);
+  const baseQty=Math.max(0,chosen[1]);
+  if(baseQty>0)return baseQty*(Math.min(days,baseDays)/baseDays);
+  // If the closest bucket is empty, use the first longer non-zero bucket.
+  for(const w of windows){
+    if(w[0]>=days&&w[1]>0)return w[1]*(Math.min(days,w[0])/w[0]);
+  }
+  // Last resort for long ranges: use annual velocity or all-time quantity.
+  if(_opsNum(it.qty_1y)>0)return _opsNum(it.qty_1y)*(Math.min(days,365)/365);
+  return Math.max(0,_opsNum(it.final_qty));
+}
+function _concItemFilter(it){
+  const group=document.getElementById('concGroup')?.value||'All';
+  const taxon=document.getElementById('concTaxon')?.value||'All';
+  const q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
+  if(group!=='All'&&_opsGroup(it)!==group)return false;
+  if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;
+  if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;
+  return true;
+}
+function _concTypeChannelShare(it,typeSel,channelSel){
+  if(typeSel==='All'&&channelSel==='All')return 1;
+  const ents=it.sales_entries||[];
+  let all=0,matched=0;
+  ents.forEach(e=>{
+    const q=Math.max(0,_opsNum(e.qty)); if(q<=0)return;
+    all+=q;
+    if(typeSel!=='All'&&String(e.type||'')!==typeSel)return;
+    if(channelSel!=='All'&&String(e.channel||'')!==channelSel)return;
+    matched+=q;
+  });
+  if(all>0)return Math.max(0,Math.min(1,matched/all));
+  // No transaction split available: a specifically selected filter cannot be
+  // apportioned safely, so keep the SKU only when its known best channel fits.
+  if(channelSel!=='All')return String(it.best_channel||'')===channelSel?1:0;
+  return typeSel==='All'?1:0;
+}
 function loadConcentrationRisk(){
-  _bizInitFilters('conc'); _bizInitDateRange('concD1','concD2',180); renderConcentrationRisk();
+  _bizInitFilters('conc');
+  const fromEl=document.getElementById('concD1'),toEl=document.getElementById('concD2');
+  const datesWereBlank=!(fromEl?.value||toEl?.value);
+  _bizInitDateRange('concD1','concD2',180);
+  if(datesWereBlank){
+    const latest=_bizEvents().reduce((mx,e)=>e.date>mx?e.date:mx,'');
+    if(latest&&fromEl&&toEl){toEl.value=latest;fromEl.value=_bizShift(latest,-179);}
+  }
+  renderConcentrationRisk();
 }
 function renderConcentrationRisk(){
-  const host=document.getElementById('concContent'), sum=document.getElementById('concSummary'), alertHost=document.getElementById('concAlert'); if(!host)return;
+  const host=document.getElementById('concContent'),sum=document.getElementById('concSummary'),alertHost=document.getElementById('concAlert'); if(!host)return;
   const predicate=_bizBaseFilter('conc',true);
   const events=_bizEvents().filter(predicate);
-  const sku=new Map(), channel=new Map(), taxon=new Map(); let totalRev=0,totalQty=0;
+  const sku=new Map(),channel=new Map(),taxon=new Map(); let totalRev=0,totalQty=0;
   events.forEach(e=>{
-    const rev=Math.max(0,e.rev), qty=Math.max(0,e.qty); totalRev+=rev; totalQty+=qty;
-    const s=sku.get(e.sku)||{rev:0,qty:0,item:e.item}; s.rev+=rev;s.qty+=qty;sku.set(e.sku,s);
-    const ch=e.channel||'Other'; const c=channel.get(ch)||{rev:0,qty:0};c.rev+=rev;c.qty+=qty;channel.set(ch,c);
-    const tx=e.taxon||'General'; const t=taxon.get(tx)||{rev:0,qty:0};t.rev+=rev;t.qty+=qty;taxon.set(tx,t);
+    const rev=Math.max(0,e.rev),qty=Math.max(0,e.qty); totalRev+=rev; totalQty+=qty;
+    const s=sku.get(e.sku)||{rev:0,qty:0,item:e.item};s.rev+=rev;s.qty+=qty;sku.set(e.sku,s);
+    const ch=e.channel||'Other';const c=channel.get(ch)||{rev:0,qty:0};c.rev+=rev;c.qty+=qty;channel.set(ch,c);
+    const tx=e.taxon||'General';const t=taxon.get(tx)||{rev:0,qty:0};t.rev+=rev;t.qty+=qty;taxon.set(tx,t);
   });
-  const revenueMode=totalRev>0;
+
+  const isEmployee=String(LOGIN_ROLE||'').toLowerCase()==='employee';
+  let fallbackUsed=false;
+  let fallbackSkuCount=0;
+  const selectedType=document.getElementById('concType')?.value||'All';
+  const selectedChannel=document.getElementById('concChannel')?.value||'All';
+  const rangeDays=_concRangeDays();
+
+  // Main fix: some source rows have no usable transaction date although their
+  // rolling 7/15/30/90/180/365-day quantities are populated. Previously that
+  // made the whole tab show zero. Build a recent-window concentration estimate
+  // from those SKU summaries whenever the detailed result is empty.
+  if(totalQty<=0){
+    fallbackUsed=true;
+    (master||[]).forEach(it=>{
+      if(!_concItemFilter(it))return;
+      const share=_concTypeChannelShare(it,selectedType,selectedChannel);
+      if(share<=0)return;
+      const qty=Math.max(0,_concSummaryQty(it,rangeDays)*share);
+      if(qty<=0)return;
+      const unitPrice=Math.max(0,_opsNum(it.avg_selling_price)||_opsNum(it.last_selling_price)||_opsNum(it.website_selling_price)||_opsNum(it.mrp));
+      const value=isEmployee?qty:(unitPrice>0?qty*unitPrice:qty);
+      const key=String(it.sku||'').trim();if(!key)return;
+      sku.set(key,{rev:value,qty,item:it});
+      const tx=String(it.taxon||'General')||'General';const t=taxon.get(tx)||{rev:0,qty:0};t.rev+=value;t.qty+=qty;taxon.set(tx,t);
+      const ch=selectedChannel!=='All'?selectedChannel:(String(it.best_channel||'').trim()||'Unclassified');
+      const c=channel.get(ch)||{rev:0,qty:0};c.rev+=value;c.qty+=qty;channel.set(ch,c);
+      totalRev+=value;totalQty+=qty;fallbackSkuCount++;
+    });
+  }
+
+  let revenueMode=!isEmployee&&totalRev>0;
+  // Admin data may also have quantity but no selling price. In that case use a
+  // clearly labelled quantity proxy instead of leaving concentration blank.
   if(!revenueMode&&totalQty>0){
-    // Employee role hides revenue. Use quantity as a clearly labelled proxy so the tab remains operational.
     totalRev=totalQty;
-    sku.forEach(v=>v.rev=v.qty); channel.forEach(v=>v.rev=v.qty); taxon.forEach(v=>v.rev=v.qty);
+    sku.forEach(v=>v.rev=v.qty);channel.forEach(v=>v.rev=v.qty);taxon.forEach(v=>v.rev=v.qty);
   }
   const skuRows=Array.from(sku.entries()).map(([name,v])=>({name,display:skuLabel(name,v.item?.sku_name),rev:v.rev,qty:v.qty,share:_bizPct(v.rev,totalRev),item:v.item})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
-  const channelRows=_bizRankMap(channel,totalRev), taxonRows=_bizRankMap(taxon,totalRev);
-  const group=document.getElementById('concGroup')?.value||'All', tax=document.getElementById('concTaxon')?.value||'All', q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
+  const channelRows=_bizRankMap(channel,totalRev),taxonRows=_bizRankMap(taxon,totalRev);
+  const group=document.getElementById('concGroup')?.value||'All',tax=document.getElementById('concTaxon')?.value||'All',q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
   const cityMetaFilter=m=>(group==='All'||m.group===group)&&(tax==='All'||m.taxon===tax)&&(!q||`${m.sku} ${m.skuName}`.toLowerCase().includes(q));
   const cityInfo=_concCityRanks(cityMetaFilter,revenueMode?totalRev:0);
-  const top5=skuRows.slice(0,5).reduce((s,r)=>s+r.rev,0), topSku=skuRows[0], topChannel=channelRows[0], topTaxon=taxonRows[0], topCity=cityInfo.rows[0];
+  const top5=skuRows.slice(0,5).reduce((s,r)=>s+r.rev,0),topSku=skuRows[0],topChannel=channelRows[0],topTaxon=taxonRows[0],topCity=cityInfo.rows[0];
   const threshold=Math.max(0,_opsNum(document.getElementById('concThreshold')?.value||20));
   const dependent=!!topSku&&topSku.share>=threshold;
   const atRisk=dependent?topSku.rev:0;
-  const metricLabel=revenueMode?'Revenue':'Qty Proxy';
+  const metricLabel=revenueMode?(fallbackUsed?'Estimated Revenue':'Revenue'):'Qty Proxy';
+  const basisText=fallbackUsed?`${fallbackSkuCount.toLocaleString('en-IN')} SKUs · ${rangeDays}-day rolling-summary estimate`:`${events.length.toLocaleString('en-IN')} dated transaction lines`;
   if(sum)sum.innerHTML=
-    _opsKpi(`Total ${metricLabel}`,revenueMode?_bizMoney(totalRev):_bizNum(totalRev,0),`${events.length.toLocaleString('en-IN')} transaction lines`)+
+    _opsKpi(`Total ${metricLabel}`,revenueMode?_bizMoney(totalRev):_bizNum(totalRev,0),basisText)+
     _opsKpi('Top 5 SKU Contribution',_bizPctText(_bizPct(top5,totalRev)),`${skuRows.length.toLocaleString('en-IN')} active SKUs`)+
     _opsKpi('Top Channel',topChannel?`${escHtml(topChannel.name)} · ${_bizPctText(topChannel.share)}`:'—',topChannel?(revenueMode?_bizMoney(topChannel.rev):_bizNum(topChannel.rev,0)):'No data')+
     _opsKpi('Top City (Website/D2C)',topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% overall coverage`:'No city rows')+
     _opsKpi('Top Taxon',topTaxon?`${escHtml(topTaxon.name)} · ${_bizPctText(topTaxon.share)}`:'—',topTaxon?(revenueMode?_bizMoney(topTaxon.rev):_bizNum(topTaxon.rev,0)):'No data')+
     _opsKpi('Revenue at Risk',revenueMode?_bizMoney(atRisk):_bizNum(atRisk,0),dependent?`Top SKU above ${threshold}% dependency`:`No SKU above ${threshold}%`);
   if(alertHost){
-    alertHost.innerHTML=dependent?`<div style="margin:14px 0;padding:14px 16px;border:1px solid #f1b8b3;background:#fff0ef;border-radius:14px;color:#8f1d16;font-weight:800">⚠ Single-SKU Dependency: <button class="sku-link" onclick="openSkuDetails('${String(topSku.name).replace(/'/g,"\\'")}')">${escHtml(topSku.display)}</button> contributes ${_bizPctText(topSku.share)} of selected ${metricLabel.toLowerCase()}. ${revenueMode?`Revenue-at-Risk: ${_bizMoney(topSku.rev)}.`:''}</div>`:`<div style="margin:14px 0;padding:14px 16px;border:1px solid #cbe8d3;background:#effaf2;border-radius:14px;color:#176b36;font-weight:800">✓ No single SKU crosses the selected ${threshold}% dependency threshold.</div>`;
+    const basis=fallbackUsed?`<div style="margin:14px 0;padding:12px 15px;border:1px solid #ead9a2;background:#fffaf0;border-radius:14px;color:#6f5410;font-weight:750">ℹ Dated transaction rows were unavailable for this selection, so concentration is estimated from each SKU's closest rolling sales window. Type/Channel filters use their available historical sales mix.</div>`:'';
+    const dep=dependent?`<div style="margin:14px 0;padding:14px 16px;border:1px solid #f1b8b3;background:#fff0ef;border-radius:14px;color:#8f1d16;font-weight:800">⚠ Single-SKU Dependency: <button class="sku-link" onclick="openSkuDetails('${String(topSku.name).replace(/'/g,"\\'")}')">${escHtml(topSku.display)}</button> contributes ${_bizPctText(topSku.share)} of selected ${metricLabel.toLowerCase()}. ${revenueMode?`Revenue-at-Risk: ${_bizMoney(topSku.rev)}.`:''}</div>`:`<div style="margin:14px 0;padding:14px 16px;border:1px solid #cbe8d3;background:#effaf2;border-radius:14px;color:#176b36;font-weight:800">✓ No single SKU crosses the selected ${threshold}% dependency threshold.</div>`;
+    alertHost.innerHTML=basis+dep;
   }
   const skuTableRows=skuRows.slice(0,10).map(r=>({...r,name:r.display}));
-  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable('Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable('City Concentration — Website/D2C',cityInfo.rows,'City',12)}</div>`;
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable(fallbackUsed?'Channel Concentration — Estimated Mix':'Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable('City Concentration — Website/D2C',cityInfo.rows,'City',12)}</div>`;
   _concExportRows=[];
   skuRows.forEach(r=>_concExportRows.push(['SKU',r.name,r.item?.sku_name||'',r.rev,r.qty,r.share]));
   channelRows.forEach(r=>_concExportRows.push(['Channel',r.name,'',r.rev,r.qty,r.share]));
   taxonRows.forEach(r=>_concExportRows.push(['Taxon',r.name,'',r.rev,r.qty,r.share]));
   cityInfo.rows.forEach(r=>_concExportRows.push(['City',r.name,'',r.rev,r.qty,r.share]));
 }
+
 function exportConcentrationRisk(){
   if(!_concExportRows.length)renderConcentrationRisk(); if(!_concExportRows.length){alert('No concentration rows to export');return;}
   _dlCsv(['Dimension','Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[2],Number(r[3].toFixed(2)),Number(r[4].toFixed(2)),Number(r[5].toFixed(2))]),'sales_concentration_risk');
@@ -14460,12 +14587,44 @@ function _dpCalendarCounts(d1,d2){
 function _dpUplift(a,b){return b>0?(a/b-1)*100:null;}
 function _dpUpliftText(v){return v===null||!Number.isFinite(v)?'—':`${v>=0?'+':''}${v.toFixed(1)}%`;}
 function _dpBaseEvents(includeDates=true){return _bizEvents().filter(_bizBaseFilter('dp',includeDates));}
-function loadDemandPatterns(){_bizInitFilters('dp');_bizInitDateRange('dpD1','dpD2',180);renderDemandPatterns();}
+function loadDemandPatterns(){
+  _bizInitFilters('dp');
+  const fromEl=document.getElementById('dpD1'),toEl=document.getElementById('dpD2');
+  const datesWereBlank=!(fromEl?.value||toEl?.value);
+  _bizInitDateRange('dpD1','dpD2',180);
+
+  // On first open, anchor the default range to the latest valid sale date.
+  // Manual date selections are never overwritten.
+  if(datesWereBlank){
+    const allEvents=_bizEvents();
+    const latest=allEvents.reduce((mx,e)=>e.date>mx?e.date:mx,'');
+    if(latest&&toEl&&fromEl){
+      toEl.value=latest;
+      fromEl.value=_bizShift(latest,-179);
+    }
+  }
+  renderDemandPatterns();
+}
 function renderDemandPatterns(){
   const host=document.getElementById('dpContent'),sum=document.getElementById('dpSummary');if(!host)return;
   const d1=_bizIso(document.getElementById('dpD1')?.value),d2=_bizIso(document.getElementById('dpD2')?.value); const events=_dpBaseEvents(true);
   const metric=document.getElementById('dpMetric')?.value||'qty'; const value=e=>metric==='revenue'?Math.max(0,e.rev):Math.max(0,e.qty); const metricMoney=metric==='revenue';
   const cal=_dpCalendarCounts(d1,d2); const dayAgg=_DP_DAYS.map((name,i)=>({name,qty:0,rev:0,lines:0,calendarDays:cal.days[i]}));
+  if(!events.length){
+    if(sum)sum.innerHTML=
+      _opsKpi('Best Sale Day','—','No matching transactions')+
+      _opsKpi('Weekend vs Weekday','—','No matching transactions')+
+      _opsKpi('Month-End Uplift','—','No matching transactions')+
+      _opsKpi('Payday Impact','—','No matching transactions')+
+      _opsKpi('Festival Uplift','—','Select a valid festival period')+
+      _opsKpi('Analysed Demand','0',`${_bizDaysInclusive(d1,d2)} calendar days`);
+    const allDated=_bizEvents();
+    const earliest=allDated.reduce((mn,e)=>!mn||e.date<mn?e.date:mn,'');
+    const latest=allDated.reduce((mx,e)=>e.date>mx?e.date:mx,'');
+    host.innerHTML=`<div class="ops-empty" style="padding:34px 20px"><b>No sales transactions match the selected filters.</b><br><span style="display:inline-block;margin-top:8px">${allDated.length?`Available dated sales run from ${escHtml(earliest)} to ${escHtml(latest)}. Change the date, Type, Channel, Taxon or SKU filter.`:'No valid dated sales rows were found in the loaded data.'}</span></div>`;
+    _dpExportRows=[];
+    return;
+  }
   let weekdayValue=0,weekendValue=0,startValue=0,endValue=0,payValue=0,nonpayValue=0;
   const skuMap=new Map();
   events.forEach(e=>{
@@ -14511,49 +14670,181 @@ function exportDemandPatterns(){
 
 function _olsMatchesMeta(it){
   const group=document.getElementById('olsGroup')?.value||'All',taxon=document.getElementById('olsTaxon')?.value||'All',q=String(document.getElementById('olsSearch')?.value||'').trim().toLowerCase();
-  if(group!=='All'&&_opsGroup(it)!==group)return false;if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;return true;
+  if(group!=='All'&&_opsGroup(it)!==group)return false;
+  if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;
+  if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;
+  return true;
 }
 function _olsEntryAllowed(e){
   const type=document.getElementById('olsType')?.value||'All',channel=document.getElementById('olsChannel')?.value||'All';
   return (type==='All'||String(e.type||'')===type)&&(channel==='All'||String(e.channel||'')===channel);
 }
-function _buildOosLostRows(){
-  const end=_bizIso(todayISO)||new Date().toISOString().slice(0,10),win=Math.max(1,parseInt(document.getElementById('olsWindow')?.value||'90')),cap=Math.max(1,parseInt(document.getElementById('olsCap')?.value||'60'));
-  const target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target)); const rows=[];
-  (master||[]).forEach(it=>{
-    if(!_olsMatchesMeta(it)||Math.max(0,_opsNum(it.inv_stock))>0)return;
-    const entries=(it.sales_entries||[]).filter(e=>{const d=_bizIso(e.order_date||e.date);return d&&d<=end&&_olsEntryAllowed(e);});
-    const positive=entries.filter(e=>_opsNum(e.qty)>0).sort((a,b)=>String(a.order_date||a.date).localeCompare(String(b.order_date||b.date)));
-    if(!positive.length)return;
-    const last=positive[positive.length-1],lastSale=_bizIso(last.order_date||last.date); if(!lastSale)return;
-    const oosDays=Math.max(1,Math.min(cap,_bizDaysInclusive(_bizShift(lastSale,1),end)||1));
-    const baseEnd=lastSale,baseStart=_bizShift(baseEnd,-win+1);
-    const baseline=entries.filter(e=>{const d=_bizIso(e.order_date||e.date);return d>=baseStart&&d<=baseEnd;});
-    const qty=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0),rev=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0); const drr=qty/win;if(drr<=0)return;
-    const avgSp=qty>0&&rev>0?rev/qty:Math.max(0,_opsNum(it.last_selling_price)||_opsNum(it.avg_selling_price)||_opsNum(it.website_selling_price)||_opsNum(it.mrp));
-    const chMap=new Map();baseline.forEach(e=>{const name=(String(e.channel||'')==='Ecom'&&e.sub_channel)?String(e.sub_channel):String(e.channel||e.type||'Other');chMap.set(name,(chMap.get(name)||0)+Math.max(0,_opsNum(e.qty)));});
-    const affected=Array.from(chMap.entries()).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—'; const lostQty=drr*oosDays,lostRevenue=lostQty*avgSp;
-    rows.push({item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),lastSale,oosDays,window:win,baselineQty:qty,drr,avgSp,lostQty,lostRevenue,affected,targetPct:target>0?lostRevenue/target*100:null,wip:Math.max(0,_opsNum(it.inv_wip))});
+function _olsFiltersAreAll(){
+  return (document.getElementById('olsType')?.value||'All')==='All'&&
+         (document.getElementById('olsChannel')?.value||'All')==='All';
+}
+function _olsAggregateDemand(it, win){
+  // Fallback for deployments/roles where detailed dated rows are incomplete.
+  // We keep the rate denominator tied to the source summary period so the
+  // estimated velocity is not overstated when a 60-day UI window uses a 90-day summary.
+  const q30=Math.max(0,_opsNum(it&&it.qty_1m));
+  const q90=Math.max(0,_opsNum(it&&it.qty_3m));
+  const q180=Math.max(0,_opsNum(it&&it.qty_6m));
+  const q365=Math.max(0,_opsNum(it&&it.qty_1y));
+  const choices=[];
+  if(win<=30) choices.push([q30,30,'30-day SKU summary'],[q90,90,'90-day SKU summary'],[q180,180,'180-day SKU summary'],[q365,365,'365-day SKU summary']);
+  else if(win<=60) choices.push([q90,90,'90-day SKU summary'],[q30,30,'30-day SKU summary'],[q180,180,'180-day SKU summary'],[q365,365,'365-day SKU summary']);
+  else if(win<=90) choices.push([q90,90,'90-day SKU summary'],[q180,180,'180-day SKU summary'],[q30,30,'30-day SKU summary'],[q365,365,'365-day SKU summary']);
+  else choices.push([q180,180,'180-day SKU summary'],[q365,365,'365-day SKU summary'],[q90,90,'90-day SKU summary'],[q30,30,'30-day SKU summary']);
+  for(const [qty,days,basis] of choices){
+    if(qty>0){
+      const drr=qty/days;
+      return {baselineQty:drr*win,drr,basis,sourceDays:days};
+    }
+  }
+  const total=Math.max(0,_opsNum(it&&it.final_qty));
+  const first=_bizIso(it&&it.first_dispatch_date),last=_bizIso(it&&it.last_dispatch_date);
+  const span=first&&last?_bizDaysInclusive(first,last):0;
+  if(total>0&&span>0){
+    const sourceDays=Math.max(1,Math.min(365,span));
+    const drr=total/sourceDays;
+    return {baselineQty:drr*win,drr,basis:'Lifetime sales fallback',sourceDays};
+  }
+  return {baselineQty:0,drr:0,basis:'No usable sale history',sourceDays:win};
+}
+function _olsAffectedChannel(entries,it){
+  const chMap=new Map();
+  (entries||[]).forEach(e=>{
+    const qty=Math.max(0,_opsNum(e&&e.qty)); if(qty<=0)return;
+    const name=(String(e.channel||'')==='Ecom'&&e.sub_channel)?String(e.sub_channel):String(e.channel||e.type||'Other');
+    chMap.set(name,(chMap.get(name)||0)+qty);
   });
-  _olsRows=rows.sort((a,b)=>b.lostRevenue-a.lostRevenue||b.lostQty-a.lostQty||a.sku.localeCompare(b.sku));return _olsRows;
+  const ranked=Array.from(chMap.entries()).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  return ranked[0]?.[0]||String(it&&it.best_channel||'No sale history');
+}
+function _buildOosLostRows(){
+  const end=_bizIso(todayISO)||new Date().toISOString().slice(0,10);
+  const win=Math.max(1,parseInt(document.getElementById('olsWindow')?.value||'90'));
+  const cap=Math.max(1,parseInt(document.getElementById('olsCap')?.value||'60'));
+  const target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target));
+  const allowAggregate=_olsFiltersAreAll();
+  const rows=[];
+  (master||[]).forEach(it=>{
+    // Inv Stock is the current sellable stock snapshot. WIP is incoming and is
+    // intentionally shown separately instead of treating an OOS SKU as in stock.
+    const stock=Math.max(0,_opsNum(it&&it.inv_stock));
+    if(!_olsMatchesMeta(it)||stock>0)return;
+
+    const entries=(it.sales_entries||[]).filter(e=>{
+      const d=_bizEntryDate(e);
+      return d&&d<=end&&_olsEntryAllowed(e);
+    });
+    const positive=entries.filter(e=>_opsNum(e&&e.qty)>0).sort((a,b)=>_bizEntryDate(a).localeCompare(_bizEntryDate(b)));
+    let lastSale=positive.length?_bizEntryDate(positive[positive.length-1]):'';
+    if(!lastSale&&allowAggregate)lastSale=_bizIso(it.last_dispatch_date);
+
+    let baseline=[];
+    let baselineQty=0;
+    let baselineRev=0;
+    let drr=0;
+    let demandBasis='No usable sale history';
+    if(lastSale&&positive.length){
+      const baseStart=_bizShift(lastSale,-win+1);
+      baseline=positive.filter(e=>{const d=_bizEntryDate(e);return d>=baseStart&&d<=lastSale;});
+      baselineQty=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0);
+      baselineRev=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
+      if(baselineQty>0){
+        drr=baselineQty/win;
+        demandBasis='Filtered dated transactions';
+      }
+    }
+    if(drr<=0&&allowAggregate){
+      const fb=_olsAggregateDemand(it,win);
+      baselineQty=fb.baselineQty;
+      drr=fb.drr;
+      demandBasis=fb.basis;
+    }else if(drr<=0&&!allowAggregate){
+      demandBasis='No sale in selected Type / Channel';
+    }
+
+    const oosDays=lastSale?Math.max(1,Math.min(cap,_bizDaysInclusive(_bizShift(lastSale,1),end)||1)):null;
+    const priceCandidates=[
+      baselineQty>0&&baselineRev>0?baselineRev/baselineQty:0,
+      _opsNum(it.last_selling_price),_opsNum(it.avg_selling_price),
+      _opsNum(it.website_selling_price),_opsNum(it.mrp)
+    ];
+    const avgSp=Math.max(0,priceCandidates.find(v=>Number.isFinite(v)&&v>0)||0);
+    const lostQty=drr>0&&oosDays!==null?drr*oosDays:0;
+    const lostRevenue=lostQty*avgSp;
+    const affected=_olsAffectedChannel(baseline.length?baseline:positive,it);
+    rows.push({
+      item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),
+      group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,
+      lastSale:lastSale||'',oosDays,window:win,baselineQty,drr,demandBasis,avgSp,lostQty,lostRevenue,affected,
+      targetPct:target>0&&lostRevenue>0?lostRevenue/target*100:null,
+      wip:Math.max(0,_opsNum(it.inv_wip))
+    });
+  });
+  _olsRows=rows.sort((a,b)=>
+    (b.drr>0?1:0)-(a.drr>0?1:0)||b.lostRevenue-a.lostRevenue||b.lostQty-a.lostQty||a.sku.localeCompare(b.sku)
+  );
+  return _olsRows;
 }
 function loadOosLostSales(fresh){
   _bizInitFilters('ols');
   return _loadOpsSupport(!!fresh).catch(()=>_opsSupport).then(()=>{_olsRows=[];renderOosLostSales();});
 }
 function renderOosLostSales(){
-  const host=document.getElementById('olsContent'),sum=document.getElementById('olsSummary');if(!host)return;const minDrr=Math.max(0,_opsNum(document.getElementById('olsMinDrr')?.value||0));const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
-  const lostQty=rows.reduce((s,r)=>s+r.lostQty,0),lostRev=rows.reduce((s,r)=>s+r.lostRevenue,0),avgDays=rows.length?rows.reduce((s,r)=>s+r.oosDays,0)/rows.length:0,target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target));
-  if(sum)sum.innerHTML=_opsKpi('Current OOS SKUs',rows.length.toLocaleString('en-IN'),'With positive pre-OOS demand')+_opsKpi('Estimated Lost Qty',_bizNum(lostQty,0),'Average daily sale × OOS days')+_opsKpi('Estimated Lost Revenue',_bizMoney(lostRev),'Average selling price basis')+_opsKpi('Average OOS Days',avgDays.toFixed(1),'Estimated from last positive sale')+_opsKpi('Potential Target Support',_bizMoney(lostRev),target>0?`${_bizPctText(lostRev/target*100)} of current monthly target`:'Current target unavailable')+_opsKpi('Inv WIP Support',Math.round(rows.reduce((s,r)=>s+r.wip,0)).toLocaleString('en-IN'),'Incoming stock shown separately');
-  const body=rows.slice(0,500).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td>${escHtml(r.affected)}</td><td class="ops-num">${escHtml(r.lastSale)}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${r.oosDays}</td><td class="ops-num">${_bizNum(r.baselineQty,0)}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${_bizMoney(r.avgSp)}</td><td class="ops-num" style="font-weight:900">${_bizNum(r.lostQty,1)}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${_bizMoney(r.lostRevenue)}</td><td class="ops-num">${r.targetPct===null?'—':_bizPctText(r.targetPct)}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No currently OOS SKU matches the selected demand filters.</td></tr>'}</tbody></table>${rows.length>500?`<div class="ops-note">Showing first 500 of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  const host=document.getElementById('olsContent'),sum=document.getElementById('olsSummary');if(!host)return;
+  const minDrr=Math.max(0,_opsNum(document.getElementById('olsMinDrr')?.value||0));
+  const allRows=_buildOosLostRows();
+  const rows=allRows.filter(r=>r.drr>=minDrr);
+  const demandBacked=rows.filter(r=>r.drr>0);
+  const lostQty=rows.reduce((s,r)=>s+r.lostQty,0),lostRev=rows.reduce((s,r)=>s+r.lostRevenue,0);
+  const dayRows=rows.filter(r=>r.oosDays!==null);
+  const avgDays=dayRows.length?dayRows.reduce((s,r)=>s+r.oosDays,0)/dayRows.length:0;
+  const target=Math.max(0,_opsNum(_opsSupport?.target_totals?.sp_target));
+  if(sum)sum.innerHTML=
+    _opsKpi('Current OOS SKUs',rows.length.toLocaleString('en-IN'),'Inv Stock is currently 0')+
+    _opsKpi('Demand-backed OOS',demandBacked.length.toLocaleString('en-IN'),'Detailed or summary sales velocity found')+
+    _opsKpi('Estimated Lost Qty',_bizNum(lostQty,0),'Average daily sale × OOS days')+
+    _opsKpi('Estimated Lost Revenue',_bizMoney(lostRev),'Average selling price / MRP fallback')+
+    _opsKpi('Average OOS Days',dayRows.length?avgDays.toFixed(1):'—','Estimated from last positive sale')+
+    _opsKpi('Potential Target Support',_bizMoney(lostRev),target>0?`${_bizPctText(lostRev/target*100)} of current monthly target`:'Current target unavailable')+
+    _opsKpi('Inv WIP Support',Math.round(rows.reduce((s,r)=>s+r.wip,0)).toLocaleString('en-IN'),'Incoming stock shown separately');
+
+  const body=rows.slice(0,500).map((r,i)=>`<tr>
+    <td class="ops-num">${i+1}</td>
+    <td>${_opsPhoto(r.image)}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td>
+    <td>${escHtml(r.taxon)}</td>
+    <td>${escHtml(r.affected)}</td>
+    <td class="ops-num">${r.lastSale?escHtml(r.lastSale):'—'}</td>
+    <td class="ops-num" style="font-weight:900;color:#b3261e">${r.oosDays===null?'—':r.oosDays}</td>
+    <td class="ops-num">${_bizNum(r.baselineQty,1)}</td>
+    <td class="ops-num">${r.drr.toFixed(2)}</td>
+    <td><span style="font-size:9px;font-weight:800;color:${r.drr>0?'#2f6f3e':'#8b5e00'}">${escHtml(r.demandBasis)}</span></td>
+    <td class="ops-num">${r.avgSp>0?_bizMoney(r.avgSp):'—'}</td>
+    <td class="ops-num" style="font-weight:900">${_bizNum(r.lostQty,1)}</td>
+    <td class="ops-num" style="font-weight:900;color:#b3261e">${_bizMoney(r.lostRevenue)}</td>
+    <td class="ops-num">${r.targetPct===null?'—':_bizPctText(r.targetPct)}</td>
+    <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+  </tr>`).join('');
+  const emptyMessage=allRows.length
+    ?'No OOS SKU meets the Minimum Daily Sale filter. Set Minimum Daily Sale to 0 to show every current OOS SKU.'
+    :'No current Inv Stock = 0 SKU matches the selected Product Group, Taxon or SKU search.';
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>500?`<div class="ops-note">Showing first 500 of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
   _olsRows=rows;
 }
 function exportOosLostSales(){
   const minDrr=Math.max(0,_opsNum(document.getElementById('olsMinDrr')?.value||0));
   const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
   if(!rows.length){alert('No OOS lost-sales rows to export');return;}
-  _dlCsv(['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Baseline Sold Qty','Average Daily Sale','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number(r.drr.toFixed(3)),Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),0,Math.round(r.wip)]),'oos_lost_sales_revenue');
+  _dlCsv(
+    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Baseline Sold Qty','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
+    rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
+    'oos_lost_sales_revenue'
+  );
 }
 
 window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;
