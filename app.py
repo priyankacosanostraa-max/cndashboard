@@ -1129,6 +1129,7 @@ def _refresh_data():
     website_customer_events = {}
     website_city_events = {}
     website_payment_events = {}
+    website_payment_summary = {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
     try:
         _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
         web_orders = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
@@ -1188,6 +1189,7 @@ def _refresh_data():
         _web_event_sets = {}
         _web_city_sums = {}
         _web_payment_sets = {}
+        _web_all_payment_orders = {}
         if W_DATE and W_NAME and W_ADDR and W_SKU:
             for web_row_no, r in enumerate(_df_chunks(web_orders)):
                 status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
@@ -1215,10 +1217,10 @@ def _refresh_data():
                 if not W_QTY:
                     qty_web = 1.0
 
-                # Payment mix is order-based, not line-based. The same
-                # Shipping Package / Invoice appearing on multiple SKU lines
-                # is counted once across the Rakhi tab in the browser.
-                if W_COD and re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
+                # Payment mix is order-based, not line-based. All Website SKUs
+                # feed the compact Home daily summary; RKH/CMB events are also
+                # retained per SKU for the Rakhi tab.
+                if W_COD:
                     raw_cod = str(r.get(W_COD, "") or "").strip().casefold()
                     cod_value = None
                     if raw_cod in ("1", "1.0", "cod", "cash on delivery", "cash-on-delivery", "true", "yes"):
@@ -1232,9 +1234,12 @@ def _refresh_data():
                         order_token = hashlib.sha1(
                             raw_order.casefold().encode("utf-8", errors="ignore")
                         ).hexdigest()[:16]
-                        _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = {
+                        payment_event = {
                             "o": _si(order_token), "p": int(cod_value), "d": _si(date_iso)
                         }
+                        _web_all_payment_orders[order_token] = payment_event
+                        if re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
+                            _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
 
                 # PIN is the State source of truth. City is validated against
                 # it, and State is kept in the compact event so same-named
@@ -1288,17 +1293,37 @@ def _refresh_data():
             sku: sorted(events.values(), key=lambda x: (x["d"], x["o"]))
             for sku, events in _web_payment_sets.items()
         }
+        _payment_daily = {}
+        _all_cod = _all_prepaid = 0
+        for payment_event in _web_all_payment_orders.values():
+            day = payment_event.get("d", "")
+            payment = int(payment_event.get("p", 0))
+            bucket = _payment_daily.setdefault(day, {"d": _si(day), "cod": 0, "prepaid": 0})
+            if payment == 1:
+                bucket["cod"] += 1
+                _all_cod += 1
+            else:
+                bucket["prepaid"] += 1
+                _all_prepaid += 1
+        website_payment_summary = {
+            "cod": _all_cod,
+            "prepaid": _all_prepaid,
+            "total": _all_cod + _all_prepaid,
+            "daily": [_payment_daily[d] for d in sorted(_payment_daily)],
+        }
         dbg["website_repeat_skus"] = len(website_customer_events)
         dbg["website_repeat_sessions"] = sum(len(v) for v in website_customer_events.values())
         dbg["website_city_skus"] = len(website_city_events)
         dbg["website_city_buckets"] = sum(len(v) for v in website_city_events.values())
         dbg["website_payment_skus"] = len(website_payment_events)
         dbg["website_payment_orders"] = sum(len(v) for v in website_payment_events.values())
+        dbg["website_all_payment_orders"] = website_payment_summary["total"]
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
         website_city_events = {}
         website_payment_events = {}
+        website_payment_summary = {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
     finally:
         try:
             del web_orders
@@ -1986,6 +2011,7 @@ def _refresh_data():
     # channels list (Type filter ke saath Channel filter ke liye)
     CACHE["channels"] = sorted([c for c in channels_ if c])
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
+    CACHE["website_payment_summary"] = website_payment_summary
     CACHE["ts"]    = time.time()
     _COSTS_CACHE["rows"] = None   # profit margin cache bhi refresh karo
     CACHE["debug"] = dbg
@@ -6782,6 +6808,7 @@ let currentFY = "", previousFY = "", todayISO = "",
     yesterdayISO = "", currentMonthKey = "";
 let grandNetRevenue = 0, grandFinalQty = 0;
 let marketplaceData = null;
+let websitePaymentSummary = {cod:0, prepaid:0, total:0, daily:[]};
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
 let bulkComboRows = [];
@@ -8295,6 +8322,7 @@ function loadData(force){
       grandNetRevenue = parseFloat(d.grand_net_revenue) || 0;
       grandFinalQty   = parseFloat(d.grand_final_qty) || 0;
       periodKpis = d.period_kpis || {total:grandNetRevenue, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
+      websitePaymentSummary = d.website_payment_summary || {cod:0, prepaid:0, total:0, daily:[]};
 
       const custOpts = allCusts.map(c => `<option value="${c}"></option>`).join('');
       const c1 = document.getElementById('custList');
@@ -9911,6 +9939,16 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
     : `<div class="cnx-period-bars"><div class="cnx-period-col"><div class="cnx-period-value">${cnxCompactMoney(prevRevenue)}</div><i class="cnx-period-bar cnx-period-prev" style="height:${previousHeight}%" title="Previous period revenue ${fmt(prevRevenue)}"></i><span class="cnx-period-name">Previous ${escHtml(periodShort)}</span><span class="cnx-period-dates">${escHtml(prevStartKey)} — ${escHtml(prevEndKey)}</span></div><div class="cnx-period-col"><div class="cnx-period-value">${cnxCompactMoney(revenue)}</div><i class="cnx-period-bar cnx-period-current" style="height:${currentHeight}%;animation-delay:.08s" title="Selected period revenue ${fmt(revenue)}"></i><span class="cnx-period-name">${customRange?'Selected Range':'Latest '+escHtml(periodShort)}</span><span class="cnx-period-dates">${escHtml(startKey)} — ${escHtml(endKey)}</span></div></div>`;
   const deltaPill=(v,label)=>v===null?`<span>${label}</span>`:`<span class="cnx-pill ${v>=0?'cnx-good':'cnx-risk'}">${v>=0?'↑':'↓'} ${Math.abs(v).toFixed(1)}%</span><span>${label}</span>`;
   const rangeLabel = customRange ? `${startKey} to ${endKey}` : (periodDays===365 ? 'last 365 days' : `last ${periodDays} days`);
+  let websiteCodOrders=0,websitePrepaidOrders=0;
+  for(const row of (websitePaymentSummary?.daily||[])){
+    const d=String(row?.d||'');
+    if(d<startKey || d>endKey) continue;
+    websiteCodOrders+=Number(row?.cod)||0;
+    websitePrepaidOrders+=Number(row?.prepaid)||0;
+  }
+  const websitePaymentOrders=websiteCodOrders+websitePrepaidOrders;
+  const websiteCodPct=websitePaymentOrders?websiteCodOrders/websitePaymentOrders*100:0;
+  const websitePrepaidPct=websitePaymentOrders?websitePrepaidOrders/websitePaymentOrders*100:0;
   const topRows = actionRows.slice(0,5).map(x=>{
     const status=x.inv<=10?'<span class="cnx-status cnx-urgent">URGENT</span>':x.inv<x.forecast*.45?'<span class="cnx-status cnx-watch">WATCH</span>':'<span class="cnx-status cnx-planned">PLANNED</span>';
     const skuEsc=String(x.i.sku||'').replace(/'/g,"\\'");
@@ -9926,12 +9964,13 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
   const yesterdayCard = isEmp
     ? `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(182,111,18,.17)"><div class="cnx-kpi-label">Yesterday · ${escHtml(yesterdayLabel)}</div><div class="cnx-kpi-value">${Math.round(yesterdayQty).toLocaleString('en-IN')} Units</div><div class="cnx-kpi-foot"><span class="cnx-pill ${yesterdayQty>0?'cnx-good':'cnx-risk'}">${yesterdayQty>0?'SOLD':'NO SALE'}</span><span>${yesterdayOrders.toLocaleString('en-IN')} order lines</span></div></article>`
     : `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(182,111,18,.17)"><div class="cnx-kpi-label">Yesterday · ${escHtml(yesterdayLabel)}</div><div class="cnx-kpi-value">${cnxCompactMoney(yesterdayRev)}</div><div class="cnx-kpi-foot"><span class="cnx-pill ${yesterdayQty>0?'cnx-good':'cnx-risk'}">${Math.round(yesterdayQty).toLocaleString('en-IN')} units</span><span>${yesterdayOrders.toLocaleString('en-IN')} order lines</span></div></article>`;
+  const websitePaymentCards=`<article class="cnx-kpi cnx-tilt" style="--glow:rgba(182,111,18,.18)"><div class="cnx-kpi-label">Website COD · All SKUs</div><div class="cnx-kpi-value">${websiteCodPct.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-watch">COD = 1</span><span>${websiteCodOrders.toLocaleString('en-IN')} of ${websitePaymentOrders.toLocaleString('en-IN')} orders</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Website Prepaid · All SKUs</div><div class="cnx-kpi-value">${websitePrepaidPct.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-good">COD = 0</span><span>${websitePrepaidOrders.toLocaleString('en-IN')} of ${websitePaymentOrders.toLocaleString('en-IN')} orders</span></div></article>`;
   const targetContent = isEmp
     ? `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Qty achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved Qty</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target Qty</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Remaining Qty</div><div class="cnx-mini-value" id="cnxTargetProjected">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`
     : `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Revenue achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Projected</div><div class="cnx-mini-value" id="cnxTargetProjected" style="color:var(--cnx-green)">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`;
   return `<div class="cnx-home">
     <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button class="cnx-date-apply" onclick="cnxApplyHomeDateRange()">APPLY</button><button class="cnx-date-reset" onclick="cnxResetHomeDateRange()">RESET</button><div class="cnx-date-error" id="cnxDateError">${customRange?'Showing '+escHtml(startKey)+' to '+escHtml(endKey):''}</div></div></div></div>
-    <div class="cnx-kpis">${revCard}${yesterdayCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span>${orders.toLocaleString('en-IN')} order lines</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
+    <div class="cnx-kpis">${revCard}${yesterdayCard}${websitePaymentCards}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span>${orders.toLocaleString('en-IN')} order lines</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
     <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue Period Comparison</div><div class="cnx-panel-sub">${customRange?'Selected range':'Latest '+escHtml(periodShort)} vs immediately previous ${escHtml(periodShort)} · revenue only</div></div>${isEmp?'':`<div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#b8a784">■</span> Previous &nbsp; <span style="color:#a87920">■</span> Selected</div>`}</div><div class="cnx-chart cnx-period-chart">${compareChart}</div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
     <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
   </div>`;
@@ -15746,6 +15785,9 @@ def _build_role_gz(role, force=False):
         "grand_net_revenue": grand_rev,
         "grand_final_qty":   grand_qty,
         "period_kpis":   period_kpis,
+        "website_payment_summary": CACHE.get(
+            "website_payment_summary", {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
+        ),
     }
     with _RESP_LOCK:                      # do builders ek saath na chalein (RAM spike)
         gz = _RESP_CACHE.get(key)
