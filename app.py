@@ -5161,6 +5161,7 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .cnx-panel:hover{transform:perspective(1100px) translateY(-4px) rotateX(.7deg);box-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 20px 38px rgba(86,64,24,.13),0 42px 85px rgba(86,64,24,.1)}
 .cnx-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:19px}.cnx-panel-title{font-size:13px;color:#201a12;font-weight:950}.cnx-panel-sub{font-size:9px;color:var(--cnx-muted);margin-top:5px;font-weight:650}.cnx-link-btn{border:1px solid var(--cnx-line);background:#fffefb;color:var(--cnx-muted);padding:8px 10px;border-radius:10px;font-size:8px;font-weight:900;cursor:pointer}.cnx-link-btn:hover{color:var(--cnx-gold);border-color:rgba(168,121,32,.35)}
 .cnx-chart{height:265px;position:relative;display:flex;align-items:flex-end;padding:18px 2px 30px 43px;background:linear-gradient(to bottom,transparent 24%,rgba(73,55,24,.09) 25%,transparent 25.5%,transparent 49%,rgba(73,55,24,.09) 50%,transparent 50.5%,transparent 74%,rgba(73,55,24,.09) 75%,transparent 75.5%);border-radius:15px}.cnx-y{position:absolute;left:0;top:10px;bottom:25px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:var(--cnx-muted)}.cnx-bars{width:100%;height:100%;display:flex;align-items:flex-end;justify-content:space-around;gap:7px}.cnx-bar-group{height:100%;flex:1;display:flex;align-items:flex-end;justify-content:center;gap:4px;position:relative}.cnx-bar{width:min(15px,27%);border-radius:7px 7px 2px 2px;min-height:2px;transform-origin:bottom;animation:cnxGrow 1s cubic-bezier(.2,.8,.2,1) both}.cnx-bar-rev{background:linear-gradient(to top,#7e5d20,#d8b75f);box-shadow:0 0 20px rgba(168,121,32,.13)}.cnx-bar-qty{background:linear-gradient(to top,#276a55,#58be93)}.cnx-day{position:absolute;bottom:-22px;font-size:8px;color:var(--cnx-muted)}
+.cnx-period-chart{padding:18px 12px 48px!important}.cnx-period-chart .cnx-y{bottom:45px}.cnx-period-bars{width:100%;height:100%;display:flex;align-items:flex-end;justify-content:center;gap:clamp(34px,10vw,120px);padding:0 8%;min-width:0}.cnx-period-col{height:100%;flex:1;max-width:230px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;position:relative;min-width:0}.cnx-period-value{font-size:12px;font-weight:950;color:#201a12;margin-bottom:7px;white-space:nowrap}.cnx-period-bar{width:min(88px,58%);min-height:5px;border-radius:14px 14px 4px 4px;transform-origin:bottom;animation:cnxGrow .75s cubic-bezier(.2,.8,.2,1) both}.cnx-period-prev{background:linear-gradient(to top,#b8a784,#e8dcc3);box-shadow:inset 0 1px rgba(255,255,255,.65)}.cnx-period-current{background:linear-gradient(to top,#765313,#dab85c);box-shadow:0 10px 26px rgba(168,121,32,.2),inset 0 1px rgba(255,255,255,.6)}.cnx-period-name{position:absolute;bottom:-25px;font-size:9px;font-weight:950;color:#3a3022;white-space:nowrap}.cnx-period-dates{position:absolute;bottom:-39px;font-size:7px;color:var(--cnx-muted);white-space:nowrap}.cnx-locked-chart{width:100%;height:100%;display:grid;place-items:center;text-align:center;color:var(--cnx-muted);font-size:10px;line-height:1.6}.cnx-locked-chart b{display:block;color:#8a6119;font-size:12px;margin-bottom:5px}.cnx-legacy>*{content-visibility:auto;contain-intrinsic-size:auto 260px}
 .cnx-ring-wrap{display:grid;place-items:center;padding:8px 0 13px}.cnx-ring{--pct:0;width:172px;aspect-ratio:1;border-radius:50%;background:conic-gradient(var(--cnx-gold) calc(var(--pct)*1%),rgba(73,55,24,.1) 0);display:grid;place-items:center;position:relative;box-shadow:0 24px 48px rgba(93,67,22,.15),inset 0 0 28px rgba(217,185,104,.08);animation:cnxRingFloat 4.5s ease-in-out infinite}.cnx-ring:before{content:"";width:128px;aspect-ratio:1;border-radius:50%;background:#fffefb;box-shadow:inset 0 9px 23px rgba(72,52,19,.1)}.cnx-ring-copy{position:absolute;text-align:center}.cnx-ring-value{font-size:31px;font-weight:950;color:#201a12}.cnx-ring-label{font-size:8px;color:var(--cnx-muted);text-transform:uppercase;letter-spacing:1.7px;margin-top:5px}.cnx-target-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.cnx-mini{border:1px solid var(--cnx-line);border-radius:13px;padding:11px;background:rgba(255,255,255,.38)}.cnx-mini-label{font-size:7.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--cnx-muted);font-weight:850}.cnx-mini-value{font-size:15px;font-weight:950;color:#201a12;margin-top:5px}
 .cnx-table-wrap{overflow:auto;max-height:340px;margin:0 -20px -20px}.cnx-table{width:100%;border-collapse:collapse;font-size:10px;min-width:620px}.cnx-table th{position:sticky;top:0;background:#f5ecdc;padding:12px 14px;color:#8a6119;font-size:8px;letter-spacing:1.2px;text-transform:uppercase;border-bottom:1px solid var(--cnx-line);text-align:left!important;white-space:nowrap!important}.cnx-table td{padding:12px 14px;border-bottom:1px solid var(--cnx-line);text-align:left!important;white-space:nowrap!important;color:#3c3326;font-weight:750}.cnx-table tbody tr:hover td{background:#fff9ec}.cnx-sku{font-weight:950;color:#201a12}.cnx-sku small{display:block;color:var(--cnx-muted);font-size:8px;margin-top:3px}.cnx-status{padding:5px 8px;border-radius:99px;font-size:7.5px;font-weight:950}.cnx-urgent{background:rgba(198,79,79,.12);color:var(--cnx-red)}.cnx-watch{background:rgba(182,111,18,.12);color:var(--cnx-amber)}.cnx-planned{background:rgba(23,137,94,.1);color:var(--cnx-green)}
 .cnx-alerts{display:flex;flex-direction:column;gap:9px}.cnx-alert{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid var(--cnx-line);border-radius:14px;background:rgba(255,255,255,.35);transition:transform .22s,border-color .22s}.cnx-alert:hover{transform:translateX(4px);border-color:rgba(168,121,32,.3)}.cnx-alert-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--cnx-gold-soft);color:var(--cnx-gold);font-size:16px;font-weight:950}.cnx-alert-title{font-size:10px;color:#201a12;font-weight:950}.cnx-alert-desc{font-size:8px;color:var(--cnx-muted);line-height:1.4;margin-top:4px}.cnx-alert-count{font-size:9px;color:var(--cnx-muted);font-weight:900}
@@ -5175,7 +5176,7 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
   #navMenu[style*="block"]{display:flex!important}#navMenu:before{font-size:17px;padding:8px 10px 15px}
   .app-bar{height:70px!important;padding:0 14px!important}.app-bar-brand{font-size:14px!important}.app-bar-sub{letter-spacing:1.3px!important}.cnx-hero{align-items:flex-start}.cnx-title{font-size:42px}.cnx-home-controls{width:100%;align-items:stretch}.cnx-range{width:max-content;max-width:100%}.cnx-date-filter{justify-content:flex-start}.cnx-date-error{text-align:left}
 }
-@media(max-width:640px){.cnx-kpis{grid-template-columns:1fr}.cnx-kpi{min-height:143px}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}.cnx-chart{height:230px}.cnx-range{width:100%;overflow:auto}.cnx-range button{flex:1;white-space:nowrap}.cnx-date-filter{display:grid;grid-template-columns:1fr 1fr}.cnx-date-field input{width:100%}.cnx-date-apply,.cnx-date-reset{width:100%}.cnx-date-error{grid-column:1/-1}.cnx-target-grid{grid-template-columns:1fr 1fr}.cnx-panel{padding:16px}.cnx-table-wrap{margin:0 -16px -16px}.cnx-title{font-size:36px}.app-chip{padding:8px 10px!important;letter-spacing:1px!important;font-size:8px!important}}
+@media(max-width:640px){.cnx-kpis{grid-template-columns:1fr}.cnx-kpi{min-height:143px}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}.cnx-chart{height:230px}.cnx-period-bars{gap:16px;padding:0 2%}.cnx-period-value{font-size:10px}.cnx-period-name{font-size:8px}.cnx-period-dates{font-size:6.5px}.cnx-range{width:100%;overflow:auto}.cnx-range button{flex:1;white-space:nowrap}.cnx-date-filter{display:grid;grid-template-columns:1fr 1fr}.cnx-date-field input{width:100%}.cnx-date-apply,.cnx-date-reset{width:100%}.cnx-date-error{grid-column:1/-1}.cnx-target-grid{grid-template-columns:1fr 1fr}.cnx-panel{padding:16px}.cnx-table-wrap{margin:0 -16px -16px}.cnx-title{font-size:36px}.app-chip{padding:8px 10px!important;letter-spacing:1px!important;font-size:8px!important}}
 
 /* Drawer navigation: closed by default on every screen size */
 #appRoot{padding-left:0!important}
@@ -8160,7 +8161,11 @@ function clearPastedSkus(){
 
 function loadData(force){
   force = force || false;
-  if (force) _warmRetries = 0;   // manual sync resets the warming retry counter
+  if (force) {
+    _warmRetries = 0;   // manual sync resets the warming retry counter
+    _cnxHomeTargetCache = null;
+    _cnxHomeTargetCacheAt = 0;
+  }
   const L = document.getElementById('loader');
   if (L){
     L.style.display = 'block';
@@ -8263,18 +8268,9 @@ function loadData(force){
 
       selectedSkuSet = new Set();
       refreshChecklists();
-      // Sab tab ek saath render karne se data-load par hang hota tha. Ab sirf
-      // jo tab khula hai usi ka heavy render chalega — wo bhi defer hoke (UI free).
-      setTimeout(() => {
-        try {
-          if (currentTab === 'matrix') applyF();
-          else if (currentTab === 'repeat') applyRO();
-          else if (currentTab === 'insights') renderInsights();
-          renderHome();   // home content hamesha taiyaar rakho
-        } catch(e){ console.error(e); }
-      }, 0);
-
       if (L) L.style.display = 'none'; stopWarmupPoll();
+      // showTab('home') queues exactly one Home render. The old flow rendered
+      // Home here and then immediately rendered it again inside showTab.
       showTab('home');
     })
     .catch(err => {
@@ -9777,6 +9773,7 @@ function renderProHeader(){
 let _cnxHomeDays = 30;
 let _cnxHomeFrom = '';
 let _cnxHomeTo = '';
+let _cnxHomeRenderFrame = 0;
 
 function cnxCompactMoney(n){
   n = Number(n) || 0;
@@ -9790,7 +9787,7 @@ function cnxSetHomeRange(days){
   _cnxHomeDays = Math.max(7, Number(days) || 30);
   _cnxHomeFrom = '';
   _cnxHomeTo = '';
-  renderHome();
+  cnxQueueHomeRender(true);
 }
 window.cnxSetHomeRange = cnxSetHomeRange;
 
@@ -9802,7 +9799,7 @@ function cnxApplyHomeDateRange(){
   if (from > to){ if(err) err.textContent='From date cannot be after To date.'; return; }
   _cnxHomeFrom = from;
   _cnxHomeTo = to;
-  renderHome();
+  cnxQueueHomeRender(true);
 }
 function cnxResetHomeDateRange(){ cnxSetHomeRange(30); }
 window.cnxApplyHomeDateRange = cnxApplyHomeDateRange;
@@ -9823,23 +9820,19 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
   const startKey = iso(start), prevStartKey = iso(prevStart), prevEndKey = iso(prevEnd);
   const entOk = e => !homeType || String(e.type||'').trim() === homeType;
   const yKey = yesterdayISO || (()=>{const y=new Date(now);y.setDate(y.getDate()-1);return iso(y);})();
-  let revenue=0, qty=0, orders=0, prevRevenue=0, prevQty=0, yesterdayRev=0, yesterdayQty=0, yesterdayOrders=0;
-  const daily = {};
-  for (let d=6; d>=0; d--){ const x=new Date(endDate); x.setDate(x.getDate()-d); daily[iso(x)]={rev:0,qty:0}; }
+  let revenue=0, qty=0, orders=0, prevRevenue=0, yesterdayRev=0, yesterdayQty=0, yesterdayOrders=0;
   for (const it of data){
     for (const e of (it.sales_entries||[])){
       if (!entOk(e) || !e.date || e.date==='N/A') continue;
       const q=Number(e.qty)||0, r=Number(e.rev)||0;
       if (e.date>=startKey && e.date<=endKey){ qty+=q; revenue+=r; orders+=1; }
-      else if (e.date>=prevStartKey && e.date<=prevEndKey){ prevQty+=q; prevRevenue+=r; }
+      else if (e.date>=prevStartKey && e.date<=prevEndKey){ prevRevenue+=r; }
       if (e.date===yKey){ yesterdayQty+=q; yesterdayRev+=r; yesterdayOrders+=1; }
-      if (daily[e.date]){ daily[e.date].qty+=q; daily[e.date].rev+=r; }
     }
   }
   const stock = data.reduce((s,i)=>s+(Number(i.inv_stock)||0),0);
   const str = qty+stock>0 ? qty/(qty+stock)*100 : 0;
   const revDelta = prevRevenue>0 ? (revenue-prevRevenue)/prevRevenue*100 : null;
-  const qtyDelta = prevQty>0 ? (qty-prevQty)/prevQty*100 : null;
   const actionRows = data.map(i=>{
     const inv=(Number(i.inv_stock)||0)+(Number(i.inv_wip)||0);
     const forecast=Number(i.forecast_60d)||0;
@@ -9851,14 +9844,13 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
   const stockout = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.qty_7d)||0)>0).length;
   const wipOnly = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.inv_wip)||0)>0).length;
   const comboRisk = actionRows.filter(x=>(x.i.combo_details||[]).length>0).length;
-  const days = Object.keys(daily).sort();
-  const maxRev=Math.max(1,...days.map(d=>daily[d].rev)), maxQty=Math.max(1,...days.map(d=>daily[d].qty));
-  const chart = days.map((d,idx)=>{
-    const dt=new Date(d+'T00:00:00');
-    const lab=dt.toLocaleDateString('en-GB',{weekday:'short'});
-    const rh=Math.max(3,daily[d].rev/maxRev*92), qh=Math.max(3,daily[d].qty/maxQty*82);
-    return `<div class="cnx-bar-group"><i class="cnx-bar cnx-bar-rev" style="height:${rh}%;animation-delay:${idx*.05}s" title="${escHtml(d)} revenue ${fmt(daily[d].rev)}"></i><i class="cnx-bar cnx-bar-qty" style="height:${qh}%;animation-delay:${idx*.05+.08}s" title="${escHtml(d)} qty ${Math.round(daily[d].qty)}"></i><span class="cnx-day">${lab}</span></div>`;
-  }).join('');
+  const maxPeriodRevenue = Math.max(1, prevRevenue, revenue);
+  const previousHeight = Math.max(4, prevRevenue/maxPeriodRevenue*76);
+  const currentHeight = Math.max(4, revenue/maxPeriodRevenue*76);
+  const periodShort = periodDays===365 ? '1 Year' : `${periodDays}D`;
+  const compareChart = isEmp
+    ? `<div class="cnx-locked-chart"><div><b>Revenue comparison is protected</b>Sign in as Admin to view period revenue.</div></div>`
+    : `<div class="cnx-period-bars"><div class="cnx-period-col"><div class="cnx-period-value">${cnxCompactMoney(prevRevenue)}</div><i class="cnx-period-bar cnx-period-prev" style="height:${previousHeight}%" title="Previous period revenue ${fmt(prevRevenue)}"></i><span class="cnx-period-name">Previous ${escHtml(periodShort)}</span><span class="cnx-period-dates">${escHtml(prevStartKey)} — ${escHtml(prevEndKey)}</span></div><div class="cnx-period-col"><div class="cnx-period-value">${cnxCompactMoney(revenue)}</div><i class="cnx-period-bar cnx-period-current" style="height:${currentHeight}%;animation-delay:.08s" title="Selected period revenue ${fmt(revenue)}"></i><span class="cnx-period-name">${customRange?'Selected Range':'Latest '+escHtml(periodShort)}</span><span class="cnx-period-dates">${escHtml(startKey)} — ${escHtml(endKey)}</span></div></div>`;
   const deltaPill=(v,label)=>v===null?`<span>${label}</span>`:`<span class="cnx-pill ${v>=0?'cnx-good':'cnx-risk'}">${v>=0?'↑':'↓'} ${Math.abs(v).toFixed(1)}%</span><span>${label}</span>`;
   const rangeLabel = customRange ? `${startKey} to ${endKey}` : (periodDays===365 ? 'last 365 days' : `last ${periodDays} days`);
   const topRows = actionRows.slice(0,5).map(x=>{
@@ -9881,27 +9873,44 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
     : `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Revenue achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Projected</div><div class="cnx-mini-value" id="cnxTargetProjected" style="color:var(--cnx-green)">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`;
   return `<div class="cnx-home">
     <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button class="cnx-date-apply" onclick="cnxApplyHomeDateRange()">APPLY</button><button class="cnx-date-reset" onclick="cnxResetHomeDateRange()">RESET</button><div class="cnx-date-error" id="cnxDateError">${customRange?'Showing '+escHtml(startKey)+' to '+escHtml(endKey):''}</div></div></div></div>
-    <div class="cnx-kpis">${revCard}${yesterdayCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot">${deltaPill(qtyDelta,`${orders.toLocaleString('en-IN')} order lines`)}</div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
-    <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue &amp; Sales Momentum</div><div class="cnx-panel-sub">7-day trend ending ${escHtml(endKey)}</div></div><div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#a87920">■</span> ${isEmp?'Activity':'Revenue'} &nbsp; <span style="color:#17895e">■</span> Quantity</div></div><div class="cnx-chart"><div class="cnx-y"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div class="cnx-bars">${chart}</div></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
+    <div class="cnx-kpis">${revCard}${yesterdayCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span>${orders.toLocaleString('en-IN')} order lines</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
+    <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue Period Comparison</div><div class="cnx-panel-sub">${customRange?'Selected range':'Latest '+escHtml(periodShort)} vs immediately previous ${escHtml(periodShort)} · revenue only</div></div>${isEmp?'':`<div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#b8a784">■</span> Previous &nbsp; <span style="color:#a87920">■</span> Selected</div>`}</div><div class="cnx-chart cnx-period-chart">${compareChart}</div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
     <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
   </div>`;
 }
 
+let _cnxHomeTargetCache = null;
+let _cnxHomeTargetCacheAt = 0;
+let _cnxHomeTargetPromise = null;
+
+function cnxPaintHomeTarget(d){
+  const ring=document.getElementById('cnxTargetRing'); if(!ring || !d) return;
+  const t=d.totals||{}; const emp=LOGIN_ROLE==='employee';
+  const actual=emp?(Number(t.qty_actual)||0):(Number(t.sp_actual)||0);
+  const goal=emp?(Number(t.qty_target)||0):(Number(t.sp_target)||0);
+  const pct=goal>0?Math.min(100,Math.max(0,actual/goal*100)):0;
+  const daysLeft=Math.max(1,(Number(d.days_in_month)||30)-(Number(d.day_elapsed)||0));
+  const projected=emp?Math.max(0,goal-actual):(Number(t.proj_rev)||0);
+  const required=Math.max(0,goal-actual)/daysLeft;
+  ring.style.setProperty('--pct',pct.toFixed(1));
+  const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
+  set('cnxTargetPct',pct.toFixed(0)+'%'); set('cnxTargetActual',emp?Math.round(actual).toLocaleString('en-IN'):cnxCompactMoney(actual)); set('cnxTargetGoal',emp?Math.round(goal).toLocaleString('en-IN'):cnxCompactMoney(goal)); set('cnxTargetProjected',emp?Math.round(projected).toLocaleString('en-IN'):cnxCompactMoney(projected)); set('cnxTargetRequired',emp?Math.ceil(required).toLocaleString('en-IN'):cnxCompactMoney(required));
+  const lab=document.getElementById('cnxTargetLabel'); if(lab)lab.textContent=(d.month_label||d.month_selected||'Current month')+' · all channels';
+}
+
 function cnxHydrateHomeTarget(){
-  const ring=document.getElementById('cnxTargetRing'); if(!ring) return;
-  fetch('/api/target',{headers:{'ngrok-skip-browser-warning':'true'}}).then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status))).then(d=>{
-    const t=d.totals||{}; const emp=LOGIN_ROLE==='employee';
-    const actual=emp?(Number(t.qty_actual)||0):(Number(t.sp_actual)||0);
-    const goal=emp?(Number(t.qty_target)||0):(Number(t.sp_target)||0);
-    const pct=goal>0?Math.min(100,Math.max(0,actual/goal*100)):0;
-    const daysLeft=Math.max(1,(Number(d.days_in_month)||30)-(Number(d.day_elapsed)||0));
-    const projected=emp?Math.max(0,goal-actual):(Number(t.proj_rev)||0);
-    const required=Math.max(0,goal-actual)/daysLeft;
-    ring.style.setProperty('--pct',pct.toFixed(1));
-    const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
-    set('cnxTargetPct',pct.toFixed(0)+'%'); set('cnxTargetActual',emp?Math.round(actual).toLocaleString('en-IN'):cnxCompactMoney(actual)); set('cnxTargetGoal',emp?Math.round(goal).toLocaleString('en-IN'):cnxCompactMoney(goal)); set('cnxTargetProjected',emp?Math.round(projected).toLocaleString('en-IN'):cnxCompactMoney(projected)); set('cnxTargetRequired',emp?Math.ceil(required).toLocaleString('en-IN'):cnxCompactMoney(required));
-    const lab=document.getElementById('cnxTargetLabel'); if(lab)lab.textContent=(d.month_label||d.month_selected||'Current month')+' · all channels';
-  }).catch(()=>{const lab=document.getElementById('cnxTargetLabel');if(lab)lab.textContent='Target data unavailable';});
+  if (!document.getElementById('cnxTargetRing')) return;
+  if (_cnxHomeTargetCache && Date.now()-_cnxHomeTargetCacheAt < 60000){
+    cnxPaintHomeTarget(_cnxHomeTargetCache);
+    return;
+  }
+  if (!_cnxHomeTargetPromise){
+    _cnxHomeTargetPromise=fetch('/api/target',{headers:{'ngrok-skip-browser-warning':'true'}})
+      .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+      .then(d=>{_cnxHomeTargetCache=d;_cnxHomeTargetCacheAt=Date.now();return d;})
+      .finally(()=>{_cnxHomeTargetPromise=null;});
+  }
+  _cnxHomeTargetPromise.then(cnxPaintHomeTarget).catch(()=>{const lab=document.getElementById('cnxTargetLabel');if(lab)lab.textContent='Target data unavailable';});
 }
 
 function cnxBindHomeMotion(){
@@ -9911,6 +9920,28 @@ function cnxBindHomeMotion(){
     card.onpointerleave=()=>{card.style.transform='';};
   });
 }
+
+function cnxRefreshExecutiveHome(){
+  const host=document.getElementById('homeContent');
+  const data=master||[];
+  if(!host || !data.length){ renderHome(); return; }
+  const legacy=host.querySelector('.cnx-legacy');
+  if(!legacy){ renderHome(); return; }
+  const homeType=(legacy.querySelector('#homeTypeFilter')?.value||'').trim();
+  const legacyHtml=legacy.outerHTML;
+  host.innerHTML=cnxBuildExecutiveHome(data,LOGIN_ROLE==='employee',homeType)+legacyHtml;
+  requestAnimationFrame(()=>{cnxBindHomeMotion();cnxHydrateHomeTarget();});
+}
+
+function cnxQueueHomeRender(executiveOnly=false){
+  if(_cnxHomeRenderFrame) cancelAnimationFrame(_cnxHomeRenderFrame);
+  _cnxHomeRenderFrame=requestAnimationFrame(()=>{
+    _cnxHomeRenderFrame=0;
+    try{ executiveOnly ? cnxRefreshExecutiveHome() : renderHome(); }
+    catch(e){ console.error('Home render failed:',e); }
+  });
+}
+window.cnxQueueHomeRender=cnxQueueHomeRender;
 
 function renderHome(){
   const host = document.getElementById('homeContent');
@@ -10124,7 +10155,7 @@ function renderHome(){
       <p class="home-sec-label" style="margin:0">Top Performers${homeType ? ' — '+escHtml(homeType) : ''}</p>
       <div style="display:flex;align-items:center;gap:8px">
         <label class="fl" style="margin:0">Top in Type</label>
-        <select class="fs" id="homeTypeFilter" onchange="renderHome()" style="min-width:160px" title="Filter top SKUs by channel type">${typeOpts}</select>
+        <select class="fs" id="homeTypeFilter" onchange="cnxQueueHomeRender(false)" style="min-width:160px" title="Filter top SKUs by channel type">${typeOpts}</select>
       </div>
     </div>
     <div class="home-top-grid">
@@ -14628,7 +14659,7 @@ showTab = function(t){
   if (t === 'demandpatterns') setTimeout(()=>{ try{ loadDemandPatterns(); }catch(e){console.error(e);} }, 0);
   if (t === 'ooslost') setTimeout(()=>{ try{ loadOosLostSales(false); }catch(e){console.error(e);} }, 0);
   if (t === 'payments') setTimeout(()=>{ try{ loadPayments(); loadPaymentsPlanning(); }catch(e){console.error(e);} }, 0);
-  if (t === 'home')     setTimeout(()=>{ try{ renderHome(); }catch(e){console.error(e);} }, 0);
+  if (t === 'home')     cnxQueueHomeRender(false);
 };
 
 const __origMkCard = mkCard;
