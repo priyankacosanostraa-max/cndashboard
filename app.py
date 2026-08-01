@@ -5071,7 +5071,7 @@ table.ro img,
   --cnx-green:#17895e;--cnx-red:#c64f4f;--cnx-blue:#346fad;--cnx-amber:#b66f12;
   --cnx-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 12px 28px rgba(86,64,24,.10),0 30px 70px rgba(86,64,24,.08);
 }
-html,body{background:#f6f2e9!important;color:var(--cnx-text)!important}
+html,body{background:#f6f2e9!important;color:var(--cnx-text)!important;overflow-x:hidden!important}
 body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparent 30%),radial-gradient(circle at 92% 72%,rgba(158,113,31,.12),transparent 28%),linear-gradient(145deg,#fbf8f1,#eee5d5)!important;background-attachment:fixed!important}
 #pcanvas,#siteHero{display:none!important}
 #appRoot{padding-left:276px;min-height:100vh;transition:padding-left .3s ease}
@@ -5100,6 +5100,7 @@ body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparen
 }
 #navMenu .menu-item:hover{color:#201a12!important;background:var(--cnx-gold-soft)!important;transform:translateX(4px)}
 #navMenu .menu-item.active{color:#201a12!important;background:linear-gradient(90deg,rgba(235,204,130,.38),rgba(255,255,255,.3))!important;box-shadow:inset 3px 0 var(--cnx-gold),0 8px 20px rgba(115,83,26,.08)!important}
+#navMenu .menu-item>span:nth-child(2){display:block!important;visibility:visible!important;opacity:1!important;min-width:0;line-height:1.25}
 .cn-menu-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 auto;border:1px solid var(--cnx-line);border-radius:10px;color:var(--cnx-gold);background:rgba(255,255,255,.62);box-shadow:0 5px 12px rgba(86,64,24,.09),inset 0 1px rgba(255,255,255,.95);transition:transform .25s}
 .cn-menu-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #navMenu .menu-item:hover .cn-menu-icon{transform:translateY(-2px) rotate(-4deg) scale(1.08)}
@@ -5136,10 +5137,15 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .cnx-eyebrow{font-size:9px;letter-spacing:2.6px;text-transform:uppercase;color:var(--cnx-gold);font-weight:950}
 .cnx-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(38px,4.6vw,64px);font-weight:700;line-height:.98;color:#201a12;letter-spacing:-1.5px;margin:9px 0 10px}
 .cnx-sub{color:var(--cnx-muted);font-size:12px;line-height:1.65;font-weight:650;max-width:760px}
+.cnx-home-controls{display:flex;flex-direction:column;align-items:flex-end;gap:9px;min-width:min(100%,520px)}
 .cnx-range{display:flex;gap:6px;border:1px solid var(--cnx-line);background:#fffefb;padding:7px;border-radius:15px;box-shadow:var(--cnx-shadow)}
 .cnx-range button{border:0;background:transparent;color:var(--cnx-muted);padding:9px 12px;border-radius:9px;font-size:9px;font-weight:900;cursor:pointer}
 .cnx-range button.active{background:linear-gradient(145deg,#e8cc84,#b17e20);color:#1c1508;box-shadow:0 7px 18px rgba(168,121,32,.2)}
-.cnx-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.cnx-date-filter{display:flex;align-items:flex-end;gap:7px;flex-wrap:wrap;justify-content:flex-end;padding:9px 10px;border:1px solid var(--cnx-line);background:rgba(255,254,251,.82);border-radius:15px;box-shadow:0 10px 26px rgba(86,64,24,.08)}
+.cnx-date-field{display:flex;flex-direction:column;gap:4px}.cnx-date-field span{font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:var(--cnx-muted);font-weight:900}.cnx-date-field input{width:132px;height:34px;padding:0 8px;font-size:9px;font-weight:800;border:1px solid var(--cnx-line)!important;border-radius:9px!important;background:#fff!important;color:#201a12!important}
+.cnx-date-apply,.cnx-date-reset{height:34px;border-radius:9px;padding:0 11px;font-size:8px;font-weight:950;letter-spacing:.6px;cursor:pointer}.cnx-date-apply{border:0;background:linear-gradient(145deg,#e8cc84,#a87920);color:#1d160c;box-shadow:0 8px 18px rgba(168,121,32,.16)}.cnx-date-reset{border:1px solid var(--cnx-line);background:#fff;color:var(--cnx-muted)}
+.cnx-date-error{width:100%;font-size:8px;color:var(--cnx-red);font-weight:850;text-align:right;min-height:10px}
+.cnx-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 .cnx-kpi{position:relative;min-height:158px;border:1px solid var(--cnx-line);border-radius:22px;padding:20px;overflow:hidden;background:linear-gradient(145deg,#fffefb 0%,#fbf6eb 66%,#f0e4ce 100%);box-shadow:var(--cnx-shadow);transform-style:preserve-3d;animation:cnxCardIn .7s cubic-bezier(.18,.85,.25,1.1) both;transition:transform .25s,border-color .25s}
 .cnx-kpi:nth-child(2){animation-delay:.08s}.cnx-kpi:nth-child(3){animation-delay:.16s}.cnx-kpi:nth-child(4){animation-delay:.24s}
 .cnx-kpi:before{content:"";position:absolute;width:110px;height:110px;border-radius:50%;right:-38px;top:-42px;background:radial-gradient(circle,var(--glow,rgba(217,185,104,.2)),transparent 70%)}
@@ -5161,14 +5167,45 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .cnx-legacy{margin-top:28px;padding-top:22px;border-top:1px solid var(--cnx-line)}.cnx-legacy .home-sec-label{font-size:10px!important;letter-spacing:2px!important;color:var(--cnx-gold)!important}
 @keyframes cnxSidebarIn{from{opacity:0;transform:translateX(-28px) rotateY(5deg)}}@keyframes cnxHeroIn{from{opacity:0;transform:translateY(18px)}}@keyframes cnxCardIn{from{opacity:0;transform:perspective(900px) translateY(38px) rotateX(11deg) scale(.96)}to{opacity:1;transform:perspective(900px) translateY(0) rotateX(0) scale(1)}}@keyframes cnxPanelIn{from{opacity:0;transform:perspective(1100px) translateY(42px) rotateX(7deg)}to{opacity:1;transform:perspective(1100px) translateY(0) rotateX(0)}}@keyframes cnxGrow{from{transform:scaleY(0)}}@keyframes cnxRingFloat{50%{transform:translateY(-7px) rotate(1.5deg)}}
 
+@media(max-width:1280px){.cnx-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:1180px){.cnx-kpis{grid-template-columns:repeat(2,1fr)}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}}
 @media(max-width:980px){
   #appRoot{padding-left:0}.wrap{padding:0 16px!important}.menu-btn{display:flex!important}
   #navMenu{display:none!important;top:70px!important;left:12px!important;bottom:auto!important;width:min(320px,calc(100vw - 24px))!important;min-width:0!important;max-width:calc(100vw - 24px)!important;max-height:calc(100vh - 84px)!important;border:1px solid var(--cnx-line)!important;border-radius:18px!important;padding:12px!important;box-shadow:0 28px 70px rgba(54,39,15,.22)!important}
   #navMenu[style*="block"]{display:flex!important}#navMenu:before{font-size:17px;padding:8px 10px 15px}
-  .app-bar{height:70px!important;padding:0 14px!important}.app-bar-brand{font-size:14px!important}.app-bar-sub{letter-spacing:1.3px!important}.cnx-hero{align-items:flex-start}.cnx-title{font-size:42px}
+  .app-bar{height:70px!important;padding:0 14px!important}.app-bar-brand{font-size:14px!important}.app-bar-sub{letter-spacing:1.3px!important}.cnx-hero{align-items:flex-start}.cnx-title{font-size:42px}.cnx-home-controls{width:100%;align-items:stretch}.cnx-range{width:max-content;max-width:100%}.cnx-date-filter{justify-content:flex-start}.cnx-date-error{text-align:left}
 }
-@media(max-width:640px){.cnx-kpis{grid-template-columns:1fr}.cnx-kpi{min-height:143px}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}.cnx-chart{height:230px}.cnx-range{width:100%;overflow:auto}.cnx-range button{flex:1;white-space:nowrap}.cnx-target-grid{grid-template-columns:1fr 1fr}.cnx-panel{padding:16px}.cnx-table-wrap{margin:0 -16px -16px}.cnx-title{font-size:36px}.app-chip{padding:8px 10px!important;letter-spacing:1px!important;font-size:8px!important}}
+@media(max-width:640px){.cnx-kpis{grid-template-columns:1fr}.cnx-kpi{min-height:143px}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}.cnx-chart{height:230px}.cnx-range{width:100%;overflow:auto}.cnx-range button{flex:1;white-space:nowrap}.cnx-date-filter{display:grid;grid-template-columns:1fr 1fr}.cnx-date-field input{width:100%}.cnx-date-apply,.cnx-date-reset{width:100%}.cnx-date-error{grid-column:1/-1}.cnx-target-grid{grid-template-columns:1fr 1fr}.cnx-panel{padding:16px}.cnx-table-wrap{margin:0 -16px -16px}.cnx-title{font-size:36px}.app-chip{padding:8px 10px!important;letter-spacing:1px!important;font-size:8px!important}}
+
+/* Drawer navigation: closed by default on every screen size */
+#appRoot{padding-left:0!important}
+.menu-btn{display:flex!important;align-items:center!important;justify-content:center!important;gap:9px!important;width:auto!important;min-width:102px!important;height:44px!important;padding:0 14px!important;border:1px solid rgba(123,91,33,.16)!important;border-radius:13px!important;background:linear-gradient(145deg,#fffefb,#f2e5cc)!important;color:#6f4d10!important;box-shadow:0 10px 24px rgba(86,64,24,.11)!important;font-size:10px!important;font-weight:950!important;letter-spacing:1.2px!important;text-transform:uppercase!important;cursor:pointer!important;transition:transform .22s,box-shadow .22s!important}
+.menu-btn:hover{transform:translateY(-2px)!important;box-shadow:0 16px 32px rgba(86,64,24,.16)!important}.menu-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+#navMenu{display:flex!important;transform:translateX(-108%);opacity:0;pointer-events:none;transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .25s!important;z-index:302!important;width:334px!important;min-width:334px!important;max-width:min(90vw,334px)!important;padding-top:74px!important;border-right:1px solid rgba(123,91,33,.16)!important;box-shadow:34px 0 90px rgba(48,34,12,.2)!important}
+#navMenu.cn-open{transform:translateX(0);opacity:1;pointer-events:auto}
+#navMenu:before{position:absolute;left:22px;right:58px;top:18px;padding:0 0 15px!important;margin:0!important;font-size:17px!important;line-height:1.25!important;white-space:pre!important}
+.cn-menu-close{position:absolute;right:18px;top:18px;width:38px;height:38px;border:1px solid var(--cnx-line);border-radius:11px;background:#fff;color:#6f4d10;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 8px 18px rgba(86,64,24,.1);z-index:2}.cn-menu-close:hover{background:#f5e8ce;transform:rotate(5deg)}
+.cn-nav-backdrop{position:fixed;inset:0;z-index:301;background:rgba(33,25,14,.34);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .28s}.cn-nav-backdrop.cn-open{opacity:1;pointer-events:auto}body.cn-menu-open{overflow:hidden!important}
+
+/* Ultra-premium shared module system */
+.wrap>[id^="v"]{padding:18px 0 48px;animation:cnxModuleIn .5s cubic-bezier(.2,.8,.2,1) both}
+.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero,#vBulk .bulk-head,#vTarget>.insights-head,#vPayments>.insights-head{
+  position:relative!important;overflow:hidden!important;background:linear-gradient(145deg,#fffefb 0%,#f8f0e1 68%,#ead9b9 100%)!important;border:1px solid rgba(123,91,33,.14)!important;border-radius:24px!important;padding:21px 24px!important;margin:4px 0 18px!important;box-shadow:var(--cnx-shadow)!important;color:#201a12!important
+}
+.matrix-page-title:after,.insights-head:after,.ops-page .ops-head:after,.smart-hero:after{content:"";position:absolute;width:190px;height:190px;border-radius:50%;right:-74px;top:-92px;background:radial-gradient(circle,rgba(218,177,88,.25),transparent 68%);pointer-events:none}
+.matrix-page-title,.insights-title,.ops-page .ops-title,.smart-hero-title{font-family:'Cormorant Garamond',Georgia,serif!important;font-size:clamp(27px,3vw,39px)!important;line-height:1!important;font-weight:850!important;letter-spacing:.1px!important;color:#201a12!important;text-transform:none!important}
+.insights-sub,.ops-page .ops-sub,.smart-hero-sub{color:#776e5f!important;font-size:11px!important;line-height:1.65!important;font-weight:650!important;margin-top:8px!important}
+.filter-box,.ops-page .ops-filters,.ro-col-filters{background:rgba(255,254,251,.88)!important;border:1px solid rgba(123,91,33,.14)!important;border-radius:19px!important;padding:16px!important;box-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 14px 32px rgba(86,64,24,.08)!important}
+.fg .fc,.ops-page .ops-filters .fc{background:linear-gradient(145deg,#fffefb,#f8f0e2)!important;border:1px solid rgba(123,91,33,.1)!important;border-radius:14px!important;padding:12px!important;min-height:88px!important;box-shadow:0 7px 18px rgba(86,64,24,.05)!important}
+.fl,.ops-page label{color:#8a6119!important;font-size:8px!important;letter-spacing:1.4px!important;font-weight:950!important;text-transform:uppercase!important}
+.fi,.fs,input.fi,select.fs,textarea{min-height:40px!important;border:1px solid rgba(123,91,33,.18)!important;border-radius:11px!important;background:#fffefb!important;color:#201a12!important;box-shadow:inset 0 1px 3px rgba(86,64,24,.05)!important;transition:border-color .2s,box-shadow .2s!important}.fi:focus,.fs:focus,input.fi:focus,select.fs:focus,textarea:focus{outline:none!important;border-color:#b88930!important;box-shadow:0 0 0 3px rgba(184,137,48,.13),inset 0 1px 3px rgba(86,64,24,.04)!important}
+.go-btn,.ai-hbtn,.mini-btn,.home-back{border:0!important;border-radius:11px!important;background:linear-gradient(145deg,#ebcf88,#a87920)!important;color:#1d160c!important;box-shadow:0 10px 24px rgba(168,121,32,.17),inset 0 1px rgba(255,255,255,.55)!important;transition:transform .2s,box-shadow .2s!important}.go-btn:hover,.ai-hbtn:hover,.mini-btn:hover,.home-back:hover{transform:translateY(-2px)!important;box-shadow:0 16px 30px rgba(168,121,32,.22)!important}
+.kpis{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(175px,1fr))!important;gap:13px!important;align-items:stretch!important}.kpi{min-width:0!important;min-height:122px!important;text-align:left!important;padding:18px!important}.kpi-t{text-align:left!important;color:#8a6119!important}.kpi-v{text-align:left!important;font-family:'Montserrat',sans-serif!important;color:#201a12!important}
+.ro-table-wrap,.ops-page .ops-table-wrap{border:1px solid rgba(123,91,33,.14)!important;border-radius:19px!important;background:#fffefb!important;box-shadow:var(--cnx-shadow)!important;overflow:auto!important}.ro-table-wrap table.ro,.ops-page table.ops-table{background:#fffefb!important}.ro-table-wrap table.ro thead th,.ops-page table.ops-table th{background:#f2e5cf!important;color:#7d5614!important;border-bottom:1px solid rgba(123,91,33,.16)!important;font-weight:950!important}.ro-table-wrap table.ro tbody tr:nth-child(even) td,.ops-page table.ops-table tbody tr:nth-child(even) td{background:rgba(248,240,225,.45)!important}.ro-table-wrap table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{background:#fff3d9!important}
+.type-checks,.sku-checklist{border:1px solid rgba(123,91,33,.13)!important;border-radius:12px!important;background:#fffdf8!important}.type-opt,.sku-opt{border-color:rgba(123,91,33,.1)!important;background:#fbf6eb!important;border-radius:10px!important}.card,.top-card,.yoy-card,.td-card,.insight-card{border:1px solid rgba(123,91,33,.14)!important;background:linear-gradient(145deg,#fffefb,#f6ecda)!important;border-radius:20px!important;box-shadow:var(--cnx-shadow)!important}
+footer{background:#201a12!important;border-top:0!important}.fb{color:#d8b75f!important}.fd{color:#9f917b!important}
+@keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
+@media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 @media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
 
 </style></head><body data-tab="home">
@@ -5193,6 +5230,17 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .lg-in:focus{border-color:#b8960c;box-shadow:inset 0 1px 4px rgba(26,22,16,.05),0 0 0 3px rgba(184,150,12,.18)}
 .lg-in::placeholder{color:#a89e84}
 select.lg-in option{background:#fff;color:#1a1610}
+#loginGate{padding:28px;background:radial-gradient(900px 560px at 4% 8%,rgba(217,185,104,.24),transparent 64%),radial-gradient(820px 560px at 96% 100%,rgba(142,102,29,.16),transparent 62%),linear-gradient(145deg,#fffdf8,#efe3ce)!important}
+.lg-layout{position:relative;z-index:5;width:min(1080px,96vw);min-height:650px;display:grid;grid-template-columns:1.12fr .88fr;border:1px solid rgba(115,82,24,.2);border-radius:32px;overflow:hidden;background:#fffdf8;box-shadow:0 45px 120px rgba(61,43,14,.24),0 2px 0 rgba(255,255,255,.9) inset;animation:cnxLoginIn .7s cubic-bezier(.2,.8,.2,1) both}
+.lg-showcase{position:relative;overflow:hidden;padding:58px 56px;display:flex;flex-direction:column;justify-content:center;color:#fff9ec;background:radial-gradient(circle at 75% 18%,rgba(223,181,86,.35),transparent 28%),radial-gradient(circle at 7% 92%,rgba(173,123,31,.28),transparent 31%),linear-gradient(145deg,#16120c 0%,#332716 53%,#6f4d16 100%)}
+.lg-showcase:before{content:"";position:absolute;inset:18px;border:1px solid rgba(238,207,132,.18);border-radius:24px;pointer-events:none}.lg-showcase:after{content:"CN";position:absolute;right:-25px;bottom:-78px;font-family:'Cormorant Garamond',serif;font-size:265px;line-height:1;color:rgba(255,245,220,.045);font-weight:800;pointer-events:none}
+.lg-brand-chip{position:absolute;left:56px;top:54px;width:53px;height:53px;border:1px solid rgba(238,207,132,.5);border-radius:16px;display:grid;place-items:center;font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:800;letter-spacing:2px;color:#f1d58d;background:rgba(255,255,255,.06);box-shadow:0 15px 34px rgba(0,0,0,.18),inset 0 1px rgba(255,255,255,.12)}
+.lg-show-kicker,.lg-card-kicker{font-size:9px;letter-spacing:2.8px;text-transform:uppercase;font-weight:900}.lg-show-kicker{color:#e0bd69;margin-bottom:18px}.lg-show-title{max-width:540px;font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(45px,5vw,67px);line-height:.94;letter-spacing:-1px;font-weight:700}.lg-show-sub{max-width:510px;margin-top:22px;color:#d8cdb9;font-size:12px;line-height:1.75;font-weight:600}
+.lg-feature-grid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:34px}.lg-feature{padding:15px 13px;border:1px solid rgba(238,207,132,.18);border-radius:14px;background:rgba(255,255,255,.055);backdrop-filter:blur(8px)}.lg-feature b{display:block;color:#f1d58d;font-size:15px}.lg-feature span{display:block;color:#cfc2aa;font-size:8px;letter-spacing:.8px;text-transform:uppercase;margin-top:5px;font-weight:800}.lg-secure{position:absolute;left:56px;bottom:47px;font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:#b9aa90;font-weight:800}.lg-secure i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#68c799;box-shadow:0 0 13px #68c799;margin-right:8px}
+.lg-card{position:relative;z-index:2;width:auto;max-width:none;padding:58px 52px;border:0;border-radius:0;text-align:left;background:linear-gradient(150deg,#fffefb,#f8f1e4);box-shadow:none;display:flex;flex-direction:column;justify-content:center}.lg-card-kicker{color:#9a6d1c}.lg-card-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:40px;line-height:1.02;color:#201a12;font-weight:800;margin-top:10px}.lg-card-sub{color:#7a7062;font-size:11px;line-height:1.6;margin:11px 0 28px}.lg-label{display:block;color:#765317;font-size:8px;letter-spacing:1.35px;text-transform:uppercase;font-weight:950;margin:0 0 7px 2px}
+.lg-in{min-height:50px;margin:0 0 17px;padding:13px 15px;border-color:rgba(122,88,27,.17);border-radius:13px;background:#fffdf9;color:#201a12;box-shadow:0 7px 17px rgba(72,50,14,.045),inset 0 1px 2px rgba(72,50,14,.035)}.lg-submit{width:100%;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border:0;border-radius:13px;background:linear-gradient(145deg,#2b2113,#7d5717);color:#fff9ec;box-shadow:0 17px 34px rgba(83,58,16,.22),inset 0 1px rgba(255,255,255,.18);font:900 10px 'Inter',sans-serif;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:transform .22s,box-shadow .22s}.lg-submit b{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.25);border-radius:9px;font-size:15px}.lg-submit:hover{transform:translateY(-2px);box-shadow:0 22px 42px rgba(83,58,16,.28)}.lg-foot-note{text-align:center;color:#9a8e7d;font-size:8px;letter-spacing:.7px;margin-top:18px}.lg-error{color:#b93d3d;font-size:10px;font-weight:850;min-height:16px;margin:-4px 0 10px}
+@keyframes cnxLoginIn{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:none}}
+@media(max-width:820px){#loginGate{padding:14px;align-items:flex-start!important;overflow:auto!important}.lg-layout{width:100%;min-height:0;grid-template-columns:1fr;margin:auto 0;border-radius:23px}.lg-showcase{min-height:235px;padding:76px 27px 27px;justify-content:flex-start}.lg-showcase:before{inset:11px;border-radius:17px}.lg-brand-chip{left:27px;top:24px;width:42px;height:42px;border-radius:13px;font-size:18px}.lg-show-kicker{margin-bottom:9px}.lg-show-title{font-size:38px}.lg-show-sub{font-size:10px;margin-top:12px}.lg-feature-grid{display:none}.lg-secure{display:none}.lg-card{padding:31px 26px 33px}.lg-card-title{font-size:34px}.lg-card-sub{margin-bottom:22px}}
 </style>
   <div class="lg-wm" style="top:6%;left:4%;font-size:clamp(20px,3.2vw,44px);animation:lgFloatA 14s ease-in-out infinite">COSA NOSTRAA</div>
   <div class="lg-wm" style="top:14%;right:-2%;font-size:clamp(14px,2.2vw,30px);opacity:.7;animation:lgFloatB 18s ease-in-out infinite">COSA NOSTRAA</div>
@@ -5203,28 +5251,45 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="lg-wm" style="bottom:4%;left:30%;font-size:clamp(12px,1.8vw,24px);opacity:.55;animation:lgFloatA 19s ease-in-out infinite 4s">COSA NOSTRAA</div>
   <div class="lg-wm" style="top:2%;left:42%;font-size:clamp(12px,1.6vw,22px);opacity:.5;animation:lgFloatB 15s ease-in-out infinite 2.5s">COSA NOSTRAA</div>
 
-  <div class="lg-card">
-    <div style="font-family:'Cormorant Garamond',serif;font-weight:500;font-size:30px;letter-spacing:6px;text-transform:uppercase;color:#1a1610">Cosa Nostraa</div>
-    <div style="margin-top:8px;font-size:9px;letter-spacing:4px;color:#6b5e3e;font-weight:700;text-transform:uppercase">Salasar Balaji Creations Pvt. Ltd.</div>
-    <div style="height:1px;background:linear-gradient(90deg,transparent,#b8960c,transparent);margin:22px 0 24px;animation:lgPulse 4s ease-in-out infinite"></div>
-    <select id="lgRole" class="lg-in">
-      <option value="admin">Admin Login</option>
-      <option value="employee">Employee Login</option>
-    </select>
-    <input id="lgUser" class="lg-in" placeholder="Username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
-    <input id="lgPass" class="lg-in" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-    <div id="lgErr" style="color:#c0392b;font-size:11px;font-weight:800;min-height:16px;margin-bottom:10px"></div>
-    <button type="button" onclick="doLogin(); return false;"
-      style="width:100%;padding:14px;background:#1a1610;color:#faf8f4;border:none;border-radius:12px;font-size:12px;font-weight:800;letter-spacing:4px;text-transform:uppercase;cursor:pointer;
-             box-shadow:0 14px 40px rgba(26,22,16,.22),inset 0 1px 0 rgba(255,255,255,.1);font-family:'Inter',sans-serif;transition:transform .2s,filter .2s,background .2s"
-      onmouseover="this.style.transform='translateY(-2px)';this.style.background='#b8960c'" onmouseout="this.style.transform='';this.style.background='#1a1610'">Sign In</button>
+  <div class="lg-layout">
+    <section class="lg-showcase">
+      <div class="lg-brand-chip">CN</div>
+      <div class="lg-show-kicker">Management Intelligence</div>
+      <div class="lg-show-title">Operate with clarity.<br>Grow with confidence.</div>
+      <div class="lg-show-sub">A unified command center for live sales, inventory, production, targets and forecasting — designed for faster, sharper business decisions.</div>
+      <div class="lg-feature-grid">
+        <div class="lg-feature"><b>Live</b><span>Sales &amp; Revenue</span></div>
+        <div class="lg-feature"><b>360°</b><span>Inventory View</span></div>
+        <div class="lg-feature"><b>Smart</b><span>Action Alerts</span></div>
+      </div>
+      <div class="lg-secure"><i></i>Secure role-based access</div>
+    </section>
+    <section class="lg-card">
+      <div class="lg-card-kicker">Welcome back</div>
+      <div class="lg-card-title">Sign in to Command Center</div>
+      <div class="lg-card-sub">Use your authorized Cosa Nostraa credentials to continue.</div>
+      <label class="lg-label" for="lgRole">Access Role</label>
+      <select id="lgRole" class="lg-in">
+        <option value="admin">Admin Login</option>
+        <option value="employee">Employee Login</option>
+      </select>
+      <label class="lg-label" for="lgUser">Username</label>
+      <input id="lgUser" class="lg-in" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      <label class="lg-label" for="lgPass">Password</label>
+      <input id="lgPass" class="lg-in" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+      <div id="lgErr" class="lg-error"></div>
+      <button class="lg-submit" type="button" onclick="doLogin(); return false;"><span>Sign In Securely</span><b>→</b></button>
+      <div class="lg-foot-note">Protected internal system · Salasar Balaji Creations Pvt. Ltd.</div>
+    </section>
   </div>
 </div>
 
 <div id="appRoot" style="display:none">
 
 <div class="app-bar" id="appBar">
-  <button class="menu-btn" onclick="toggleNavMenu()" title="Menu" aria-label="Menu">⋮</button>
+  <button class="menu-btn" onclick="toggleNavMenu()" title="Open menu" aria-label="Open menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="menu-btn-label">Menu</span>
+  </button>
   <div class="app-bar-copy">
     <div class="app-bar-brand">COSA NOSTRAA</div>
     <div class="app-bar-sub" id="appBarSub">HOME</div>
@@ -5235,6 +5300,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 </div>
 
 <div class="nav-menu" id="navMenu">
+  <button class="cn-menu-close" onclick="toggleNavMenu(false)" title="Close menu" aria-label="Close menu">×</button>
   <button class="menu-item" id="m1" onclick="showTab('home')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6"/></svg></span><span>Home</span></button>
   <button class="menu-item" id="m2" onclick="showTab('matrix')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V4h4v16M16 20v-7h4v7M3 20h18"/></svg></span><span>Overall Details</span></button>
   <button class="menu-item" id="m3" onclick="showTab('repeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m17 3 4 4-4 4M21 7H7a4 4 0 0 0-4 4v1M7 21l-4-4 4-4M3 17h14a4 4 0 0 0 4-4v-1"/></svg></span><span>Repeat Orders</span></button>
@@ -5260,6 +5326,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m17" onclick="showTab('payments')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3zM3 10h18M7 15h4"/></svg></span><span>Payments</span></button>
   <button class="menu-item" id="m11" onclick="showTab('help')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .8-1.5 1.3-1.5 3M12 18h.01"/></svg></span><span>Help</span></button>
 </div>
+<div class="cn-nav-backdrop" id="cnNavBackdrop" onclick="toggleNavMenu(false)" aria-hidden="true"></div>
 
 <div class="hero" id="siteHero">
   <div class="hero-only">
@@ -7249,9 +7316,23 @@ window.sdSearchInput = sdSearchInput; window.sdSearchGo = sdSearchGo;
 function toggleNavMenu(force){
   const menu = document.getElementById('navMenu');
   if (!menu) return;
-  const show = typeof force === 'boolean' ? force : menu.style.display !== 'block';
-  menu.style.display = show ? 'block' : 'none';
+  const backdrop = document.getElementById('cnNavBackdrop');
+  const trigger = document.querySelector('.menu-btn');
+  const isOpen = menu.classList.contains('cn-open');
+  const show = typeof force === 'boolean' ? force : !isOpen;
+  menu.style.display = '';
+  menu.classList.toggle('cn-open', show);
+  if (backdrop) backdrop.classList.toggle('cn-open', show);
+  document.body.classList.toggle('cn-menu-open', show);
+  if (trigger) {
+    trigger.setAttribute('aria-expanded', show ? 'true' : 'false');
+    trigger.setAttribute('aria-label', show ? 'Close menu' : 'Open menu');
+  }
 }
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') toggleNavMenu(false);
+});
 
 function goBackFromDetails(){
   showTab(lastTab || 'home');
@@ -9463,7 +9544,57 @@ function enterApp(role){
   if (typeof loadData === 'function') setTimeout(() => { try { loadData(false); } catch(e){ console.error(e); } }, 50);
 }
 
+/* Short premium login chime. Web Audio keeps the dashboard self-contained. */
+let _loginAudioCtx = null;
+function primeLoginSound(){
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!_loginAudioCtx) _loginAudioCtx = new AudioCtx();
+    if (_loginAudioCtx.state === 'suspended') _loginAudioCtx.resume().catch(() => {});
+  } catch(e){}
+}
+
+function playLoginSuccessSound(){
+  try {
+    primeLoginSound();
+    const ctx = _loginAudioCtx;
+    if (!ctx) return;
+    const start = ctx.currentTime + 0.015;
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.0001, start);
+    masterGain.gain.exponentialRampToValueAtTime(0.23, start + 0.035);
+    masterGain.gain.setValueAtTime(0.23, start + 0.48);
+    masterGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.98);
+    masterGain.connect(ctx.destination);
+
+    [
+      {freq:523.25, at:0.00, dur:0.58, type:'sine',     vol:0.52},
+      {freq:659.25, at:0.10, dur:0.65, type:'sine',     vol:0.42},
+      {freq:783.99, at:0.22, dur:0.70, type:'triangle', vol:0.23},
+      {freq:1046.5, at:0.43, dur:0.52, type:'sine',     vol:0.16}
+    ].forEach(tone => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const toneStart = start + tone.at;
+      const toneEnd = Math.min(start + 0.98, toneStart + tone.dur);
+      osc.type = tone.type;
+      osc.frequency.setValueAtTime(tone.freq, toneStart);
+      osc.detune.setValueAtTime(-3, toneStart);
+      gain.gain.setValueAtTime(0.0001, toneStart);
+      gain.gain.exponentialRampToValueAtTime(tone.vol, toneStart + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, toneEnd);
+      osc.connect(gain);
+      gain.connect(masterGain);
+      osc.start(toneStart);
+      osc.stop(toneEnd + 0.02);
+    });
+  } catch(e){}
+}
+
 async function doLogin(){
+  // Prime audio while the click/Enter gesture is active; play only after success.
+  primeLoginSound();
   const u = (document.getElementById('lgUser')?.value || '').trim();
   const p = (document.getElementById('lgPass')?.value || '');
   const err = document.getElementById('lgErr');
@@ -9477,6 +9608,7 @@ async function doLogin(){
 
   if (ok) {
     if (err) err.textContent = '';
+    playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
   } else {
     if (err) err.textContent = 'Invalid username or password.';
@@ -9643,6 +9775,8 @@ function renderProHeader(){
 
 
 let _cnxHomeDays = 30;
+let _cnxHomeFrom = '';
+let _cnxHomeTo = '';
 
 function cnxCompactMoney(n){
   n = Number(n) || 0;
@@ -9654,28 +9788,51 @@ function cnxCompactMoney(n){
 
 function cnxSetHomeRange(days){
   _cnxHomeDays = Math.max(7, Number(days) || 30);
+  _cnxHomeFrom = '';
+  _cnxHomeTo = '';
   renderHome();
 }
 window.cnxSetHomeRange = cnxSetHomeRange;
 
+function cnxApplyHomeDateRange(){
+  const from = document.getElementById('cnxDateFrom')?.value || '';
+  const to = document.getElementById('cnxDateTo')?.value || '';
+  const err = document.getElementById('cnxDateError');
+  if (!from || !to){ if(err) err.textContent='Select both From and To dates.'; return; }
+  if (from > to){ if(err) err.textContent='From date cannot be after To date.'; return; }
+  _cnxHomeFrom = from;
+  _cnxHomeTo = to;
+  renderHome();
+}
+function cnxResetHomeDateRange(){ cnxSetHomeRange(30); }
+window.cnxApplyHomeDateRange = cnxApplyHomeDateRange;
+window.cnxResetHomeDateRange = cnxResetHomeDateRange;
+
 function cnxBuildExecutiveHome(data, isEmp, homeType){
   const nowKey = todayISO || new Date().toISOString().slice(0,10);
   const now = new Date(nowKey + 'T00:00:00');
-  const start = new Date(now); start.setDate(start.getDate() - (_cnxHomeDays - 1));
+  const endKey = _cnxHomeTo || nowKey;
+  const endDate = new Date(endKey + 'T00:00:00');
+  const customRange = Boolean(_cnxHomeFrom && _cnxHomeTo);
+  const periodDays = customRange ? Math.max(1, Math.round((endDate - new Date(_cnxHomeFrom+'T00:00:00'))/86400000)+1) : _cnxHomeDays;
+  const start = customRange ? new Date(_cnxHomeFrom+'T00:00:00') : new Date(endDate);
+  if (!customRange) start.setDate(start.getDate() - (periodDays - 1));
   const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
-  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (_cnxHomeDays - 1));
-  const iso = d => d.toISOString().slice(0,10);
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (periodDays - 1));
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   const startKey = iso(start), prevStartKey = iso(prevStart), prevEndKey = iso(prevEnd);
   const entOk = e => !homeType || String(e.type||'').trim() === homeType;
-  let revenue=0, qty=0, orders=0, prevRevenue=0, prevQty=0;
+  const yKey = yesterdayISO || (()=>{const y=new Date(now);y.setDate(y.getDate()-1);return iso(y);})();
+  let revenue=0, qty=0, orders=0, prevRevenue=0, prevQty=0, yesterdayRev=0, yesterdayQty=0, yesterdayOrders=0;
   const daily = {};
-  for (let d=6; d>=0; d--){ const x=new Date(now); x.setDate(x.getDate()-d); daily[iso(x)]={rev:0,qty:0}; }
+  for (let d=6; d>=0; d--){ const x=new Date(endDate); x.setDate(x.getDate()-d); daily[iso(x)]={rev:0,qty:0}; }
   for (const it of data){
     for (const e of (it.sales_entries||[])){
       if (!entOk(e) || !e.date || e.date==='N/A') continue;
       const q=Number(e.qty)||0, r=Number(e.rev)||0;
-      if (e.date>=startKey && e.date<=nowKey){ qty+=q; revenue+=r; orders+=1; }
+      if (e.date>=startKey && e.date<=endKey){ qty+=q; revenue+=r; orders+=1; }
       else if (e.date>=prevStartKey && e.date<=prevEndKey){ prevQty+=q; prevRevenue+=r; }
+      if (e.date===yKey){ yesterdayQty+=q; yesterdayRev+=r; yesterdayOrders+=1; }
       if (daily[e.date]){ daily[e.date].qty+=q; daily[e.date].rev+=r; }
     }
   }
@@ -9703,7 +9860,7 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
     return `<div class="cnx-bar-group"><i class="cnx-bar cnx-bar-rev" style="height:${rh}%;animation-delay:${idx*.05}s" title="${escHtml(d)} revenue ${fmt(daily[d].rev)}"></i><i class="cnx-bar cnx-bar-qty" style="height:${qh}%;animation-delay:${idx*.05+.08}s" title="${escHtml(d)} qty ${Math.round(daily[d].qty)}"></i><span class="cnx-day">${lab}</span></div>`;
   }).join('');
   const deltaPill=(v,label)=>v===null?`<span>${label}</span>`:`<span class="cnx-pill ${v>=0?'cnx-good':'cnx-risk'}">${v>=0?'↑':'↓'} ${Math.abs(v).toFixed(1)}%</span><span>${label}</span>`;
-  const rangeLabel = _cnxHomeDays===365 ? 'last 365 days' : `last ${_cnxHomeDays} days`;
+  const rangeLabel = customRange ? `${startKey} to ${endKey}` : (periodDays===365 ? 'last 365 days' : `last ${periodDays} days`);
   const topRows = actionRows.slice(0,5).map(x=>{
     const status=x.inv<=10?'<span class="cnx-status cnx-urgent">URGENT</span>':x.inv<x.forecast*.45?'<span class="cnx-status cnx-watch">WATCH</span>':'<span class="cnx-status cnx-planned">PLANNED</span>';
     const skuEsc=String(x.i.sku||'').replace(/'/g,"\\'");
@@ -9715,13 +9872,17 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
   const revCard = isEmp
     ? `<article class="cnx-kpi" style="--glow:rgba(217,185,104,.22)"><div class="cnx-kpi-label">Catalog SKUs</div><div class="cnx-kpi-value">${data.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-good">LIVE</span><span>active catalog</span></div></article>`
     : `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(217,185,104,.22)"><div class="cnx-kpi-label">Net Revenue</div><div class="cnx-kpi-value">${cnxCompactMoney(revenue)}</div><div class="cnx-kpi-foot">${deltaPill(revDelta,'vs previous period')}</div></article>`;
+  const yesterdayLabel = new Date(yKey+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  const yesterdayCard = isEmp
+    ? `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(182,111,18,.17)"><div class="cnx-kpi-label">Yesterday · ${escHtml(yesterdayLabel)}</div><div class="cnx-kpi-value">${Math.round(yesterdayQty).toLocaleString('en-IN')} Units</div><div class="cnx-kpi-foot"><span class="cnx-pill ${yesterdayQty>0?'cnx-good':'cnx-risk'}">${yesterdayQty>0?'SOLD':'NO SALE'}</span><span>${yesterdayOrders.toLocaleString('en-IN')} order lines</span></div></article>`
+    : `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(182,111,18,.17)"><div class="cnx-kpi-label">Yesterday · ${escHtml(yesterdayLabel)}</div><div class="cnx-kpi-value">${cnxCompactMoney(yesterdayRev)}</div><div class="cnx-kpi-foot"><span class="cnx-pill ${yesterdayQty>0?'cnx-good':'cnx-risk'}">${Math.round(yesterdayQty).toLocaleString('en-IN')} units</span><span>${yesterdayOrders.toLocaleString('en-IN')} order lines</span></div></article>`;
   const targetContent = isEmp
     ? `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Qty achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved Qty</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target Qty</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Remaining Qty</div><div class="cnx-mini-value" id="cnxTargetProjected">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`
     : `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Revenue achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Projected</div><div class="cnx-mini-value" id="cnxTargetProjected" style="color:var(--cnx-green)">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`;
   return `<div class="cnx-home">
-    <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${_cnxHomeDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${_cnxHomeDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${_cnxHomeDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${_cnxHomeDays===365?'active':''}">1 YEAR</button></div></div>
-    <div class="cnx-kpis">${revCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot">${deltaPill(qtyDelta,`${orders.toLocaleString('en-IN')} order lines`)}</div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
-    <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue &amp; Sales Momentum</div><div class="cnx-panel-sub">Daily live performance · latest 7 days</div></div><div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#a87920">■</span> ${isEmp?'Activity':'Revenue'} &nbsp; <span style="color:#17895e">■</span> Quantity</div></div><div class="cnx-chart"><div class="cnx-y"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div class="cnx-bars">${chart}</div></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
+    <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button class="cnx-date-apply" onclick="cnxApplyHomeDateRange()">APPLY</button><button class="cnx-date-reset" onclick="cnxResetHomeDateRange()">RESET</button><div class="cnx-date-error" id="cnxDateError">${customRange?'Showing '+escHtml(startKey)+' to '+escHtml(endKey):''}</div></div></div></div>
+    <div class="cnx-kpis">${revCard}${yesterdayCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot">${deltaPill(qtyDelta,`${orders.toLocaleString('en-IN')} order lines`)}</div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
+    <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue &amp; Sales Momentum</div><div class="cnx-panel-sub">7-day trend ending ${escHtml(endKey)}</div></div><div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#a87920">■</span> ${isEmp?'Activity':'Revenue'} &nbsp; <span style="color:#17895e">■</span> Quantity</div></div><div class="cnx-chart"><div class="cnx-y"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div class="cnx-bars">${chart}</div></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
     <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
   </div>`;
 }
