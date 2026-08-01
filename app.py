@@ -185,12 +185,13 @@
 # script (or on your PATH), the defaults below will find it automatically.
 # You can also hard-code an absolute path, e.g.:
 #   CLOUDFLARED_PATH = r"C:\Users\You\Downloads\cloudflared-windows-386.exe"
-CLOUDFLARED_PATH = ""   # leave "" to auto-detect; set to skip detection
+import os
+CLOUDFLARED_PATH = os.environ.get("CLOUDFLARED_PATH", "")   # leave empty to auto-detect
 USE_TUNNEL  = True      # set False to run local-only (http://localhost:5000)
-GEMINI_KEY  = "AQ.Ab8RN6KN6B49A6nKMMeyvQsu8jIs6LMfyTy6ciNA88zSkJ88Pg"
+GEMINI_KEY  = os.environ.get("GEMINI_KEY", "")
 # OPTIONAL free backup for design generation: huggingface.co/settings/tokens
 # se FREE token banakar yahan daalo (Read access kaafi hai). Khali bhi chalega.
-HF_TOKEN    = "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"
+HF_TOKEN    = os.environ.get("HF_TOKEN", "")
 # Apne HF Space ka id (e.g. "username/cosa-embedder") — lite server par
 # SKU Finder isi se photo embeddings banata hai. Env var SPACE_ID se override.
 # Default pre-filled taaki Render (bina torch) par bhi SKU Finder ON rahe.
@@ -204,8 +205,8 @@ SPACE_ID    = "mayuresh2026/cosa-embedder"
 #  3. API TOKEN: My Profile (upar right) -> API Tokens -> Create Token ->
 #     "Workers AI" template -> Continue -> Create -> token copy karo
 #  4. Dono neeche paste karo:
-CF_ACCOUNT_ID = "975ea2d6d03cfa63e40b32a683d472df"
-CF_API_TOKEN  = "cfut_lYVrtys6IQLlG0P6Db5sQyIesEjEhKxxQoP9LSWb548628c7"
+CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "")
+CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
 
 import os, re, io, sys, time, glob, base64, pickle, shutil, threading, subprocess, difflib, uuid, json, hashlib
 import gzip as _gzip_mod
@@ -5060,6 +5061,116 @@ table.ro img,
   .ops-page table.ops-table.ops-rank-table td:nth-child(2){width:38%}
 }
 
+/* ========================================================================
+   COSA NOSTRAA — LIGHT LUXURY 3D UI (integrated production theme)
+   ======================================================================== */
+:root{
+  --cnx-bg:#f6f2e9;--cnx-bg2:#ebe3d3;--cnx-panel:#fffefb;--cnx-panel2:#f7f0e3;
+  --cnx-text:#201a12;--cnx-muted:#776e5f;--cnx-line:rgba(73,55,24,.12);
+  --cnx-gold:#a87920;--cnx-gold2:#dfbd6a;--cnx-gold-soft:rgba(184,139,46,.12);
+  --cnx-green:#17895e;--cnx-red:#c64f4f;--cnx-blue:#346fad;--cnx-amber:#b66f12;
+  --cnx-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 12px 28px rgba(86,64,24,.10),0 30px 70px rgba(86,64,24,.08);
+}
+html,body{background:#f6f2e9!important;color:var(--cnx-text)!important}
+body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparent 30%),radial-gradient(circle at 92% 72%,rgba(158,113,31,.12),transparent 28%),linear-gradient(145deg,#fbf8f1,#eee5d5)!important;background-attachment:fixed!important}
+#pcanvas,#siteHero{display:none!important}
+#appRoot{padding-left:276px;min-height:100vh;transition:padding-left .3s ease}
+.wrap{max-width:1660px!important;padding:0 28px!important}
+
+/* Permanent desktop command sidebar */
+#navMenu{
+  position:fixed!important;display:flex!important;flex-direction:column!important;
+  left:0!important;top:0!important;bottom:0!important;width:276px!important;min-width:276px!important;
+  max-width:276px!important;max-height:none!important;margin:0!important;padding:24px 18px 18px!important;
+  border:0!important;border-right:1px solid var(--cnx-line)!important;border-radius:0!important;
+  background:rgba(255,253,247,.88)!important;backdrop-filter:blur(24px)!important;
+  box-shadow:16px 0 48px rgba(95,70,24,.07)!important;overflow:auto!important;z-index:120!important;
+  animation:cnxSidebarIn .7s cubic-bezier(.2,.8,.2,1) both;
+}
+#navMenu:before{
+  content:"COSA NOSTRAA\A MANAGEMENT SYSTEM";white-space:pre;display:block;
+  font-family:'Cormorant Garamond',Georgia,serif;font-size:21px;line-height:1.3;letter-spacing:3.5px;
+  color:#281f13;font-weight:800;padding:8px 12px 22px;margin-bottom:15px;border-bottom:1px solid var(--cnx-line);
+}
+#navMenu .menu-item{
+  display:flex!important;align-items:center;gap:11px;width:100%;min-height:48px;text-align:left;
+  border:0!important;background:transparent!important;color:#716858!important;padding:7px 10px!important;
+  border-radius:14px!important;margin:3px 0!important;font-size:10.5px!important;font-weight:850!important;
+  letter-spacing:.55px!important;text-transform:none!important;transition:transform .24s,background .24s,color .24s!important;
+}
+#navMenu .menu-item:hover{color:#201a12!important;background:var(--cnx-gold-soft)!important;transform:translateX(4px)}
+#navMenu .menu-item.active{color:#201a12!important;background:linear-gradient(90deg,rgba(235,204,130,.38),rgba(255,255,255,.3))!important;box-shadow:inset 3px 0 var(--cnx-gold),0 8px 20px rgba(115,83,26,.08)!important}
+.cn-menu-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 auto;border:1px solid var(--cnx-line);border-radius:10px;color:var(--cnx-gold);background:rgba(255,255,255,.62);box-shadow:0 5px 12px rgba(86,64,24,.09),inset 0 1px rgba(255,255,255,.95);transition:transform .25s}
+.cn-menu-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+#navMenu .menu-item:hover .cn-menu-icon{transform:translateY(-2px) rotate(-4deg) scale(1.08)}
+#navMenu .menu-item.active .cn-menu-icon{background:linear-gradient(145deg,#fff2c8,#e5bd61);color:#17120a;border-color:rgba(154,109,27,.22);box-shadow:0 8px 18px rgba(154,109,27,.2),inset 0 1px rgba(255,255,255,.85)}
+.cn-rakhi-icon{position:relative;background:linear-gradient(145deg,#fff8e7,#f7e5b6)!important}
+.cn-rakhi-icon:before{content:"";width:12px;height:12px;border-radius:50%;background:radial-gradient(circle,#fff6c9 0 18%,#db3347 20% 42%,#f2bd4f 44% 62%,#9d1935 64% 100%);box-shadow:0 0 0 2px #f5d47f,0 3px 7px rgba(119,31,45,.24);z-index:2}
+.cn-rakhi-icon:after{content:"";position:absolute;width:34px;height:3px;border-radius:99px;background:linear-gradient(90deg,#b4203b,#f0b53e 30%,#b4203b 48%,#f0b53e 70%,#b4203b);transform:rotate(-8deg);box-shadow:0 2px 3px rgba(105,42,34,.16)}
+
+/* Top command bar */
+.app-bar{height:82px!important;padding:0 28px!important;background:rgba(246,242,233,.88)!important;border-bottom:0!important;box-shadow:none!important;backdrop-filter:blur(18px)!important}
+.app-bar-brand{font-family:'Cormorant Garamond',Georgia,serif!important;font-size:17px!important;letter-spacing:3.5px!important;color:#281f13!important}
+.app-bar-sub{font-size:9px!important;letter-spacing:2px!important;color:var(--cnx-muted)!important}
+.menu-btn{display:none!important}
+.app-chip{background:#fffefb!important;color:#8f2626!important;border:1px solid rgba(170,54,54,.2)!important;border-radius:13px!important;box-shadow:0 8px 22px rgba(86,64,24,.08)!important}
+.app-chip:hover{background:#fff3f1!important;color:#b42318!important}
+
+/* Shared 3D surfaces across every existing module */
+.kpi,.filter-box,.card,.ro-table-wrap,.upload-area,.sd-head,.home-card,.insight-summary-card,.ops-page .ops-kpi,.ops-page .ops-filters,.ops-page .ops-table-wrap{
+  border-color:rgba(123,91,33,.14)!important;background:linear-gradient(145deg,#fffefb 0%,#fbf6eb 66%,#f1e5cf 100%)!important;
+  box-shadow:var(--cnx-shadow)!important;border-radius:20px!important;transform-style:preserve-3d;
+}
+.kpi,.card,.home-card,.insight-summary-card,.ops-page .ops-kpi{transition:transform .3s,border-color .3s,box-shadow .3s!important}
+.kpi:hover,.card:hover,.home-card:hover,.insight-summary-card:hover,.ops-page .ops-kpi:hover{transform:perspective(1000px) translateY(-6px) rotateX(1.2deg)!important;border-color:rgba(168,121,32,.3)!important;box-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 22px 40px rgba(86,64,24,.13),0 44px 88px rgba(86,64,24,.1)!important}
+.fi,.fs,input,select,textarea{border-color:rgba(123,91,33,.18)!important;background:#fffefb!important;color:#201a12!important;border-radius:11px!important}
+.go-btn{background:linear-gradient(145deg,#e8cc84,#a87920)!important;color:#1d160c!important;border-radius:11px!important;box-shadow:0 10px 24px rgba(168,121,32,.17)!important}
+table.ro thead tr,.ops-page table.ops-table thead tr{background:#f5ecdc!important}
+table.ro thead th,.ops-page table.ops-table th{background:#f5ecdc!important;color:#8a6119!important}
+table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{background:#fff9ec!important}
+
+/* Executive Home */
+.home-wrap{max-width:100%!important;padding:0 0 48px!important}
+.cnx-home{padding:10px 0 2px;animation:cnxHeroIn .72s .06s cubic-bezier(.2,.8,.2,1) both}
+.cnx-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:22px;flex-wrap:wrap;padding:12px 4px 25px}
+.cnx-eyebrow{font-size:9px;letter-spacing:2.6px;text-transform:uppercase;color:var(--cnx-gold);font-weight:950}
+.cnx-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(38px,4.6vw,64px);font-weight:700;line-height:.98;color:#201a12;letter-spacing:-1.5px;margin:9px 0 10px}
+.cnx-sub{color:var(--cnx-muted);font-size:12px;line-height:1.65;font-weight:650;max-width:760px}
+.cnx-range{display:flex;gap:6px;border:1px solid var(--cnx-line);background:#fffefb;padding:7px;border-radius:15px;box-shadow:var(--cnx-shadow)}
+.cnx-range button{border:0;background:transparent;color:var(--cnx-muted);padding:9px 12px;border-radius:9px;font-size:9px;font-weight:900;cursor:pointer}
+.cnx-range button.active{background:linear-gradient(145deg,#e8cc84,#b17e20);color:#1c1508;box-shadow:0 7px 18px rgba(168,121,32,.2)}
+.cnx-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+.cnx-kpi{position:relative;min-height:158px;border:1px solid var(--cnx-line);border-radius:22px;padding:20px;overflow:hidden;background:linear-gradient(145deg,#fffefb 0%,#fbf6eb 66%,#f0e4ce 100%);box-shadow:var(--cnx-shadow);transform-style:preserve-3d;animation:cnxCardIn .7s cubic-bezier(.18,.85,.25,1.1) both;transition:transform .25s,border-color .25s}
+.cnx-kpi:nth-child(2){animation-delay:.08s}.cnx-kpi:nth-child(3){animation-delay:.16s}.cnx-kpi:nth-child(4){animation-delay:.24s}
+.cnx-kpi:before{content:"";position:absolute;width:110px;height:110px;border-radius:50%;right:-38px;top:-42px;background:radial-gradient(circle,var(--glow,rgba(217,185,104,.2)),transparent 70%)}
+.cnx-kpi:after{content:"";position:absolute;inset:-80% -35%;background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.68) 49%,transparent 56%);transform:translateX(-75%) rotate(8deg);transition:transform .8s;pointer-events:none}.cnx-kpi:hover:after{transform:translateX(70%) rotate(8deg)}
+.cnx-kpi:hover{border-color:rgba(168,121,32,.34);transform:perspective(850px) translateY(-6px) rotateX(2deg)}
+.cnx-kpi-label{font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:var(--cnx-muted);font-weight:950}
+.cnx-kpi-value{font-family:'Montserrat',sans-serif;font-size:clamp(25px,2.3vw,38px);font-weight:950;color:#201a12;letter-spacing:-1px;margin-top:25px}
+.cnx-kpi-foot{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:14px;color:var(--cnx-muted);font-size:9px;font-weight:700}
+.cnx-pill{display:inline-flex;padding:5px 8px;border-radius:99px;font-size:8px;font-weight:950}.cnx-good{color:var(--cnx-green);background:rgba(23,137,94,.1)}.cnx-risk{color:var(--cnx-red);background:rgba(198,79,79,.1)}
+.cnx-main-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(310px,.72fr);gap:16px;margin-top:16px}
+.cnx-bottom-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:16px;margin-top:16px}
+.cnx-panel{border:1px solid var(--cnx-line);border-radius:22px;background:linear-gradient(145deg,#fffefb,#f7f0e3);box-shadow:var(--cnx-shadow);padding:20px;min-width:0;overflow:hidden;animation:cnxPanelIn .78s .25s cubic-bezier(.2,.8,.2,1) both;transform-style:preserve-3d;transition:transform .3s,box-shadow .3s}
+.cnx-panel:hover{transform:perspective(1100px) translateY(-4px) rotateX(.7deg);box-shadow:0 2px 0 rgba(255,255,255,.9) inset,0 20px 38px rgba(86,64,24,.13),0 42px 85px rgba(86,64,24,.1)}
+.cnx-panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:19px}.cnx-panel-title{font-size:13px;color:#201a12;font-weight:950}.cnx-panel-sub{font-size:9px;color:var(--cnx-muted);margin-top:5px;font-weight:650}.cnx-link-btn{border:1px solid var(--cnx-line);background:#fffefb;color:var(--cnx-muted);padding:8px 10px;border-radius:10px;font-size:8px;font-weight:900;cursor:pointer}.cnx-link-btn:hover{color:var(--cnx-gold);border-color:rgba(168,121,32,.35)}
+.cnx-chart{height:265px;position:relative;display:flex;align-items:flex-end;padding:18px 2px 30px 43px;background:linear-gradient(to bottom,transparent 24%,rgba(73,55,24,.09) 25%,transparent 25.5%,transparent 49%,rgba(73,55,24,.09) 50%,transparent 50.5%,transparent 74%,rgba(73,55,24,.09) 75%,transparent 75.5%);border-radius:15px}.cnx-y{position:absolute;left:0;top:10px;bottom:25px;display:flex;flex-direction:column;justify-content:space-between;font-size:8px;color:var(--cnx-muted)}.cnx-bars{width:100%;height:100%;display:flex;align-items:flex-end;justify-content:space-around;gap:7px}.cnx-bar-group{height:100%;flex:1;display:flex;align-items:flex-end;justify-content:center;gap:4px;position:relative}.cnx-bar{width:min(15px,27%);border-radius:7px 7px 2px 2px;min-height:2px;transform-origin:bottom;animation:cnxGrow 1s cubic-bezier(.2,.8,.2,1) both}.cnx-bar-rev{background:linear-gradient(to top,#7e5d20,#d8b75f);box-shadow:0 0 20px rgba(168,121,32,.13)}.cnx-bar-qty{background:linear-gradient(to top,#276a55,#58be93)}.cnx-day{position:absolute;bottom:-22px;font-size:8px;color:var(--cnx-muted)}
+.cnx-ring-wrap{display:grid;place-items:center;padding:8px 0 13px}.cnx-ring{--pct:0;width:172px;aspect-ratio:1;border-radius:50%;background:conic-gradient(var(--cnx-gold) calc(var(--pct)*1%),rgba(73,55,24,.1) 0);display:grid;place-items:center;position:relative;box-shadow:0 24px 48px rgba(93,67,22,.15),inset 0 0 28px rgba(217,185,104,.08);animation:cnxRingFloat 4.5s ease-in-out infinite}.cnx-ring:before{content:"";width:128px;aspect-ratio:1;border-radius:50%;background:#fffefb;box-shadow:inset 0 9px 23px rgba(72,52,19,.1)}.cnx-ring-copy{position:absolute;text-align:center}.cnx-ring-value{font-size:31px;font-weight:950;color:#201a12}.cnx-ring-label{font-size:8px;color:var(--cnx-muted);text-transform:uppercase;letter-spacing:1.7px;margin-top:5px}.cnx-target-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.cnx-mini{border:1px solid var(--cnx-line);border-radius:13px;padding:11px;background:rgba(255,255,255,.38)}.cnx-mini-label{font-size:7.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--cnx-muted);font-weight:850}.cnx-mini-value{font-size:15px;font-weight:950;color:#201a12;margin-top:5px}
+.cnx-table-wrap{overflow:auto;max-height:340px;margin:0 -20px -20px}.cnx-table{width:100%;border-collapse:collapse;font-size:10px;min-width:620px}.cnx-table th{position:sticky;top:0;background:#f5ecdc;padding:12px 14px;color:#8a6119;font-size:8px;letter-spacing:1.2px;text-transform:uppercase;border-bottom:1px solid var(--cnx-line);text-align:left!important;white-space:nowrap!important}.cnx-table td{padding:12px 14px;border-bottom:1px solid var(--cnx-line);text-align:left!important;white-space:nowrap!important;color:#3c3326;font-weight:750}.cnx-table tbody tr:hover td{background:#fff9ec}.cnx-sku{font-weight:950;color:#201a12}.cnx-sku small{display:block;color:var(--cnx-muted);font-size:8px;margin-top:3px}.cnx-status{padding:5px 8px;border-radius:99px;font-size:7.5px;font-weight:950}.cnx-urgent{background:rgba(198,79,79,.12);color:var(--cnx-red)}.cnx-watch{background:rgba(182,111,18,.12);color:var(--cnx-amber)}.cnx-planned{background:rgba(23,137,94,.1);color:var(--cnx-green)}
+.cnx-alerts{display:flex;flex-direction:column;gap:9px}.cnx-alert{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid var(--cnx-line);border-radius:14px;background:rgba(255,255,255,.35);transition:transform .22s,border-color .22s}.cnx-alert:hover{transform:translateX(4px);border-color:rgba(168,121,32,.3)}.cnx-alert-icon{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--cnx-gold-soft);color:var(--cnx-gold);font-size:16px;font-weight:950}.cnx-alert-title{font-size:10px;color:#201a12;font-weight:950}.cnx-alert-desc{font-size:8px;color:var(--cnx-muted);line-height:1.4;margin-top:4px}.cnx-alert-count{font-size:9px;color:var(--cnx-muted);font-weight:900}
+.cnx-legacy{margin-top:28px;padding-top:22px;border-top:1px solid var(--cnx-line)}.cnx-legacy .home-sec-label{font-size:10px!important;letter-spacing:2px!important;color:var(--cnx-gold)!important}
+@keyframes cnxSidebarIn{from{opacity:0;transform:translateX(-28px) rotateY(5deg)}}@keyframes cnxHeroIn{from{opacity:0;transform:translateY(18px)}}@keyframes cnxCardIn{from{opacity:0;transform:perspective(900px) translateY(38px) rotateX(11deg) scale(.96)}to{opacity:1;transform:perspective(900px) translateY(0) rotateX(0) scale(1)}}@keyframes cnxPanelIn{from{opacity:0;transform:perspective(1100px) translateY(42px) rotateX(7deg)}to{opacity:1;transform:perspective(1100px) translateY(0) rotateX(0)}}@keyframes cnxGrow{from{transform:scaleY(0)}}@keyframes cnxRingFloat{50%{transform:translateY(-7px) rotate(1.5deg)}}
+
+@media(max-width:1180px){.cnx-kpis{grid-template-columns:repeat(2,1fr)}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}}
+@media(max-width:980px){
+  #appRoot{padding-left:0}.wrap{padding:0 16px!important}.menu-btn{display:flex!important}
+  #navMenu{display:none!important;top:70px!important;left:12px!important;bottom:auto!important;width:min(320px,calc(100vw - 24px))!important;min-width:0!important;max-width:calc(100vw - 24px)!important;max-height:calc(100vh - 84px)!important;border:1px solid var(--cnx-line)!important;border-radius:18px!important;padding:12px!important;box-shadow:0 28px 70px rgba(54,39,15,.22)!important}
+  #navMenu[style*="block"]{display:flex!important}#navMenu:before{font-size:17px;padding:8px 10px 15px}
+  .app-bar{height:70px!important;padding:0 14px!important}.app-bar-brand{font-size:14px!important}.app-bar-sub{letter-spacing:1.3px!important}.cnx-hero{align-items:flex-start}.cnx-title{font-size:42px}
+}
+@media(max-width:640px){.cnx-kpis{grid-template-columns:1fr}.cnx-kpi{min-height:143px}.cnx-main-grid,.cnx-bottom-grid{grid-template-columns:1fr}.cnx-chart{height:230px}.cnx-range{width:100%;overflow:auto}.cnx-range button{flex:1;white-space:nowrap}.cnx-target-grid{grid-template-columns:1fr 1fr}.cnx-panel{padding:16px}.cnx-table-wrap{margin:0 -16px -16px}.cnx-title{font-size:36px}.app-chip{padding:8px 10px!important;letter-spacing:1px!important;font-size:8px!important}}
+@media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
+
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -5124,30 +5235,30 @@ select.lg-in option{background:#fff;color:#1a1610}
 </div>
 
 <div class="nav-menu" id="navMenu">
-  <button class="menu-item" id="m1" onclick="showTab('home')">Home</button>
-  <button class="menu-item" id="m2" onclick="showTab('matrix')">Overall Details</button>
-  <button class="menu-item" id="m3" onclick="showTab('repeat')">Repeat Orders</button>
-  <button class="menu-item" id="m4" onclick="showTab('finder')">SKU Finder</button>
-  <button class="menu-item" id="m5" onclick="showTab('skudetails')">SKU Details</button>
-  <button class="menu-item" id="m10" onclick="showTab('target')">Target</button>
-  <button class="menu-item" id="m12" onclick="showTab('discount')">Discount Leakage</button>
-  <button class="menu-item" id="m13" onclick="showTab('production')">Production</button>
-  <button class="menu-item" id="m14" onclick="showTab('profit')">Profit Margin</button>
-  <button class="menu-item" id="m16" onclick="showTab('atrisk')">At-Risk Customers</button>
-  <button class="menu-item" id="m18" onclick="showTab('taxon')">Taxon Details</button>
-  <button class="menu-item" id="m20" onclick="showTab('rakhi')">Rakhi</button>
-  <button class="menu-item" id="m21" onclick="showTab('bulk')">Bulk</button>
-  <button class="menu-item" id="m22" onclick="showTab('oos')">OOS</button>
-  <button class="menu-item" id="m23" onclick="showTab('repeatplanner')">Auto Repeat Planner</button>
-  <button class="menu-item" id="m24" onclick="showTab('comborisk')">Combo Production Risk</button>
-  <button class="menu-item" id="m25" onclick="showTab('smartops')">Smart Alerts &amp; Ageing</button>
-  <button class="menu-item" id="m26" onclick="showTab('opportunity')">SKU Opportunity Score</button>
-  <button class="menu-item" id="m27" onclick="showTab('salesanomaly')">Sales Anomaly</button>
-  <button class="menu-item" id="m28" onclick="showTab('concentration')">Sales Concentration <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
-  <button class="menu-item" id="m29" onclick="showTab('demandpatterns')">Demand Patterns <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
-  <button class="menu-item" id="m30" onclick="showTab('ooslost')">OOS Lost Sales <span style="margin-left:6px;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:8px;font-weight:900;letter-spacing:1px">NEW</span></button>
-  <button class="menu-item" id="m17" onclick="showTab('payments')">Payments</button>
-  <button class="menu-item" id="m11" onclick="showTab('help')">Help</button>
+  <button class="menu-item" id="m1" onclick="showTab('home')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6"/></svg></span><span>Home</span></button>
+  <button class="menu-item" id="m2" onclick="showTab('matrix')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V4h4v16M16 20v-7h4v7M3 20h18"/></svg></span><span>Overall Details</span></button>
+  <button class="menu-item" id="m3" onclick="showTab('repeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m17 3 4 4-4 4M21 7H7a4 4 0 0 0-4 4v1M7 21l-4-4 4-4M3 17h14a4 4 0 0 0 4-4v-1"/></svg></span><span>Repeat Orders</span></button>
+  <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
+  <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
+  <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
+  <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
+  <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
+  <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
+  <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
+  <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
+  <button class="menu-item" id="m20" onclick="showTab('rakhi')"><span class="cn-menu-icon cn-rakhi-icon"></span><span>Rakhi</span></button>
+  <button class="menu-item" id="m21" onclick="showTab('bulk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span><span>Bulk</span></button>
+  <button class="menu-item" id="m22" onclick="showTab('oos')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 4l16 16M6 9V5h12v10M6 15v4h8"/><path d="M9 8h6"/></svg></span><span>OOS</span></button>
+  <button class="menu-item" id="m23" onclick="showTab('repeatplanner')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3"/><path d="m17 14 2 2 3-4"/></svg></span><span>Auto Repeat Planner</span></button>
+  <button class="menu-item" id="m24" onclick="showTab('comborisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h7v7H4zM13 12h7v7h-7zM13 5h7M4 15h7"/><path d="M16.5 7.5h.01"/></svg></span><span>Combo Production Risk</span></button>
+  <button class="menu-item" id="m25" onclick="showTab('smartops')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span><span>Smart Alerts &amp; Ageing</span></button>
+  <button class="menu-item" id="m26" onclick="showTab('opportunity')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M14 4c3-1 5-1 7-1 0 2 0 4-1 7l-6 6-6-6Z"/><path d="m8 10-4 1-1 4 5 1M14 16l-1 5-4-1-1-4M15 9h.01"/></svg></span><span>SKU Opportunity Score</span></button>
+  <button class="menu-item" id="m27" onclick="showTab('salesanomaly')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M7 15l4-4 3 2 5-6M16 7h3v3"/></svg></span><span>Sales Anomaly</span></button>
+  <button class="menu-item" id="m28" onclick="showTab('concentration')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg></span><span>Sales Concentration</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m29" onclick="showTab('demandpatterns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 15c3-8 6 4 9-4s6 4 9-4M3 20h18"/></svg></span><span>Demand Patterns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m30" onclick="showTab('ooslost')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M7 8l4 4 3-2 5 6"/><path d="M16 16h3v-3"/></svg></span><span>OOS Lost Sales</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b8960c;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m17" onclick="showTab('payments')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 6h18v12H3zM3 10h18M7 15h4"/></svg></span><span>Payments</span></button>
+  <button class="menu-item" id="m11" onclick="showTab('help')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .8-1.5 1.3-1.5 3M12 18h.01"/></svg></span><span>Help</span></button>
 </div>
 
 <div class="hero" id="siteHero">
@@ -9531,6 +9642,115 @@ function renderProHeader(){
 }
 
 
+let _cnxHomeDays = 30;
+
+function cnxCompactMoney(n){
+  n = Number(n) || 0;
+  if (Math.abs(n) >= 10000000) return '₹' + (n/10000000).toFixed(2).replace(/\.00$/,'') + 'Cr';
+  if (Math.abs(n) >= 100000) return '₹' + (n/100000).toFixed(2).replace(/\.00$/,'') + 'L';
+  if (Math.abs(n) >= 1000) return '₹' + (n/1000).toFixed(1).replace(/\.0$/,'') + 'K';
+  return '₹' + Math.round(n).toLocaleString('en-IN');
+}
+
+function cnxSetHomeRange(days){
+  _cnxHomeDays = Math.max(7, Number(days) || 30);
+  renderHome();
+}
+window.cnxSetHomeRange = cnxSetHomeRange;
+
+function cnxBuildExecutiveHome(data, isEmp, homeType){
+  const nowKey = todayISO || new Date().toISOString().slice(0,10);
+  const now = new Date(nowKey + 'T00:00:00');
+  const start = new Date(now); start.setDate(start.getDate() - (_cnxHomeDays - 1));
+  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1);
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (_cnxHomeDays - 1));
+  const iso = d => d.toISOString().slice(0,10);
+  const startKey = iso(start), prevStartKey = iso(prevStart), prevEndKey = iso(prevEnd);
+  const entOk = e => !homeType || String(e.type||'').trim() === homeType;
+  let revenue=0, qty=0, orders=0, prevRevenue=0, prevQty=0;
+  const daily = {};
+  for (let d=6; d>=0; d--){ const x=new Date(now); x.setDate(x.getDate()-d); daily[iso(x)]={rev:0,qty:0}; }
+  for (const it of data){
+    for (const e of (it.sales_entries||[])){
+      if (!entOk(e) || !e.date || e.date==='N/A') continue;
+      const q=Number(e.qty)||0, r=Number(e.rev)||0;
+      if (e.date>=startKey && e.date<=nowKey){ qty+=q; revenue+=r; orders+=1; }
+      else if (e.date>=prevStartKey && e.date<=prevEndKey){ prevQty+=q; prevRevenue+=r; }
+      if (daily[e.date]){ daily[e.date].qty+=q; daily[e.date].rev+=r; }
+    }
+  }
+  const stock = data.reduce((s,i)=>s+(Number(i.inv_stock)||0),0);
+  const str = qty+stock>0 ? qty/(qty+stock)*100 : 0;
+  const revDelta = prevRevenue>0 ? (revenue-prevRevenue)/prevRevenue*100 : null;
+  const qtyDelta = prevQty>0 ? (qty-prevQty)/prevQty*100 : null;
+  const actionRows = data.map(i=>{
+    const inv=(Number(i.inv_stock)||0)+(Number(i.inv_wip)||0);
+    const forecast=Number(i.forecast_60d)||0;
+    const repeat=Math.max(0,Number(i.reorder_qty)||Math.ceil(forecast-inv));
+    return {i,inv,forecast,repeat,q30:Number(i.qty_1m)||0};
+  }).filter(x=>x.repeat>0).sort((a,b)=>b.repeat-a.repeat);
+  const urgent = actionRows.filter(x=>x.inv<=10).length;
+  const fastLow = data.filter(i=>(Number(i.qty_7d)||0)>=10 && ((Number(i.inv_stock)||0)+(Number(i.inv_wip)||0))<(Number(i.qty_7d)||0)*2).length;
+  const stockout = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.qty_7d)||0)>0).length;
+  const wipOnly = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.inv_wip)||0)>0).length;
+  const comboRisk = actionRows.filter(x=>(x.i.combo_details||[]).length>0).length;
+  const days = Object.keys(daily).sort();
+  const maxRev=Math.max(1,...days.map(d=>daily[d].rev)), maxQty=Math.max(1,...days.map(d=>daily[d].qty));
+  const chart = days.map((d,idx)=>{
+    const dt=new Date(d+'T00:00:00');
+    const lab=dt.toLocaleDateString('en-GB',{weekday:'short'});
+    const rh=Math.max(3,daily[d].rev/maxRev*92), qh=Math.max(3,daily[d].qty/maxQty*82);
+    return `<div class="cnx-bar-group"><i class="cnx-bar cnx-bar-rev" style="height:${rh}%;animation-delay:${idx*.05}s" title="${escHtml(d)} revenue ${fmt(daily[d].rev)}"></i><i class="cnx-bar cnx-bar-qty" style="height:${qh}%;animation-delay:${idx*.05+.08}s" title="${escHtml(d)} qty ${Math.round(daily[d].qty)}"></i><span class="cnx-day">${lab}</span></div>`;
+  }).join('');
+  const deltaPill=(v,label)=>v===null?`<span>${label}</span>`:`<span class="cnx-pill ${v>=0?'cnx-good':'cnx-risk'}">${v>=0?'↑':'↓'} ${Math.abs(v).toFixed(1)}%</span><span>${label}</span>`;
+  const rangeLabel = _cnxHomeDays===365 ? 'last 365 days' : `last ${_cnxHomeDays} days`;
+  const topRows = actionRows.slice(0,5).map(x=>{
+    const status=x.inv<=10?'<span class="cnx-status cnx-urgent">URGENT</span>':x.inv<x.forecast*.45?'<span class="cnx-status cnx-watch">WATCH</span>':'<span class="cnx-status cnx-planned">PLANNED</span>';
+    const skuEsc=String(x.i.sku||'').replace(/'/g,"\\'");
+    return `<tr><td class="cnx-sku" onclick="openSkuDetails('${skuEsc}')" style="cursor:pointer">${escHtml(skuLabel(x.i.sku,x.i.sku_name))}<small>${escHtml(x.i.taxon||'General')}</small></td><td>${Math.round(x.q30).toLocaleString('en-IN')}</td><td>${Math.round(x.inv).toLocaleString('en-IN')}</td><td>${Math.round(x.forecast).toLocaleString('en-IN')}</td><td><b>${Math.round(x.repeat).toLocaleString('en-IN')}</b></td><td>${status}</td></tr>`;
+  }).join('');
+  const todayLabel = now.toLocaleDateString('en-GB',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  const greetingHour = new Date().getHours();
+  const greeting = greetingHour<12?'Good morning':greetingHour<17?'Good afternoon':'Good evening';
+  const revCard = isEmp
+    ? `<article class="cnx-kpi" style="--glow:rgba(217,185,104,.22)"><div class="cnx-kpi-label">Catalog SKUs</div><div class="cnx-kpi-value">${data.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-good">LIVE</span><span>active catalog</span></div></article>`
+    : `<article class="cnx-kpi cnx-tilt" style="--glow:rgba(217,185,104,.22)"><div class="cnx-kpi-label">Net Revenue</div><div class="cnx-kpi-value">${cnxCompactMoney(revenue)}</div><div class="cnx-kpi-foot">${deltaPill(revDelta,'vs previous period')}</div></article>`;
+  const targetContent = isEmp
+    ? `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Qty achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved Qty</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target Qty</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Remaining Qty</div><div class="cnx-mini-value" id="cnxTargetProjected">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`
+    : `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Revenue achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Projected</div><div class="cnx-mini-value" id="cnxTargetProjected" style="color:var(--cnx-green)">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`;
+  return `<div class="cnx-home">
+    <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${_cnxHomeDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${_cnxHomeDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${_cnxHomeDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${_cnxHomeDays===365?'active':''}">1 YEAR</button></div></div>
+    <div class="cnx-kpis">${revCard}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot">${deltaPill(qtyDelta,`${orders.toLocaleString('en-IN')} order lines`)}</div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
+    <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue &amp; Sales Momentum</div><div class="cnx-panel-sub">Daily live performance · latest 7 days</div></div><div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#a87920">■</span> ${isEmp?'Activity':'Revenue'} &nbsp; <span style="color:#17895e">■</span> Quantity</div></div><div class="cnx-chart"><div class="cnx-y"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0</span></div><div class="cnx-bars">${chart}</div></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
+    <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
+  </div>`;
+}
+
+function cnxHydrateHomeTarget(){
+  const ring=document.getElementById('cnxTargetRing'); if(!ring) return;
+  fetch('/api/target',{headers:{'ngrok-skip-browser-warning':'true'}}).then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status))).then(d=>{
+    const t=d.totals||{}; const emp=LOGIN_ROLE==='employee';
+    const actual=emp?(Number(t.qty_actual)||0):(Number(t.sp_actual)||0);
+    const goal=emp?(Number(t.qty_target)||0):(Number(t.sp_target)||0);
+    const pct=goal>0?Math.min(100,Math.max(0,actual/goal*100)):0;
+    const daysLeft=Math.max(1,(Number(d.days_in_month)||30)-(Number(d.day_elapsed)||0));
+    const projected=emp?Math.max(0,goal-actual):(Number(t.proj_rev)||0);
+    const required=Math.max(0,goal-actual)/daysLeft;
+    ring.style.setProperty('--pct',pct.toFixed(1));
+    const set=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val};
+    set('cnxTargetPct',pct.toFixed(0)+'%'); set('cnxTargetActual',emp?Math.round(actual).toLocaleString('en-IN'):cnxCompactMoney(actual)); set('cnxTargetGoal',emp?Math.round(goal).toLocaleString('en-IN'):cnxCompactMoney(goal)); set('cnxTargetProjected',emp?Math.round(projected).toLocaleString('en-IN'):cnxCompactMoney(projected)); set('cnxTargetRequired',emp?Math.ceil(required).toLocaleString('en-IN'):cnxCompactMoney(required));
+    const lab=document.getElementById('cnxTargetLabel'); if(lab)lab.textContent=(d.month_label||d.month_selected||'Current month')+' · all channels';
+  }).catch(()=>{const lab=document.getElementById('cnxTargetLabel');if(lab)lab.textContent='Target data unavailable';});
+}
+
+function cnxBindHomeMotion(){
+  if (window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.cnx-tilt').forEach(card=>{
+    card.onpointermove=e=>{const r=card.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;card.style.transform=`perspective(850px) rotateX(${-y*5}deg) rotateY(${x*7}deg) translateY(-4px)`;};
+    card.onpointerleave=()=>{card.style.transform='';};
+  });
+}
+
 function renderHome(){
   const host = document.getElementById('homeContent');
   if (!host) return;
@@ -9738,7 +9958,7 @@ function renderHome(){
     .concat(Array.from(typeSet).sort().map(tp => `<option value="${escHtml(tp)}"${tp===homeType?' selected':''}>${escHtml(tp)}</option>`))
     .join('');
 
-  host.innerHTML = `
+  host.innerHTML = cnxBuildExecutiveHome(data, isEmp, homeType) + `<div class="cnx-legacy">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:6px">
       <p class="home-sec-label" style="margin:0">Top Performers${homeType ? ' — '+escHtml(homeType) : ''}</p>
       <div style="display:flex;align-items:center;gap:8px">
@@ -9755,7 +9975,8 @@ function renderHome(){
     ${dayBlock}
     ${custTableBlock}
     <div id="helpQueriesBox"></div>
-  `;
+  </div>`;
+  requestAnimationFrame(() => { cnxBindHomeMotion(); cnxHydrateHomeTarget(); });
   if (LOGIN_ROLE === 'admin') { try { renderHelpQueries(); } catch(e){} }
 }
 window.renderHome = renderHome;
