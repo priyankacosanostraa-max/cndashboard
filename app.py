@@ -174,7 +174,13 @@
 #   4. New "Repeat Orders" tab with 7d/15d/30d qty, forecast
 # FIXES: Bulletproof Qty/Rev Parsing + Fuzzy SKU Matching + Unified Grand Totals
 # ============================================================
+# DATA ACCURACY PATCH (01-Aug-2026): corrected PIN-State boundary mapping,
+# city/PIN mismatch handling, cancelled/non-positive Website rows, and
+# city+State aggregation across Rakhi and Website/D2C views.
+# ============================================================
 
+# NEW: All dashboard data tables now centre values vertically/horizontally,
+#      wrap long text clearly, and compact ranking tables show every column.
 # Path to the cloudflared executable. If it's in the same folder as this
 # script (or on your PATH), the defaults below will find it automatically.
 # You can also hard-code an absolute path, e.g.:
@@ -1187,24 +1193,29 @@ def _refresh_data():
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
 
-                # Top city for Website / D2C views. When the Website sheet has
-                # no explicit quantity column, one row represents one sold SKU
-                # line, so default to 1. Cancelled/failed rows were removed above.
+                # If an explicit Qty column exists, zero/negative rows are not
+                # sales (often returns/adjustments) and must not affect city or
+                # repeat metrics. Without a Qty column, one order-line = one unit.
+                qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
+                if W_QTY and qty_web <= 0:
+                    continue
+                if not W_QTY:
+                    qty_web = 1.0
+
+                # PIN is the State source of truth. City is validated against
+                # it, and State is kept in the compact event so same-named
+                # cities in different States never get merged.
                 city_web, pin_web = _extract_city_pin_from_address(raw_addr)
-                if pin_web:
-                    state_web = _pincode_to_state(pin_web)
-                    if state_web:
-                        city_web = _normalize_city_for_state(city_web, state_web)
+                state_web = _pincode_to_state(pin_web) if pin_web else ""
+                if state_web:
+                    city_web = _normalize_city_for_state(city_web, state_web, pin_web)
                 if city_web:
-                    qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
-                    if qty_web <= 0:
-                        qty_web = 1.0
                     rev_web = to_num(r.get(W_REV, 0)) if W_REV else 0.0
                     if rev_web <= 0 and W_SP:
                         unit_sp_web = to_num(r.get(W_SP, 0))
                         if unit_sp_web > 0:
                             rev_web = float(unit_sp_web) * float(qty_web)
-                    city_key = (date_iso, city_web)
+                    city_key = (date_iso, state_web, city_web)
                     sku_city_map = _web_city_sums.setdefault(mapped_web_sku, {})
                     city_bucket = sku_city_map.setdefault(city_key, {"q": 0.0, "r": 0.0})
                     city_bucket["q"] += float(qty_web)
@@ -1229,11 +1240,13 @@ def _refresh_data():
         website_city_events = {
             sku: [
                 {
-                    "d": _si(day), "c": _si(city),
+                    "d": _si(day), "s": _si(state), "c": _si(city),
                     "q": round(float(vals.get("q", 0.0)), 4),
                     "r": round(float(vals.get("r", 0.0)), 2),
                 }
-                for (day, city), vals in sorted(city_map.items(), key=lambda x: (x[0][0], x[0][1]))
+                for (day, state, city), vals in sorted(
+                    city_map.items(), key=lambda x: (x[0][0], x[0][1], x[0][2])
+                )
             ]
             for sku, city_map in _web_city_sums.items()
         }
@@ -4916,6 +4929,137 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page .anom-type{font-weight:900;color:#1f2937;white-space:nowrap}
 .ops-page .anom-receipt{font-size:9px;color:#64748b;margin-top:4px}
 
+
+/* ── GLOBAL TABLE READABILITY ─────────────────────────────────────────────
+   Keep every dashboard data table centred, vertically aligned and wrapped.
+   This also overrides older inline right/left alignment so values remain
+   readable on laptop screens instead of being clipped in a single line. */
+table.ro th,
+table.ro td,
+.ops-page table.ops-table th,
+.ops-page table.ops-table td,
+#vBulk table.bulk-table th,
+#vBulk table.bulk-table td,
+table.sd-vtable th,
+table.sd-vtable td{
+  text-align:center !important;
+  vertical-align:middle !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+  hyphens:auto;
+  line-height:1.45 !important;
+}
+
+table.ro th,
+.ops-page table.ops-table th,
+#vBulk table.bulk-table th,
+table.sd-vtable th{
+  padding-top:11px !important;
+  padding-bottom:11px !important;
+}
+
+table.ro td,
+.ops-page table.ops-table td,
+#vBulk table.bulk-table td,
+table.sd-vtable td{
+  padding-top:10px !important;
+  padding-bottom:10px !important;
+}
+
+/* SKU/product buttons and long descriptions must wrap inside their own cell. */
+table.ro .sku-link,
+.ops-page table.ops-table .sku-link,
+#vBulk table.bulk-table .sku-link{
+  display:inline-block;
+  max-width:100%;
+  text-align:center !important;
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+  line-height:1.45 !important;
+}
+
+table.ro img,
+.ops-page table.ops-table img,
+#vBulk table.bulk-table img{
+  margin-left:auto !important;
+  margin-right:auto !important;
+}
+
+/* Existing numeric helper classes were right-aligned. Centre them everywhere. */
+.ops-page .ops-num,
+.ops-page .anom-metric,
+#vRakhi .rkh-metric,
+.pm-num,
+.prod-num,
+#vBulk .bulk-money{
+  text-align:center !important;
+  white-space:normal !important;
+}
+
+/* Compact ranking tables (Concentration, channel/taxon/city rankings, etc.)
+   now show every column without a hidden 1180px-wide inner table. */
+.ops-page table.ops-table.ops-rank-table{
+  width:100% !important;
+  min-width:100% !important;
+  table-layout:fixed !important;
+}
+.ops-page table.ops-table.ops-rank-table th,
+.ops-page table.ops-table.ops-rank-table td{
+  min-width:0 !important;
+  max-width:none !important;
+  padding-left:7px !important;
+  padding-right:7px !important;
+}
+.ops-page table.ops-table.ops-rank-table th:nth-child(1),
+.ops-page table.ops-table.ops-rank-table td:nth-child(1){width:7%}
+.ops-page table.ops-table.ops-rank-table th:nth-child(2),
+.ops-page table.ops-table.ops-rank-table td:nth-child(2){width:31%}
+.ops-page table.ops-table.ops-rank-table th:nth-child(3),
+.ops-page table.ops-table.ops-rank-table td:nth-child(3){width:18%}
+.ops-page table.ops-table.ops-rank-table th:nth-child(4),
+.ops-page table.ops-table.ops-rank-table td:nth-child(4){width:11%}
+.ops-page table.ops-table.ops-rank-table th:nth-child(5),
+.ops-page table.ops-table.ops-rank-table td:nth-child(5){width:17%}
+.ops-page table.ops-table.ops-rank-table th:nth-child(6),
+.ops-page table.ops-table.ops-rank-table td:nth-child(6){width:16%}
+.ops-page table.ops-table.ops-rank-table .ops-rank-name{
+  font-size:10.5px;
+  line-height:1.5 !important;
+}
+.ops-page table.ops-table.ops-rank-table .ops-rank-share > div{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:120px;
+  margin:0 auto;
+}
+
+/* Long action/detail cells remain comfortably readable after centring. */
+.ops-page .ops-list,
+.ops-page .anom-detail{
+  white-space:normal !important;
+  overflow-wrap:anywhere !important;
+  word-break:break-word !important;
+  text-align:center !important;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+@media(max-width:760px){
+  table.ro th,table.ro td,
+  .ops-page table.ops-table th,.ops-page table.ops-table td,
+  #vBulk table.bulk-table th,#vBulk table.bulk-table td{
+    font-size:10px !important;
+    padding-left:7px !important;
+    padding-right:7px !important;
+  }
+  .ops-page table.ops-table.ops-rank-table th:nth-child(6),
+  .ops-page table.ops-table.ops-rank-table td:nth-child(6){display:none}
+  .ops-page table.ops-table.ops-rank-table th:nth-child(2),
+  .ops-page table.ops-table.ops-rank-table td:nth-child(2){width:38%}
+}
+
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -5926,7 +6070,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopCitiesCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">State/UT derived from the PIN code in the Website order sheet's Final Billing Address column, matched directly by SKU (curated Rakhi list only). Every Indian State &amp; UT is listed — independent of the Type filter above.</div>
+  <div class="small-note" style="margin:6px 0 14px">State/UT is derived from the billing PIN and the city label is validated against that PIN before grouping. Cancelled/failed and non-positive quantity rows are excluded. Matched directly by SKU (curated Rakhi list only); every Indian State &amp; UT is listed independently of the Type filter above.</div>
   <div id="rakhiTopCityContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -6564,13 +6708,19 @@ function skuTopCityMeta(itemOrSku){
     if (d1 && (!day || day < d1)) return;
     if (d2 && (!day || day > d2)) return;
     const city = String(ev?.c || '').trim();
+    const state = String(ev?.s || '').trim();
     if (!city) return;
-    totals.set(city, (totals.get(city) || 0) + (Number(ev?.q) || 0));
+    const key = `${city}\u0000${state}`;
+    const cur = totals.get(key) || {city, state, qty:0};
+    cur.qty += Number(ev?.q) || 0;
+    totals.set(key, cur);
   });
   if (!totals.size) return null;
-  const ranked = Array.from(totals.entries()).sort((a,b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
-  const [city, qty] = ranked[0];
-  return {city, qty};
+  const ranked = Array.from(totals.values()).sort((a,b) => (b.qty - a.qty) || a.city.localeCompare(b.city) || a.state.localeCompare(b.state));
+  const top = ranked[0];
+  const label = top.state && !top.city.toLowerCase().includes(top.state.toLowerCase())
+    ? `${top.city}, ${top.state}` : top.city;
+  return {...top, label};
 }
 
 function skuTopCityText(itemOrSku){
@@ -6578,7 +6728,7 @@ function skuTopCityText(itemOrSku){
   if (!m) return '';
   const qty = Number(m.qty) || 0;
   const qtyLabel = Number.isInteger(qty) ? qty.toLocaleString('en-IN') : qty.toLocaleString('en-IN', {maximumFractionDigits:2});
-  return `〔📍 TOP CITY: ${m.city} · ${qtyLabel} qty〕`;
+  return `〔📍 TOP CITY: ${m.label || m.city} · ${qtyLabel} qty〕`;
 }
 
 function skuCodeWithFlag(sku){
@@ -10656,20 +10806,14 @@ function _rkhBuildTopCities(cityRows){
     const state = String(r.state || '').trim();
     let city = String(r.city || '').trim() || 'Unknown City';
     if (!state) return;
-    // Defensive cleanup: kabhi-kabhi source address me city text aur PIN-state
-    // mismatch hota hai (e.g. Delhi PIN ke saath "Mumbai"). Aise case me
-    // galat city ko selected state ke andar dikhane ke bajay state ka canonical
-    // city label use karo.
-    const cityState = {
-      'mumbai':'Maharashtra','bombay':'Maharashtra','new delhi':'Delhi','delhi':'Delhi',
-      'gurugram':'Haryana','gurgaon':'Haryana','noida':'Uttar Pradesh',
-      'bengaluru':'Karnataka','bangalore':'Karnataka','kolkata':'West Bengal',
-      'chennai':'Tamil Nadu','hyderabad':'Telangana','ahmedabad':'Gujarat',
-      'pune':'Maharashtra','jaipur':'Rajasthan','lucknow':'Uttar Pradesh'
-    };
-    const knownState = cityState[city.toLowerCase()];
-    if (knownState && knownState !== state) city = (state === 'Delhi' ? 'New Delhi' : state);
-    if (state === 'Delhi' && /^(north|south|east|west|north east|north west|south east|south west|central)$/i.test(city)) city += ' Delhi';
+    // Server has already validated city against the PIN-derived State.
+    // Keep a final empty-value guard only; duplicating a short city map in
+    // JavaScript previously allowed cities such as Darjeeling to remain
+    // under Rajasthan when that city was missing from the browser map.
+    if (!city || /^unknown city$/i.test(city)) {
+      const pin = String(r.pin || '').replace(/\D/g, '').slice(0, 3);
+      city = pin ? `PIN ${pin} Area` : (state === 'Delhi' ? 'New Delhi' : state);
+    }
     if (!map[state]) map[state] = {state, qty: 0, orders: 0, cities: []};
     const soldQty = Number(r.qty) || 0;
     map[state].qty += soldQty;
@@ -10750,6 +10894,10 @@ async function renderRakhiTopCities(){
     host.innerHTML = `<div class="home-empty" style="padding:30px;text-align:left;font-size:.82rem;line-height:1.5">${msg}</div>`;
     return;
   }
+  const corrected = Number(_rkhCityDiag && _rkhCityDiag.city_labels_corrected) || 0;
+  const qualityNote = corrected > 0
+    ? `<div class="small-note" style="margin:0 0 8px;color:#7a5a00"><b>Data check:</b> ${corrected.toLocaleString('en-IN')} source city label${corrected===1?' was':'s were'} corrected using the billing PIN before grouping.</div>`
+    : '';
   const head = `<tr><th>#</th><th>State / UT</th><th>Sold Qty</th><th>Order Lines</th></tr>`;
   const body = list.map((r, i) => {
     const hasCities = r.cities && r.cities.length;
@@ -10775,7 +10923,7 @@ async function renderRakhiTopCities(){
       </td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:420px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `${qualityNote}<table class="ro rkh-grid" style="width:100%;min-width:420px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiTopCitiesCSV(){
   const list = _rakhiTopCityRows || [];
@@ -14387,8 +14535,8 @@ function _bizRankMap(map,total){
 }
 function _bizRankTable(title,rows,nameLabel='Name',limit=10){
   const shown=(rows||[]).slice(0,limit);
-  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td style="font-weight:750">${escHtml(r.name)}</td><td class="ops-num">${_bizMoney(r.rev)}</td><td class="ops-num">${_bizNum(r.qty,0)}</td><td class="ops-num" style="font-weight:850">${_bizPctText(r.share)}</td><td>${_bizBar(r.share)}</td></tr>`).join('');
-  return `<div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">${escHtml(title)}</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>#</th><th>${escHtml(nameLabel)}</th><th>Revenue</th><th>Qty</th><th>Contribution</th><th>Share</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="ops-empty">No matching data.</td></tr>'}</tbody></table></div></div>`;
+  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td class="ops-rank-name" style="font-weight:750">${escHtml(r.name)}</td><td class="ops-num">${_bizMoney(r.rev)}</td><td class="ops-num">${_bizNum(r.qty,0)}</td><td class="ops-num" style="font-weight:850">${_bizPctText(r.share)}</td><td class="ops-rank-share">${_bizBar(r.share)}</td></tr>`).join('');
+  return `<div class="ops-section ops-rank-section"><div class="ops-section-head"><div class="ops-section-title">${escHtml(title)}</div></div><div class="ops-table-wrap"><table class="ops-table ops-rank-table"><thead><tr><th>#</th><th>${escHtml(nameLabel)}</th><th>Revenue</th><th>Qty</th><th>Contribution</th><th>Share</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="ops-empty">No matching data.</td></tr>'}</tbody></table></div></div>`;
 }
 
 function _concCityRanks(filterMeta,totalRevenue){
@@ -14412,7 +14560,9 @@ function _concCityRanks(filterMeta,totalRevenue){
     (it.website_city_events||[]).forEach(ev=>{
       const date=_bizIso(ev.d); if(!date)return;
       if(d1&&date<d1)return; if(d2&&date>d2)return;
-      const name=String(ev.c||'').trim(); if(!name)return;
+      const cityName=String(ev.c||'').trim(); if(!cityName)return;
+      const stateName=String(ev.s||'').trim();
+      const name=stateName&&!cityName.toLowerCase().includes(stateName.toLowerCase())?`${cityName}, ${stateName}`:cityName;
       const qty=Math.max(0,_opsNum(ev.q));
       const directRev=Math.max(0,_opsNum(ev.r));
       const rev=directRev>0?directRev:qty*fallbackSp;
@@ -15847,42 +15997,109 @@ INDIA_STATES_UTS = [
 ]
 
 def _pincode_to_state(pin):
-    """6-digit Indian PIN code se State/UT naam deta hai — India Post ke
-    standard PIN-region (first digit/2-3 digit) ranges par based hai.
-    NOTE: kuch adjoining states/UT ki boundary par (jaise UP/Uttarakhand,
-    Bihar/Jharkhand, AP/Telangana, Gujarat/DNH-DD) PIN ranges thoda overlap
-    karte hain kyunki India Post ne har state ke liye clean-cut range
-    allot nahi ki — is liye chand boundary PINs me approximation ho sakta
-    hai, par bulk/aggregate State-wise reporting ke liye yeh kaafi accurate
-    hai."""
+    """Return the Indian State/UT for a 6-digit PIN.
+
+    The old implementation used a few very broad carve-outs (notably
+    605xxx/609xxx for Puducherry and 813xxx-835xxx for Jharkhand) that could
+    place valid Tamil Nadu/Bihar orders in the wrong State.  This version
+    keeps the broad India Post postal regions, but applies only conservative
+    and well-known 3/6-digit exceptions at shared boundaries.
+    """
+    digits = re.sub(r"\D", "", str(pin or ""))
+    if len(digits) < 6:
+        return ""
     try:
-        p = int(str(pin).strip()[:6])
+        p = int(digits[:6])
     except Exception:
         return ""
     if not (100000 <= p <= 899999):
-        return ""   # 9xxxxx = Army Postal Service, koi state/UT nahi
-    d2 = p // 10000  # first 2 digits
+        return ""  # 9xxxxx is APS / non-State postal routing
 
-    # ── Chhote/UT carve-outs jo bade state-range ke andar aate hain ──
-    if 110001 <= p <= 110099: return "Delhi"
-    if 160001 <= p <= 160104: return "Chandigarh"
-    if 193501 <= p <= 194404: return "Ladakh"
-    if 246001 <= p <= 249999: return "Uttarakhand"
-    if 262001 <= p <= 263680: return "Uttarakhand"
-    if 396191 <= p <= 396240: return "Dadra & Nagar Haveli and Daman & Diu"
-    if 403001 <= p <= 403899: return "Goa"
-    if 500001 <= p <= 509999: return "Telangana"
-    if 515001 <= p <= 535999: return "Andhra Pradesh"
-    if 605001 <= p <= 605649: return "Puducherry"
-    if 609601 <= p <= 609816: return "Puducherry"
-    if 673310 <= p <= 673313: return "Puducherry"          # Mahe
-    if 682551 <= p <= 682559: return "Lakshadweep"
-    if 737001 <= p <= 737139: return "Sikkim"
-    if 744101 <= p <= 744304: return "Andaman & Nicobar Islands"
-    if 813001 <= p <= 835999: return "Jharkhand"
+    d2 = p // 10000
+    d3 = p // 1000
 
-    # ── Broad state ranges (first 2 digits) ──
-    D2_STATE = {
+    # Union Territories and shared postal-region exceptions.
+    if 110001 <= p <= 110099:
+        return "Delhi"
+    # 160055/59/62/70 etc. are Mohali (Punjab), so do not classify every
+    # 160xxx PIN as Chandigarh.
+    if 160001 <= p <= 160047 or 160101 <= p <= 160103:
+        return "Chandigarh"
+    # Ladakh primarily uses 194xxx; 193xxx belongs to J&K postal districts.
+    if 194001 <= p <= 194999:
+        return "Ladakh"
+
+    # Uttarakhand shares the UP postal region. Use conservative sub-ranges
+    # instead of treating all 246-249 and 262-263 as Uttarakhand.
+    if 244700 <= p <= 244799:
+        return "Uttarakhand"
+    if 246000 <= p <= 246999:
+        return "Uttarakhand"
+    if 247600 <= p <= 247699:
+        return "Uttarakhand"
+    if 248000 <= p <= 249999:
+        return "Uttarakhand"
+    if 262500 <= p <= 262599 or 263000 <= p <= 263999:
+        return "Uttarakhand"
+
+    if 396191 <= p <= 396240 or 362520 <= p <= 362599:
+        return "Dadra & Nagar Haveli and Daman & Diu"
+    if 403001 <= p <= 403899:
+        return "Goa"
+
+    # AP/Telangana split.
+    if 500000 <= p <= 509999:
+        return "Telangana"
+    if 510000 <= p <= 535999:
+        return "Andhra Pradesh"
+
+    # Puducherry has small enclaves inside TN/AP/Kerala postal regions.
+    # Keep this intentionally precise; the previous 605001-605649 and
+    # 609601-609816 ranges incorrectly swallowed many Tamil Nadu PINs.
+    puducherry_pins = {
+        *range(605001, 605015),
+        605101, 605102, 605104, 605105, 605106, 605107, 605110, 605111,
+        605501, 605502,
+        *range(609601, 609610),
+        533464,  # Yanam
+        673310,  # Mahe
+    }
+    if p in puducherry_pins:
+        return "Puducherry"
+    if 682551 <= p <= 682559:
+        return "Lakshadweep"
+    if 737001 <= p <= 737139:
+        return "Sikkim"
+    if 744101 <= p <= 744304:
+        return "Andaman & Nicobar Islands"
+
+    # North-East 79x split.
+    if d2 == 79:
+        if 790 <= d3 <= 792:
+            return "Arunachal Pradesh"
+        if 793 <= d3 <= 794:
+            return "Meghalaya"
+        if d3 == 795:
+            return "Manipur"
+        if d3 == 796:
+            return "Mizoram"
+        if 797 <= d3 <= 798:
+            return "Nagaland"
+        if d3 == 799:
+            return "Tripura"
+        return ""
+
+    # Bihar/Jharkhand share 80-85. 813 is Bhagalpur/Banka (Bihar), while
+    # Jharkhand uses the following district prefixes.
+    if 800 <= d3 <= 855:
+        jharkhand_prefixes = {
+            814, 815, 816, 822,
+            825, 826, 827, 828, 829,
+            831, 832, 833, 834, 835,
+        }
+        return "Jharkhand" if d3 in jharkhand_prefixes else "Bihar"
+
+    d2_state = {
         11: "Delhi", 12: "Haryana", 13: "Haryana",
         14: "Punjab", 15: "Punjab", 16: "Punjab",
         17: "Himachal Pradesh",
@@ -15896,130 +16113,472 @@ def _pincode_to_state(pin):
         40: "Maharashtra", 41: "Maharashtra", 42: "Maharashtra",
         43: "Maharashtra", 44: "Maharashtra",
         45: "Madhya Pradesh", 46: "Madhya Pradesh", 47: "Madhya Pradesh",
-        48: "Madhya Pradesh",
-        49: "Chhattisgarh",
+        48: "Madhya Pradesh", 49: "Chhattisgarh",
         56: "Karnataka", 57: "Karnataka", 58: "Karnataka", 59: "Karnataka",
         60: "Tamil Nadu", 61: "Tamil Nadu", 62: "Tamil Nadu",
-        63: "Tamil Nadu", 64: "Tamil Nadu", 66: "Tamil Nadu",
+        63: "Tamil Nadu", 64: "Tamil Nadu", 65: "Tamil Nadu", 66: "Tamil Nadu",
         67: "Kerala", 68: "Kerala", 69: "Kerala",
         70: "West Bengal", 71: "West Bengal", 72: "West Bengal",
         73: "West Bengal", 74: "West Bengal",
         75: "Odisha", 76: "Odisha", 77: "Odisha",
         78: "Assam",
-        79: "Assam",   # 790-792 Arunachal, 793-794 Meghalaya, 795 Manipur,
-                        # 796 Mizoram, 797-798 Nagaland, 799 Tripura — sub-split neeche
-        80: "Bihar", 81: "Bihar", 82: "Jharkhand", 83: "Jharkhand",
-        84: "Bihar", 85: "Bihar",
     }
-    # 79x North-East sub-split (Assam ke sivaay baaki chhote states isi
-    # band me aate hain — India Post ne inhe alag 2-digit nahi diya)
-    if d2 == 79:
-        d3 = p // 1000
-        if 790 <= d3 <= 792: return "Arunachal Pradesh"
-        if 793 <= d3 <= 794: return "Meghalaya"
-        if d3 == 795: return "Manipur"
-        if d3 == 796: return "Mizoram"
-        if 797 <= d3 <= 798: return "Nagaland"
-        if d3 == 799: return "Tripura"
-        return "Assam"
-    return D2_STATE.get(d2, "")
+    return d2_state.get(d2, "")
+
+
+def _geo_key(value):
+    """Case/punctuation-insensitive key for State and city validation."""
+    s = str(value or "").casefold().replace("&", " and ")
+    s = re.sub(r"\b(dist(?:rict)?|city|urban|rural)\b", " ", s)
+    return re.sub(r"[^a-z0-9]+", " ", s).strip()
+
+
+# State aliases seen in free-form addresses.
+_STATE_KEY_TO_NAME = {_geo_key(s): s for s in INDIA_STATES_UTS}
+_STATE_KEY_TO_NAME.update({
+    "orissa": "Odisha", "pondicherry": "Puducherry",
+    "uttaranchal": "Uttarakhand", "nct delhi": "Delhi",
+    "jammu kashmir": "Jammu & Kashmir", "j and k": "Jammu & Kashmir",
+    "andaman nicobar": "Andaman & Nicobar Islands",
+    "dadra nagar haveli daman diu": "Dadra & Nagar Haveli and Daman & Diu",
+})
+
+
+# Known unambiguous Indian city aliases.  This is used only as a validation
+# guard: when the address says a known city from State A but the PIN belongs
+# to State B, PIN wins and a PIN-area/city hint replaces the bad source city.
+_CITY_STATE_ALIASES = {}
+def _register_city(state, canonical, *aliases):
+    for alias in (canonical,) + aliases:
+        _CITY_STATE_ALIASES[_geo_key(alias)] = (state, canonical)
+
+_register_city("Delhi", "New Delhi", "Delhi", "N Delhi")
+_register_city("Rajasthan", "Jaipur")
+_register_city("Rajasthan", "Jodhpur")
+_register_city("Rajasthan", "Udaipur")
+_register_city("Rajasthan", "Kota")
+_register_city("Rajasthan", "Ajmer")
+_register_city("Rajasthan", "Bikaner")
+_register_city("Rajasthan", "Alwar")
+_register_city("Rajasthan", "Bharatpur")
+_register_city("Rajasthan", "Bhilwara")
+_register_city("Rajasthan", "Chittorgarh", "Chittaurgarh")
+_register_city("Rajasthan", "Churu")
+_register_city("Rajasthan", "Dausa")
+_register_city("Rajasthan", "Dholpur")
+_register_city("Rajasthan", "Dungarpur")
+_register_city("Rajasthan", "Hanumangarh")
+_register_city("Rajasthan", "Jaisalmer")
+_register_city("Rajasthan", "Jhalawar")
+_register_city("Rajasthan", "Jhunjhunu")
+_register_city("Rajasthan", "Nagaur")
+_register_city("Rajasthan", "Pali")
+_register_city("Rajasthan", "Sikar")
+_register_city("Rajasthan", "Sirohi")
+_register_city("Rajasthan", "Sri Ganganagar", "Ganganagar")
+_register_city("Rajasthan", "Tonk")
+_register_city("Rajasthan", "Barmer")
+_register_city("Rajasthan", "Banswara")
+_register_city("Rajasthan", "Baran")
+_register_city("Rajasthan", "Bundi")
+_register_city("Rajasthan", "Sawai Madhopur")
+_register_city("West Bengal", "Kolkata", "Calcutta")
+_register_city("West Bengal", "Howrah")
+_register_city("West Bengal", "Darjeeling", "Darjiling", "Darjeling")
+_register_city("West Bengal", "Siliguri")
+_register_city("West Bengal", "Durgapur")
+_register_city("West Bengal", "Asansol")
+_register_city("West Bengal", "Kharagpur")
+_register_city("West Bengal", "Jalpaiguri")
+_register_city("West Bengal", "Malda")
+_register_city("West Bengal", "Cooch Behar")
+_register_city("West Bengal", "Bardhaman", "Burdwan")
+_register_city("Maharashtra", "Mumbai", "Bombay")
+_register_city("Maharashtra", "Navi Mumbai")
+_register_city("Maharashtra", "Pune", "Poona")
+_register_city("Maharashtra", "Nagpur")
+_register_city("Maharashtra", "Nashik", "Nasik")
+_register_city("Maharashtra", "Thane")
+_register_city("Maharashtra", "Kolhapur")
+_register_city("Maharashtra", "Solapur")
+_register_city("Maharashtra", "Amravati")
+_register_city("Haryana", "Gurugram", "Gurgaon")
+_register_city("Haryana", "Faridabad")
+_register_city("Haryana", "Panchkula")
+_register_city("Haryana", "Panipat")
+_register_city("Haryana", "Sonipat", "Sonepat")
+_register_city("Haryana", "Ambala")
+_register_city("Haryana", "Karnal")
+_register_city("Haryana", "Hisar", "Hissar")
+_register_city("Haryana", "Rohtak")
+_register_city("Uttar Pradesh", "Noida")
+_register_city("Uttar Pradesh", "Greater Noida")
+_register_city("Uttar Pradesh", "Ghaziabad")
+_register_city("Uttar Pradesh", "Lucknow")
+_register_city("Uttar Pradesh", "Kanpur")
+_register_city("Uttar Pradesh", "Agra")
+_register_city("Uttar Pradesh", "Varanasi", "Banaras", "Benares")
+_register_city("Uttar Pradesh", "Prayagraj", "Allahabad")
+_register_city("Uttar Pradesh", "Meerut")
+_register_city("Uttar Pradesh", "Bareilly")
+_register_city("Uttar Pradesh", "Gorakhpur")
+_register_city("Uttar Pradesh", "Mathura")
+_register_city("Uttar Pradesh", "Aligarh")
+_register_city("Uttar Pradesh", "Moradabad")
+_register_city("Uttar Pradesh", "Saharanpur")
+_register_city("Uttarakhand", "Dehradun")
+_register_city("Uttarakhand", "Haridwar")
+_register_city("Uttarakhand", "Roorkee")
+_register_city("Uttarakhand", "Rishikesh")
+_register_city("Uttarakhand", "Haldwani")
+_register_city("Uttarakhand", "Nainital")
+_register_city("Uttarakhand", "Rudrapur")
+_register_city("Uttarakhand", "Kashipur")
+_register_city("Punjab", "Ludhiana")
+_register_city("Punjab", "Amritsar")
+_register_city("Punjab", "Jalandhar")
+_register_city("Punjab", "Patiala")
+_register_city("Punjab", "Mohali", "Sahibzada Ajit Singh Nagar", "SAS Nagar")
+_register_city("Punjab", "Bathinda", "Bhatinda")
+_register_city("Chandigarh", "Chandigarh")
+_register_city("Himachal Pradesh", "Shimla")
+_register_city("Himachal Pradesh", "Dharamshala")
+_register_city("Himachal Pradesh", "Solan")
+_register_city("Himachal Pradesh", "Mandi")
+_register_city("Jammu & Kashmir", "Srinagar")
+_register_city("Jammu & Kashmir", "Jammu")
+_register_city("Jammu & Kashmir", "Anantnag")
+_register_city("Jammu & Kashmir", "Baramulla")
+_register_city("Ladakh", "Leh")
+_register_city("Ladakh", "Kargil")
+_register_city("Gujarat", "Ahmedabad", "Amdavad")
+_register_city("Gujarat", "Surat")
+_register_city("Gujarat", "Vadodara", "Baroda")
+_register_city("Gujarat", "Rajkot")
+_register_city("Gujarat", "Gandhinagar")
+_register_city("Gujarat", "Jamnagar")
+_register_city("Gujarat", "Bhavnagar")
+_register_city("Gujarat", "Vapi")
+_register_city("Dadra & Nagar Haveli and Daman & Diu", "Silvassa")
+_register_city("Dadra & Nagar Haveli and Daman & Diu", "Daman")
+_register_city("Dadra & Nagar Haveli and Daman & Diu", "Diu")
+_register_city("Goa", "Panaji", "Panjim")
+_register_city("Goa", "Margao", "Madgaon")
+_register_city("Goa", "Vasco Da Gama", "Vasco")
+_register_city("Goa", "Mapusa")
+_register_city("Madhya Pradesh", "Bhopal")
+_register_city("Madhya Pradesh", "Indore")
+_register_city("Madhya Pradesh", "Jabalpur")
+_register_city("Madhya Pradesh", "Gwalior")
+_register_city("Madhya Pradesh", "Ujjain")
+_register_city("Madhya Pradesh", "Sagar")
+_register_city("Madhya Pradesh", "Rewa")
+_register_city("Chhattisgarh", "Raipur")
+_register_city("Chhattisgarh", "Bhilai")
+_register_city("Chhattisgarh", "Durg")
+_register_city("Chhattisgarh", "Korba")
+_register_city("Karnataka", "Bengaluru", "Bangalore")
+_register_city("Karnataka", "Mysuru", "Mysore")
+_register_city("Karnataka", "Mangaluru", "Mangalore")
+_register_city("Karnataka", "Hubballi", "Hubli")
+_register_city("Karnataka", "Belagavi", "Belgaum")
+_register_city("Karnataka", "Davanagere")
+_register_city("Karnataka", "Udupi")
+_register_city("Tamil Nadu", "Chennai", "Madras")
+_register_city("Tamil Nadu", "Coimbatore")
+_register_city("Tamil Nadu", "Madurai")
+_register_city("Tamil Nadu", "Tiruchirappalli", "Trichy")
+_register_city("Tamil Nadu", "Salem")
+_register_city("Tamil Nadu", "Tiruppur", "Tirupur")
+_register_city("Tamil Nadu", "Erode")
+_register_city("Tamil Nadu", "Vellore")
+_register_city("Tamil Nadu", "Thanjavur", "Tanjore")
+_register_city("Tamil Nadu", "Tirunelveli")
+_register_city("Tamil Nadu", "Kanchipuram", "Kancheepuram")
+_register_city("Tamil Nadu", "Udhagamandalam", "Ooty")
+_register_city("Puducherry", "Puducherry", "Pondicherry")
+_register_city("Puducherry", "Karaikal")
+_register_city("Puducherry", "Mahe")
+_register_city("Puducherry", "Yanam")
+_register_city("Kerala", "Thiruvananthapuram", "Trivandrum")
+_register_city("Kerala", "Kochi", "Cochin")
+_register_city("Kerala", "Ernakulam")
+_register_city("Kerala", "Kozhikode", "Calicut")
+_register_city("Kerala", "Thrissur", "Trichur")
+_register_city("Kerala", "Kannur")
+_register_city("Kerala", "Kollam", "Quilon")
+_register_city("Kerala", "Alappuzha", "Alleppey")
+_register_city("Lakshadweep", "Kavaratti")
+_register_city("Telangana", "Hyderabad")
+_register_city("Telangana", "Secunderabad")
+_register_city("Telangana", "Warangal")
+_register_city("Telangana", "Karimnagar")
+_register_city("Telangana", "Nizamabad")
+_register_city("Andhra Pradesh", "Visakhapatnam", "Vizag")
+_register_city("Andhra Pradesh", "Vijayawada")
+_register_city("Andhra Pradesh", "Guntur")
+_register_city("Andhra Pradesh", "Tirupati")
+_register_city("Andhra Pradesh", "Nellore")
+_register_city("Andhra Pradesh", "Kurnool")
+_register_city("Andhra Pradesh", "Rajahmundry", "Rajamahendravaram")
+_register_city("Andhra Pradesh", "Kakinada")
+_register_city("Odisha", "Bhubaneswar", "Bhubaneshwar")
+_register_city("Odisha", "Cuttack")
+_register_city("Odisha", "Rourkela")
+_register_city("Odisha", "Puri")
+_register_city("Odisha", "Sambalpur")
+_register_city("Assam", "Guwahati", "Gauhati")
+_register_city("Assam", "Dibrugarh")
+_register_city("Assam", "Silchar")
+_register_city("Assam", "Jorhat")
+_register_city("Assam", "Tezpur")
+_register_city("Arunachal Pradesh", "Itanagar")
+_register_city("Meghalaya", "Shillong")
+_register_city("Manipur", "Imphal")
+_register_city("Mizoram", "Aizawl")
+_register_city("Nagaland", "Kohima")
+_register_city("Nagaland", "Dimapur")
+_register_city("Tripura", "Agartala")
+_register_city("Bihar", "Patna")
+_register_city("Bihar", "Gaya")
+_register_city("Bihar", "Muzaffarpur")
+_register_city("Bihar", "Bhagalpur")
+_register_city("Bihar", "Darbhanga")
+_register_city("Bihar", "Purnia", "Purnea")
+_register_city("Bihar", "Bihar Sharif")
+_register_city("Jharkhand", "Ranchi")
+_register_city("Jharkhand", "Jamshedpur", "Tatanagar")
+_register_city("Jharkhand", "Dhanbad")
+_register_city("Jharkhand", "Bokaro")
+_register_city("Jharkhand", "Deoghar")
+_register_city("Jharkhand", "Hazaribagh")
+_register_city("Sikkim", "Gangtok")
+_register_city("Andaman & Nicobar Islands", "Port Blair")
+
+
+# Conservative city/district hints from PIN prefixes.  These are used only
+# when a known city/state mismatch is detected; otherwise the source city is
+# retained.  Rajasthan is intentionally detailed because that is where the
+# reported Darjeeling mismatch occurred.
+_PIN3_CITY_HINTS = {
+    110: ("Delhi", "New Delhi"),
+    122: ("Haryana", "Gurugram"),
+    160: ("Chandigarh", "Chandigarh"),
+    201: ("Uttar Pradesh", "Noida / Ghaziabad"),
+    226: ("Uttar Pradesh", "Lucknow"),
+    244: ("Uttarakhand", "Kashipur / Rudrapur"),
+    248: ("Uttarakhand", "Dehradun"),
+    249: ("Uttarakhand", "Haridwar / Rishikesh"),
+    301: ("Rajasthan", "Alwar"), 302: ("Rajasthan", "Jaipur"),
+    303: ("Rajasthan", "Dausa / Jaipur Rural"), 304: ("Rajasthan", "Tonk"),
+    305: ("Rajasthan", "Ajmer"), 306: ("Rajasthan", "Pali"),
+    307: ("Rajasthan", "Sirohi"), 311: ("Rajasthan", "Bhilwara"),
+    312: ("Rajasthan", "Chittorgarh"), 313: ("Rajasthan", "Udaipur"),
+    314: ("Rajasthan", "Dungarpur"), 321: ("Rajasthan", "Bharatpur"),
+    322: ("Rajasthan", "Sawai Madhopur"), 323: ("Rajasthan", "Bundi"),
+    324: ("Rajasthan", "Kota"), 325: ("Rajasthan", "Baran"),
+    326: ("Rajasthan", "Jhalawar"), 327: ("Rajasthan", "Banswara"),
+    328: ("Rajasthan", "Dholpur"), 331: ("Rajasthan", "Churu"),
+    332: ("Rajasthan", "Sikar"), 333: ("Rajasthan", "Jhunjhunu"),
+    334: ("Rajasthan", "Bikaner"), 335: ("Rajasthan", "Sri Ganganagar / Hanumangarh"),
+    341: ("Rajasthan", "Nagaur"), 342: ("Rajasthan", "Jodhpur"),
+    343: ("Rajasthan", "Jalore"), 344: ("Rajasthan", "Barmer"),
+    345: ("Rajasthan", "Jaisalmer"),
+    380: ("Gujarat", "Ahmedabad"), 395: ("Gujarat", "Surat"),
+    400: ("Maharashtra", "Mumbai"), 411: ("Maharashtra", "Pune"),
+    440: ("Maharashtra", "Nagpur"), 452: ("Madhya Pradesh", "Indore"),
+    462: ("Madhya Pradesh", "Bhopal"), 492: ("Chhattisgarh", "Raipur"),
+    500: ("Telangana", "Hyderabad"), 520: ("Andhra Pradesh", "Vijayawada"),
+    530: ("Andhra Pradesh", "Visakhapatnam"), 560: ("Karnataka", "Bengaluru"),
+    600: ("Tamil Nadu", "Chennai"), 641: ("Tamil Nadu", "Coimbatore"),
+    682: ("Kerala", "Kochi"), 695: ("Kerala", "Thiruvananthapuram"),
+    700: ("West Bengal", "Kolkata"), 711: ("West Bengal", "Howrah"),
+    734: ("West Bengal", "Darjeeling / Siliguri"),
+    737: ("Sikkim", "Gangtok"), 744: ("Andaman & Nicobar Islands", "Port Blair"),
+    751: ("Odisha", "Bhubaneswar"), 781: ("Assam", "Guwahati"),
+    793: ("Meghalaya", "Shillong"), 795: ("Manipur", "Imphal"),
+    796: ("Mizoram", "Aizawl"), 797: ("Nagaland", "Kohima / Dimapur"),
+    799: ("Tripura", "Agartala"), 800: ("Bihar", "Patna"),
+    834: ("Jharkhand", "Ranchi"),
+}
+
+
+def _pincode_city_hint(pin, state):
+    digits = re.sub(r"\D", "", str(pin or ""))
+    if len(digits) < 3:
+        return ""
+    prefix = int(digits[:3])
+    hint = _PIN3_CITY_HINTS.get(prefix)
+    if hint and hint[0] == state:
+        return hint[1]
+    if state == "Delhi":
+        return "New Delhi"
+    if state == "Chandigarh":
+        return "Chandigarh"
+    return f"PIN {prefix} Area"
+
 
 def _extract_city_pin_from_address(addr):
-    """Final Billing Address ke end se CITY aur 6-digit PIN nikalta hai.
-    Expected tail: "...,MUMBAI-400071" / "...,New Delhi - 110001".
-    City ko sirf last comma-separated segment se liya jata hai, isliye
-    address ke beech ke locality/tower text se mix nahi hota."""
+    """Extract city and the final 6-digit PIN from free-form billing address.
+
+    Supports `CITY-PIN`, `CITY, STATE - PIN`, line breaks and trailing India.
+    The final PIN is treated as authoritative; city/state consistency is
+    handled by `_normalize_city_for_state`.
+    """
     s = str(addr or "").strip()
     if not s:
         return "", ""
-    tail = re.split(r'[,\n]+', s)[-1].strip()
-    m = re.search(r'^\s*(.*?)\s*-\s*(\d{6})\s*$', tail)
-    if not m:
+    matches = list(re.finditer(r"(?<!\d)([1-8]\d{5})(?!\d)", s))
+    if not matches:
         return "", ""
-    city = re.sub(r'\s+', ' ', m.group(1)).strip(' .,-')
-    pin = m.group(2)
-    if not city:
-        return "", ""
-    # Sheet casing inconsistent ho sakti hai; readable title case rakho.
-    city = city.title()
-    return city, pin
+    m = matches[-1]
+    pin = m.group(1)
+    prefix = s[:m.start()].strip(" \t\r\n,;:-–—/")
+    if not prefix:
+        return "", pin
+
+    parts = [re.sub(r"\s+", " ", p).strip(" .;:-–—/")
+             for p in re.split(r"[,\n]+", prefix)]
+    parts = [p for p in parts if p]
+    if not parts:
+        return "", pin
+
+    # Drop trailing country/state-only segments, then use the nearest city
+    # segment before the PIN.
+    while parts and _geo_key(parts[-1]) in {"india", "bharat"}:
+        parts.pop()
+    pin_state = _pincode_to_state(pin)
+    while len(parts) > 1 and _geo_key(parts[-1]) in _STATE_KEY_TO_NAME:
+        tail_key = _geo_key(parts[-1])
+        city_alias = _CITY_STATE_ALIASES.get(tail_key)
+        # Puducherry/Delhi/Chandigarh can be both State/UT and city names.
+        # Keep the token when it is a valid city for the PIN-derived State.
+        if city_alias and city_alias[0] == pin_state:
+            break
+        parts.pop()
+    if not parts:
+        return "", pin
+    city = parts[-1]
+
+    # Tail may be `Jaipur - Rajasthan`; remove a trailing State token.
+    chunks = [c.strip() for c in re.split(r"\s*[-–—/]\s*", city) if c.strip()]
+    while len(chunks) > 1 and _geo_key(chunks[-1]) in _STATE_KEY_TO_NAME:
+        tail_key = _geo_key(chunks[-1])
+        city_alias = _CITY_STATE_ALIASES.get(tail_key)
+        if city_alias and city_alias[0] == pin_state:
+            break
+        chunks.pop()
+    city = chunks[-1] if chunks else city
+    city = re.sub(r"\s+", " ", city).strip(" .,-")
+    return city.title(), pin
+
 
 def _extract_pin_from_address(addr):
     """Backward-compatible PIN-only helper."""
     return _extract_city_pin_from_address(addr)[1]
 
 
-def _normalize_city_for_state(city, state):
-    """PIN se nikle state aur address-city ko consistent rakhta hai.
-    Source sheet me kabhi city text galat hota hai (jaise Delhi PIN ke saath
-    Mumbai). Known cross-state mismatch ko selected state ke canonical label
-    me badal dete hain, taaki Mumbai Delhi ke andar kabhi na dikhe."""
-    city = re.sub(r'\s+', ' ', str(city or '')).strip(' .,-')
-    state = str(state or '').strip()
-    if not city:
-        return 'New Delhi' if state == 'Delhi' else state
+def _normalize_city_for_state(city, state, pin=""):
+    """Validate address city against PIN-derived State and correct mismatch.
 
-    city_state = {
-        'mumbai': 'Maharashtra', 'bombay': 'Maharashtra',
-        'new delhi': 'Delhi', 'delhi': 'Delhi',
-        'gurugram': 'Haryana', 'gurgaon': 'Haryana',
-        'noida': 'Uttar Pradesh', 'bengaluru': 'Karnataka',
-        'bangalore': 'Karnataka', 'kolkata': 'West Bengal',
-        'chennai': 'Tamil Nadu', 'hyderabad': 'Telangana',
-        'ahmedabad': 'Gujarat', 'pune': 'Maharashtra',
-        'jaipur': 'Rajasthan', 'lucknow': 'Uttar Pradesh',
-    }
-    known_state = city_state.get(city.casefold())
-    if known_state and known_state != state:
-        return 'New Delhi' if state == 'Delhi' else state
+    A known cross-State city never remains under the wrong State.  When the
+    source city conflicts with the PIN, a conservative PIN-prefix hint is
+    used (for example a 302xxx Rajasthan address becomes Jaipur rather than
+    showing Darjeeling under Rajasthan).
+    """
+    city = re.sub(r"\s+", " ", str(city or "")).strip(" .,-")
+    state = _STATE_KEY_TO_NAME.get(_geo_key(state), str(state or "").strip())
+    if not state:
+        return city.title()
 
-    if state == 'Delhi' and city.casefold() in {
-        'north', 'south', 'east', 'west', 'north east', 'north west',
-        'south east', 'south west', 'central'
+    key = _geo_key(city)
+    known = _CITY_STATE_ALIASES.get(key)
+    if not city or key in {"india", "bharat"}:
+        return _pincode_city_hint(pin, state)
+    # Puducherry, Delhi and Chandigarh can be both State/UT and city names.
+    # Treat them as cities when the PIN-derived State agrees.
+    if key in _STATE_KEY_TO_NAME and not (known and known[0] == state):
+        return _pincode_city_hint(pin, state)
+
+    if known:
+        known_state, canonical = known
+        if known_state != state:
+            return _pincode_city_hint(pin, state)
+        city = canonical
+
+    if state == "Delhi" and key in {
+        "north", "south", "east", "west", "north east", "north west",
+        "south east", "south west", "central"
     }:
-        city = f'{city} Delhi'
+        city = f"{city} Delhi"
     return city.title()
 
+
 def _fetch_rkh_sku_city_rows():
-    """Website order sheet ko fetch karke [{sku, qty, state}, ...] deta hai
-    (raw order-lines, koi Rakhi-filter yahan nahi laga — wo client-side
-    SKU ke hisaab se hota hai) — 10 min cache. Return: (rows, diagnostics)
-    — diagnostics me exact wajah hoti hai agar kuch match na ho (columns
-    na milna, fetch fail, ya sheet khaali) taaki UI par saaf pata chale."""
+    """Build validated Website order city rows for the Rakhi State/UT table.
+
+    PIN-derived State is authoritative. Cancelled/failed and explicit
+    zero/negative-quantity rows are excluded. If no Qty column exists, one
+    row is treated as one sold unit. Diagnostics expose how many source city
+    labels were corrected so data quality can be monitored.
+    """
     if _RKH_CITY_CACHE["rows"] is not None and (time.time() - _RKH_CITY_CACHE["ts"] < 600):
         return _RKH_CITY_CACHE["rows"], _RKH_CITY_CACHE.get("diag", {})
     out = []
-    diag = {"rows_total": 0, "rows_used": 0, "columns_found": False, "error": None}
+    diag = {
+        "rows_total": 0, "rows_used": 0, "columns_found": False,
+        "rows_cancelled": 0, "rows_nonpositive_qty": 0,
+        "city_labels_corrected": 0, "error": None,
+    }
     try:
         df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
         df.columns = [str(c).strip() for c in df.columns]
         cols = list(df.columns)
         diag["rows_total"] = len(df)
-        diag["all_columns"] = cols[:20]   # debug ke liye — sheet ke pehle 20 column names
-        C_SKU = find_col(cols, "SKU", "sku code", "product sku", "item sku") \
+        diag["all_columns"] = cols[:20]
+        C_SKU = find_col(cols, "New SKU", "SKU", "sku code", "product sku", "item sku") \
                 or (cols[0] if len(cols) > 0 else None)
-        C_QTY = find_col(cols, "Final Qty", "final quantity", "sold qty", "qty", "quantity") \
-                or (cols[1] if len(cols) > 1 else None)
+        qty_keys = {
+            "finalqty", "finalquantity", "soldqty", "saleqty",
+            "orderqty", "orderedqty", "totalqty", "quantity", "qty"
+        }
+        C_QTY = next((c for c in cols if re.sub(r"[^a-z0-9]", "", c.lower()) in qty_keys), None)
         C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
                  or (cols[4] if len(cols) > 4 else None)
+        C_STATUS = find_col(cols, "Sale Order Status", "Order Status", "status")
         diag["sku_col"] = C_SKU
         diag["qty_col"] = C_QTY
         diag["addr_col"] = C_ADDR
+        diag["status_col"] = C_STATUS
         if C_SKU and C_ADDR:
             diag["columns_found"] = True
             for _, r in df.iterrows():
+                status = str(r.get(C_STATUS, "") or "").strip().casefold() if C_STATUS else ""
+                if status and any(x in status for x in ("cancel", "void", "failed")):
+                    diag["rows_cancelled"] += 1
+                    continue
                 sku = str(r.get(C_SKU, "") or "").strip()
                 if not sku:
                     continue
-                city, pin = _extract_city_pin_from_address(r.get(C_ADDR, ""))
+                raw_city, pin = _extract_city_pin_from_address(r.get(C_ADDR, ""))
                 if not pin:
                     continue
                 state = _pincode_to_state(pin)
                 if not state:
                     continue
-                city = _normalize_city_for_state(city, state)
-                qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
-                out.append({"sku": sku, "qty": qty, "state": state, "city": city})
+                city = _normalize_city_for_state(raw_city, state, pin)
+                if _geo_key(city) != _geo_key(raw_city):
+                    diag["city_labels_corrected"] += 1
+                qty = to_num(r.get(C_QTY, 0)) if C_QTY else 1.0
+                if C_QTY and qty <= 0:
+                    diag["rows_nonpositive_qty"] += 1
+                    continue
+                if not C_QTY:
+                    qty = 1.0
+                out.append({
+                    "sku": sku, "qty": float(qty), "state": state,
+                    "city": city, "pin": pin,
+                })
                 diag["rows_used"] += 1
         else:
             diag["error"] = "Could not find SKU / Final Billing Address columns in the sheet."
