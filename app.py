@@ -1120,6 +1120,7 @@ def _refresh_data():
     # on the same date are collapsed into one customer-session. Only a short
     # SHA-1 token is sent to the browser; names/addresses themselves are not.
     website_customer_events = {}
+    website_city_events = {}
     try:
         _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
         web_orders = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
@@ -1136,16 +1137,28 @@ def _refresh_data():
                            "Billing Address", "final address", "address") or _wat(4))
         W_SKU = (find_col(web_orders.columns, "New SKU", "SKU", "sku code",
                           "product sku", "item sku") or _wat(7))
+        _website_qty_keys = {
+            "finalqty", "finalquantity", "soldqty", "saleqty",
+            "orderqty", "orderedqty", "totalqty", "quantity", "qty"
+        }
+        W_QTY = next((
+            c for c in web_orders.columns
+            if re.sub(r"[^a-z0-9]", "", str(c).lower()) in _website_qty_keys
+        ), None)
         W_STATUS = find_col(web_orders.columns, "Sale Order Status", "Order Status", "status")
 
         dbg["website_repeat_cols"] = wcols
         dbg["website_repeat_resolved"] = {
             "date": W_DATE, "name": W_NAME, "address": W_ADDR,
-            "sku": W_SKU, "status": W_STATUS,
+            "sku": W_SKU, "qty": W_QTY, "status": W_STATUS,
         }
 
-        # sku -> {(customer_token, date_iso): compact event}
+        # Repeat-rate sessions and Website/D2C city sales are built from the
+        # same Website order source. City rows are compacted by SKU + date +
+        # city so the browser can recalculate the top city for active date
+        # filters without sending customer names or full addresses.
         _web_event_sets = {}
+        _web_city_sums = {}
         if W_DATE and W_NAME and W_ADDR and W_SKU:
             for r in _df_chunks(web_orders):
                 status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
@@ -1163,6 +1176,23 @@ def _refresh_data():
 
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
+
+                # Top city for Website / D2C views. When the Website sheet has
+                # no explicit quantity column, one row represents one sold SKU
+                # line, so default to 1. Cancelled/failed rows were removed above.
+                city_web, pin_web = _extract_city_pin_from_address(raw_addr)
+                if pin_web:
+                    state_web = _pincode_to_state(pin_web)
+                    if state_web:
+                        city_web = _normalize_city_for_state(city_web, state_web)
+                if city_web:
+                    qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
+                    if qty_web <= 0:
+                        qty_web = 1.0
+                    city_key = (date_iso, city_web)
+                    sku_city_map = _web_city_sums.setdefault(mapped_web_sku, {})
+                    sku_city_map[city_key] = sku_city_map.get(city_key, 0.0) + float(qty_web)
+
                 name_norm = re.sub(r"[^a-z0-9]+", " ", raw_name.casefold()).strip()
                 addr_norm = re.sub(r"[^a-z0-9]+", " ", raw_addr.casefold()).strip()
                 if not name_norm or not addr_norm:
@@ -1179,11 +1209,21 @@ def _refresh_data():
             sku: sorted(events.values(), key=lambda x: (x["d"], x["c"]))
             for sku, events in _web_event_sets.items()
         }
+        website_city_events = {
+            sku: [
+                {"d": _si(day), "c": _si(city), "q": round(float(qty), 4)}
+                for (day, city), qty in sorted(city_map.items(), key=lambda x: (x[0][0], x[0][1]))
+            ]
+            for sku, city_map in _web_city_sums.items()
+        }
         dbg["website_repeat_skus"] = len(website_customer_events)
         dbg["website_repeat_sessions"] = sum(len(v) for v in website_customer_events.values())
+        dbg["website_city_skus"] = len(website_city_events)
+        dbg["website_city_buckets"] = sum(len(v) for v in website_city_events.values())
     except Exception as e:
-        dbg["errors"].append(f"website repeat: {e}")
+        dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
+        website_city_events = {}
     finally:
         try:
             del web_orders
@@ -1681,6 +1721,7 @@ def _refresh_data():
             "sales_entries": ent,
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(dedupe_key, []),
+            "website_city_events": website_city_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -1756,6 +1797,7 @@ def _refresh_data():
             "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(orphan_key, []),
+            "website_city_events": website_city_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -4728,6 +4770,10 @@ table.ro td,table.ro th,.row span,.kpi-v.gold,.kpi-v.green,.kpi-v.red,.kpi-v.ora
 .hero-title,b,strong,th{ font-weight:800 !important; }
 input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
+/* Global SKU scene flags are appended to the SKU label itself so every existing
+   table/card/search result shows the stock scene immediately. */
+.sku,.sku-link,.tc-sku,.combo-sku,.prod-sku-text,.bulk-product-name,.pm-skuopt{line-height:1.45}
+
 
 
 
@@ -5251,6 +5297,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
+        <div class="kpi"><div class="kpi-t">STR (Sell-Through Rate)</div><div class="kpi-v" id="sdStrPct" style="color:#b68b00">0%</div><div class="small-note" id="sdStrMeta" style="margin-top:4px;white-space:normal">Filtered Sold Qty ÷ (Filtered Sold Qty + Inv Stock)</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div></div>
         <div class="kpi" id="sdWebsiteRepeatCard" style="display:none"><div class="kpi-t">Website Repeat Rate</div><div class="kpi-v" id="sdWebsiteRepeatRate" style="color:#b68b00">0%</div><div class="small-note" id="sdWebsiteRepeatMeta" style="margin-top:4px;white-space:normal">0 repeat customers</div></div>
@@ -5823,7 +5870,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopSkusCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Ranked by units sold — restricted to the curated Rakhi SKU list (RKH + CMB gift sets), FY 2026-27 orders only.</div>
+  <div class="small-note" style="margin:6px 0 14px">Ranked by units sold — restricted to the curated Rakhi SKU list (RKH + CMB gift sets), FY 2026-27 orders only. Daily Avg Sale is calculated from 22 Jul 2026 to today; Estimated Days to OOS uses current Inv Stock only.</div>
   <div id="rakhiTopSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -5835,7 +5882,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiSlowMoversCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list — showing every SKU that has NOT sold a single unit this Rakhi season (FY 2026-27). No stock/WIP/age criteria applied.</div>
+  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list — showing every SKU that has NOT sold a single unit this Rakhi season (FY 2026-27). Daily Avg Sale is calculated from 22 Jul 2026 to today; Estimated Days to OOS uses current Inv Stock only. No stock/WIP/age criteria applied.</div>
   <div id="rakhiSlowMoverContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -5926,6 +5973,11 @@ select.lg-in option{background:#fff;color:#1a1610}
           <option value="All">All</option>
           <option value="Rakhi">Rakhi (RKH + Rakhi CMB)</option>
           <option value="Others">Others</option>
+        </select>
+      </div>
+      <div class="fc"><label class="fl">Taxon / Category</label>
+        <select class="fs" id="oosTaxon" onchange="renderOOS()">
+          <option value="All">All Taxons</option>
         </select>
       </div>
     </div>
@@ -6088,12 +6140,170 @@ function safeText(v){ return (v === null || v === undefined) ? '' : String(v); }
 function giftSetStoneDetails(sku){
   return _giftSetStoneMap[String(sku || '').trim().toUpperCase()] || '';
 }
+function skuHealthMeta(itemOrSku){
+  // One clear, consistent scene flag wherever a SKU is displayed.
+  // OOS and OOS Soon deliberately use sellable Inv Stock (not WIP), exactly
+  // like the OOS tab. WIP remains incoming support and does not hide an OOS.
+  let item = itemOrSku;
+  if (!item || typeof item !== 'object') {
+    const key = String(itemOrSku || '').trim().toUpperCase();
+    item = _masterSkuMap[key] || null;
+  }
+  if (!item) return {key:'unknown', label:'⚪ STATUS N/A'};
+
+  const stock = Math.max(0, Number(item.inv_stock) || 0);
+  const wip = Math.max(0, Number(item.inv_wip) || 0);
+  const sale30 = Math.max(0, Number(item.qty_1m) || 0);
+
+  if (stock <= 0) {
+    return {key:'oos', label:'🔴 OOS', title:`Inv Stock 0${wip > 0 ? ` · ${Math.round(wip)} WIP incoming` : ''}`};
+  }
+
+  if (sale30 > 0) {
+    const drr = sale30 / 30;
+    const coverDays = drr > 0 ? stock / drr : Infinity;
+    if (coverDays <= 30) {
+      return {key:'soon', label:'🟠 OOS SOON', title:`Approx. ${coverDays < 1 ? '<1' : coverDays.toFixed(coverDays < 10 ? 1 : 0)} days of Inv Stock cover`};
+    }
+    return {key:'good', label:'🟢 GOOD RUNNING', title:`${Math.round(sale30)} units sold in the latest 30 days`};
+  }
+
+  const existingStatus = String(item.status || '').trim().toLowerCase();
+  if (existingStatus === 'good running') {
+    return {key:'good', label:'🟢 GOOD RUNNING', title:'Good Running by the dashboard status rule'};
+  }
+  if (existingStatus === 'slow movers') {
+    return {key:'slow', label:'⚪ SLOW / NO 30D SALE', title:'No sale in the latest 30 days'};
+  }
+  if (existingStatus === 'new launch') {
+    return {key:'new', label:'🔵 NEW LAUNCH', title:'Launched in the current month'};
+  }
+  return {key:'slow', label:'⚪ NO 30D SALE', title:'No positive sale in the latest 30 days'};
+}
+
+function skuHealthFlagText(itemOrSku){
+  const m = skuHealthMeta(itemOrSku);
+  return m && m.label ? `〔${m.label}〕` : '';
+}
+
+function _visibleFilterValuesForCurrentTab(){
+  // Only Type/Channel controls can activate Website/D2C city labels. Other
+  // dropdowns (Taxon, Status, Product Group, etc.) are intentionally ignored.
+  const cfg = {
+    home:       {selects:['homeTypeFilter']},
+    matrix:     {boxes:['fTypeChecks','fChanChecks']},
+    repeat:     {boxes:['rTypeChecks','rChanChecks']},
+    skudetails: {boxes:['sdTypeChecks']},
+    taxon:      {boxes:['txTypeChecks']},
+    rakhi:      {selects:['rkhTypeFilter']},
+    production: {selects:['prodChannel','prodType']},
+    target:     {selects:['tgtChannel']}
+  }[currentTab] || {};
+  const values = [];
+  (cfg.boxes || []).forEach(id => {
+    const box = document.getElementById(id);
+    if (!box || box.offsetParent === null) return;
+    box.querySelectorAll('input[type="checkbox"]:checked').forEach(el => {
+      const v = String(el.value || el.closest('label')?.textContent || '').trim();
+      if (v) values.push(v);
+    });
+  });
+  (cfg.selects || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el || el.offsetParent === null) return;
+    const v = String(el.value || '').trim();
+    if (v && !/^all/i.test(v)) values.push(v);
+    const opt = el.options && el.selectedIndex >= 0 ? el.options[el.selectedIndex] : null;
+    const txt = String(opt?.textContent || '').trim();
+    if (txt && !/^all/i.test(txt)) values.push(txt);
+  });
+  return values;
+}
+
+function isWebsiteD2CFilterActive(){
+  const words = _visibleFilterValuesForCurrentTab().join(' ');
+  return /(^|\b)(website|d2c|online|direct\s*to\s*consumer)(\b|$)/i.test(words);
+}
+
+function _websiteCityDateRange(){
+  const dateIds = {
+    matrix:['fD1','fD2'], repeat:['rD1','rD2'], skudetails:['sdD1','sdD2'],
+    taxon:['txD1','txD2']
+  }[currentTab] || [];
+  return {
+    d1: dateIds[0] ? String(document.getElementById(dateIds[0])?.value || '') : '',
+    d2: dateIds[1] ? String(document.getElementById(dateIds[1])?.value || '') : ''
+  };
+}
+
+function skuTopCityMeta(itemOrSku){
+  if (!isWebsiteD2CFilterActive()) return null;
+  let item = itemOrSku;
+  if (!item || typeof item !== 'object') {
+    const key = String(itemOrSku || '').trim().toUpperCase();
+    item = _masterSkuMap[key] || null;
+  }
+  const events = item?.website_city_events || [];
+  if (!events.length) return null;
+
+  const {d1, d2} = _websiteCityDateRange();
+  const totals = new Map();
+  events.forEach(ev => {
+    const day = String(ev?.d || '');
+    if (d1 && (!day || day < d1)) return;
+    if (d2 && (!day || day > d2)) return;
+    const city = String(ev?.c || '').trim();
+    if (!city) return;
+    totals.set(city, (totals.get(city) || 0) + (Number(ev?.q) || 0));
+  });
+  if (!totals.size) return null;
+  const ranked = Array.from(totals.entries()).sort((a,b) => (b[1] - a[1]) || a[0].localeCompare(b[0]));
+  const [city, qty] = ranked[0];
+  return {city, qty};
+}
+
+function skuTopCityText(itemOrSku){
+  const m = skuTopCityMeta(itemOrSku);
+  if (!m) return '';
+  const qty = Number(m.qty) || 0;
+  const qtyLabel = Number.isInteger(qty) ? qty.toLocaleString('en-IN') : qty.toLocaleString('en-IN', {maximumFractionDigits:2});
+  return `〔📍 TOP CITY: ${m.city} · ${qtyLabel} qty〕`;
+}
+
+function skuCodeWithFlag(sku){
+  const code = String(sku || '').trim();
+  const parts = [code, skuHealthFlagText(code), skuTopCityText(code)].filter(Boolean);
+  return parts.join(' ');
+}
+
+function skuTextWithFlags(value){
+  // Decorate SKU codes embedded inside combo/stone-detail text too. Only tokens
+  // that exist in the loaded master catalogue are changed, so ordinary words
+  // and remarks remain untouched.
+  return String(value || '').replace(/[A-Za-z0-9][A-Za-z0-9_()\/-]{2,}/g, token => {
+    const key = String(token || '').trim().toUpperCase();
+    return _masterSkuMap[key] ? skuCodeWithFlag(token) : token;
+  });
+}
+
 function skuLabel(sku, name){
   // cosanostraa.com par mila to "Product Name (SKU)", warna sirf SKU code.
+  // Health scene flag is appended as plain text so it remains visible in every
+  // existing table/card without breaking escaped HTML, links or exports.
   const base = (name && name !== sku) ? (name + ' (' + sku + ')') : (sku || '');
-  const stone = giftSetStoneDetails(sku);
-  return stone ? (base + ' - ' + stone) : base;
+  const stone = skuTextWithFlags(giftSetStoneDetails(sku));
+  const label = stone ? (base + ' - ' + stone) : base;
+  const flag = skuHealthFlagText(sku);
+  const city = skuTopCityText(sku);
+  return [label, flag, city].filter(Boolean).join(' ');
 }
+window.skuHealthMeta = skuHealthMeta;
+window.skuHealthFlagText = skuHealthFlagText;
+window.skuTopCityMeta = skuTopCityMeta;
+window.skuTopCityText = skuTopCityText;
+window.isWebsiteD2CFilterActive = isWebsiteD2CFilterActive;
+window.skuCodeWithFlag = skuCodeWithFlag;
+window.skuTextWithFlags = skuTextWithFlags;
 
 // Export ke liye "SKU Name" column — sirf tabhi jab REAL naam mila ho
 // (cosanostraa.com se). Agar naam nahi mila to backend fallback me SKU code
@@ -6532,6 +6742,19 @@ function _sdFilteredStatus(item, ents){
   if (stockWip >= 20 && recentSoldQty <= 0) return 'Slow Movers';
   return 'Good Running';
 }
+function _sdSellThroughStats(item, ents){
+  // Standard retail sell-through rate, fully responsive to the active
+  // SKU Details Date, Type and Marketplace filters:
+  // STR = Filtered Sold Qty / (Filtered Sold Qty + current Inv Stock) * 100.
+  // WIP is intentionally excluded because it is not yet sellable inventory.
+  const rows = Array.isArray(ents) ? ents : [];
+  const soldQty = Math.max(0, rows.reduce((s,e) => s + (parseFloat(e?.qty) || 0), 0));
+  const invStock = Math.max(0, parseFloat(item?.inv_stock) || 0);
+  const baseQty = soldQty + invStock;
+  const rate = baseQty > 0 ? (soldQty / baseQty) * 100 : 0;
+  return {soldQty, invStock, baseQty, rate};
+}
+
 function _sdWebsiteRepeatStats(item){
   const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => String(c.value || '').trim().toLowerCase());
   const show = typesPicked.includes('website');
@@ -6569,6 +6792,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
   const totalOrders = ents.length;
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+  const sellThrough = _sdSellThroughStats(item, ents);
   // AOV is intentionally calculated per piece for every Type/filter.
   // This keeps Purchase/B2B orders with multiple pieces mathematically correct.
   const aovPerPiece = totalQty ? (totalRev / totalQty) : 0;
@@ -6613,6 +6837,8 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       ['Current Stock', stock.toLocaleString('en-IN')],
       ['WIP', wip.toLocaleString('en-IN')],
       ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
+      ['STR / Sell-Through Rate (Filtered)', `${sellThrough.rate.toFixed(1)}%`],
+      ['STR Basis', `${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold ÷ (${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold + ${Math.round(sellThrough.invStock).toLocaleString('en-IN')} stock)`],
       ['Reorder Qty (60D forecast)', (item.reorder_qty||0).toLocaleString('en-IN')],
       ['Last Sold Date', _sdDisplayDate(lastSoldDate)],
       ['Best Performing Channel', bestChannel || '—'],
@@ -6702,7 +6928,7 @@ function renderSkuDetails(sku){
     `<span>Plating: <b>${safeText(item.plating)}</b></span>` +
     (item.stone_color ? `<span>Stone Color: <b>${safeText(item.stone_color)}</b></span>` : '') +
     (item.dimensions ? `<span>Dimensions: <b>${safeText(item.dimensions)}</b></span>` : '') +
-    (item.combo_skus ? `<span>Combo SKUs: <b>${safeText(item.combo_skus)}</b></span>` : '') +
+    (item.combo_skus ? `<span>Combo SKUs: <b>${safeText(skuTextWithFlags(item.combo_skus))}</b></span>` : '') +
     `<span>Status: <b id="sdMetaStatus">${safeText(item.status)}</b></span>` +
     `<span>Inv Stock: <b>${item.inv_stock || 0}</b></span>` +
     `<span>Inv WIP: <b>${item.inv_wip || 0}</b></span>` +
@@ -6717,12 +6943,15 @@ function renderSkuDetails(sku){
     const stock = parseFloat(item.inv_stock) || 0;
     const wip = parseFloat(item.inv_wip) || 0;
     const avail = stock + wip;
+    const initialSellThrough = _sdSellThroughStats(item, item.sales_entries || []);
     const launchDisp = item.launch_date || '—';
     const rows = [
       ['Launch Date', launchDisp],
       ['Current Stock', stock.toLocaleString('en-IN')],
       ['WIP', wip.toLocaleString('en-IN')],
       ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
+      ['STR / Sell-Through Rate (Filtered)', `${initialSellThrough.rate.toFixed(1)}%`],
+      ['STR Basis', `${Math.round(initialSellThrough.soldQty).toLocaleString('en-IN')} sold ÷ (${Math.round(initialSellThrough.soldQty).toLocaleString('en-IN')} sold + ${Math.round(initialSellThrough.invStock).toLocaleString('en-IN')} stock)`],
       ['Reorder Qty (60D forecast)', (item.reorder_qty||0).toLocaleString('en-IN')],
       ['Last Sold Date', _sdDisplayDate(item.last_dispatch_date)],
       ['Best Performing Channel', item.best_channel || '—'],
@@ -6793,6 +7022,7 @@ function renderSdTable(){
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
   const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
+  const sellThrough = _sdSellThroughStats(item, ents);
   // Return % = returned units divided by the original dispatched units.
   // COSA Final Qty is the net sold quantity, so original dispatched qty is
   // Final Qty + Return Qty. This stays fully filter-aware because both totals
@@ -6818,6 +7048,8 @@ function renderSdTable(){
   setT('sdQty', totalQty);
   setT('sdRev', fmt(totalRev));
   setT('sdDiscPct', overallDiscPct + '%');
+  setT('sdStrPct', sellThrough.rate.toFixed(1) + '%');
+  setT('sdStrMeta', `${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold ÷ (${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold + ${Math.round(sellThrough.invStock).toLocaleString('en-IN')} stock)`);
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
   setT('sdRetPct', totalRetPct.toFixed(1) + '%');
   setT('sdRetAmt', fmt(totalRetAmt));
@@ -7093,7 +7325,8 @@ function exportSD(fmtType){
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const mrp = parseFloat(item.mrp) || 0;
-  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const exportSellThrough = _sdSellThroughStats(item, ents);
+  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
@@ -7108,6 +7341,7 @@ function exportSD(fmtType){
       Type: e.type,
       Channel: e.channel || '',
       'Sold Qty': q,
+      'Filtered STR': exportSellThrough.rate.toFixed(1) + '%',
       'MRP': mrp,
       ...(emp0 ? {} : {'Selling Price': sp, 'Discount %': discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
       'Image Link': item.image_url || '',
@@ -10047,7 +10281,7 @@ function renderRakhiPivot(){
       <td>${wip}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:700px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:980px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiPivotCSV(){
   const list = _rakhiPivotRows || [];
@@ -10527,11 +10761,11 @@ function renderRakhiCommonSkus(){
       : `<span class="rkh-common-photo-ph" style="display:flex">💎</span>`;
     const parents = r.parents.map(p => {
       const pEsc = String(p.sku).replace(/'/g, "\\'");
-      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(p.sku)}</button>`;
+      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuCodeWithFlag(p.sku))}</button>`;
     }).join(', ');
     return `<tr>
       <td style="width:118px;text-align:center">${photo}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(skuCodeWithFlag(r.sku))}</b></button></td>
       <td style="text-align:center"><b>${r.parents.length}</b></td>
       <td style="white-space:normal;line-height:1.7">${parents}</td>
     </tr>`;
@@ -10569,16 +10803,26 @@ function _rkhBuildTopSkus(){
   // Type filter lga ho to sirf usi ke hisaab se (_rakhiFilteredRows),
   // warna poora Rakhi data (_rakhiRows).
   const rows = _rakhiFilteredRows || _rakhiRows || [];
+  const daySpan = _rkhDrrDaySpan();
   const map = {};
   rows.forEach(r => {
     const key = String(r.sku || '').trim();
     if (!key) return;
     if (!_rkhInWhitelist(key)) return;   // sirf curated whitelist ke SKUs
-    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, rev: 0, inv_stock: r.inv_stock || 0, inv_wip: r.inv_wip || 0, combo_details: r.combo_details || []};
+    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, drr_qty: 0, rev: 0, inv_stock: r.inv_stock || 0, inv_wip: r.inv_wip || 0, combo_details: r.combo_details || []};
     map[key].qty += (r.qty || 0);
+    if (_rkhInDrrWindow(r.date)) map[key].drr_qty += (r.qty || 0);
     map[key].rev += (r.rev || 0);
   });
-  return Object.values(map).sort((a, b) => b.qty - a.qty);
+  return Object.values(map).map(r => {
+    const avg = (Number(r.drr_qty) || 0) / Math.max(1, daySpan);
+    const stock = Number(r.inv_stock) || 0;
+    return Object.assign(r, {
+      daily_avg_sale: avg,
+      est_days_to_oos: stock <= 0 ? 0 : (avg > 0 ? stock / avg : null),
+      velocity_days: daySpan
+    });
+  }).sort((a, b) => b.qty - a.qty);
 }
 function renderRakhiTopSkus(){
   const host = document.getElementById('rakhiTopSkuContent');
@@ -10594,7 +10838,7 @@ function renderRakhiTopSkus(){
     return;
   }
   const emp = LOGIN_ROLE === 'employee';
-  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
+  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Qty Sold</th><th>Daily Avg Sale</th><th>Est. Days to OOS</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = list.map((r, i) => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -10603,38 +10847,46 @@ function renderRakhiTopSkus(){
     const stk = parseInt(r.inv_stock) || 0;
     const wip = parseInt(r.inv_wip) || 0;
     const comboHtml = _rkhComboBoxHtml(r.combo_details);
+    const avgSale = Number(r.daily_avg_sale) || 0;
+    const daysToOos = r.est_days_to_oos == null
+      ? '<span class="muted">No current sale pace</span>'
+      : (r.est_days_to_oos <= 0 ? '<span style="color:#b3261e;font-weight:700">OOS</span>' : `${Math.ceil(r.est_days_to_oos).toLocaleString('en-IN')} days`);
     return `<tr>
       <td><b>${i + 1}</b></td>
       <td>${img}</td>
       <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
-        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
         ${comboHtml}
       </div></td>
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
+      <td><b>${avgSale.toFixed(2)}</b><div class="small-note">qty/day</div></td>
+      <td><b>${daysToOos}</b><div class="small-note">Inv Stock only</div></td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
       <td>${stk}</td>
       <td>${wip}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:600px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:920px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiTopSkusCSV(){
   const list = _rakhiTopSkuRows || [];
   if (!list.length){ alert('No Rakhi SKU data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Qty Sold', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Qty Sold', 'Daily Avg Sale', 'Estimated Days to OOS', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = [];
   list.forEach((r, i) => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
       i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
+      Number(r.daily_avg_sale || 0).toFixed(2),
+      r.est_days_to_oos == null ? '' : Math.ceil(r.est_days_to_oos),
       ...(emp ? [] : [Math.round(r.rev)]),
       parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
     ]);
     // Gift Set ke andar wale (Stone Details) sub-SKUs — inki apni Inv Stock/WIP
     (r.combo_details || []).forEach(c => {
       data.push([
-        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '',
+        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '', '', '',
         ...(emp ? [] : ['']),
         parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
@@ -10669,14 +10921,24 @@ function _rkhBuildSlowMovers(){
     const sold = soldMap[sk] || 0;
     if (sold > 0) return;   // jo bik chuka hai wo slow mover nahi
     const item = _masterSkuMap[sk] || null;
+    const invStock = item ? (Number(item.inv_stock) || 0) : 0;
+    const daySpan = _rkhDrrDaySpan();
+    const drrQty = (_rakhiFilteredRows || _rakhiRows || []).reduce((sum, r) => {
+      const key = String(r.sku || '').trim().toUpperCase();
+      return key === sk && _rkhInDrrWindow(r.date) ? sum + (Number(r.qty) || 0) : sum;
+    }, 0);
+    const dailyAvg = drrQty / Math.max(1, daySpan);
     rows.push({
       sku: sk,
       sku_name: item ? (item.sku_name || '') : '',
       image_url: item ? (item.image_url || '') : '',
-      inv_stock: item ? (Number(item.inv_stock) || 0) : 0,
+      inv_stock: invStock,
       inv_wip: item ? (Number(item.inv_wip) || 0) : 0,
       taxon: item ? (item.taxon || '') : '',
       days_since_last_sale: item ? item.days_since_last_sale : -1,
+      daily_avg_sale: dailyAvg,
+      est_days_to_oos: invStock <= 0 ? 0 : (dailyAvg > 0 ? invStock / dailyAvg : null),
+      velocity_days: daySpan,
       found: !!item,
       combo_details: item ? (item.combo_details || []) : []
     });
@@ -10697,7 +10959,7 @@ function renderRakhiSlowMovers(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">Every SKU in the curated Rakhi list has sold at least 1 unit this season.</div>';
     return;
   }
-  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Inv Stock</th><th>Inv WIP</th><th>Days Since Last Sale (any channel)</th></tr>`;
+  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Daily Avg Sale</th><th>Est. Days to OOS</th><th>Inv Stock</th><th>Inv WIP</th><th>Days Since Last Sale (any channel)</th></tr>`;
   const body = list.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -10705,35 +10967,44 @@ function renderRakhiSlowMovers(){
       : '—';
     const comboHtml = _rkhComboBoxHtml(r.combo_details);
     const dsls = (r.days_since_last_sale >= 0) ? (r.days_since_last_sale + ' days') : '—';
+    const avgSale = Number(r.daily_avg_sale) || 0;
+    const daysToOos = r.est_days_to_oos == null
+      ? '<span class="muted">No current sale pace</span>'
+      : (r.est_days_to_oos <= 0 ? '<span style="color:#b3261e;font-weight:700">OOS</span>' : `${Math.ceil(r.est_days_to_oos).toLocaleString('en-IN')} days`);
     return `<tr>
       <td>${img}</td>
       <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
-        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
+        <button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g, "\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button>
         ${r.found ? '' : '<span class="muted" style="font-size:.68rem">(not in inventory)</span>'}
         ${comboHtml}
       </div></td>
       <td>${escHtml(r.taxon || '—')}</td>
+      <td><b>${avgSale.toFixed(2)}</b><div class="small-note">qty/day</div></td>
+      <td><b>${daysToOos}</b><div class="small-note">Inv Stock only</div></td>
       <td>${r.inv_stock}</td>
       <td>${r.inv_wip}</td>
       <td>${dsls}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:700px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro rkh-grid" style="width:100%;min-width:980px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 function exportRakhiSlowMoversCSV(){
   const list = _rakhiSlowMoverRows || [];
   if (!list.length){ alert('No Slow Movers data to export.'); return; }
-  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Inv Stock', 'Inv WIP', 'Days Since Last Sale', 'Image Link'];
+  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Daily Avg Sale', 'Estimated Days to OOS', 'Inv Stock', 'Inv WIP', 'Days Since Last Sale', 'Image Link'];
   const data = [];
   list.forEach(r => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
-      r.sku, exportSkuName(r.sku, r.sku_name), r.taxon || '', r.inv_stock, r.inv_wip,
+      r.sku, exportSkuName(r.sku, r.sku_name), r.taxon || '',
+      Number(r.daily_avg_sale || 0).toFixed(2),
+      r.est_days_to_oos == null ? '' : Math.ceil(r.est_days_to_oos),
+      r.inv_stock, r.inv_wip,
       (r.days_since_last_sale >= 0 ? r.days_since_last_sale : ''), r.image_url || ''
     ]);
     (r.combo_details || []).forEach(c => {
       data.push([
-        'Stone Detail', c.sku, exportSkuName(c.sku, c.sku_name), '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
+        'Stone Detail', c.sku, exportSkuName(c.sku, c.sku_name), '', '', '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
         '', c.image_url || ''
       ]);
     });
@@ -11468,6 +11739,7 @@ function _oosBuildRows(){
       skuName: String((it && it.sku_name) || '').trim(),
       image: String((it && it.image_url) || '').trim(),
       group: _oosProductGroup(it),
+      taxon: String((it && it.taxon) || 'General').trim() || 'General',
       sale30,
       drr,
       stock,
@@ -11486,8 +11758,25 @@ function _oosBuildRows(){
 
 function _oosFilteredRows(){
   const group = document.getElementById('oosGroup')?.value || 'All';
+  const taxon = document.getElementById('oosTaxon')?.value || 'All';
   const rows = _oosRows.length ? _oosRows : _oosBuildRows();
-  return rows.filter(r => group === 'All' || r.group === group);
+  return rows.filter(r => {
+    if (group !== 'All' && r.group !== group) return false;
+    if (taxon !== 'All' && r.taxon !== taxon) return false;
+    return true;
+  });
+}
+
+function _oosFillTaxonFilter(){
+  const sel = document.getElementById('oosTaxon');
+  if (!sel) return;
+  const current = sel.value || 'All';
+  const taxons = Array.from(new Set((_oosRows || [])
+    .map(r => String((r && r.taxon) || 'General').trim() || 'General')))
+    .sort((a,b) => a.localeCompare(b, undefined, {sensitivity:'base'}));
+  sel.innerHTML = '<option value="All">All Taxons</option>' +
+    taxons.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  sel.value = taxons.includes(current) ? current : 'All';
 }
 
 function _oosPhotoHtml(url){
@@ -11505,6 +11794,7 @@ function _oosDaysText(v){
 
 function loadOOS(){
   _oosBuildRows();
+  _oosFillTaxonFilter();
   renderOOS();
 }
 
@@ -11573,7 +11863,9 @@ function exportOOS(){
     r.risk.label
   ]);
   const group = (document.getElementById('oosGroup')?.value || 'All').toLowerCase();
-  _dlCsv(headers, data, `oos_stockout_risk_${group}`);
+  const taxon = String(document.getElementById('oosTaxon')?.value || 'All')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'all';
+  _dlCsv(headers, data, `oos_stockout_risk_${group}_${taxon}`);
 }
 window.loadOOS = loadOOS;
 window.renderOOS = renderOOS;
@@ -12436,7 +12728,7 @@ function renderInsights(){
   const row = (name, sub, value, pct, suffix='', sku=null) => `
     <div class="insight-row">
       <div>
-        <div class="name"${sku ? ` style="cursor:pointer" onclick="openSkuDetails('${String(sku).replace(/'/g, "\\'")}')" title="View SKU details"` : ''}>${escHtml(name)}</div>
+        <div class="name"${sku ? ` style="cursor:pointer" onclick="openSkuDetails('${String(sku).replace(/'/g, "\\'")}')" title="View SKU details"` : ''}>${escHtml(sku ? skuCodeWithFlag(name) : name)}</div>
         <div class="sub">${escHtml(sub || '')}</div>
         <div class="bar"><span style="width:${Math.max(4, Math.min(100, pct))}%"></span></div>
       </div>
@@ -12883,7 +13175,7 @@ function bulkRenderCombo(forcedMessage){
     }
     return `<tr>
       <td style="width:104px">${image}</td>
-      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(it.sku)}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
+      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(skuCodeWithFlag(it.sku))}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
       <td style="width:115px"><input class="bulk-qty" type="number" min="1" step="1" value="${r.qty}" data-sku="${escHtml(it.sku)}" onchange="bulkUpdateQty(this.dataset.sku,this.value)"></td>
       <td class="bulk-money" style="width:145px">${bulkFmtMoney(r.price)}</td>
       <td class="bulk-money" style="width:155px;color:#15803d">${bulkFmtMoney(r.line)}</td>
@@ -13093,7 +13385,7 @@ mkCard = function(item, rev, conf, slow){
         <span class="meta-tag">MRP ₹${Math.round(item.mrp || 0).toLocaleString('en-IN')}</span>
         ${item.dimensions ? `<span class="meta-tag">${escHtml(String(item.dimensions))}</span>` : ''}
         <span class="meta-tag">Plating ${escHtml(item.plating || 'N/A')}</span>
-        ${item.combo_skus ? `<span class="meta-tag">Combo SKUs ${escHtml(item.combo_skus)}</span>` : ''}
+        ${item.combo_skus ? `<span class="meta-tag">Combo SKUs ${escHtml(skuTextWithFlags(item.combo_skus))}</span>` : ''}
       </div>
       ${(LOGIN_ROLE === 'employee') ? '' : `
       <div class="row rev-only"><span>Net Revenue</span><span>${fmt(r)}</span></div>
