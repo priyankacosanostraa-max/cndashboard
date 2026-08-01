@@ -5213,6 +5213,7 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .cnx-date-field{display:flex;flex-direction:column;gap:4px}.cnx-date-field span{font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:var(--cnx-muted);font-weight:900}.cnx-date-field input{width:132px;height:34px;padding:0 8px;font-size:9px;font-weight:800;border:1px solid var(--cnx-line)!important;border-radius:9px!important;background:#fff!important;color:#201a12!important}
 .cnx-date-apply,.cnx-date-reset{height:34px;border-radius:9px;padding:0 11px;font-size:8px;font-weight:950;letter-spacing:.6px;cursor:pointer}.cnx-date-apply{border:0;background:linear-gradient(145deg,#e8cc84,#a87920);color:#1d160c;box-shadow:0 8px 18px rgba(168,121,32,.16)}.cnx-date-reset{border:1px solid var(--cnx-line);background:#fff;color:var(--cnx-muted)}
 .cnx-date-error{width:100%;font-size:8px;color:var(--cnx-red);font-weight:850;text-align:right;min-height:10px}
+.cnx-date-error.is-applied{color:var(--cnx-green)}
 .cnx-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 .cnx-kpi{position:relative;min-height:158px;border:1px solid var(--cnx-line);border-radius:22px;padding:20px;overflow:hidden;background:linear-gradient(145deg,#fffefb 0%,#fbf6eb 66%,#f0e4ce 100%);box-shadow:var(--cnx-shadow);transform-style:preserve-3d;animation:cnxCardIn .7s cubic-bezier(.18,.85,.25,1.1) both;transition:transform .25s,border-color .25s}
 .cnx-kpi:nth-child(2){animation-delay:.08s}.cnx-kpi:nth-child(3){animation-delay:.16s}.cnx-kpi:nth-child(4){animation-delay:.24s}
@@ -9869,25 +9870,46 @@ function cnxCompactMoney(n){
   return '₹' + Math.round(n).toLocaleString('en-IN');
 }
 
-function cnxSetHomeRange(days){
+function cnxRenderHomeFilterNow(){
+  if (_cnxHomeRenderFrame){
+    cancelAnimationFrame(_cnxHomeRenderFrame);
+    _cnxHomeRenderFrame = 0;
+  }
+  try { cnxRefreshExecutiveHome(); }
+  catch(e){ console.error('Home filter refresh failed:',e); renderHome(); }
+}
+
+function cnxNormalizeHomeDate(value){
+  const v=String(value||'').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const m=v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` : '';
+}
+
+function cnxSetHomeRange(days,event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
   _cnxHomeDays = Math.max(7, Number(days) || 30);
   _cnxHomeFrom = '';
   _cnxHomeTo = '';
-  cnxQueueHomeRender(true);
+  cnxRenderHomeFilterNow();
 }
 window.cnxSetHomeRange = cnxSetHomeRange;
 
-function cnxApplyHomeDateRange(){
-  const from = document.getElementById('cnxDateFrom')?.value || '';
-  const to = document.getElementById('cnxDateTo')?.value || '';
+function cnxApplyHomeDateRange(event){
+  if(event){ event.preventDefault(); event.stopPropagation(); }
+  const from = cnxNormalizeHomeDate(document.getElementById('cnxDateFrom')?.value);
+  const to = cnxNormalizeHomeDate(document.getElementById('cnxDateTo')?.value);
   const err = document.getElementById('cnxDateError');
-  if (!from || !to){ if(err) err.textContent='Select both From and To dates.'; return; }
-  if (from > to){ if(err) err.textContent='From date cannot be after To date.'; return; }
+  if (!from || !to){ if(err){err.classList.remove('is-applied');err.textContent='Select both From and To dates.';} return false; }
+  if (from > to){ if(err){err.classList.remove('is-applied');err.textContent='From date cannot be after To date.';} return false; }
   _cnxHomeFrom = from;
   _cnxHomeTo = to;
-  cnxQueueHomeRender(true);
+  _cnxHomeDays = Math.max(1,Math.round((new Date(to+'T00:00:00')-new Date(from+'T00:00:00'))/86400000)+1);
+  if(err){err.classList.add('is-applied');err.textContent=`Applied · ${from} to ${to}`;}
+  cnxRenderHomeFilterNow();
+  return false;
 }
-function cnxResetHomeDateRange(){ cnxSetHomeRange(30); }
+function cnxResetHomeDateRange(event){ cnxSetHomeRange(30,event); return false; }
 window.cnxApplyHomeDateRange = cnxApplyHomeDateRange;
 window.cnxResetHomeDateRange = cnxResetHomeDateRange;
 
@@ -9969,7 +9991,7 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
     ? `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Qty achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved Qty</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target Qty</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Remaining Qty</div><div class="cnx-mini-value" id="cnxTargetProjected">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`
     : `<div class="cnx-ring-wrap"><div class="cnx-ring" id="cnxTargetRing" style="--pct:0"><div class="cnx-ring-copy"><div class="cnx-ring-value" id="cnxTargetPct">—</div><div class="cnx-ring-label">Revenue achieved</div></div></div></div><div class="cnx-target-grid"><div class="cnx-mini"><div class="cnx-mini-label">Achieved</div><div class="cnx-mini-value" id="cnxTargetActual">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Target</div><div class="cnx-mini-value" id="cnxTargetGoal">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Projected</div><div class="cnx-mini-value" id="cnxTargetProjected" style="color:var(--cnx-green)">—</div></div><div class="cnx-mini"><div class="cnx-mini-label">Required / Day</div><div class="cnx-mini-value" id="cnxTargetRequired">—</div></div></div>`;
   return `<div class="cnx-home">
-    <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button onclick="cnxSetHomeRange(7)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button onclick="cnxSetHomeRange(30)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button onclick="cnxSetHomeRange(90)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button onclick="cnxSetHomeRange(365)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button class="cnx-date-apply" onclick="cnxApplyHomeDateRange()">APPLY</button><button class="cnx-date-reset" onclick="cnxResetHomeDateRange()">RESET</button><div class="cnx-date-error" id="cnxDateError">${customRange?'Showing '+escHtml(startKey)+' to '+escHtml(endKey):''}</div></div></div></div>
+    <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button type="button" onclick="return cnxSetHomeRange(7,event)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button type="button" onclick="return cnxSetHomeRange(30,event)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button type="button" onclick="return cnxSetHomeRange(90,event)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button type="button" onclick="return cnxSetHomeRange(365,event)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button type="button" class="cnx-date-apply" onclick="return cnxApplyHomeDateRange(event)">APPLY</button><button type="button" class="cnx-date-reset" onclick="return cnxResetHomeDateRange(event)">RESET</button><div class="cnx-date-error ${customRange?'is-applied':''}" id="cnxDateError">${customRange?'✓ Applied · '+escHtml(startKey)+' to '+escHtml(endKey)+' · '+periodDays+' days':''}</div></div></div></div>
     <div class="cnx-kpis">${revCard}${yesterdayCard}${websitePaymentCards}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span>${orders.toLocaleString('en-IN')} order lines</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
     <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue Period Comparison</div><div class="cnx-panel-sub">${customRange?'Selected range':'Latest '+escHtml(periodShort)} vs immediately previous ${escHtml(periodShort)} · revenue only</div></div>${isEmp?'':`<div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#b8a784">■</span> Previous &nbsp; <span style="color:#a87920">■</span> Selected</div>`}</div><div class="cnx-chart cnx-period-chart">${compareChart}</div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
     <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
