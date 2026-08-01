@@ -5240,7 +5240,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 .lg-card{position:relative;z-index:2;width:auto;max-width:none;padding:58px 52px;border:0;border-radius:0;text-align:left;background:linear-gradient(150deg,#fffefb,#f8f1e4);box-shadow:none;display:flex;flex-direction:column;justify-content:center}.lg-card-kicker{color:#9a6d1c}.lg-card-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:40px;line-height:1.02;color:#201a12;font-weight:800;margin-top:10px}.lg-card-sub{color:#7a7062;font-size:11px;line-height:1.6;margin:11px 0 28px}.lg-label{display:block;color:#765317;font-size:8px;letter-spacing:1.35px;text-transform:uppercase;font-weight:950;margin:0 0 7px 2px}
 .lg-in{min-height:50px;margin:0 0 17px;padding:13px 15px;border-color:rgba(122,88,27,.17);border-radius:13px;background:#fffdf9;color:#201a12;box-shadow:0 7px 17px rgba(72,50,14,.045),inset 0 1px 2px rgba(72,50,14,.035)}.lg-submit{width:100%;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border:0;border-radius:13px;background:linear-gradient(145deg,#2b2113,#7d5717);color:#fff9ec;box-shadow:0 17px 34px rgba(83,58,16,.22),inset 0 1px rgba(255,255,255,.18);font:900 10px 'Inter',sans-serif;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:transform .22s,box-shadow .22s}.lg-submit b{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.25);border-radius:9px;font-size:15px}.lg-submit:hover{transform:translateY(-2px);box-shadow:0 22px 42px rgba(83,58,16,.28)}.lg-foot-note{text-align:center;color:#9a8e7d;font-size:8px;letter-spacing:.7px;margin-top:18px}.lg-error{color:#b93d3d;font-size:10px;font-weight:850;min-height:16px;margin:-4px 0 10px}
 @keyframes cnxLoginIn{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:none}}
-@media(max-width:820px){#loginGate{padding:14px;align-items:flex-start!important;overflow:auto!important}.lg-layout{width:100%;min-height:0;grid-template-columns:1fr;margin:auto 0;border-radius:23px}.lg-showcase{min-height:235px;padding:76px 27px 27px;justify-content:flex-start}.lg-showcase:before{inset:11px;border-radius:17px}.lg-brand-chip{left:27px;top:24px;width:42px;height:42px;border-radius:13px;font-size:18px}.lg-show-kicker{margin-bottom:9px}.lg-show-title{font-size:38px}.lg-show-sub{font-size:10px;margin-top:12px}.lg-feature-grid{display:none}.lg-secure{display:none}.lg-card{padding:31px 26px 33px}.lg-card-title{font-size:34px}.lg-card-sub{margin-bottom:22px}}
+@media(max-width:820px){ #loginGate{padding:14px;align-items:flex-start!important;overflow:auto!important}.lg-layout{width:100%;min-height:0;grid-template-columns:1fr;margin:auto 0;border-radius:23px}.lg-showcase{min-height:235px;padding:76px 27px 27px;justify-content:flex-start}.lg-showcase:before{inset:11px;border-radius:17px}.lg-brand-chip{left:27px;top:24px;width:42px;height:42px;border-radius:13px;font-size:18px}.lg-show-kicker{margin-bottom:9px}.lg-show-title{font-size:38px}.lg-show-sub{font-size:10px;margin-top:12px}.lg-feature-grid{display:none}.lg-secure{display:none}.lg-card{padding:31px 26px 33px}.lg-card-title{font-size:34px}.lg-card-sub{margin-bottom:22px}}
 </style>
   <div class="lg-wm" style="top:6%;left:4%;font-size:clamp(20px,3.2vw,44px);animation:lgFloatA 14s ease-in-out infinite">COSA NOSTRAA</div>
   <div class="lg-wm" style="top:14%;right:-2%;font-size:clamp(14px,2.2vw,30px);opacity:.7;animation:lgFloatB 18s ease-in-out infinite">COSA NOSTRAA</div>
@@ -15541,7 +15541,10 @@ def add_headers(resp):
 
 @app.route("/")
 def home():
-    return render_template_string(HTML)
+    # HTML is a complete static dashboard shell. Serving it directly prevents
+    # Jinja from interpreting valid CSS/JavaScript brace sequences such as
+    # "{#selector" as template comments.
+    return app.response_class(HTML, mimetype="text/html")
 
 REV_ITEM_KEYS = ("total_net_revenue", "rev_yesterday", "rev_month", "rev_fy", "rev_prev_fy",
                  "avg_selling_price", "last_selling_price", "website_selling_price", "return_amount",
