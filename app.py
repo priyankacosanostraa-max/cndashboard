@@ -1128,6 +1128,7 @@ def _refresh_data():
     # SHA-1 token is sent to the browser; names/addresses themselves are not.
     website_customer_events = {}
     website_city_events = {}
+    website_payment_events = {}
     try:
         _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
         web_orders = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
@@ -1162,12 +1163,22 @@ def _refresh_data():
             "Selling Price", "Sale Price", "Unit Selling Price", "Unit Price", "SP"
         )
         W_STATUS = find_col(web_orders.columns, "Sale Order Status", "Order Status", "status")
+        # Website sheet: M column stores payment mode (0=Prepaid, 1=COD).
+        # Header match is preferred; fixed M-column fallback protects against
+        # harmless header spelling/spacing changes in the source sheet.
+        W_COD = find_col(web_orders.columns, "COD", "Cash On Delivery", "Cash on Delivery") or _wat(12)
+        W_ORDER = find_col(
+            web_orders.columns,
+            "Shipping Package Code", "Invoice Code", "Order ID", "Order Code",
+            "Order Number", "Sale Order Code"
+        ) or _wat(8)
 
         dbg["website_repeat_cols"] = wcols
         dbg["website_repeat_resolved"] = {
             "date": W_DATE, "name": W_NAME, "address": W_ADDR,
             "sku": W_SKU, "qty": W_QTY, "revenue": W_REV,
             "selling_price": W_SP, "status": W_STATUS,
+            "cod": W_COD, "order": W_ORDER,
         }
 
         # Repeat-rate sessions and Website/D2C city sales are built from the
@@ -1176,8 +1187,9 @@ def _refresh_data():
         # filters without sending customer names or full addresses.
         _web_event_sets = {}
         _web_city_sums = {}
+        _web_payment_sets = {}
         if W_DATE and W_NAME and W_ADDR and W_SKU:
-            for r in _df_chunks(web_orders):
+            for web_row_no, r in enumerate(_df_chunks(web_orders)):
                 status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
                 if status and any(x in status for x in ("cancel", "void", "failed")):
                     continue
@@ -1202,6 +1214,27 @@ def _refresh_data():
                     continue
                 if not W_QTY:
                     qty_web = 1.0
+
+                # Payment mix is order-based, not line-based. The same
+                # Shipping Package / Invoice appearing on multiple SKU lines
+                # is counted once across the Rakhi tab in the browser.
+                if W_COD and re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
+                    raw_cod = str(r.get(W_COD, "") or "").strip().casefold()
+                    cod_value = None
+                    if raw_cod in ("1", "1.0", "cod", "cash on delivery", "cash-on-delivery", "true", "yes"):
+                        cod_value = 1
+                    elif raw_cod in ("0", "0.0", "prepaid", "pre-paid", "false", "no"):
+                        cod_value = 0
+                    if cod_value is not None:
+                        raw_order = clean(r.get(W_ORDER, "")) if W_ORDER else ""
+                        if not raw_order:
+                            raw_order = f"ROW:{date_iso}:{mapped_web_sku}:{web_row_no}"
+                        order_token = hashlib.sha1(
+                            raw_order.casefold().encode("utf-8", errors="ignore")
+                        ).hexdigest()[:16]
+                        _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = {
+                            "o": _si(order_token), "p": int(cod_value), "d": _si(date_iso)
+                        }
 
                 # PIN is the State source of truth. City is validated against
                 # it, and State is kept in the compact event so same-named
@@ -1251,14 +1284,21 @@ def _refresh_data():
             ]
             for sku, city_map in _web_city_sums.items()
         }
+        website_payment_events = {
+            sku: sorted(events.values(), key=lambda x: (x["d"], x["o"]))
+            for sku, events in _web_payment_sets.items()
+        }
         dbg["website_repeat_skus"] = len(website_customer_events)
         dbg["website_repeat_sessions"] = sum(len(v) for v in website_customer_events.values())
         dbg["website_city_skus"] = len(website_city_events)
         dbg["website_city_buckets"] = sum(len(v) for v in website_city_events.values())
+        dbg["website_payment_skus"] = len(website_payment_events)
+        dbg["website_payment_orders"] = sum(len(v) for v in website_payment_events.values())
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
         website_city_events = {}
+        website_payment_events = {}
     finally:
         try:
             del web_orders
@@ -1757,6 +1797,7 @@ def _refresh_data():
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(dedupe_key, []),
             "website_city_events": website_city_events.get(dedupe_key, []),
+            "website_payment_events": website_payment_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -1833,6 +1874,7 @@ def _refresh_data():
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(orphan_key, []),
             "website_city_events": website_city_events.get(orphan_key, []),
+            "website_payment_events": website_payment_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -6193,7 +6235,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list (RKH + CMB gift sets) — overall stock, WIP, orders, run-rate and repeat-order health, FY 2026-27.</div>
+  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list (RKH + CMB gift sets) — overall stock, WIP, orders, run-rate and repeat-order health, FY 2026-27. Website payment mix uses COD column M: 0 = Prepaid, 1 = COD.</div>
   <div id="rakhiOverallSummary" class="yoy-grid" style="margin-bottom:16px"></div>
   <div id="rakhiActionable" style="margin-bottom:26px"></div>
 
@@ -8167,6 +8209,17 @@ function loadData(force){
     _cnxHomeTargetCacheAt = 0;
   }
   const L = document.getElementById('loader');
+  // Re-login/tab restore par already parsed data ko reuse karo. Manual Sync
+  // force=true hai, isliye fresh-data workflow unchanged rahega.
+  if (!force && master && master.length){
+    if (L) L.style.display='none';
+    showTab('home');
+    return;
+  }
+  // Double click / overlapping retry se multi-megabyte /api/data response
+  // parallel mein do baar download + JSON.parse nahi hona chahiye.
+  if (_dataLoadBusy) return;
+  _dataLoadBusy = true;
   if (L){
     L.style.display = 'block';
     L.innerHTML = '<div class="spin"></div>' + (force ? 'Fetching fresh data…' : 'Syncing databases… please wait');
@@ -8185,6 +8238,7 @@ function loadData(force){
       // khud retry karo (reload-loop ke bina). Loader warmup-status dikhata rahega.
       if (r.status === 202) {
         clearTimeout(timer);
+        _dataLoadBusy = false;
         _warmRetries = (_warmRetries || 0) + 1;
         if (_warmRetries > 120) {   // ~5 min: data load nahi hua, stop looping
           if (L) L.innerHTML = 'Server is still preparing the data (large dataset). '
@@ -8202,6 +8256,7 @@ function loadData(force){
       if (d === null) return;   // warming — retry already scheduled
       clearTimeout(timer);
       if (!d.inventory || d.inventory.length === 0) {
+        _dataLoadBusy = false;
         if (L) L.innerHTML = 'No data found. Open <b>Debug</b> (top-left) to see the column mapping / errors.'
           + '<div style="margin-top:14px"><button class="go-btn" style="width:auto;padding:9px 16px" onclick="loadData(true)">Retry</button></div>';
         return;
@@ -8271,10 +8326,12 @@ function loadData(force){
       if (L) L.style.display = 'none'; stopWarmupPoll();
       // showTab('home') queues exactly one Home render. The old flow rendered
       // Home here and then immediately rendered it again inside showTab.
+      _dataLoadBusy = false;
       showTab('home');
     })
     .catch(err => {
       clearTimeout(timer);
+      _dataLoadBusy = false;
       const msg = (err && err.name === 'AbortError')
         ? 'Loading timed out (the dataset is large). The server may still be preparing data.'
         : ('Sync failed: ' + (err && err.message ? err.message : err));
@@ -9454,6 +9511,7 @@ let _loggedIn = false;
 // live server warmup progress in the loader (cold start par exact status dikhta hai)
 let _warmPoll = null;
 let _warmRetries = 0;
+let _dataLoadBusy = false;
 function startWarmupPoll(){
   if (_warmPoll) return;
   _warmPoll = setInterval(async () => {
@@ -10722,7 +10780,31 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
-function loadRakhi(){ renderRakhi(); renderRakhiPivot(); renderRakhiTopCities(); renderRakhiOverallSummary(); renderRakhiChannel(); renderRakhiCommonSkus(); renderRakhiTopSkus(); renderRakhiSlowMovers(); renderRakhiReturns(); }
+let _rakhiLoadRun = 0;
+function loadRakhi(){
+  const run=++_rakhiLoadRun;
+  // Build the main table first so the tab responds immediately. Remaining
+  // analytical sections are split across idle frames instead of freezing the
+  // browser in one long synchronous task.
+  renderRakhi();
+  const tasks=[
+    renderRakhiOverallSummary, renderRakhiPivot, renderRakhiChannel,
+    renderRakhiCommonSkus, renderRakhiTopSkus, renderRakhiSlowMovers,
+    renderRakhiReturns, renderRakhiTopCities
+  ];
+  let index=0;
+  const next=()=>{
+    if(run!==_rakhiLoadRun || currentTab!=='rakhi' || index>=tasks.length) return;
+    const task=tasks[index++];
+    try{task();}catch(e){console.error('Rakhi section render failed:',e);}
+    schedule();
+  };
+  const schedule=()=>{
+    if(window.requestIdleCallback) window.requestIdleCallback(next,{timeout:180});
+    else setTimeout(next,18);
+  };
+  schedule();
+}
 
 /* ── RAKHI — OVERALL SUMMARY ──
    "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
@@ -10755,6 +10837,30 @@ function _rkhWebsiteRepeatStatsForSkus(rawSkus){
   const repeatOrders = customers.reduce((sum, ds) => sum + Math.max(0, ds.size - 1), 0);
   const rate = distinct ? Math.round((repeat / distinct) * 1000) / 10 : 0;
   return {distinct, repeat, repeatOrders, rate};
+}
+
+function _rkhWebsitePaymentStatsForSkus(rawSkus){
+  const orders=new Map();
+  (rawSkus||[]).forEach(rawSku=>{
+    const sku=String(rawSku||'').trim().toUpperCase();
+    const item=_masterSkuMap[sku]||{};
+    (item.website_payment_events||[]).forEach(ev=>{
+      const order=String(ev?.o||'');
+      const date=String(ev?.d||'');
+      const payment=Number(ev?.p);
+      if(!order || date<'2026-04-01' || date>'2027-03-31') return;
+      if(payment!==0 && payment!==1) return;
+      // One Website order may contain several curated Rakhi SKUs. The hashed
+      // Shipping Package/Invoice token prevents that order being double-counted.
+      if(!orders.has(order)) orders.set(order,payment);
+    });
+  });
+  let cod=0,prepaid=0;
+  orders.forEach(payment=>{if(payment===1)cod+=1;else prepaid+=1;});
+  const total=cod+prepaid;
+  const codPct=total?Math.round(cod/total*1000)/10:0;
+  const prepaidPct=total?Math.round(prepaid/total*1000)/10:0;
+  return {cod,prepaid,total,codPct,prepaidPct};
 }
 function _rkhBuildOverallSummary(){
   const wlRows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
@@ -10807,6 +10913,7 @@ function _rkhBuildOverallSummary(){
   const distinctCust = overallWebsiteRepeat.distinct;
   const repeatCust = overallWebsiteRepeat.repeat;
   const repeatPct = overallWebsiteRepeat.rate;
+  const websitePayment = _rkhWebsitePaymentStatsForSkus(Array.from(RAKHI_WHITELIST_SKUS));
   const slowCount = _rkhBuildSlowMovers().length;
   let bestChannel = null;
   (_rkhBuildChannelSummary() || []).forEach(c => { if (!bestChannel || c.qty > bestChannel.qty) bestChannel = c; });
@@ -10861,7 +10968,11 @@ function _rkhBuildOverallSummary(){
 
   return {
     totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drrQty, drr,
-    distinctCust, repeatCust, repeatPct, slowCount, skuRows,
+    distinctCust, repeatCust, repeatPct,
+    codOrders:websitePayment.cod, prepaidOrders:websitePayment.prepaid,
+    websitePaymentOrders:websitePayment.total,
+    codPct:websitePayment.codPct, prepaidPct:websitePayment.prepaidPct,
+    slowCount, skuRows,
     bestChannel: bestChannel ? bestChannel.channel : '',
     bestChannelQty: bestChannel ? bestChannel.qty : 0
   };
@@ -10891,6 +11002,8 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
     <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">Rakhi units/day since 22 Jul 2026 (${s.daySpan} days)</div></div>
     <div class="yoy-card"><div class="yc-label">Website Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers · same name + address; same-day orders counted once</div></div>
+    <div class="yoy-card"><div class="yc-label">Website COD</div><div class="yc-val" style="color:#b56c18">${s.codPct.toFixed(1)}%</div><div class="yc-sub">${s.codOrders.toLocaleString('en-IN')} of ${s.websitePaymentOrders.toLocaleString('en-IN')} Rakhi orders · COD = 1</div></div>
+    <div class="yoy-card"><div class="yc-label">Website Prepaid</div><div class="yc-val" style="color:#17895e">${s.prepaidPct.toFixed(1)}%</div><div class="yc-sub">${s.prepaidOrders.toLocaleString('en-IN')} of ${s.websitePaymentOrders.toLocaleString('en-IN')} Rakhi orders · COD = 0</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
     <div class="yoy-card"><div class="yc-label">Required Qty / Day</div><div class="yc-val">${pace.qtyPerDay.toLocaleString('en-IN')}</div><div class="yc-sub">${qtyPaceSub}</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Required Revenue / Day</div><div class="yc-val">${fmt(pace.revenuePerDay)}</div><div class="yc-sub">${revenuePaceSub}</div></div>`}
@@ -11033,8 +11146,9 @@ function renderRakhi(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders match the selected filter.</div>';
     return;
   }
+  const visibleRows = fRows.slice(0, 500);
   const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
-  const body = fRows.map(r => {
+  const body = visibleRows.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:40px;height:40px;object-fit:cover;border-radius:6px">`
@@ -11058,7 +11172,7 @@ function renderRakhi(){
       <td>${wip}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:700px"><thead>${head}</thead><tbody>${body}</tbody></table>${fRows.length>visibleRows.length?`<div class="small-note" style="padding:12px 4px">Showing first ${visibleRows.length.toLocaleString('en-IN')} of ${fRows.length.toLocaleString('en-IN')} transactions for smooth browsing. Export includes all filtered rows.</div>`:''}`;
 }
 function exportRakhi(){
   // Type filter lga ho to sirf usi ke hisaab se filtered rows export
@@ -15441,6 +15555,9 @@ window.loadOosLostSales=loadOosLostSales;window.renderOosLostSales=renderOosLost
 (function(){
   const cv = document.getElementById('pcanvas');
   if (!cv) return;
+  // Current light theme hides this canvas in CSS. Do not keep an invisible
+  // requestAnimationFrame paint loop running in the background.
+  if (window.getComputedStyle && window.getComputedStyle(cv).display === 'none') return;
   // Mobile / chhoti screen / low-core device par particles OFF — pura smooth.
   const lowEnd = (window.innerWidth < 760)
     || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4)
@@ -15660,9 +15777,13 @@ def api_data():
     if "gzip" in (request.headers.get("Accept-Encoding") or ""):
         resp = app.response_class(gz, mimetype="application/json")
         resp.headers["Content-Encoding"] = "gzip"
-        resp.headers["Vary"] = "Accept-Encoding"
+        resp.headers["Vary"] = "Accept-Encoding, Cookie"
+        resp.headers["Cache-Control"] = "no-store" if force else "private, max-age=60"
         return resp
-    return app.response_class(_gzip_mod.decompress(gz), mimetype="application/json")
+    resp = app.response_class(_gzip_mod.decompress(gz), mimetype="application/json")
+    resp.headers["Cache-Control"] = "no-store" if force else "private, max-age=60"
+    resp.headers["Vary"] = "Cookie"
+    return resp
 
 @app.route("/api/warmup-status")
 def api_warmup_status():
