@@ -1,5 +1,11 @@
 # ============================================================
-# Cosa Nostraa — V23.3 (STABLE FINAL — no-crash build)
+# Cosa Nostraa — V23.4 (CN NAME + SALES COMPARISON)
+# V23.4:
+#   • All Product AF Name is loaded as CN Name; Non-Rel is classified before
+#     Rel, with Unclassified retained for missing markers.
+#   • SKU Details supports SKU/CN Name search and CN-class filtering.
+#   • Rakhi and dedicated Sales Comparison views compare Rel vs Non-Rel with
+#     date/type/taxon-aware metrics, chart, tables and CSV export.
 # V23.3:
 #   • CRASH FIX (512MB OOM): data ab chunks mein process hota hai (full
 #     copy nahi banti), sales dataframe kaam khatam hote hi free, bg
@@ -636,6 +642,22 @@ def cn_classify_tags(name_or_sku):
         "seasonal":  _cn_kw_match(t, CN_SEASONAL_KEYWORDS),
     }
 
+def cn_classify_rel_marker(cn_name):
+    """All Product column AF (Name) se authoritative Rel/Non-Rel class.
+
+    `Non-Rel` contains `Rel`, isliye Non-Rel hamesha pehle test hota hai.
+    Marker poore name me kahin bhi ho sakta hai; separators space, dash ya
+    underscore ho sakte hain. Missing/unknown marker ko Unclassified rakho.
+    """
+    text = str(cn_name or "").strip().lower()
+    if not text:
+        return "Unclassified"
+    if re.search(r"(?:^|[^a-z0-9])non[\s_-]*rel(?:[^a-z0-9]|$)", text):
+        return "Non-Rel"
+    if re.search(r"(?:^|[^a-z0-9])rel(?:[^a-z0-9]|$)", text):
+        return "Rel"
+    return "Unclassified"
+
 _TYPE_CANON = {}
 _TAXON_CANON = {}
 _CUST_CANON = {}
@@ -1032,6 +1054,11 @@ def _refresh_data():
     I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
+    # AF (zero-based index 31) = internal CN Name. Exact header match is
+    # preferred; positional fallback protects against harmless header edits.
+    I_CN_NAME = find_col(inv.columns, "CN Name", "Name")
+    if I_CN_NAME is None and len(inv.columns) > 31:
+        I_CN_NAME = inv.columns[31]
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
                  and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()]
     I_STK = stk_cands[0] if stk_cands else find_col(inv.columns,"Inv. Stock","stock")
@@ -1106,7 +1133,7 @@ def _refresh_data():
     C_TYPE  = _at(10) or find_col(cosa.columns, "Type","channel","mode")
 
     dbg["resolved"] = {
-        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE},
+        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"cn_name":I_CN_NAME},
         "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
     }
 
@@ -1769,6 +1796,7 @@ def _refresh_data():
         blocked      = to_int(r.get(I_BLOCKED,0))       if I_BLOCKED      else 0
         mrp   = to_num(r.get(I_MRP,0))                 if I_MRP  else 0.0
         cost  = to_num(r.get(I_COST,0))                if I_COST else 0.0
+        cn_name = clean(r.get(I_CN_NAME,""))           if I_CN_NAME else ""
 
         sd  = sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
         ent = sd["entries"]
@@ -1807,6 +1835,8 @@ def _refresh_data():
         A = _agg_entries(ent)   # ek hi pass me saare numbers
         _cn_name_for_item = cn_display_name(raw) or raw
         _cn_tags_for_item = cn_classify_tags(_cn_name_for_item)
+        _rel_class_for_item = cn_classify_rel_marker(cn_name)
+        _is_rel_for_item = (_rel_class_for_item == "Rel") if _rel_class_for_item != "Unclassified" else _cn_tags_for_item["religious"]
 
         stone_details_raw = clean(r.get(I_STONE,"")) if I_STONE else ""
         combo_details_raw = clean(r.get(I_COMBO_DETAILS,"")) if I_COMBO_DETAILS else ""
@@ -1818,7 +1848,9 @@ def _refresh_data():
         item = {
             "sku":         raw,
             "sku_name":    cn_sku_label(raw),
-            "is_religious": _cn_tags_for_item["religious"],
+            "cn_name":     cn_name,
+            "religion_class": _rel_class_for_item,
+            "is_religious": _is_rel_for_item,
             "is_seasonal":  _cn_tags_for_item["seasonal"],
             "image_url":   img,
             "inv_stock":   stk,
@@ -1917,6 +1949,7 @@ def _refresh_data():
         _cn_tags_o = cn_classify_tags(_cn_name_o)
         item = {
             "sku": orphan_key, "sku_name": cn_sku_label(orphan_key),
+            "cn_name": "", "religion_class": "Unclassified",
             "is_religious": _cn_tags_o["religious"], "is_seasonal": _cn_tags_o["seasonal"],
             "image_url": "", "inv_stock": 0, "inv_wip": 0, "wh_wip": 0,
             "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0, "inv_wip_sor": 0,
@@ -1999,6 +2032,8 @@ def _refresh_data():
             it["combo_details"].append({
                 "sku": cand,
                 "sku_name": (ci.get("sku_name") if ci else ""),
+                "cn_name": (ci.get("cn_name") if ci else ""),
+                "religion_class": (ci.get("religion_class") if ci else "Unclassified"),
                 "stone_color": (ci.get("stone_color") if ci else ""),
                 "image_url": (ci.get("image_url") if ci else ""),
                 "inv_stock": info["stock"] if info else 0,
@@ -5340,6 +5375,20 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 @media(max-width:560px){.cnx-sawan-card{padding:42px 24px 30px;border-radius:24px}.cnx-sawan-icon{width:68px;height:68px;border-radius:21px;font-size:32px}.cnx-sawan-copy{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu,.cnx-sawan-icon{animation:none!important;transition:none!important}.cnx-sawan-card{transition:none!important}}
 
+/* Large-data smooth mode. Premium styling remains, while expensive repeated
+   transforms, blur layers and entry animations are reduced once live catalog
+   data is loaded. This protects low/mid-range office laptops from paint jank. */
+body.cnx-large-data .cnx-kpi,body.cnx-large-data .cnx-panel,body.cnx-large-data .kpi,body.cnx-large-data .card,body.cnx-large-data .home-card,body.cnx-large-data .top-card,body.cnx-large-data .yoy-card{animation:none!important;transform-style:flat!important;will-change:auto!important}
+body.cnx-large-data .cnx-ring{animation:none!important}
+body.cnx-large-data .app-bar{backdrop-filter:blur(7px)!important;-webkit-backdrop-filter:blur(7px)!important}
+body.cnx-large-data .cnx-kpi:hover,body.cnx-large-data .cnx-panel:hover,body.cnx-large-data .kpi:hover,body.cnx-large-data .card:hover,body.cnx-large-data .home-card:hover{transform:translateY(-2px)!important;box-shadow:0 12px 30px rgba(86,64,24,.11)!important}
+body.cnx-large-data .ro-table-wrap,body.cnx-large-data .ops-table-wrap{box-shadow:0 8px 22px rgba(86,64,24,.07)!important}
+
+/* CN Name lookup + Rel/Non-Rel comparison surfaces. */
+.sd-search-shell{position:relative;flex:1 1 360px;max-width:650px}.sd-search-shell .fi{width:100%;max-width:none!important}.sd-search-results{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 7px);max-height:330px;overflow:auto;border:1px solid rgba(123,91,33,.18);border-radius:14px;background:#fffefb;box-shadow:0 22px 52px rgba(55,38,12,.2);display:none}.sd-search-results.is-open{display:block}.sd-search-result{width:100%;display:grid;grid-template-columns:minmax(110px,.45fr) minmax(220px,1fr) auto;gap:12px;align-items:center;padding:11px 13px;border:0;border-bottom:1px solid rgba(123,91,33,.1);background:transparent;text-align:left;cursor:pointer}.sd-search-result:last-child{border-bottom:0}.sd-search-result:hover,.sd-search-result:focus{background:#fff3d9;outline:none}.sd-search-result .code{font-size:10px;font-weight:950;color:#765317}.sd-search-result .name{font-size:10px;font-weight:800;color:#201a12;line-height:1.4}.cn-class-badge{display:inline-flex;align-items:center;justify-content:center;min-width:62px;padding:5px 8px;border-radius:999px;font-size:7px;font-weight:950;letter-spacing:.8px;text-transform:uppercase}.cn-class-badge.rel{background:rgba(168,121,32,.13);color:#80570f}.cn-class-badge.non-rel{background:rgba(23,137,94,.11);color:#14714d}.cn-class-badge.unclassified{background:#eee9df;color:#746c60}
+.rel-compare-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin:15px 0}.rel-compare-chart{overflow:auto;border:1px solid rgba(123,91,33,.11);border-radius:16px;background:#fffefb}.rel-compare-chart svg{display:block;width:100%;min-width:720px;height:300px}.rel-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:9px;font-weight:850;color:#706553}.rel-legend span{display:inline-flex;align-items:center;gap:6px}.rel-legend i{width:10px;height:10px;border-radius:50%;display:inline-block}.rel-note{margin-top:10px;color:#847968;font-size:9px;font-weight:700;line-height:1.55}
+@media(max-width:700px){.sd-search-result{grid-template-columns:1fr auto}.sd-search-result .name{grid-column:1/-1;grid-row:2}.rel-compare-kpis{grid-template-columns:1fr 1fr}}
+
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -5456,6 +5505,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')"><span class="cn-menu-icon cn-rakhi-icon"></span><span>Rakhi</span></button>
+  <button class="menu-item" id="m31" onclick="showTab('salescomparison')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V5h4v15M16 20v-6h4v6M3 20h18"/><path d="m5 8 5-4 4 3 5-5"/></svg></span><span>Sales Comparison</span></button>
   <button class="menu-item" id="m21" onclick="showTab('bulk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span><span>Bulk</span></button>
   <button class="menu-item" id="m22" onclick="showTab('oos')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 4l16 16M6 9V5h12v10M6 15v4h8"/><path d="M9 8h6"/></svg></span><span>OOS</span></button>
   <button class="menu-item" id="m23" onclick="showTab('repeatplanner')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M6 4h12v16H6zM9 8h6M9 12h6M9 16h3"/><path d="m17 14 2 2 3-4"/></svg></span><span>Auto Repeat Planner</span></button>
@@ -5518,7 +5568,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <input class="fi" id="fSearch" placeholder='SKU, category, tag…' oninput="applyF_d()"></div>
         <div class="fc" style="grid-column:span 2">
           <label class="fl">SKU Search + Tick</label>
-          <input class="fi" id="fSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderSkuChecklist()">
+          <input class="fi" id="fSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderSkuChecklist_d()">
           <div class="small-note" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;gap:10px;flex-wrap:wrap">
             <span id="skuSelInfo">0 selected</span>
             <span style="display:flex;gap:8px">
@@ -5603,7 +5653,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <input class="fi" id="rSearch" placeholder='SKU name…' oninput="applyRO_d()"></div>
         <div class="fc" style="grid-column:span 2">
           <label class="fl">SKU Search + Tick</label>
-          <input class="fi" id="rSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderRoSkuChecklist()">
+          <input class="fi" id="rSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderRoSkuChecklist_d()">
           <div class="small-note" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;gap:10px;flex-wrap:wrap">
             <span id="rSkuSelInfo">0 selected</span>
             <span style="display:flex;gap:8px">
@@ -5798,11 +5848,16 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least one filtered unit sold in the latest 30-day window, or Stock+WIP is below 20; <b>Slow Movers</b> = Stock+WIP is 20+ and no filtered unit was sold in that 30-day window.</div>
     </div>
     <div class="filter-box" style="margin:8px 0 16px">
-      <label class="fl" style="margin-bottom:8px;display:block">Search SKU</label>
+      <label class="fl" style="margin-bottom:8px;display:block">Search SKU / CN Name</label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:relative">
-        <input class="fi" id="sdSearchBox" list="sdSearchList" placeholder="Type a SKU code to view its details…"
-          oninput="sdSearchInput()" onkeydown="if(event.key==='Enter')sdSearchGo()" style="min-width:280px;max-width:420px">
-        <datalist id="sdSearchList"></datalist>
+        <div class="sd-search-shell">
+          <input class="fi" id="sdSearchBox" autocomplete="off" placeholder="Search SKU code or AF-column CN Name…"
+            oninput="sdSearchInput()" onfocus="sdSearchInput()" onkeydown="if(event.key==='Enter')sdSearchGo()">
+          <div id="sdSearchResults" class="sd-search-results"></div>
+        </div>
+        <select class="fs" id="sdCnClassFilter" onchange="sdSearchInput()" style="min-width:150px">
+          <option value="All">All CN Classes</option><option value="Rel">Rel</option><option value="Non-Rel">Non-Rel</option><option value="Unclassified">Unclassified</option>
+        </select>
         <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px" onclick="sdSearchGo()">Go</button>
       </div>
     </div>
@@ -6031,7 +6086,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">SKU / Category Search</label>
-      <input class="fi" id="ssSearch" placeholder="SKU or taxon…" oninput="renderStockStatus()" style="min-width:200px"></div>
+      <input class="fi" id="ssSearch" placeholder="SKU or taxon…" oninput="renderStockStatus_d()" style="min-width:200px"></div>
     <div class="fc"><label class="fl">Movement Status</label>
       <select class="fs" id="ssStatus" onchange="renderStockStatus()">
         <option value="">All</option>
@@ -6068,7 +6123,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="fc"><label class="fl">Tag / Type</label>
       <select class="fs" id="payTag" onchange="renderPayments()"><option value="">All Tags</option></select></div>
     <div class="fc"><label class="fl">Search Customer</label>
-      <input class="fi" id="paySearch" placeholder="Customer name…" oninput="renderPayments()" style="min-width:200px"></div>
+      <input class="fi" id="paySearch" placeholder="Customer name…" oninput="renderPayments_d()" style="min-width:200px"></div>
     <div class="fc"><label class="fl">Show</label>
       <select class="fs" id="payView" onchange="renderPayments()">
         <option value="overdue">Has Overdue</option>
@@ -6331,6 +6386,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vRakhi" style="display:none">
   <div id="rakhiRevenueTrend"></div>
+  <div id="rakhiRelComparison"></div>
   <div class="insights-head">
     <div>
       <div class="insights-title">Rakhi — Overall Summary</div>
@@ -6450,6 +6506,25 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
+  <div id="vSalesComparison" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div><div class="ops-title">Rel vs Non-Rel Sales Comparison</div><div class="ops-sub">Compares All Product AF-column CN classifications against Cosa Nostraa sales. Unclassified names are excluded from the two comparison groups.</div></div>
+      <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparison()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparison()">Export CSV</button></div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scD1" onchange="renderSalesComparison()"></div>
+      <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scD2" onchange="renderSalesComparison()"></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="scType" onchange="renderSalesComparison()"><option value="All">All Types</option></select></div>
+      <div class="fc"><label class="fl">Taxon</label><select class="fs" id="scTaxon" onchange="renderSalesComparison()"><option value="All">All Taxons</option></select></div>
+      <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparison()">Reset</button>
+    </div>
+    <div id="scSummary" class="rel-compare-kpis"></div>
+    <div id="scChart" class="rel-compare-chart"></div>
+    <div id="scContent" class="ro-table-wrap" style="padding:0;overflow:auto;margin-top:16px"></div>
+    <div id="scNote" class="rel-note"></div>
+  </div>
+
+
   <div id="vBulk" style="display:none">
     <div class="insights-head">
       <div>
@@ -6485,7 +6560,7 @@ select.lg-in option{background:#fff;color:#1a1610}
             </div>
             <div>
               <label class="fl">Discount %</label>
-              <input id="bulkDiscount" class="bulk-discount" type="number" value="0" min="0" max="100" step="0.1" oninput="bulkRenderCombo()">
+              <input id="bulkDiscount" class="bulk-discount" type="number" value="0" min="0" max="100" step="0.1" oninput="bulkRenderCombo_d()">
             </div>
           </div>
         </div>
@@ -6551,14 +6626,14 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="ops-filters">
-      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="rpSearch" placeholder="Search SKU…" oninput="renderRepeatPlanner()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="rpSearch" placeholder="Search SKU…" oninput="renderRepeatPlanner_d()"></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="rpGroup" onchange="renderRepeatPlanner()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="rpTaxon" onchange="renderRepeatPlanner()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Sales Velocity</label><select class="fs" id="rpWindow" onchange="renderRepeatPlanner()"><option value="30">Latest 30 Days</option><option value="90">Latest 90 Days</option><option value="15">Latest 15 Days</option><option value="7">Latest 7 Days</option></select></div>
-      <div class="fc"><label class="fl">Lead Time (Days)</label><input class="fi" id="rpLeadDays" type="number" min="1" max="365" value="45" oninput="renderRepeatPlanner()"></div>
-      <div class="fc"><label class="fl">Safety Stock (Days)</label><input class="fi" id="rpSafetyDays" type="number" min="0" max="180" value="15" oninput="renderRepeatPlanner()"></div>
+      <div class="fc"><label class="fl">Lead Time (Days)</label><input class="fi" id="rpLeadDays" type="number" min="1" max="365" value="45" oninput="renderRepeatPlanner_d()"></div>
+      <div class="fc"><label class="fl">Safety Stock (Days)</label><input class="fi" id="rpSafetyDays" type="number" min="0" max="180" value="15" oninput="renderRepeatPlanner_d()"></div>
       <div class="fc"><label class="fl">Rows</label><select class="fs" id="rpNeedOnly" onchange="renderRepeatPlanner()"><option value="yes">Only Repeat Required</option><option value="all">All Selling SKUs</option></select></div>
-      <div class="fc"><label class="fl">Minimum DRR</label><input class="fi" id="rpMinDrr" type="number" min="0" step="0.01" value="0.01" oninput="renderRepeatPlanner()"></div>
+      <div class="fc"><label class="fl">Minimum DRR</label><input class="fi" id="rpMinDrr" type="number" min="0" step="0.01" value="0.01" oninput="renderRepeatPlanner_d()"></div>
     </div>
     <div id="rpSummary" class="ops-kpis"></div>
     <div id="rpContent" class="ops-table-wrap"></div>
@@ -6577,7 +6652,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="ops-filters">
-      <div class="fc"><label class="fl">Search Child / CMB</label><input class="fi" id="crSearch" placeholder="RKH-… / CMB-…" oninput="renderComboRisk()"></div>
+      <div class="fc"><label class="fl">Search Child / CMB</label><input class="fi" id="crSearch" placeholder="RKH-… / CMB-…" oninput="renderComboRisk_d()"></div>
       <div class="fc"><label class="fl">Combo Group</label><select class="fs" id="crGroup" onchange="renderComboRisk()"><option value="All">All Combos</option><option value="Rakhi">Rakhi Combos</option><option value="Others">Other Combos</option></select></div>
       <div class="fc"><label class="fl">Child Taxon</label><select class="fs" id="crTaxon" onchange="renderComboRisk()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Demand Horizon</label><select class="fs" id="crHorizon" onchange="renderComboRisk()"><option value="15">15 Days</option><option value="30" selected>30 Days</option><option value="45">45 Days</option><option value="60">60 Days</option></select></div>
@@ -6608,7 +6683,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Alert Type</label><select class="fs" id="saType" onchange="renderSmartAlerts()"><option value="All">All Alerts</option><option value="OOS_7">OOS within 7 Days</option><option value="HIGH_SALE_LOW_WIP">High Sale, Low WIP</option><option value="WIP_OLD">WIP Pending Too Long</option><option value="TARGET_BEHIND">Target Behind</option><option value="HIGH_RETURN">High Return Rate</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="saGroup" onchange="renderSmartAlerts()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
         <div class="fc"><label class="fl">Taxon</label><select class="fs" id="saTaxon" onchange="renderSmartAlerts()"><option value="All">All Taxons</option></select></div>
-        <div class="fc"><label class="fl">Search</label><input class="fi" id="saSearch" placeholder="SKU / channel…" oninput="renderSmartAlerts()"></div>
+        <div class="fc"><label class="fl">Search</label><input class="fi" id="saSearch" placeholder="SKU / channel…" oninput="renderSmartAlerts_d()"></div>
         <div class="fc"><label class="fl">Old WIP Threshold</label><select class="fs" id="saWipDays" onchange="renderSmartAlerts()"><option value="15">15+ Days</option><option value="30" selected>30+ Days</option><option value="45">45+ Days</option><option value="60">60+ Days</option></select></div>
       </div>
       <div id="saSummary" class="ops-kpis"></div>
@@ -6623,7 +6698,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Age Bucket</label><select class="fs" id="iaBucket" onchange="renderInventoryAgeing()"><option value="All">All Buckets</option><option value="0-30">0–30 Days</option><option value="31-60">31–60 Days</option><option value="61-90">61–90 Days</option><option value="90+">90+ Days</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="iaGroup" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
         <div class="fc"><label class="fl">Taxon</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Taxons</option></select></div>
-        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing()"></div>
+        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing_d()"></div>
         <div class="fc"><label class="fl">Stock Rows</label><select class="fs" id="iaStockOnly" onchange="renderInventoryAgeing()"><option value="yes">Only Stock &gt; 0</option><option value="all">Include Zero Stock</option></select></div>
       </div>
       <div id="iaSummary" class="ops-kpis"></div>
@@ -6645,12 +6720,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="ops-filters">
-      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="oppSearch" placeholder="Search SKU…" oninput="renderOpportunityScore()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="oppSearch" placeholder="Search SKU…" oninput="renderOpportunityScore_d()"></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="oppGroup" onchange="renderOpportunityScore()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="oppTaxon" onchange="renderOpportunityScore()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Sales Growth Window</label><select class="fs" id="oppWindow" onchange="loadOpportunityScore()"><option value="30" selected>Latest 30D vs Previous 30D</option><option value="15">Latest 15D vs Previous 15D</option><option value="7">Latest 7D vs Previous 7D</option><option value="90">Latest 90D vs Previous 90D</option></select></div>
       <div class="fc"><label class="fl">Opportunity Action</label><select class="fs" id="oppAction" onchange="renderOpportunityScore()"><option value="All">All Actions</option><option value="Push Now">Push Now</option><option value="Replenish & Push">Replenish &amp; Push</option><option value="Maintain">Maintain</option><option value="Watch">Watch</option><option value="Fix Returns">Fix Returns</option><option value="Pause / Fix">Pause / Fix</option></select></div>
-      <div class="fc"><label class="fl">Minimum Score</label><input class="fi" id="oppMinScore" type="number" min="0" max="100" value="0" oninput="renderOpportunityScore()"></div>
+      <div class="fc"><label class="fl">Minimum Score</label><input class="fi" id="oppMinScore" type="number" min="0" max="100" value="0" oninput="renderOpportunityScore_d()"></div>
       <div class="fc"><label class="fl">Rows</label><select class="fs" id="oppRows" onchange="renderOpportunityScore()"><option value="selling">Selling / Recently Selling SKUs</option><option value="all">All Inventory SKUs</option></select></div>
     </div>
     <div id="oppSummary" class="ops-kpis"></div>
@@ -6676,8 +6751,8 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="anomTaxon" onchange="renderSalesAnomalies()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Analysis Window</label><select class="fs" id="anomWindow" onchange="loadSalesAnomalies(false)"><option value="7">Latest 7D vs Previous 7D</option><option value="15">Latest 15D vs Previous 15D</option><option value="30" selected>Latest 30D vs Previous 30D</option><option value="60">Latest 60D vs Previous 60D</option></select></div>
       <div class="fc"><label class="fl">Severity</label><select class="fs" id="anomSeverity" onchange="renderSalesAnomalies()"><option value="All">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select></div>
-      <div class="fc"><label class="fl">Minimum Baseline Sale</label><input class="fi" id="anomBaseline" type="number" min="1" value="5" oninput="loadSalesAnomalies(false)"></div>
-      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="anomSearch" placeholder="Search SKU..." oninput="renderSalesAnomalies()"></div>
+      <div class="fc"><label class="fl">Minimum Baseline Sale</label><input class="fi" id="anomBaseline" type="number" min="1" value="5" oninput="loadSalesAnomalies_d()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="anomSearch" placeholder="Search SKU..." oninput="renderSalesAnomalies_d()"></div>
     </div>
     <div id="anomSummary" class="ops-kpis"></div>
     <div id="anomContent" class="ops-table-wrap"></div>
@@ -6704,7 +6779,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">SKU Dependency Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
-      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk_d()"></div>
     </div>
     <div id="concSummary" class="ops-kpis"></div>
     <div id="concAlert"></div>
@@ -6731,7 +6806,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="dpTaxon" onchange="renderDemandPatterns()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="dpType" onchange="renderDemandPatterns()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="dpChannel" onchange="renderDemandPatterns()"><option value="All">All Channels</option></select></div>
-      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="dpSearch" placeholder="Search SKU / product…" oninput="renderDemandPatterns()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="dpSearch" placeholder="Search SKU / product…" oninput="renderDemandPatterns_d()"></div>
       <div class="fc"><label class="fl">Metric</label><select class="fs" id="dpMetric" onchange="renderDemandPatterns()"><option value="qty">Sold Qty</option><option value="revenue">Revenue</option></select></div>
       <div class="fc"><label class="fl">Festival From</label><input class="fi" type="date" id="dpFestD1" onchange="renderDemandPatterns()"></div>
       <div class="fc"><label class="fl">Festival To</label><input class="fi" type="date" id="dpFestD2" onchange="renderDemandPatterns()"></div>
@@ -6760,8 +6835,8 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="olsChannel" onchange="renderOosLostSales()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Pre-OOS Sales Window</label><select class="fs" id="olsWindow" onchange="renderOosLostSales()"><option value="30">30 Days</option><option value="60">60 Days</option><option value="90" selected>90 Days</option><option value="180">180 Days</option></select></div>
       <div class="fc"><label class="fl">OOS Days Cap</label><select class="fs" id="olsCap" onchange="renderOosLostSales()"><option value="30">Maximum 30 Days</option><option value="60" selected>Maximum 60 Days</option><option value="90">Maximum 90 Days</option><option value="180">Maximum 180 Days</option></select></div>
-      <div class="fc"><label class="fl">Minimum Daily Sale</label><input class="fi" id="olsMinDrr" type="number" min="0" step="0.01" value="0" oninput="renderOosLostSales()"></div>
-      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="olsSearch" placeholder="Search SKU / product…" oninput="renderOosLostSales()"></div>
+      <div class="fc"><label class="fl">Minimum Daily Sale</label><input class="fi" id="olsMinDrr" type="number" min="0" step="0.01" value="0" oninput="renderOosLostSales_d()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="olsSearch" placeholder="Search SKU / product…" oninput="renderOosLostSales_d()"></div>
     </div>
     <div id="olsSummary" class="ops-kpis"></div>
     <div id="olsContent" class="ops-table-wrap"></div>
@@ -6913,6 +6988,7 @@ let roTxns = null;
 let currentSdSku = null;
 let currentTab = "home";
 let lastTab = "home";
+const CNX_SMOOTH_MODE = true;
 let insightRows = [];
 let roSortKey = "total_net_revenue";
 let roSortDir = -1;
@@ -7278,7 +7354,10 @@ function _debounce(fn, ms){
 const applyRO_d = _debounce(function(){ try{ applyRO(); }catch(e){ console.error(e); } }, 280);
 const applyF_d  = _debounce(function(){ try{ applyF(); }catch(e){ console.error(e); } }, 280);
 const applyInsights_d = _debounce(function(){ try{ applyInsights(); }catch(e){ console.error(e); } }, 280);
+const renderSkuChecklist_d = _debounce(function(){ try{ renderSkuChecklist(); }catch(e){ console.error(e); } }, 140);
+const renderRoSkuChecklist_d = _debounce(function(){ try{ renderRoSkuChecklist(); }catch(e){ console.error(e); } }, 140);
 window.applyRO_d = applyRO_d; window.applyF_d = applyF_d; window.applyInsights_d = applyInsights_d;
+window.renderSkuChecklist_d = renderSkuChecklist_d; window.renderRoSkuChecklist_d = renderRoSkuChecklist_d;
 
 
 function renderTypeChecks(){
@@ -7355,7 +7434,7 @@ function renderSkuChecklist(){
   if (!box) return;
   const q = (document.getElementById('fSkuSearch')?.value || '').trim().toLowerCase();
   const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
-  const limit = q ? 300 : 180;
+  const limit = q ? 180 : 100;
   const shown = list.slice(0, limit);
   box.innerHTML = shown.map(s => {
     const checked = selectedSkuSet.has(s) ? 'checked' : '';
@@ -7370,7 +7449,7 @@ function renderRoSkuChecklist(){
   if (!box) return;
   const q = (document.getElementById('rSkuSearch')?.value || '').trim().toLowerCase();
   const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
-  const limit = q ? 300 : 180;
+  const limit = q ? 180 : 100;
   const shown = list.slice(0, limit);
   box.innerHTML = shown.map(s => {
     const checked = selectedSkuSet.has(s) ? 'checked' : '';
@@ -7381,8 +7460,10 @@ function renderRoSkuChecklist(){
 }
 
 function refreshChecklists(){
-  if (document.getElementById('skuChecklist')) renderSkuChecklist();
-  if (document.getElementById('rSkuChecklist')) renderRoSkuChecklist();
+  // Only rebuild the checklist the user can currently see. Recreating both
+  // hidden 100-row checkbox trees on every click made bulk selection stutter.
+  if (currentTab === 'matrix' && document.getElementById('skuChecklist')) renderSkuChecklist();
+  else if (currentTab === 'repeat' && document.getElementById('rSkuChecklist')) renderRoSkuChecklist();
 }
 
 function toggleSkuSelection(sku, checked){
@@ -7441,26 +7522,64 @@ function openSkuDetails(sku){
   showTab('skudetails');
 }
 
-/* ── SKU Details: search box (type/select any SKU, jump straight to its details) ── */
-let _sdSearchListFilled = false;
-function _sdFillSearchList(){
-  const dl = document.getElementById('sdSearchList');
-  if (!dl) return;
-  dl.innerHTML = (allSkus || []).slice(0, 3000).map(s => `<option value="${escHtml(s)}">`).join('');
-  _sdSearchListFilled = true;
+/* ── SKU Details: SKU + All Product AF-column CN Name lookup ── */
+let _sdSearchMatches = [];
+let _sdSearchTimer = null;
+function cnClassOf(item){
+  const v=String((item&&item.religion_class)||'').trim();
+  return (v==='Rel'||v==='Non-Rel')?v:'Unclassified';
 }
-function sdSearchInput(){
-  if (!_sdSearchListFilled) _sdFillSearchList();
+function cnClassBadge(value){
+  const v=(value==='Rel'||value==='Non-Rel')?value:'Unclassified';
+  const cls=v==='Rel'?'rel':v==='Non-Rel'?'non-rel':'unclassified';
+  return `<span class="cn-class-badge ${cls}">${escHtml(v)}</span>`;
+}
+function _sdMatchingItems(){
+  const q=(document.getElementById('sdSearchBox')?.value||'').trim().toLowerCase();
+  const cls=document.getElementById('sdCnClassFilter')?.value||'All';
+  return (master||[]).filter(item=>{
+    if(cls!=='All'&&cnClassOf(item)!==cls) return false;
+    if(!q) return cls!=='All';
+    return String(item.sku||'').toLowerCase().includes(q)
+      || String(item.cn_name||'').toLowerCase().includes(q)
+      || String(item.sku_name||'').toLowerCase().includes(q);
+  });
+}
+function _sdRenderSearchResults(){
+  const host=document.getElementById('sdSearchResults');
+  if(!host) return;
+  const q=(document.getElementById('sdSearchBox')?.value||'').trim();
+  const cls=document.getElementById('sdCnClassFilter')?.value||'All';
+  if(!q&&cls==='All'){_sdSearchMatches=[];host.innerHTML='';host.classList.remove('is-open');return;}
+  _sdSearchMatches=_sdMatchingItems();
+  const shown=_sdSearchMatches.slice(0,25);
+  host.innerHTML=shown.length?shown.map(item=>{
+    const sku=String(item.sku||'');
+    const skuEsc=sku.replace(/'/g,"\\'");
+    return `<button type="button" class="sd-search-result" onclick="sdPickSearch('${skuEsc}')"><span class="code">${escHtml(sku)}</span><span class="name">${escHtml(item.cn_name||'CN Name not available')}</span>${cnClassBadge(cnClassOf(item))}</button>`;
+  }).join(''):`<div class="small-note" style="padding:16px">No SKU or CN Name matches this search.</div>`;
+  if(_sdSearchMatches.length>shown.length) host.innerHTML+=`<div class="small-note" style="padding:9px 13px;border-top:1px solid rgba(123,91,33,.1)">Showing first ${shown.length} of ${_sdSearchMatches.length.toLocaleString('en-IN')} matches — type more to narrow.</div>`;
+  host.classList.add('is-open');
+}
+function sdSearchInput(){clearTimeout(_sdSearchTimer);_sdSearchTimer=setTimeout(_sdRenderSearchResults,140);}
+function sdPickSearch(sku){
+  const input=document.getElementById('sdSearchBox');if(input)input.value=sku;
+  const host=document.getElementById('sdSearchResults');if(host)host.classList.remove('is-open');
+  openSkuDetails(sku);
 }
 function sdSearchGo(){
-  const v = (document.getElementById('sdSearchBox')?.value || '').trim();
-  if (!v) return;
-  const exact = (master || []).find(i => String(i.sku).toLowerCase() === v.toLowerCase());
-  const item = exact || (master || []).find(i => String(i.sku).toLowerCase().includes(v.toLowerCase()));
-  if (!item){ alert('No SKU found matching "' + v + '"'); return; }
-  openSkuDetails(item.sku);
+  const v=(document.getElementById('sdSearchBox')?.value||'').trim();
+  if(!v){sdSearchInput();return;}
+  const q=v.toLowerCase(), cls=document.getElementById('sdCnClassFilter')?.value||'All';
+  const pool=(master||[]).filter(i=>cls==='All'||cnClassOf(i)===cls);
+  const exact=pool.find(i=>String(i.sku||'').toLowerCase()===q)
+    ||pool.find(i=>String(i.cn_name||'').trim().toLowerCase()===q);
+  const item=exact||pool.find(i=>String(i.sku||'').toLowerCase().includes(q)||String(i.cn_name||'').toLowerCase().includes(q)||String(i.sku_name||'').toLowerCase().includes(q));
+  if(!item){alert('No SKU or CN Name found matching "'+v+'"');return;}
+  sdPickSearch(item.sku);
 }
-window.sdSearchInput = sdSearchInput; window.sdSearchGo = sdSearchGo;
+document.addEventListener('click',ev=>{const shell=ev.target&&ev.target.closest?ev.target.closest('.sd-search-shell'):null;if(!shell)document.getElementById('sdSearchResults')?.classList.remove('is-open');});
+window.sdSearchInput=sdSearchInput;window.sdSearchGo=sdSearchGo;window.sdPickSearch=sdPickSearch;window.cnClassOf=cnClassOf;window.cnClassBadge=cnClassBadge;
 
 function toggleNavMenu(force){
   const menu = document.getElementById('navMenu');
@@ -7726,6 +7845,9 @@ function renderSkuDetails(sku){
   setT('sdSku', skuLabel(item.sku, item.sku_name));
   const metaEl = document.getElementById('sdMeta');
   if (metaEl) metaEl.innerHTML =
+    `<span>SKU: <b>${escHtml(item.sku)}</b></span>` +
+    `<span>CN Name: <b>${escHtml(item.cn_name || '—')}</b></span>` +
+    `<span>CN Class: <b>${cnClassBadge(cnClassOf(item))}</b></span>` +
     `<span>Category: <b>${safeText(item.taxon)}</b></span>` +
     `<span>Plating: <b>${safeText(item.plating)}</b></span>` +
     (item.stone_color ? `<span>Stone Color: <b>${safeText(item.stone_color)}</b></span>` : '') +
@@ -7748,6 +7870,9 @@ function renderSkuDetails(sku){
     const initialSellThrough = _sdSellThroughStats(item, item.sales_entries || []);
     const launchDisp = item.launch_date || '—';
     const rows = [
+      ['SKU Code', escHtml(item.sku || '—')],
+      ['CN Name (All Product AF)', escHtml(item.cn_name || '—')],
+      ['CN Classification', cnClassBadge(cnClassOf(item))],
       ['Launch Date', launchDisp],
       ['Current Stock', stock.toLocaleString('en-IN')],
       ['WIP', wip.toLocaleString('en-IN')],
@@ -8128,7 +8253,7 @@ function exportSD(fmtType){
   const emp0 = LOGIN_ROLE === 'employee';
   const mrp = parseFloat(item.mrp) || 0;
   const exportSellThrough = _sdSellThroughStats(item, ents);
-  const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
@@ -8137,6 +8262,8 @@ function exportSD(fmtType){
       'Dispatch Date': e.date === 'N/A' ? '' : e.date,
       SKU: item.sku,
       'SKU Name': exportSkuName(item.sku, item.sku_name),
+      'CN Name': item.cn_name || '',
+      'CN Class': cnClassOf(item),
       'Stone Color': item.stone_color || '',
       'Product Dimensions': item.dimensions || '',
       Customer: e.cust,
@@ -8249,7 +8376,6 @@ function selectVisibleSkus(visibleOnly){
   list.forEach(s => selectedSkuSet.add(s));
   refreshChecklists();
   applyF();
-  applyRO();
 }
 
 function selectVisibleRoSkus(){
@@ -8257,15 +8383,17 @@ function selectVisibleRoSkus(){
   const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
   list.forEach(s => selectedSkuSet.add(s));
   refreshChecklists();
-  applyF();
   applyRO();
 }
 
 function clearSkuSelection(){
   selectedSkuSet.clear();
   refreshChecklists();
-  applyF();
-  applyRO();
+  // Never rebuild a hidden 10k-SKU view. The other tab recalculates when it
+  // is actually opened, which removes a major source of navigation freezes.
+  if (currentTab === 'repeat') applyRO();
+  else if (currentTab === 'matrix') applyF();
+  else updateExportHint();
 }
 
 function applyPastedSkus(){
@@ -8376,6 +8504,20 @@ function loadData(force){
       master.forEach(it => {
         if (it && it.sku) {
           const skuKey = String(it.sku).trim().toUpperCase();
+          const entries = Array.isArray(it.sales_entries) ? it.sales_entries : [];
+          // Stable derived fields are prepared once per data sync. Repeat and
+          // Overall filters reuse them instead of cloning/scanning every SKU
+          // when no transaction-level filter is active.
+          it._fe = entries;
+          it._fRev = Number(it.total_net_revenue)||0;
+          it._fQty = Number(it.final_qty)||0;
+          it._fDiscPct = Number(it.discount_pct)||0;
+          it._customer_count = Number(it.customer_count)||0;
+          it._skuLower = String(it.sku||'').toLowerCase();
+          it._cnNameLower = String(it.cn_name||'').toLowerCase();
+          it._relClass = ['Rel','Non-Rel'].includes(String(it.religion_class||'')) ? String(it.religion_class) : 'Unclassified';
+          it._comboLower = String(it.combo_skus||'').toLowerCase();
+          it._searchText = `${it.sku||''} ${it.sku_name||''} ${it.cn_name||''} ${it.taxon||''} ${it.plating||''} ${it.status||''} ${it.combo_skus||''} ${it.tags||''}`.toLowerCase();
           _masterSkuMap[skuKey] = it;
           const compactKey = skuKey.replace(/[^A-Z0-9]/g, '');
           const baseKey = String(skuKey.split('_')[0] || '').replace(/[^A-Z0-9]/g, '');
@@ -8385,6 +8527,7 @@ function loadData(force){
           if (stone) _giftSetStoneMap[skuKey] = stone;
         }
       });
+      document.body.classList.toggle('cnx-large-data', master.length > 2500);
       allCusts = d.customers || [];
       allTypes = d.types || [];
       allChannels = d.channels || [];
@@ -8403,7 +8546,11 @@ function loadData(force){
       periodKpis = d.period_kpis || {total:grandNetRevenue, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
       websitePaymentSummary = d.website_payment_summary || {cod:0, prepaid:0, total:0, daily:[]};
 
-      const custOpts = allCusts.map(c => `<option value="${c}"></option>`).join('');
+      // Datalists with thousands of <option> nodes are particularly slow in
+      // Chromium. Filtering still accepts any typed customer; this cap only
+      // limits the browser's suggestion DOM.
+      const CUSTOMER_SUGGESTION_CAP = 300;
+      const custOpts = allCusts.slice(0, CUSTOMER_SUGGESTION_CAP).map(c => `<option value="${c}"></option>`).join('');
       const c1 = document.getElementById('custList');
       const c2 = document.getElementById('custList2');
       if (c1) c1.innerHTML = custOpts;
@@ -8508,60 +8655,67 @@ function applyF(){
   const launchQ = document.getElementById('fLaunch')?.value || 'All';
   const d1 = document.getElementById('fD1')?.value || '';
   const d2 = document.getElementById('fD2')?.value || '';
-  const selected = Array.from(selectedSkuSet);
+  const hasSelectedSkus = selectedSkuSet.size > 0;
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
   let ky=0, km=0, kf=0, kpf=0, kt=0;
   const cards = [];
-  const CAP = 350;
+  const CAP = 120;
   const drill = !!(custQ || d1 || d2);
+  const anyEntryFilter = !!(custQ || d1 || d2 || typeSel.length || chanSel.length || subChanSel.length || fyQ !== 'All FYs');
   const txns = [];
 
   master.forEach(item => {
-    const hay = `${item.sku} ${item.sku_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
+    const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
     if (txt && !hay.includes(txt)) return;
-    if (selected.length > 0 && !selected.includes(item.sku)) return;
+    if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
     if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
     if (cnTagQ === 'Religious' && !item.is_religious) return;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return;
     if (statusQ !== 'All' && item.status !== statusQ) return;
-    if (fyQ !== 'All FYs' && !(item.sales_entries || []).some(e => e.fy === fyQ)) return;
     if (plat !== 'All' && item.plating !== plat) return;
     if (mrpRange){
       const _m = parseFloat(item.mrp) || 0;
       if (_m < mrpLo || _m >= mrpHi) return;
     }
     if (launchQ !== 'All' && item.launch_key !== launchQ) return;
-    if (typeSel.length > 0 && !(item.sales_entries || []).some(e => typeOk(e.type))) return;
-    if (chanSel.length > 0 && !(item.sales_entries || []).some(e => chanOk(e.channel))) return;
-    if (subChanSel.length > 0 && !(item.sales_entries || []).some(e => subChanOk(e.sub_channel))) return;
-    if (custQ && !(item.sales_entries || []).some(e => e.cust.toLowerCase().includes(custQ))) return;
-
-    const fe = (item.sales_entries || []).filter(e => {
-      if (custQ && !e.cust.toLowerCase().includes(custQ)) return false;
-      if (!typeOk(e.type)) return false;
-      if (!chanOk(e.channel)) return false;
-      if (!subChanOk(e.sub_channel)) return false;
-      if (fyQ !== 'All FYs' && e.fy !== fyQ) return false;
-      if (d1 || d2) {
-        if (e.date === 'N/A') return false;
-        if (d1 && e.date < d1) return false;
-        if (d2 && e.date > d2) return false;
+    let fe = item._fe || item.sales_entries || [];
+    let yRev = Number(item.rev_yesterday)||0;
+    let mRev = Number(item.rev_month)||0;
+    let fRev = Number(item.rev_fy)||0;
+    let pfRev = Number(item.rev_prev_fy)||0;
+    let feRev = Number(item.total_net_revenue)||0;
+    let feQty = Number(item.final_qty)||0;
+    let filteredCustomerCount = Number(item.customer_count)||0;
+    if (anyEntryFilter) {
+      fe = [];
+      yRev = mRev = fRev = pfRev = feRev = feQty = 0;
+      const customerSet = new Set();
+      for (const e of (item.sales_entries || [])) {
+        if (custQ && !String(e.cust||'').toLowerCase().includes(custQ)) continue;
+        if (!typeOk(e.type) || !chanOk(e.channel) || !subChanOk(e.sub_channel)) continue;
+        if (fyQ !== 'All FYs' && e.fy !== fyQ) continue;
+        if (d1 || d2) {
+          if (e.date === 'N/A') continue;
+          if (d1 && e.date < d1) continue;
+          if (d2 && e.date > d2) continue;
+        }
+        fe.push(e);
+        const rev = Number(e.rev)||0, qty = Number(e.qty)||0;
+        feRev += rev; feQty += qty;
+        if (e.date === yesterdayISO) yRev += rev;
+        if (e.date !== 'N/A' && String(e.date).startsWith(currentMonthKey)) mRev += rev;
+        if (e.fy === currentFY) fRev += rev;
+        if (e.fy === previousFY) pfRev += rev;
+        if (e.cust) customerSet.add(e.cust);
       }
-      return true;
-    });
-
-    const yRev = fe.filter(e => e.date === yesterdayISO).reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-    const mRev = fe.filter(e => e.date !== 'N/A' && e.date.startsWith(currentMonthKey)).reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-    const fRev = fe.filter(e => e.fy === currentFY).reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-    const pfRev = fe.filter(e => e.fy === previousFY).reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-    const feRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+      if (!fe.length) return;
+      filteredCustomerCount = customerSet.size;
+    }
 
     ky += yRev; km += mRev; kf += fRev; kpf += pfRev;
-    const anyEntryFilter = !!(custQ || (d1 || d2) || typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || fyQ !== 'All FYs');
-    const feQty = fe.reduce((s,e)=>s + (parseFloat(e.qty)||0), 0);
     kt += anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
 
     if (drill) {
@@ -8570,7 +8724,7 @@ function applyF(){
       cards.push({ mrp: parseFloat(item.mrp) || 0, html: mkCard({
         ...item,
         final_qty: anyEntryFilter ? feQty : item.final_qty,
-        customer_count: new Set((fe.length ? fe : item.sales_entries || []).map(e => e.cust)).size,
+        customer_count: filteredCustomerCount,
         rev_yesterday: yRev,
         rev_month: mRev,
         rev_fy: fRev,
@@ -8602,7 +8756,10 @@ function applyF(){
         });
         _matrixPivot = Array.from(pivotMap.values()).sort((a,b) => b.rev - a.rev);
 
-        const rowsHtml = txns.map(t => {
+        const MATRIX_RENDER_CAP = 150;
+        const visibleTxns = txns.slice(0, MATRIX_RENDER_CAP);
+        const visiblePivot = _matrixPivot.slice(0, MATRIX_RENDER_CAP);
+        const rowsHtml = visibleTxns.map(t => {
           const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
           const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
@@ -8612,14 +8769,14 @@ function applyF(){
             <td>${safeText(t.cust)}</td>
             <td>${safeText(t.type)}</td>
             <td class="gold">${parseFloat(t.qty) || 0}</td>
-            <td class="green">${fmt(parseFloat(t.rev) || 0)}</td>
+            ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(parseFloat(t.rev) || 0)}</td>`}
             <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
             <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
             <td class="${blk > 0 ? 'red' : 'muted'}">${blk}</td>
           </tr>`;
         }).join('');
 
-        const pivotRowsHtml = _matrixPivot.map(p => {
+        const pivotRowsHtml = visiblePivot.map(p => {
           const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
           const iv = invBy[p.sku] || {s:0, w:0, img:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
@@ -8645,7 +8802,8 @@ function applyF(){
           </div>
           <table class="ro"><thead><tr>
             <th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>
-          </tr></thead><tbody>${rowsHtml}</tbody></table></div>
+          </tr></thead><tbody>${rowsHtml}</tbody></table>
+          ${txns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${txns.length.toLocaleString('en-IN')} transactions. Export includes all rows.</div>` : ''}</div>
         <div class="ro-table-wrap" style="grid-column:1/-1;margin-top:20px">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 12px 0;flex-wrap:wrap;gap:8px">
             <div class="insights-title" style="font-size:1rem">Pivot — SKU-wise Summary</div>
@@ -8653,7 +8811,8 @@ function applyF(){
           </div>
           <table class="ro"><thead><tr>
             <th>Customer</th><th>SKU</th><th>Total Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
-          </tr></thead><tbody>${pivotRowsHtml}</tbody></table></div>`;
+          </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
+          ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
     } else {
       _matrixTxns = []; _matrixPivot = [];
@@ -8787,7 +8946,6 @@ function resetFilters(){
   selectedSkuSet.clear();
   refreshChecklists();
   applyF();
-  applyRO();
 }
 
 function renderSlow(items){
@@ -8831,6 +8989,7 @@ function applyRO(){
   const d2 = document.getElementById('rD2')?.value || '';
   const ticked = Array.from(selectedSkuSet);
   const packSel = getSelectedPacks();
+  const hasEntryFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || d1 || d2);
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
@@ -8852,13 +9011,13 @@ function applyRO(){
 
   const skuOk = item => {
     if (pastedSkuSet) return pastedSkuSet.has(String(item.sku).toUpperCase());
-    if (txt && !item.sku.toLowerCase().includes(txt)) return false;
+    if (txt && !(item._skuLower || String(item.sku||'').toLowerCase()).includes(txt)) return false;
     if (taxQ !== 'All' && item.taxon !== taxQ) return false;
     if (cnTagQ === 'Religious' && !item.is_religious) return false;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
     // Hide SKUs where Stone Details/Remarks (combo_skus) contains the word "customer"
-    if ((item.combo_skus || '').toLowerCase().includes('customer')) return false;
+    if ((item._comboLower || String(item.combo_skus||'').toLowerCase()).includes('customer')) return false;
     // NOTE: ticked SKUs ko yahan filter NAHI karte — select karne par baaki
     // rows bhi dikhte rehte hain. Ticked sirf export ke liye use hote hain.
     return true;
@@ -8866,17 +9025,16 @@ function applyRO(){
 
   let filtered = master.filter(item => {
     if (!skuOk(item)) return false;
-    const ents = item.sales_entries || [];
-    if (typeSel.length > 0 && !ents.some(e => typeOk(e.type))) return false;
-    if (chanSel.length > 0 && !ents.some(e => chanOk(e.channel))) return false;
-    if (subChanSel.length > 0 && !ents.some(e => subChanOk(e.sub_channel))) return false;
-    if (custQ && !ents.some(e => String(e.cust).toLowerCase().includes(custQ))) return false;
-    if (d1 || d2) { if (!ents.some(entOk)) return false; }
     return true;
   });
 
   filtered = filtered.map(item => {
+    // Fast path: SKU/category/pack filters do not change transaction totals.
+    // Reuse stable fields prepared once during loadData instead of cloning
+    // every item and scanning every sales entry again.
+    if (!hasEntryFilter) return item;
     const fe = (item.sales_entries || []).filter(entOk);
+    if (!fe.length) return null;
     const totalRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = fe.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
     // Filter-aware Discount % — jo bhi Date/Channel/Type filter abhi lage
@@ -8899,7 +9057,7 @@ function applyRO(){
       _fDiscPct: fDiscPct,
       _customer_count: new Set(fe.map(e=>e.cust)).size
     };
-  });
+  }).filter(Boolean);
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
@@ -8939,7 +9097,7 @@ function applyRO(){
 
   roFiltered = filtered;
 
-  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -9042,7 +9200,7 @@ function applyRO(){
     }
     if (empty) empty.style.display = 'none';
 
-    const TX_CAP = 400;
+    const TX_CAP = 150;
     const txShown = txns.slice(0, TX_CAP);
     tbody.innerHTML = txShown.map(t => {
       const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
@@ -9102,7 +9260,7 @@ function applyRO(){
 
   // PERF: 10,000+ rows ek saath render karne se page "load" leta tha (freeze).
   // Sirf pehle 300 dikhao (counts/export poori list par hi chalti hain).
-  const RO_CAP = 300;
+  const RO_CAP = 120;
   const roShown = filtered.slice(0, RO_CAP);
   tbody.innerHTML = roShown.map(item => {
     const img = (item.image_url && item.image_url !== '' && String(item.image_url).toLowerCase() !== 'nan')
@@ -9245,7 +9403,7 @@ function applyColFilters(){
   }
 
   // Re-render tbody only (not thead / KPIs)
-  const RO_CAP = 300;
+  const RO_CAP = 120;
   const roShown = colFiltered.slice(0, RO_CAP);
   const roNoFilter = !_cfActive && !(
     (document.getElementById('rSearch')?.value || '').trim() ||
@@ -9346,7 +9504,6 @@ function resetRO(){
   const pinfo = document.getElementById('rPasteInfo'); if (pinfo) pinfo.textContent = '';
   selectedSkuSet.clear();
   refreshChecklists();
-  applyF();
   applyRO();
 }
 
@@ -9831,8 +9988,6 @@ async function doLogout(){
 window.doLogout = doLogout;
 
 document.addEventListener('DOMContentLoaded', () => {
-  const fs = document.getElementById('fSkuSearch');
-  if (fs) fs.addEventListener('input', renderSkuChecklist);
   const r = document.getElementById('lgRole'); if (r) r.addEventListener('change', applyRoleUI);
   const u = document.getElementById('lgUser'); if (u) u.focus();
 
@@ -10034,6 +10189,31 @@ function cnxResetHomeDateRange(event){ cnxSetHomeRange(30,event); return false; 
 window.cnxApplyHomeDateRange = cnxApplyHomeDateRange;
 window.cnxResetHomeDateRange = cnxResetHomeDateRange;
 
+let _cnxHomeCatalogCacheData = null;
+let _cnxHomeCatalogCache = null;
+function cnxHomeCatalogStats(data){
+  if (_cnxHomeCatalogCacheData === data && _cnxHomeCatalogCache) return _cnxHomeCatalogCache;
+  const actionRows = [];
+  let stock=0,fastLow=0,stockout=0,wipOnly=0;
+  for (const i of data){
+    const invStock=Number(i.inv_stock)||0, invWip=Number(i.inv_wip)||0;
+    const inv=invStock+invWip, q7=Number(i.qty_7d)||0;
+    const forecast=Number(i.forecast_60d)||0;
+    const repeat=Math.max(0,Number(i.reorder_qty)||Math.ceil(forecast-inv));
+    stock+=invStock;
+    if(q7>=10 && inv<q7*2) fastLow+=1;
+    if(invStock<=0 && q7>0) stockout+=1;
+    if(invStock<=0 && invWip>0) wipOnly+=1;
+    if(repeat>0) actionRows.push({i,inv,forecast,repeat,q30:Number(i.qty_1m)||0});
+  }
+  actionRows.sort((a,b)=>b.repeat-a.repeat);
+  const urgent=actionRows.reduce((n,x)=>n+(x.inv<=10?1:0),0);
+  const comboRisk=actionRows.reduce((n,x)=>n+((x.i.combo_details||[]).length>0?1:0),0);
+  _cnxHomeCatalogCacheData=data;
+  _cnxHomeCatalogCache={actionRows,stock,urgent,fastLow,stockout,wipOnly,comboRisk};
+  return _cnxHomeCatalogCache;
+}
+
 function cnxBuildExecutiveHome(data, isEmp, homeType){
   const nowKey = todayISO || new Date().toISOString().slice(0,10);
   const now = new Date(nowKey + 'T00:00:00');
@@ -10059,20 +10239,10 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
       if (e.date===yKey){ yesterdayQty+=q; yesterdayRev+=r; yesterdayOrders+=1; }
     }
   }
-  const stock = data.reduce((s,i)=>s+(Number(i.inv_stock)||0),0);
+  const homeCatalog = cnxHomeCatalogStats(data);
+  const {stock,actionRows,urgent,fastLow,stockout,wipOnly,comboRisk}=homeCatalog;
   const str = qty+stock>0 ? qty/(qty+stock)*100 : 0;
   const revDelta = prevRevenue>0 ? (revenue-prevRevenue)/prevRevenue*100 : null;
-  const actionRows = data.map(i=>{
-    const inv=(Number(i.inv_stock)||0)+(Number(i.inv_wip)||0);
-    const forecast=Number(i.forecast_60d)||0;
-    const repeat=Math.max(0,Number(i.reorder_qty)||Math.ceil(forecast-inv));
-    return {i,inv,forecast,repeat,q30:Number(i.qty_1m)||0};
-  }).filter(x=>x.repeat>0).sort((a,b)=>b.repeat-a.repeat);
-  const urgent = actionRows.filter(x=>x.inv<=10).length;
-  const fastLow = data.filter(i=>(Number(i.qty_7d)||0)>=10 && ((Number(i.inv_stock)||0)+(Number(i.inv_wip)||0))<(Number(i.qty_7d)||0)*2).length;
-  const stockout = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.qty_7d)||0)>0).length;
-  const wipOnly = data.filter(i=>(Number(i.inv_stock)||0)<=0 && (Number(i.inv_wip)||0)>0).length;
-  const comboRisk = actionRows.filter(x=>(x.i.combo_details||[]).length>0).length;
   const maxPeriodRevenue = Math.max(1, prevRevenue, revenue);
   const previousHeight = Math.max(4, prevRevenue/maxPeriodRevenue*76);
   const currentHeight = Math.max(4, revenue/maxPeriodRevenue*76);
@@ -10154,7 +10324,7 @@ function cnxHydrateHomeTarget(){
 }
 
 function cnxBindHomeMotion(){
-  if (window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (CNX_SMOOTH_MODE || window.matchMedia('(max-width: 900px)').matches || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   document.querySelectorAll('.cnx-tilt').forEach(card=>{
     card.onpointermove=e=>{const r=card.getBoundingClientRect(),x=(e.clientX-r.left)/r.width-.5,y=(e.clientY-r.top)/r.height-.5;card.style.transform=`perspective(850px) rotateX(${-y*5}deg) rotateY(${x*7}deg) translateY(-4px)`;};
     card.onpointerleave=()=>{card.style.transform='';};
@@ -10701,7 +10871,9 @@ function renderDiscount(){
   const head = `<tr>
     <th>SKU</th><th>Stone Color</th><th>Category</th><th>MRP</th><th>Avg SP</th><th>Last SP</th>
     <th>Discount %</th><th>Gap / unit</th><th>Qty Sold</th><th>Leakage</th></tr>`;
-  const body = d.rows.map(r => {
+  const DISCOUNT_RENDER_CAP = 150;
+  const visibleRows = d.rows.slice(0, DISCOUNT_RENDER_CAP);
+  const body = visibleRows.map(r => {
     const dCls = r.disc_pct >= 40 ? 'red' : r.disc_pct >= 20 ? 'orange' : 'gold';
     const img = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan')
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">` : '';
@@ -10718,7 +10890,7 @@ function renderDiscount(){
       <td class="red" style="font-weight:900">${fmt(r.leakage)}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > DISCOUNT_RENDER_CAP ? `<div class="ops-note">Showing first ${DISCOUNT_RENDER_CAP} of ${d.rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
 }
 function exportDiscount(){
   const d = _discData;
@@ -11098,7 +11270,7 @@ function loadRakhi(){
   renderRakhi();
   renderRakhiRevenueTrend();
   const tasks=[
-    renderRakhiOverallSummary, renderRakhiPivot, renderRakhiChannel,
+    renderRakhiRelComparison, renderRakhiOverallSummary, renderRakhiPivot, renderRakhiChannel,
     renderRakhiCommonSkus, renderRakhiTopSkus, renderRakhiSlowMovers,
     renderRakhiReturns, renderRakhiTopCities
   ];
@@ -11115,6 +11287,39 @@ function loadRakhi(){
   };
   schedule();
 }
+
+let _rakhiRelComparisonExport = [];
+function renderRakhiRelComparison(){
+  const host=document.getElementById('rakhiRelComparison');
+  if(!host) return;
+  const maxDate=todayISO||new Date().toISOString().slice(0,10);
+  const oldFrom=document.getElementById('rkhCmpFrom')?.value||RAKHI_DRR_START;
+  const oldTo=document.getElementById('rkhCmpTo')?.value||maxDate;
+  const dateError=!oldFrom||!oldTo?'Select both dates.':oldFrom>oldTo?'From date cannot be after To date.':'';
+  const allRows=(_rakhiRows&&_rakhiRows.length?_rakhiRows:_rkhBuildRows()).filter(r=>_rkhInWhitelist(r.sku));
+  const filtered=dateError?[]:allRows.filter(r=>r.date&&r.date!=='N/A'&&r.date>=oldFrom&&r.date<=oldTo);
+  const groups={'Rel':{cls:'Rel',skus:new Set(),orders:0,qty:0,rev:0},'Non-Rel':{cls:'Non-Rel',skus:new Set(),orders:0,qty:0,rev:0}};
+  let unclassifiedOrders=0;
+  filtered.forEach(r=>{
+    const item=_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{};
+    const cls=cnClassOf(item);
+    if(!groups[cls]){unclassifiedOrders+=1;return;}
+    const g=groups[cls];g.skus.add(String(r.sku||''));g.orders+=1;g.qty+=_rkhEffectiveQty(r);g.rev+=Number(r.rev)||0;
+  });
+  const list=['Rel','Non-Rel'].map(k=>groups[k]);
+  const totalQty=list.reduce((s,g)=>s+g.qty,0),totalRev=list.reduce((s,g)=>s+g.rev,0);
+  _rakhiRelComparisonExport=list.map(g=>({class:g.cls,sku_count:g.skus.size,orders:g.orders,qty:g.qty,revenue:g.rev,qty_share:totalQty?g.qty/totalQty*100:0,revenue_share:totalRev?g.rev/totalRev*100:0,from:oldFrom,to:oldTo}));
+  const emp=LOGIN_ROLE==='employee';
+  const filter=`<div class="rkh-rev-head"><div><div class="rkh-rev-title">Rakhi Sales Comparison — Rel vs Non-Rel</div><div class="rkh-rev-sub">Curated Rakhi SKUs · classification from All Product AF Name · sold quantity follows the Rakhi-unit rule</div></div><div class="rkh-rev-filters"><label class="rkh-rev-filter"><span>From Date</span><input id="rkhCmpFrom" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldFrom)}"></label><label class="rkh-rev-filter"><span>To Date</span><input id="rkhCmpTo" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldTo)}"></label><button class="rkh-rev-btn" onclick="renderRakhiRelComparison()">APPLY</button><button class="rkh-rev-btn alt" onclick="resetRakhiRelComparison()">RESET</button><button class="rkh-rev-btn" style="background:#2f6f3e;color:#fff" onclick="exportRakhiRelComparison()">EXPORT</button></div></div>`;
+  if(dateError){host.innerHTML=`<section class="rkh-rev-panel">${filter}<div class="rkh-rev-error">${escHtml(dateError)}</div></section>`;return;}
+  const kpis=`<div class="rel-compare-kpis">${list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Sold Qty</div><div class="yc-val">${Math.round(g.qty).toLocaleString('en-IN')}</div><div class="yc-sub">${g.orders.toLocaleString('en-IN')} order lines · ${g.skus.size.toLocaleString('en-IN')} SKUs</div></div>`).join('')}${emp?'':list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Net Revenue</div><div class="yc-val">${fmt(g.rev)}</div><div class="yc-sub">${(totalRev?g.rev/totalRev*100:0).toFixed(1)}% comparison share</div></div>`).join('')}</div>`;
+  const head=`<tr><th>CN Class</th><th>Distinct SKUs</th><th>Order Lines</th><th>Sold Qty</th><th>Qty Share</th>${emp?'':'<th>Net Revenue</th><th>Revenue Share</th><th>Avg Selling Price</th>'}</tr>`;
+  const body=list.map(g=>`<tr><td>${cnClassBadge(g.cls)}</td><td>${g.skus.size.toLocaleString('en-IN')}</td><td>${g.orders.toLocaleString('en-IN')}</td><td><b>${Math.round(g.qty).toLocaleString('en-IN')}</b></td><td>${(totalQty?g.qty/totalQty*100:0).toFixed(1)}%</td>${emp?'':`<td><b>${fmt(g.rev)}</b></td><td>${(totalRev?g.rev/totalRev*100:0).toFixed(1)}%</td><td>${g.qty?fmt(g.rev/g.qty):'—'}</td>`}</tr>`).join('');
+  host.innerHTML=`<section class="rkh-rev-panel">${filter}${kpis}<div class="ro-table-wrap" style="padding:0"><table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="rel-note">${unclassifiedOrders.toLocaleString('en-IN')} filtered order lines have no Rel/Non-Rel marker in AF Name and are excluded from this two-group comparison.</div></section>`;
+}
+function resetRakhiRelComparison(){const a=document.getElementById('rkhCmpFrom'),b=document.getElementById('rkhCmpTo');if(a)a.value=RAKHI_DRR_START;if(b)b.value=todayISO||new Date().toISOString().slice(0,10);renderRakhiRelComparison();}
+function exportRakhiRelComparison(){if(!_rakhiRelComparisonExport.length)renderRakhiRelComparison();if(!_rakhiRelComparisonExport.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','CN Class','Distinct SKUs','Order Lines','Sold Qty','Qty Share %',...(emp?[]:['Net Revenue','Revenue Share %'])],_rakhiRelComparisonExport.map(r=>[r.from,r.to,r.class,r.sku_count,r.orders,Number(r.qty.toFixed(2)),Number(r.qty_share.toFixed(2)),...(emp?[]:[Number(r.revenue.toFixed(2)),Number(r.revenue_share.toFixed(2))])]),'rakhi_rel_vs_non_rel');}
+window.renderRakhiRelComparison=renderRakhiRelComparison;window.resetRakhiRelComparison=resetRakhiRelComparison;window.exportRakhiRelComparison=exportRakhiRelComparison;
 
 /* ── RAKHI — OVERALL SUMMARY ──
    "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
@@ -11434,7 +11639,7 @@ function renderRakhi(){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi orders match the selected filter.</div>';
     return;
   }
-  const visibleRows = fRows.slice(0, 500);
+  const visibleRows = fRows.slice(0, 150);
   const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Sold Qty</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = visibleRows.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -11468,19 +11673,20 @@ function exportRakhi(){
   const rows = _rakhiFilteredRows || _rakhiRows || [];
   if (!rows.length){ alert('No Rakhi data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'CN Name', 'CN Class', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Sold Qty', 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = [];
   rows.forEach(r => {
+    const parentItem=_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{};
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
-      r.date, r.sku, exportSkuName(r.sku, r.sku_name), r.type || '', r.cust || '',
+      r.date, r.sku, exportSkuName(r.sku, r.sku_name), parentItem.cn_name||'', cnClassOf(parentItem), r.type || '', r.cust || '',
       ...(emp ? [] : [Math.round(r.rev)]),
       Math.round(r.qty), parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
     ]);
     // Gift Set ke andar wale (Stone Details) sub-SKUs — inki apni Inv Stock/WIP
     (r.combo_details || []).forEach(c => {
       data.push([
-        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '', '',
+        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), c.cn_name||'', c.religion_class||'Unclassified', '', '',
         ...(emp ? [] : ['']),
         '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
@@ -12505,7 +12711,8 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Sum of Balance Qty across all orders for this SKU (total)">Total Balance (All Orders) ⇅</th>
     <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
     <th>Receiving Date</th></tr>`;
-  const body = d.rows.map(r => {
+  const visibleProdRows = d.rows.slice(0, 150);
+  const body = visibleProdRows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
     const img = hasImg
       ? `<img class="prod-img" src="${escHtml(r.image_url)}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
@@ -12530,8 +12737,8 @@ function renderProduction(){
       <td>${escHtml(r.delivery_date || '—')}</td>
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
-  }).join('') + (d.count > d.rows.length
-    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${d.rows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters.</td></tr>`
+  }).join('') + (d.count > visibleProdRows.length
+    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${visibleProdRows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters. Export keeps all loaded rows.</td></tr>`
     : '');
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
@@ -12797,7 +13004,9 @@ function renderAtRisk(){
   const head = `<tr>
     <th>Customer</th><th>Type</th><th>Orders</th><th>First Order</th><th>Last Order</th>
     <th>Days Since</th><th>Avg Gap</th><th>Total Qty</th>${emp ? '' : '<th>Total Revenue</th>'}</tr>`;
-  const body = d.rows.map(r => `<tr>
+  const AT_RISK_RENDER_CAP = 200;
+  const visibleRows = d.rows.slice(0, AT_RISK_RENDER_CAP);
+  const body = visibleRows.map(r => `<tr>
       <td style="font-weight:800">${escHtml(r.customer)}</td>
       <td>${escHtml(r.type||'—')}</td>
       <td style="text-align:center">${r.orders}</td>
@@ -12808,7 +13017,7 @@ function renderAtRisk(){
       <td style="text-align:center">${(r.total_qty||0).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td style="font-weight:700">${fmt(r.total_rev)}</td>`}
     </tr>`).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > AT_RISK_RENDER_CAP ? `<div class="ops-note">Showing first ${AT_RISK_RENDER_CAP} of ${d.rows.length.toLocaleString('en-IN')} customers. Export includes all rows.</div>` : ''}`;
 }
 function exportAtRisk(){
   const d = _arData; if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
@@ -13620,7 +13829,7 @@ function renderStockStatus(){
   const host = document.getElementById('ssContent');
   if (!host) return;
   const sorted = rows.slice().sort((a,b) => (b.reorder_qty||0) - (a.reorder_qty||0));
-  const body = sorted.slice(0, 500).map(it => {
+  const body = sorted.slice(0, 150).map(it => {
     const stock = Math.round(parseFloat(it.inv_stock)||0);
     const wip = Math.round(parseFloat(it.inv_wip)||0);
     const avail = stock + wip;
@@ -13648,7 +13857,7 @@ function renderStockStatus(){
       <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
       <th style="text-align:right">Days Since Sale</th><th>Flags</th>
     </tr></thead><tbody>${body || `<tr><td colspan="${emp?11:13}" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>`}</tbody></table>
-    ${sorted.length > 500 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 500 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters.</p>` : ''}`;
+    ${sorted.length > 150 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 150 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters. Export includes all rows.</p>` : ''}`;
 }
 function exportStockStatus(){
   const rows = _ssFiltered();
@@ -14974,8 +15183,72 @@ function renderMarketplaces(){
   `;
 }
 
+/* ── ALL-PRODUCT SALES COMPARISON: AF Name Rel vs Non-Rel ── */
+let _scInitialized=false;
+let _scExportRows=[];
+function _scShiftDate(iso,days){const p=String(iso||'').split('-').map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)))return '';return new Date(Date.UTC(p[0],p[1]-1,p[2])+days*86400000).toISOString().slice(0,10);}
+function _scShortDate(iso){const p=String(iso||'').split('-').map(Number);if(p.length!==3)return String(iso||'');return new Date(Date.UTC(p[0],p[1]-1,p[2])).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});}
+function _scPopulateFilters(){
+  const type=document.getElementById('scType'),tax=document.getElementById('scTaxon');
+  if(type&&type.options.length<=1)type.innerHTML='<option value="All">All Types</option>'+Array.from(new Set(allTypes||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  if(tax&&tax.options.length<=1)tax.innerHTML='<option value="All">All Taxons</option>'+Array.from(new Set(allTaxons||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  if(!_scInitialized){
+    const end=todayISO||new Date().toISOString().slice(0,10),start=_scShiftDate(end,-29);
+    const d1=document.getElementById('scD1'),d2=document.getElementById('scD2');if(d1)d1.value=start;if(d2)d2.value=end;
+    _scInitialized=true;
+  }
+}
+function _scChartHtml(daily,metric){
+  if(!daily.length)return '<div class="rkh-rev-empty">No classified sales found for these filters.</div>';
+  const W=1100,H=300,L=70,R=25,T=25,B=46,PW=W-L-R,PH=H-T-B;
+  const values=daily.flatMap(d=>[Number(d.rel[metric])||0,Number(d.nonRel[metric])||0]);
+  const max=Math.max(1,...values),x=i=>L+(daily.length===1?PW/2:i/(daily.length-1)*PW),y=v=>T+(1-(Number(v)||0)/max)*PH;
+  const relPts=daily.map((d,i)=>`${x(i).toFixed(1)},${y(d.rel[metric]).toFixed(1)}`).join(' '),nonPts=daily.map((d,i)=>`${x(i).toFixed(1)},${y(d.nonRel[metric]).toFixed(1)}`).join(' ');
+  const fmtV=v=>metric==='rev'?cnxCompactMoney(v):Math.round(v).toLocaleString('en-IN');
+  const grids=Array.from({length:5},(_,i)=>{const v=max*(4-i)/4,yy=y(v);return `<g><line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#e5ddd0"/><text x="${L-10}" y="${yy+4}" text-anchor="end" fill="#847968" font-size="10">${escHtml(fmtV(v))}</text></g>`;}).join('');
+  const tickCount=Math.min(7,daily.length),idx=Array.from(new Set(Array.from({length:tickCount},(_,i)=>Math.round(i*(daily.length-1)/Math.max(1,tickCount-1)))));
+  const ticks=idx.map(i=>`<text x="${x(i)}" y="${H-17}" text-anchor="middle" fill="#847968" font-size="10">${escHtml(_scShortDate(daily[i].date))}</text>`).join('');
+  const hits=daily.map((d,i)=>`<g><circle cx="${x(i)}" cy="${y(d.rel[metric])}" r="4" fill="#fff" stroke="#a87920" stroke-width="2"><title>${escHtml(_scShortDate(d.date))} · Rel ${escHtml(fmtV(d.rel[metric]))}</title></circle><circle cx="${x(i)}" cy="${y(d.nonRel[metric])}" r="4" fill="#fff" stroke="#17895e" stroke-width="2"><title>${escHtml(_scShortDate(d.date))} · Non-Rel ${escHtml(fmtV(d.nonRel[metric]))}</title></circle></g>`).join('');
+  return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 15px 0;flex-wrap:wrap"><b style="font-size:11px;color:#201a12">Daily ${metric==='rev'?'Net Revenue':'Sold Qty'}</b><div class="rel-legend"><span><i style="background:#a87920"></i>Rel</span><span><i style="background:#17895e"></i>Non-Rel</span></div></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rel versus Non-Rel daily sales comparison">${grids}<polyline points="${relPts}" fill="none" stroke="#a87920" stroke-width="3.3" stroke-linejoin="round"/><polyline points="${nonPts}" fill="none" stroke="#17895e" stroke-width="3.3" stroke-linejoin="round"/>${hits}${ticks}</svg>`;
+}
+function loadSalesComparison(){_scPopulateFilters();renderSalesComparison();}
+function renderSalesComparison(){
+  _scPopulateFilters();
+  const sum=document.getElementById('scSummary'),chart=document.getElementById('scChart'),host=document.getElementById('scContent'),note=document.getElementById('scNote');if(!sum||!chart||!host)return;
+  const d1=document.getElementById('scD1')?.value||'',d2=document.getElementById('scD2')?.value||'',type=document.getElementById('scType')?.value||'All',taxon=document.getElementById('scTaxon')?.value||'All';
+  if(!d1||!d2||d1>d2){sum.innerHTML='';chart.innerHTML='<div class="rkh-rev-empty">Choose a valid From and To date.</div>';host.innerHTML='';if(note)note.textContent='';return;}
+  const groups={'Rel':{cls:'Rel',skus:new Set(),orders:0,qty:0,rev:0},'Non-Rel':{cls:'Non-Rel',skus:new Set(),orders:0,qty:0,rev:0}},byDate={};
+  let unclassifiedLines=0,unclassifiedSkus=new Set();
+  (master||[]).forEach(item=>{
+    if(taxon!=='All'&&String(item.taxon||'')!==taxon)return;
+    const cls=cnClassOf(item),target=groups[cls];
+    (item.sales_entries||[]).forEach(e=>{
+      const date=String(e.date||'');if(!date||date==='N/A'||date<d1||date>d2)return;if(type!=='All'&&String(e.type||'')!==type)return;
+      if(!target){unclassifiedLines++;unclassifiedSkus.add(String(item.sku||''));return;}
+      const qty=Number(e.qty)||0,rev=Number(e.rev)||0;target.skus.add(String(item.sku||''));target.orders++;target.qty+=qty;target.rev+=rev;
+      if(!byDate[date])byDate[date]={date,rel:{qty:0,rev:0,orders:0},nonRel:{qty:0,rev:0,orders:0}};
+      const bucket=cls==='Rel'?byDate[date].rel:byDate[date].nonRel;bucket.qty+=qty;bucket.rev+=rev;bucket.orders++;
+    });
+  });
+  const list=['Rel','Non-Rel'].map(k=>groups[k]),totalQty=list.reduce((s,g)=>s+g.qty,0),totalRev=list.reduce((s,g)=>s+g.rev,0),emp=LOGIN_ROLE==='employee';
+  const daily=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));_scExportRows=daily.map(d=>({from:d1,to:d2,type,taxon,date:d.date,rel_qty:d.rel.qty,non_rel_qty:d.nonRel.qty,rel_revenue:d.rel.rev,non_rel_revenue:d.nonRel.rev}));
+  sum.innerHTML=list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Sold Qty</div><div class="yc-val">${Math.round(g.qty).toLocaleString('en-IN')}</div><div class="yc-sub">${g.orders.toLocaleString('en-IN')} lines · ${(totalQty?g.qty/totalQty*100:0).toFixed(1)}% share</div></div>`).join('')+(emp?'':list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Net Revenue</div><div class="yc-val">${fmt(g.rev)}</div><div class="yc-sub">${(totalRev?g.rev/totalRev*100:0).toFixed(1)}% share</div></div>`).join(''));
+  chart.innerHTML=_scChartHtml(daily,emp?'qty':'rev');
+  const summaryHead=`<tr><th>CN Class</th><th>Distinct Selling SKUs</th><th>Order Lines</th><th>Sold Qty</th><th>Qty Share</th>${emp?'':'<th>Net Revenue</th><th>Revenue Share</th><th>Avg Selling Price</th>'}</tr>`;
+  const summaryBody=list.map(g=>`<tr><td>${cnClassBadge(g.cls)}</td><td>${g.skus.size.toLocaleString('en-IN')}</td><td>${g.orders.toLocaleString('en-IN')}</td><td><b>${Math.round(g.qty).toLocaleString('en-IN')}</b></td><td>${(totalQty?g.qty/totalQty*100:0).toFixed(1)}%</td>${emp?'':`<td><b>${fmt(g.rev)}</b></td><td>${(totalRev?g.rev/totalRev*100:0).toFixed(1)}%</td><td>${g.qty?fmt(g.rev/g.qty):'—'}</td>`}</tr>`).join('');
+  const dailyDesc=daily.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,150),dailyHead=`<tr><th>Date</th><th>Rel Qty</th><th>Non-Rel Qty</th><th>Qty Difference</th>${emp?'':'<th>Rel Revenue</th><th>Non-Rel Revenue</th><th>Revenue Difference</th>'}</tr>`;
+  const dailyBody=dailyDesc.map(d=>`<tr><td>${escHtml(d.date)}</td><td>${Math.round(d.rel.qty).toLocaleString('en-IN')}</td><td>${Math.round(d.nonRel.qty).toLocaleString('en-IN')}</td><td>${Math.round(d.rel.qty-d.nonRel.qty).toLocaleString('en-IN')}</td>${emp?'':`<td>${fmt(d.rel.rev)}</td><td>${fmt(d.nonRel.rev)}</td><td>${fmt(d.rel.rev-d.nonRel.rev)}</td>`}</tr>`).join('');
+  host.innerHTML=`<div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Comparison Summary</div></div><table class="ro" style="width:100%;min-width:780px"><thead>${summaryHead}</thead><tbody>${summaryBody}</tbody></table></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Date-wise Comparison</div><div class="small-note">Latest ${dailyDesc.length.toLocaleString('en-IN')} active dates · export includes all</div></div><table class="ro" style="width:100%;min-width:850px"><thead>${dailyHead}</thead><tbody>${dailyBody||`<tr><td colspan="7" class="ops-empty">No sales found.</td></tr>`}</tbody></table></div>`;
+  if(note)note.textContent=`Source: Cosa Nostraa sales entries by Dispatch Date. CN classification: All Product AF Name. ${unclassifiedLines.toLocaleString('en-IN')} filtered lines across ${unclassifiedSkus.size.toLocaleString('en-IN')} unclassified SKUs were excluded.`;
+}
+function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';renderSalesComparison();}
+function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
+window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;
+
 function renderProUI(){
-  renderProHeader();
+  // Header metrics do not change when Matrix/Repeat client-side filters run.
+  // Recomputing six full-catalog passes after every keystroke was wasted work.
+  if (currentTab === 'home') renderProHeader();
   // NOTE: renderInsights() yahan se hata diya — pehle har filter/applyRO par
   // poora Insights (10k SKU) bhi re-render hota tha (chahe woh tab khula na ho),
   // isse bahut hang hota tha. Insights ab apne tab khulne par hi render hota hai.
@@ -15003,6 +15276,7 @@ showTab = function(t){
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
     rakhi: {id: 'vRakhi', btn: 'm20'},
+    salescomparison: {id: 'vSalesComparison', btn: 'm31'},
     bulk: {id: 'vBulk', btn: 'm21'},
     oos: {id: 'vOos', btn: 'm22'},
     repeatplanner: {id: 'vRepeatPlanner', btn: 'm23'},
@@ -15055,6 +15329,7 @@ showTab = function(t){
       taxon: 'TAXON DETAILS',
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
+      salescomparison: 'SALES COMPARISON',
       bulk: 'BULK — MAKE COMBO',
       oos: 'OOS — STOCKOUT RISK',
       repeatplanner: 'AUTO REPEAT PLANNER',
@@ -15079,8 +15354,8 @@ showTab = function(t){
   if (t === 'home') renderProHeader();
   // Heavy renders ko defer karo — tab turant switch ho jaye (UI block na ho),
   // bhaari kaam agle frame me. Isse page badalne par hang nahi hoga.
-  if (t === 'repeat')   setTimeout(()=>{ try{ applyRO(); }catch(e){console.error(e);} }, 0);
-  if (t === 'matrix')   setTimeout(()=>{ try{ applyF(); }catch(e){console.error(e);} }, 0);
+  if (t === 'repeat')   setTimeout(()=>{ try{ renderRoSkuChecklist(); applyRO(); }catch(e){console.error(e);} }, 0);
+  if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
@@ -15090,6 +15365,7 @@ showTab = function(t){
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
+  if (t === 'salescomparison') setTimeout(()=>{ try{ loadSalesComparison(); }catch(e){console.error(e);} }, 0);
   if (t === 'bulk') setTimeout(()=>{ try{ bulkRenderCombo(); }catch(e){console.error(e);} }, 0);
   if (t === 'oos') setTimeout(()=>{ try{ loadOOS(); }catch(e){console.error(e);} }, 0);
   if (t === 'repeatplanner') setTimeout(()=>{ try{ loadRepeatPlanner(); }catch(e){console.error(e);} }, 0);
@@ -15164,10 +15440,6 @@ applyRO = function(){
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-  const fs = document.getElementById('fSkuSearch');
-  if (fs) fs.addEventListener('input', renderSkuChecklist);
-  const rs = document.getElementById('rSkuSearch');
-  if (rs) rs.addEventListener('input', renderRoSkuChecklist);
   const u = document.getElementById('lgUser'); if (u) u.focus();
   renderProHeader();
   showTab('home');
@@ -15663,9 +15935,10 @@ function renderDemandPatterns(){
     const idx=s.days.indexOf(Math.max(...s.days));const weekendDaily=s.weekend/Math.max(1,cal.weekend),weekdayDaily=s.weekday/Math.max(1,cal.weekday),payDaily=s.pay/Math.max(1,cal.pay),nonpayDaily=s.nonpay/Math.max(1,cal.nonpay);
     return {sku,item:s.item,bestDay:_DP_DAYS[idx]||'—',bestQty:s.days[idx]||0,totalQty:s.totalQty,totalRev:s.totalRev,weekendShare:_bizPct(s.weekend,s.totalQty),weekendUplift:_dpUplift(weekendDaily,weekdayDaily),payUplift:_dpUplift(payDaily,nonpayDaily)};
   }).filter(r=>r.totalQty>0).sort((a,b)=>b.totalQty-a.totalQty||a.sku.localeCompare(b.sku));
-  const skuBody=skuRows.slice(0,300).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.item?.sku_name))}</button></td><td style="font-weight:850">${r.bestDay}</td><td class="ops-num">${_bizNum(r.bestQty,0)}</td><td class="ops-num">${_bizNum(r.totalQty,0)}</td><td class="ops-num">${_bizMoney(r.totalRev)}</td><td class="ops-num">${_bizPctText(r.weekendShare)}</td><td class="ops-num">${_dpUpliftText(r.payUplift)}</td></tr>`).join('');
+  const DEMAND_RENDER_CAP=150;
+  const skuBody=skuRows.slice(0,DEMAND_RENDER_CAP).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.item?.sku_name))}</button></td><td style="font-weight:850">${r.bestDay}</td><td class="ops-num">${_bizNum(r.bestQty,0)}</td><td class="ops-num">${_bizNum(r.totalQty,0)}</td><td class="ops-num">${_bizMoney(r.totalRev)}</td><td class="ops-num">${_bizPctText(r.weekendShare)}</td><td class="ops-num">${_dpUpliftText(r.payUplift)}</td></tr>`).join('');
   const periodRows=[['Weekend vs Weekday',weekendAvg,weekdayAvg,weekendUplift],['Month-End vs Month-Start',endAvg,startAvg,endUplift],['Payday Window vs Other Days',payAvg,nonpayAvg,payUplift],['Festival vs Previous Equal Period',festAvg,prevFestAvg,festUplift]].map(r=>`<tr><td style="font-weight:800">${r[0]}</td><td class="ops-num">${fmtMetric(r[1])}</td><td class="ops-num">${fmtMetric(r[2])}</td><td class="ops-num" style="font-weight:900;color:${r[3]===null?'#777':r[3]>=0?'#15803d':'#b3261e'}">${_dpUpliftText(r[3])}</td></tr>`).join('');
-  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px"><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Monday–Sunday Sale Pattern</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Day</th><th>Total</th><th>Average / Day</th><th>Calendar Days</th><th>Relative Demand</th></tr></thead><tbody>${dayRows}</tbody></table></div></div><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Period Behaviour</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Comparison</th><th>Focus Avg / Day</th><th>Base Avg / Day</th><th>Uplift</th></tr></thead><tbody>${periodRows}</tbody></table></div></div></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Best Sale Day by SKU</div><div class="small-note">Showing ${Math.min(300,skuRows.length).toLocaleString('en-IN')} of ${skuRows.length.toLocaleString('en-IN')} SKUs</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Best Day</th><th>Best-Day Qty</th><th>Total Qty</th><th>Revenue</th><th>Weekend Share</th><th>Payday Uplift</th></tr></thead><tbody>${skuBody||'<tr><td colspan="9" class="ops-empty">No demand pattern rows.</td></tr>'}</tbody></table></div></div>`;
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px"><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Monday–Sunday Sale Pattern</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Day</th><th>Total</th><th>Average / Day</th><th>Calendar Days</th><th>Relative Demand</th></tr></thead><tbody>${dayRows}</tbody></table></div></div><div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Period Behaviour</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>Comparison</th><th>Focus Avg / Day</th><th>Base Avg / Day</th><th>Uplift</th></tr></thead><tbody>${periodRows}</tbody></table></div></div></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Best Sale Day by SKU</div><div class="small-note">Showing ${Math.min(DEMAND_RENDER_CAP,skuRows.length).toLocaleString('en-IN')} of ${skuRows.length.toLocaleString('en-IN')} SKUs · Export includes all</div></div><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Best Day</th><th>Best-Day Qty</th><th>Total Qty</th><th>Revenue</th><th>Weekend Share</th><th>Payday Uplift</th></tr></thead><tbody>${skuBody||'<tr><td colspan="9" class="ops-empty">No demand pattern rows.</td></tr>'}</tbody></table></div></div>`;
   _dpExportRows=skuRows;
 }
 function exportDemandPatterns(){
@@ -15818,7 +16091,8 @@ function renderOosLostSales(){
     _opsKpi('Potential Target Support',_bizMoney(lostRev),target>0?`${_bizPctText(lostRev/target*100)} of current monthly target`:'Current target unavailable')+
     _opsKpi('Inv WIP Support',Math.round(rows.reduce((s,r)=>s+r.wip,0)).toLocaleString('en-IN'),'Incoming stock shown separately');
 
-  const body=rows.slice(0,500).map((r,i)=>`<tr>
+  const OOS_RENDER_CAP=150;
+  const body=rows.slice(0,OOS_RENDER_CAP).map((r,i)=>`<tr>
     <td class="ops-num">${i+1}</td>
     <td>${_opsPhoto(r.image)}</td>
     <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td>
@@ -15838,7 +16112,7 @@ function renderOosLostSales(){
   const emptyMessage=allRows.length
     ?'No OOS SKU meets the Minimum Daily Sale filter. Set Minimum Daily Sale to 0 to show every current OOS SKU.'
     :'No current Inv Stock = 0 SKU matches the selected Product Group, Taxon or SKU search.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>500?`<div class="ops-note">Showing first 500 of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
   _olsRows=rows;
 }
 function exportOosLostSales(){
@@ -15855,6 +16129,28 @@ function exportOosLostSales(){
 window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;
 window.loadDemandPatterns=loadDemandPatterns;window.renderDemandPatterns=renderDemandPatterns;window.exportDemandPatterns=exportDemandPatterns;
 window.loadOosLostSales=loadOosLostSales;window.renderOosLostSales=renderOosLostSales;window.exportOosLostSales=exportOosLostSales;
+
+/* Heavy operational searches run once after typing pauses. This keeps the
+   browser responsive on large catalogs while select/date changes remain
+   immediate. */
+const renderStockStatus_d      = _debounce(()=>renderStockStatus(), 220);
+const renderPayments_d         = _debounce(()=>renderPayments(), 220);
+const bulkRenderCombo_d        = _debounce(()=>bulkRenderCombo(), 220);
+const renderRepeatPlanner_d    = _debounce(()=>renderRepeatPlanner(), 220);
+const renderComboRisk_d        = _debounce(()=>renderComboRisk(), 220);
+const renderSmartAlerts_d      = _debounce(()=>renderSmartAlerts(), 220);
+const renderInventoryAgeing_d  = _debounce(()=>renderInventoryAgeing(), 220);
+const renderOpportunityScore_d = _debounce(()=>renderOpportunityScore(), 220);
+const loadSalesAnomalies_d     = _debounce(()=>loadSalesAnomalies(false), 260);
+const renderSalesAnomalies_d   = _debounce(()=>renderSalesAnomalies(), 220);
+const renderConcentrationRisk_d= _debounce(()=>renderConcentrationRisk(), 220);
+const renderDemandPatterns_d   = _debounce(()=>renderDemandPatterns(), 220);
+const renderOosLostSales_d     = _debounce(()=>renderOosLostSales(), 220);
+Object.assign(window,{renderStockStatus_d,renderPayments_d,bulkRenderCombo_d,
+  renderRepeatPlanner_d,renderComboRisk_d,renderSmartAlerts_d,
+  renderInventoryAgeing_d,renderOpportunityScore_d,loadSalesAnomalies_d,
+  renderSalesAnomalies_d,renderConcentrationRisk_d,renderDemandPatterns_d,
+  renderOosLostSales_d});
 
 /* ===== GLOBAL TABLE SORTING =====
    Event delegation makes every current and future table sortable without
@@ -15956,7 +16252,7 @@ document.addEventListener('click',function(ev){
 
 /* ===== 3D tilt (KPIs + home cards only — light) ===== */
 (function(){
-  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return; // skip touch
+  if (CNX_SMOOTH_MODE || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) return; // smooth mode / touch
   let raf = null;
   document.addEventListener('mousemove', (e) => {
     const el = e.target.closest && e.target.closest('.kpi, .home-card');
