@@ -5282,6 +5282,14 @@ table thead th:not(.sort-arrow):not([onclick*="sort"]):not([data-sort-disabled])
 table thead th.cnx-sort-asc:after{content:' ▲'!important;color:var(--cnx-gold,#a87920)!important;opacity:1!important}
 table thead th.cnx-sort-desc:after{content:' ▼'!important;color:var(--cnx-gold,#a87920)!important;opacity:1!important}
 table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;color:#201a12!important}
+/* Rakhi revenue trend — chart-first summary at the top of the tab. */
+.rkh-rev-panel{margin:0 0 18px;padding:20px;border:1px solid rgba(123,91,33,.14);border-radius:22px;background:linear-gradient(145deg,#fffefb,#f8f0e2);box-shadow:var(--cnx-shadow)}
+.rkh-rev-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap}.rkh-rev-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:29px;line-height:1;color:#201a12;font-weight:850}.rkh-rev-sub{margin-top:7px;color:#776e5f;font-size:10px;line-height:1.55;font-weight:700}
+.rkh-rev-filters{display:flex;align-items:flex-end;justify-content:flex-end;gap:9px;flex-wrap:wrap}.rkh-rev-filter{display:flex;flex-direction:column;gap:5px}.rkh-rev-filter span{font-size:7px;letter-spacing:1.25px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-rev-filter input,.rkh-rev-filter select{height:36px;min-width:132px;padding:0 9px;border:1px solid rgba(123,91,33,.17);border-radius:10px;background:#fffefb;color:#201a12;font-size:9px;font-weight:800;outline:none}.rkh-rev-filter select{min-width:170px}.rkh-rev-filter input:focus,.rkh-rev-filter select:focus{border-color:#b88930;box-shadow:0 0 0 3px rgba(184,137,48,.12)}
+.rkh-rev-btn{height:36px;padding:0 13px;border:0;border-radius:10px;background:linear-gradient(145deg,#ebcf88,#a87920);color:#21170a;font-size:8px;letter-spacing:1.2px;font-weight:950;cursor:pointer}.rkh-rev-btn.alt{background:#fffefb;border:1px solid rgba(123,91,33,.17);color:#765317}
+.rkh-rev-kpis{display:grid;grid-template-columns:repeat(4,minmax(135px,1fr));gap:10px;margin:17px 0 12px}.rkh-rev-kpi{padding:12px 14px;border:1px solid rgba(123,91,33,.11);border-radius:14px;background:rgba(255,255,255,.62)}.rkh-rev-kpi span{display:block;font-size:7px;letter-spacing:1.25px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-rev-kpi b{display:block;margin-top:5px;color:#201a12;font-size:18px;font-weight:950}.rkh-rev-kpi small{display:block;margin-top:3px;color:#847968;font-size:8px;font-weight:700}
+.rkh-rev-chart-wrap{overflow-x:auto;border:1px solid rgba(123,91,33,.1);border-radius:16px;background:#fffefb}.rkh-rev-chart{display:block;width:100%;min-width:720px;height:320px}.rkh-rev-empty{min-height:250px;display:grid;place-items:center;text-align:center;color:#847968;font-size:11px;font-weight:750}.rkh-rev-error{margin-top:9px;color:#b42318;font-size:9px;font-weight:850;min-height:13px}
+@media(max-width:760px){.rkh-rev-panel{padding:15px;border-radius:18px}.rkh-rev-title{font-size:25px}.rkh-rev-filters{width:100%;justify-content:flex-start}.rkh-rev-filter{flex:1 1 140px}.rkh-rev-filter input,.rkh-rev-filter select{width:100%;min-width:0}.rkh-rev-kpis{grid-template-columns:1fr 1fr}.rkh-rev-chart{height:280px}}
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 @media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
@@ -6261,6 +6269,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 
   <div id="vRakhi" style="display:none">
+  <div id="rakhiRevenueTrend"></div>
   <div class="insights-head">
     <div>
       <div class="insights-title">Rakhi — Overall Summary</div>
@@ -10849,6 +10858,96 @@ function _rkhFmtShortDate(iso){
   if (!M || M < 1 || M > 12) return String(iso);
   return `${D} ${months[M - 1]}`;
 }
+function _rkhRevenueDateKeys(from,to){
+  const out=[];
+  let cursor=new Date(String(from)+'T00:00:00Z');
+  const end=new Date(String(to)+'T00:00:00Z');
+  while(Number.isFinite(cursor.getTime())&&cursor<=end&&out.length<370){
+    out.push(cursor.toISOString().slice(0,10));
+    cursor=new Date(cursor.getTime()+86400000);
+  }
+  return out;
+}
+function _rkhRevenueFilterMarkup({from,to,sku,type,skuOptions,typeOptions,maxDate,error}){
+  return `<div class="rkh-rev-head"><div><div class="rkh-rev-title">Rakhi Net Revenue Trend</div><div class="rkh-rev-sub">Daily Net Revenue by Order Date · curated Rakhi SKUs and CMB gift sets · filters apply only to this chart</div></div><div class="rkh-rev-filters">
+    <label class="rkh-rev-filter"><span>From Date</span><input id="rkhRevFrom" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(from)}"></label>
+    <label class="rkh-rev-filter"><span>To Date</span><input id="rkhRevTo" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(to)}"></label>
+    <label class="rkh-rev-filter"><span>SKU / CMB</span><select id="rkhRevSku" onchange="renderRakhiRevenueTrend()"><option value="All">All Rakhi SKUs</option>${skuOptions.map(x=>`<option value="${escHtml(x.value)}" ${x.value===sku?'selected':''}>${escHtml(x.label)}</option>`).join('')}</select></label>
+    <label class="rkh-rev-filter"><span>Type</span><select id="rkhRevType" onchange="renderRakhiRevenueTrend()"><option value="All">All Types</option>${typeOptions.map(x=>`<option value="${escHtml(x)}" ${x===type?'selected':''}>${escHtml(x)}</option>`).join('')}</select></label>
+    <button type="button" class="rkh-rev-btn" onclick="renderRakhiRevenueTrend()">APPLY</button><button type="button" class="rkh-rev-btn alt" onclick="resetRakhiRevenueTrend()">RESET</button>
+  </div></div><div class="rkh-rev-error">${error?escHtml(error):''}</div>`;
+}
+function renderRakhiRevenueTrend(){
+  const host=document.getElementById('rakhiRevenueTrend');
+  if(!host) return;
+  const maxDate=todayISO||new Date().toISOString().slice(0,10);
+  const rows=(_rakhiRows||[]).filter(r=>_rkhInWhitelist(r.sku)&&r.date&&r.date!=='N/A');
+  const availableDates=rows.map(r=>String(r.date)).sort();
+  const firstAvailable=availableDates[0]||RAKHI_DRR_START;
+  const defaultFrom=firstAvailable>RAKHI_DRR_START?firstAvailable:RAKHI_DRR_START;
+  const from=document.getElementById('rkhRevFrom')?.value||defaultFrom;
+  const to=document.getElementById('rkhRevTo')?.value||maxDate;
+  const sku=document.getElementById('rkhRevSku')?.value||'All';
+  const type=document.getElementById('rkhRevType')?.value||'All';
+  const skuOptions=Array.from(RAKHI_WHITELIST_SKUS).sort().map(value=>{
+    const item=_masterSkuMap[value]||{};
+    return {value,label:skuLabel(value,item.sku_name||item.name||'')};
+  });
+  const typeOptions=Array.from(new Set(rows.map(r=>String(r.type||'').trim()).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  const dateError=!from||!to?'Select both From and To dates.':from>to?'From date cannot be after To date.':'';
+  const filterMarkup=_rkhRevenueFilterMarkup({from,to,sku,type,skuOptions,typeOptions,maxDate,error:dateError});
+  if(LOGIN_ROLE==='employee'){
+    host.innerHTML=`<section class="rkh-rev-panel">${filterMarkup}<div class="rkh-rev-empty"><div><b>Net Revenue trend is protected</b><br>Sign in as Admin to view revenue.</div></div></section>`;
+    return;
+  }
+  if(dateError){
+    host.innerHTML=`<section class="rkh-rev-panel">${filterMarkup}<div class="rkh-rev-empty">Choose a valid date range to draw the chart.</div></section>`;
+    return;
+  }
+  const filtered=rows.filter(r=>r.date>=from&&r.date<=to&&(sku==='All'||String(r.sku||'').trim().toUpperCase()===sku)&&(type==='All'||String(r.type||'').trim()===type));
+  const keys=_rkhRevenueDateKeys(from,to);
+  const byDate={};
+  filtered.forEach(r=>{byDate[r.date]=(byDate[r.date]||0)+(Number(r.rev)||0);});
+  const daily=keys.map(date=>({date,revenue:byDate[date]||0}));
+  const total=filtered.reduce((sum,r)=>sum+(Number(r.rev)||0),0);
+  const average=daily.length?total/daily.length:0;
+  const best=daily.length?daily.reduce((a,b)=>b.revenue>a.revenue?b:a,daily[0]):null;
+  const selectedSkuLabel=sku==='All'?'All Rakhi SKUs':sku;
+  const selectedTypeLabel=type==='All'?'All Types':type;
+  const kpis=`<div class="rkh-rev-kpis"><div class="rkh-rev-kpi"><span>Filtered Net Revenue</span><b>${cnxCompactMoney(total)}</b><small>${_rkhFmtShortDate(from)} – ${_rkhFmtShortDate(to)}</small></div><div class="rkh-rev-kpi"><span>Average / Calendar Day</span><b>${cnxCompactMoney(average)}</b><small>${daily.length.toLocaleString('en-IN')} selected days</small></div><div class="rkh-rev-kpi"><span>Order Lines</span><b>${filtered.length.toLocaleString('en-IN')}</b><small>${escHtml(selectedSkuLabel)} · ${escHtml(selectedTypeLabel)}</small></div><div class="rkh-rev-kpi"><span>Best Revenue Day</span><b>${best?cnxCompactMoney(best.revenue):'₹0'}</b><small>${best?_rkhFmtShortDate(best.date):'No data'}</small></div></div>`;
+  if(!daily.length||!filtered.length){
+    host.innerHTML=`<section class="rkh-rev-panel">${filterMarkup}${kpis}<div class="rkh-rev-chart-wrap"><div class="rkh-rev-empty">No Net Revenue found for the selected filters.</div></div></section>`;
+    return;
+  }
+
+  const W=1100,H=320,L=74,R=24,T=22,B=48,PW=W-L-R,PH=H-T-B;
+  const values=daily.map(d=>d.revenue);
+  let yMin=Math.min(0,...values),yMax=Math.max(0,...values);
+  if(yMin===yMax)yMax=yMin+1;
+  const ySpan=yMax-yMin;
+  const xAt=i=>L+(daily.length===1?PW/2:(i/(daily.length-1))*PW);
+  const yAt=v=>T+((yMax-v)/ySpan)*PH;
+  const zeroY=yAt(0);
+  const points=daily.map((d,i)=>`${xAt(i).toFixed(2)},${yAt(d.revenue).toFixed(2)}`).join(' ');
+  const area=`${L},${zeroY.toFixed(2)} ${points} ${xAt(daily.length-1).toFixed(2)},${zeroY.toFixed(2)}`;
+  const yTicks=Array.from({length:5},(_,i)=>yMax-(ySpan*i/4));
+  const yGrid=yTicks.map(v=>{const y=yAt(v);return `<g><line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}" stroke="#e5ddd0" stroke-width="1"/><text x="${L-11}" y="${y+4}" text-anchor="end" fill="#847968" font-size="10" font-family="Inter,Arial">${escHtml(cnxCompactMoney(v))}</text></g>`;}).join('');
+  const tickCount=Math.min(7,daily.length);
+  const tickIdx=Array.from(new Set(Array.from({length:tickCount},(_,i)=>Math.round(i*(daily.length-1)/Math.max(1,tickCount-1)))));
+  const xTicks=tickIdx.map(i=>`<text x="${xAt(i)}" y="${H-19}" text-anchor="middle" fill="#847968" font-size="10" font-family="Inter,Arial">${escHtml(_rkhFmtShortDate(daily[i].date))}</text>`).join('');
+  const markers=daily.length<=45?daily.map((d,i)=>`<circle cx="${xAt(i)}" cy="${yAt(d.revenue)}" r="4" fill="#fffefb" stroke="#a87920" stroke-width="2"><title>${escHtml(_rkhFmtShortDate(d.date))} · ${escHtml(cnxCompactMoney(d.revenue))}</title></circle>`).join(''):'';
+  const chart=`<div class="rkh-rev-chart-wrap"><svg class="rkh-rev-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily Rakhi Net Revenue from ${escHtml(from)} to ${escHtml(to)}">${yGrid}<line x1="${L}" y1="${zeroY}" x2="${W-R}" y2="${zeroY}" stroke="#9f917b" stroke-width="1.2"/><polygon points="${area}" fill="#d9b968" fill-opacity=".13"/><polyline points="${points}" fill="none" stroke="#a87920" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>${markers}${xTicks}</svg></div>`;
+  host.innerHTML=`<section class="rkh-rev-panel">${filterMarkup}${kpis}${chart}</section>`;
+}
+function resetRakhiRevenueTrend(){
+  const from=document.getElementById('rkhRevFrom');if(from)from.value=RAKHI_DRR_START;
+  const to=document.getElementById('rkhRevTo');if(to)to.value=todayISO||new Date().toISOString().slice(0,10);
+  const sku=document.getElementById('rkhRevSku');if(sku)sku.value='All';
+  const type=document.getElementById('rkhRevType');if(type)type.value='All';
+  renderRakhiRevenueTrend();
+}
+window.renderRakhiRevenueTrend=renderRakhiRevenueTrend;
+window.resetRakhiRevenueTrend=resetRakhiRevenueTrend;
 let _rakhiLoadRun = 0;
 function loadRakhi(){
   const run=++_rakhiLoadRun;
@@ -10856,6 +10955,7 @@ function loadRakhi(){
   // analytical sections are split across idle frames instead of freezing the
   // browser in one long synchronous task.
   renderRakhi();
+  renderRakhiRevenueTrend();
   const tasks=[
     renderRakhiOverallSummary, renderRakhiPivot, renderRakhiChannel,
     renderRakhiCommonSkus, renderRakhiTopSkus, renderRakhiSlowMovers,
