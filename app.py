@@ -1,5 +1,10 @@
 # ============================================================
-# Cosa Nostraa — V23.4 (CN NAME + SALES COMPARISON)
+# Cosa Nostraa — V23.5 (RAKHI / OTHERS SALES FILTER)
+# V23.5:
+#   • Sales Comparison adds a Rakhi / Others product-group filter.
+#   • The selected group updates KPIs, daily chart, both tables and CSV export.
+#   • Rakhi uses the same curated whitelist as the dedicated Rakhi dashboard;
+#     Others means every selling SKU outside that curated list.
 # V23.4:
 #   • All Product AF Name is loaded as CN Name; Non-Rel is classified before
 #     Rel, with Unclassified retained for missing markers.
@@ -6516,6 +6521,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scD2" onchange="renderSalesComparison()"></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="scType" onchange="renderSalesComparison()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Taxon</label><select class="fs" id="scTaxon" onchange="renderSalesComparison()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Rakhi / Others</label><select class="fs" id="scProductGroup" onchange="renderSalesComparison()"><option value="All">All Products</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparison()">Reset</button>
     </div>
     <div id="scSummary" class="rel-compare-kpis"></div>
@@ -15214,13 +15220,16 @@ function _scChartHtml(daily,metric){
 function loadSalesComparison(){_scPopulateFilters();renderSalesComparison();}
 function renderSalesComparison(){
   _scPopulateFilters();
+  _scExportRows=[];
   const sum=document.getElementById('scSummary'),chart=document.getElementById('scChart'),host=document.getElementById('scContent'),note=document.getElementById('scNote');if(!sum||!chart||!host)return;
-  const d1=document.getElementById('scD1')?.value||'',d2=document.getElementById('scD2')?.value||'',type=document.getElementById('scType')?.value||'All',taxon=document.getElementById('scTaxon')?.value||'All';
+  const d1=document.getElementById('scD1')?.value||'',d2=document.getElementById('scD2')?.value||'',type=document.getElementById('scType')?.value||'All',taxon=document.getElementById('scTaxon')?.value||'All',productGroup=document.getElementById('scProductGroup')?.value||'All';
   if(!d1||!d2||d1>d2){sum.innerHTML='';chart.innerHTML='<div class="rkh-rev-empty">Choose a valid From and To date.</div>';host.innerHTML='';if(note)note.textContent='';return;}
   const groups={'Rel':{cls:'Rel',skus:new Set(),orders:0,qty:0,rev:0},'Non-Rel':{cls:'Non-Rel',skus:new Set(),orders:0,qty:0,rev:0}},byDate={};
   let unclassifiedLines=0,unclassifiedSkus=new Set();
   (master||[]).forEach(item=>{
     if(taxon!=='All'&&String(item.taxon||'')!==taxon)return;
+    const itemProductGroup=_rkhInWhitelist(item.sku)?'Rakhi':'Others';
+    if(productGroup!=='All'&&itemProductGroup!==productGroup)return;
     const cls=cnClassOf(item),target=groups[cls];
     (item.sales_entries||[]).forEach(e=>{
       const date=String(e.date||'');if(!date||date==='N/A'||date<d1||date>d2)return;if(type!=='All'&&String(e.type||'')!==type)return;
@@ -15231,7 +15240,7 @@ function renderSalesComparison(){
     });
   });
   const list=['Rel','Non-Rel'].map(k=>groups[k]),totalQty=list.reduce((s,g)=>s+g.qty,0),totalRev=list.reduce((s,g)=>s+g.rev,0),emp=LOGIN_ROLE==='employee';
-  const daily=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));_scExportRows=daily.map(d=>({from:d1,to:d2,type,taxon,date:d.date,rel_qty:d.rel.qty,non_rel_qty:d.nonRel.qty,rel_revenue:d.rel.rev,non_rel_revenue:d.nonRel.rev}));
+  const daily=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));_scExportRows=daily.map(d=>({from:d1,to:d2,type,taxon,product_group:productGroup,date:d.date,rel_qty:d.rel.qty,non_rel_qty:d.nonRel.qty,rel_revenue:d.rel.rev,non_rel_revenue:d.nonRel.rev}));
   sum.innerHTML=list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Sold Qty</div><div class="yc-val">${Math.round(g.qty).toLocaleString('en-IN')}</div><div class="yc-sub">${g.orders.toLocaleString('en-IN')} lines · ${(totalQty?g.qty/totalQty*100:0).toFixed(1)}% share</div></div>`).join('')+(emp?'':list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Net Revenue</div><div class="yc-val">${fmt(g.rev)}</div><div class="yc-sub">${(totalRev?g.rev/totalRev*100:0).toFixed(1)}% share</div></div>`).join(''));
   chart.innerHTML=_scChartHtml(daily,emp?'qty':'rev');
   const summaryHead=`<tr><th>CN Class</th><th>Distinct Selling SKUs</th><th>Order Lines</th><th>Sold Qty</th><th>Qty Share</th>${emp?'':'<th>Net Revenue</th><th>Revenue Share</th><th>Avg Selling Price</th>'}</tr>`;
@@ -15239,10 +15248,10 @@ function renderSalesComparison(){
   const dailyDesc=daily.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,150),dailyHead=`<tr><th>Date</th><th>Rel Qty</th><th>Non-Rel Qty</th><th>Qty Difference</th>${emp?'':'<th>Rel Revenue</th><th>Non-Rel Revenue</th><th>Revenue Difference</th>'}</tr>`;
   const dailyBody=dailyDesc.map(d=>`<tr><td>${escHtml(d.date)}</td><td>${Math.round(d.rel.qty).toLocaleString('en-IN')}</td><td>${Math.round(d.nonRel.qty).toLocaleString('en-IN')}</td><td>${Math.round(d.rel.qty-d.nonRel.qty).toLocaleString('en-IN')}</td>${emp?'':`<td>${fmt(d.rel.rev)}</td><td>${fmt(d.nonRel.rev)}</td><td>${fmt(d.rel.rev-d.nonRel.rev)}</td>`}</tr>`).join('');
   host.innerHTML=`<div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Comparison Summary</div></div><table class="ro" style="width:100%;min-width:780px"><thead>${summaryHead}</thead><tbody>${summaryBody}</tbody></table></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Date-wise Comparison</div><div class="small-note">Latest ${dailyDesc.length.toLocaleString('en-IN')} active dates · export includes all</div></div><table class="ro" style="width:100%;min-width:850px"><thead>${dailyHead}</thead><tbody>${dailyBody||`<tr><td colspan="7" class="ops-empty">No sales found.</td></tr>`}</tbody></table></div>`;
-  if(note)note.textContent=`Source: Cosa Nostraa sales entries by Dispatch Date. CN classification: All Product AF Name. ${unclassifiedLines.toLocaleString('en-IN')} filtered lines across ${unclassifiedSkus.size.toLocaleString('en-IN')} unclassified SKUs were excluded.`;
+  if(note)note.textContent=`Source: Cosa Nostraa sales entries by Dispatch Date. Product group: ${productGroup==='All'?'All Products':productGroup}. Rakhi uses the curated Rakhi SKU list; Others includes SKUs outside that list. CN classification: All Product AF Name. ${unclassifiedLines.toLocaleString('en-IN')} filtered lines across ${unclassifiedSkus.size.toLocaleString('en-IN')} unclassified SKUs were excluded.`;
 }
-function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';renderSalesComparison();}
-function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
+function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';if(productGroup)productGroup.value='All';renderSalesComparison();}
+function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
 window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;
 
 function renderProUI(){
