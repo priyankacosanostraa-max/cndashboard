@@ -1,5 +1,10 @@
 # ============================================================
-# Cosa Nostraa — V23.8 (LOGIN RAKHI CHILD-STOCK ALERT)
+# Cosa Nostraa — V23.9 (PARENT-WISE RAKHI SOLD QTY)
+# V23.9:
+#   • The login Rakhi alert now shows sold quantity against every individual
+#     parent CMB containing the same child SKU.
+#   • CSV export writes one child-parent row per CMB so each parent's sold
+#     quantity remains explicit and audit-friendly.
 # V23.8:
 #   • Login opens an exportable "Attention to These Rakhi SKUs" popup after
 #     live data is ready (and after the dated Sawan greeting, when applicable).
@@ -5400,7 +5405,7 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 .rkh-attn-modal{position:fixed;inset:0;z-index:10045;display:grid;place-items:center;padding:22px;background:rgba(30,22,11,.54);backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .28s ease,visibility .28s ease}.rkh-attn-modal.is-open{opacity:1;visibility:visible;pointer-events:auto}
 .rkh-attn-card{width:min(1120px,96vw);max-height:min(84vh,780px);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(168,121,32,.28);border-radius:27px;background:linear-gradient(145deg,#fffefb,#f6ecda);box-shadow:0 42px 110px rgba(39,28,10,.36),inset 0 1px rgba(255,255,255,.9);transform:perspective(1000px) translateY(24px) rotateX(4deg) scale(.97);transition:transform .4s cubic-bezier(.2,.82,.2,1)}.rkh-attn-modal.is-open .rkh-attn-card{transform:none}
 .rkh-attn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 24px 17px;border-bottom:1px solid rgba(123,91,33,.14);background:radial-gradient(circle at 90% 0,rgba(222,184,91,.28),transparent 40%)}.rkh-attn-title-row{display:flex;gap:14px;align-items:flex-start}.rkh-attn-icon{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#f2d98e,#a87920);color:#281c0a;font-size:21px;font-weight:950;box-shadow:0 12px 25px rgba(168,121,32,.2)}.rkh-attn-kicker{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#9a6b18;font-weight:950}.rkh-attn-title{margin-top:5px;font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(27px,3.4vw,40px);line-height:1;color:#201a12;font-weight:900}.rkh-attn-sub{margin-top:7px;color:#706553;font-size:10px;line-height:1.55;font-weight:700}.rkh-attn-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.rkh-attn-btn{min-height:38px;padding:0 14px;border:0;border-radius:11px;background:linear-gradient(145deg,#e9cb7d,#a87920);color:#211709;font-size:8px;letter-spacing:1.2px;font-weight:950;text-transform:uppercase;cursor:pointer;box-shadow:0 9px 20px rgba(168,121,32,.17)}.rkh-attn-btn.alt{background:#fffefb;border:1px solid rgba(123,91,33,.17);color:#765317;box-shadow:none}.rkh-attn-btn:disabled{opacity:.45;cursor:not-allowed}
-.rkh-attn-summary{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:10px;padding:14px 24px}.rkh-attn-chip{padding:11px 13px;border:1px solid rgba(123,91,33,.12);border-radius:13px;background:rgba(255,255,255,.68)}.rkh-attn-chip span{display:block;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-attn-chip b{display:block;margin-top:4px;color:#201a12;font-size:17px;font-weight:950}.rkh-attn-table-wrap{margin:0 24px 18px;overflow:auto;border:1px solid rgba(123,91,33,.14);border-radius:16px;background:#fff}.rkh-attn-table{width:100%;min-width:930px;border-collapse:collapse}.rkh-attn-table th{position:sticky;top:0;z-index:2;padding:10px 11px;background:#f1e3c9;color:#7d5614;font-size:7px;letter-spacing:1.05px;text-transform:uppercase;text-align:left;white-space:nowrap}.rkh-attn-table td{padding:10px 11px;border-top:1px solid #eee5d6;color:#342a1d;font-size:9px;font-weight:700;vertical-align:middle}.rkh-attn-table tr:nth-child(even) td{background:#fdf9f1}.rkh-attn-photo{width:42px;height:42px;object-fit:cover;border-radius:10px;border:1px solid #e5d7bd;background:#f7f0e3}.rkh-attn-stock{font-size:15px!important;font-weight:950!important;color:#b3261e!important}.rkh-attn-empty{padding:38px 20px;text-align:center;color:#397044;font-size:12px;font-weight:850}.rkh-attn-note{padding:0 24px 19px;color:#847968;font-size:8px;line-height:1.55;font-weight:700}
+.rkh-attn-summary{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:10px;padding:14px 24px}.rkh-attn-chip{padding:11px 13px;border:1px solid rgba(123,91,33,.12);border-radius:13px;background:rgba(255,255,255,.68)}.rkh-attn-chip span{display:block;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-attn-chip b{display:block;margin-top:4px;color:#201a12;font-size:17px;font-weight:950}.rkh-attn-table-wrap{margin:0 24px 18px;overflow:auto;border:1px solid rgba(123,91,33,.14);border-radius:16px;background:#fff}.rkh-attn-table{width:100%;min-width:980px;border-collapse:collapse}.rkh-attn-table th{position:sticky;top:0;z-index:2;padding:10px 11px;background:#f1e3c9;color:#7d5614;font-size:7px;letter-spacing:1.05px;text-transform:uppercase;text-align:left;white-space:nowrap}.rkh-attn-table td{padding:10px 11px;border-top:1px solid #eee5d6;color:#342a1d;font-size:9px;font-weight:700;vertical-align:middle}.rkh-attn-table tr:nth-child(even) td{background:#fdf9f1}.rkh-attn-photo{width:42px;height:42px;object-fit:cover;border-radius:10px;border:1px solid #e5d7bd;background:#f7f0e3}.rkh-attn-sku{display:block;padding:0;border:0;background:transparent;color:#9a6b18;font:900 10px 'Inter',sans-serif;cursor:pointer;text-align:left}.rkh-attn-table td small{display:block;margin-top:4px;color:#847968;font-size:7px}.rkh-attn-parents,.rkh-attn-parent-sales{display:flex;flex-direction:column;gap:5px;align-items:flex-start}.rkh-attn-parent,.rkh-attn-parent-qty{display:inline-flex;align-items:center;min-height:22px;padding:4px 7px;border-radius:7px;background:#f4ead7;color:#684812;font-size:8px;font-weight:850;white-space:nowrap}.rkh-attn-parent-qty{background:#eaf5ed;color:#23613d}.rkh-attn-parent-qty b{margin-left:5px;font-size:10px}.rkh-attn-link{color:#936410;font-weight:900;text-decoration:none}.rkh-attn-stock{font-size:15px!important;font-weight:950!important;color:#b3261e!important}.rkh-attn-empty{padding:38px 20px;text-align:center;color:#397044;font-size:12px;font-weight:850}.rkh-attn-empty span{display:block;margin-top:7px;color:#847968;font-size:9px}.rkh-attn-cap{padding:9px 12px;color:#847968;font-size:8px;font-weight:750}.rkh-attn-note{padding:0 24px 19px;color:#847968;font-size:8px;line-height:1.55;font-weight:700}
 @media(max-width:720px){.rkh-attn-modal{padding:10px}.rkh-attn-card{width:100%;max-height:92vh;border-radius:20px}.rkh-attn-head{padding:17px;flex-direction:column}.rkh-attn-actions{width:100%;justify-content:flex-start}.rkh-attn-summary{padding:12px 17px;grid-template-columns:1fr 1fr}.rkh-attn-table-wrap{margin:0 17px 14px}.rkh-attn-note{padding:0 17px 15px}}
 
 /* Large-data smooth mode. Premium styling remains, while expensive repeated
@@ -5512,7 +5517,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="rakhiAttentionSummary" class="rkh-attn-summary"></div>
     <div id="rakhiAttentionContent" class="rkh-attn-table-wrap"></div>
-    <div class="rkh-attn-note">Sales = FY 2026-27 Order Date quantity of the listed curated parent CMBs. A child SKU appearing in multiple sold CMBs is shown once with all parent CMBs. Inv Stock and Inv WIP come from the current All Product inventory snapshot.</div>
+    <div class="rkh-attn-note">Sales = FY 2026-27 Order Date quantity of each listed curated parent CMB. A child SKU appearing in multiple sold CMBs is shown once, with every parent CMB and its own sold quantity. CSV export writes one row per child-parent combination. Inv Stock and Inv WIP come from the current All Product inventory snapshot.</div>
   </div>
 </div>
 
@@ -10067,6 +10072,7 @@ function _buildRakhiAttentionRows(){
           sku_name: String(current.sku_name || detail.sku_name || ''),
           cn_name: String(current.cn_name || detail.cn_name || ''),
           parents: [],
+          parent_sales: [],
           sold_qty: 0,
           inv_stock: invStock,
           inv_wip: invWip,
@@ -10075,6 +10081,7 @@ function _buildRakhiAttentionRows(){
       }
       if (!rec.parents.includes(parentSku)) {
         rec.parents.push(parentSku);
+        rec.parent_sales.push({sku: parentSku, sold_qty: soldQty});
         rec.sold_qty += soldQty;
       }
       children.set(childSku, rec);
@@ -10082,7 +10089,11 @@ function _buildRakhiAttentionRows(){
   });
 
   return Array.from(children.values())
-    .map(rec => ({...rec, parents: rec.parents.slice().sort()}))
+    .map(rec => ({
+      ...rec,
+      parents: rec.parents.slice().sort(),
+      parent_sales: rec.parent_sales.slice().sort((a, b) => a.sku.localeCompare(b.sku))
+    }))
     .sort((a, b) => a.inv_stock - b.inv_stock || b.sold_qty - a.sold_qty || a.sku.localeCompare(b.sku));
 }
 
@@ -10120,9 +10131,12 @@ function _renderRakhiAttentionPopup(){
       const label = exportSkuName(parentSku, parent.sku_name || '');
       return `<span class="rkh-attn-parent">${escHtml(label)}</span>`;
     }).join('');
-    return `<tr><td>${index + 1}</td><td>${photo}</td><td><button class="rkh-attn-sku" type="button" onclick="closeRakhiAttentionPopup();openSkuDetails('${String(row.sku).replace(/'/g, "\\'")}')">${escHtml(row.sku)}</button><small>${escHtml(row.sku_name || '')}</small></td><td>${escHtml(row.cn_name || '—')}</td><td><div class="rkh-attn-parents">${parentHtml}</div></td><td>${Math.round(row.sold_qty).toLocaleString('en-IN')}</td><td><b class="rkh-attn-stock">${Math.round(row.inv_stock).toLocaleString('en-IN')}</b></td><td>${Math.round(row.inv_wip).toLocaleString('en-IN')}</td><td>${imageLink}</td></tr>`;
+    const parentSalesHtml = (row.parent_sales || []).map(parentSale =>
+      `<span class="rkh-attn-parent-qty">${escHtml(parentSale.sku)}<b>${Math.round(parentSale.sold_qty).toLocaleString('en-IN')}</b></span>`
+    ).join('');
+    return `<tr><td>${index + 1}</td><td>${photo}</td><td><button class="rkh-attn-sku" type="button" onclick="closeRakhiAttentionPopup();openSkuDetails('${String(row.sku).replace(/'/g, "\\'")}')">${escHtml(row.sku)}</button><small>${escHtml(row.sku_name || '')}</small></td><td>${escHtml(row.cn_name || '—')}</td><td><div class="rkh-attn-parents">${parentHtml}</div></td><td><div class="rkh-attn-parent-sales">${parentSalesHtml}</div><small>Total: ${Math.round(row.sold_qty).toLocaleString('en-IN')}</small></td><td><b class="rkh-attn-stock">${Math.round(row.inv_stock).toLocaleString('en-IN')}</b></td><td>${Math.round(row.inv_wip).toLocaleString('en-IN')}</td><td>${imageLink}</td></tr>`;
   }).join('');
-  host.innerHTML = `<table class="rkh-attn-table"><thead><tr><th>#</th><th>Photo</th><th>Child SKU</th><th>CN Name</th><th>Parent CMB(s)</th><th>Sold CMB Qty</th><th>Inv Stock</th><th>Inv WIP</th><th>Image Link</th></tr></thead><tbody>${body}</tbody></table>${rows.length > shown.length ? `<div class="rkh-attn-cap">Showing first ${shown.length} of ${rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
+  host.innerHTML = `<table class="rkh-attn-table"><thead><tr><th>#</th><th>Photo</th><th>Child SKU</th><th>CN Name</th><th>Parent CMB(s)</th><th>Sold Qty by Parent</th><th>Inv Stock</th><th>Inv WIP</th><th>Image Link</th></tr></thead><tbody>${body}</tbody></table>${rows.length > shown.length ? `<div class="rkh-attn-cap">Showing first ${shown.length} of ${rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
 }
 
 function showRakhiAttentionPopup(){
@@ -10166,18 +10180,23 @@ function closeRakhiAttentionPopup(){
 function exportRakhiAttentionCSV(){
   const rows = _rakhiAttentionRows || [];
   if (!rows.length) { alert('No urgent Rakhi child SKU to export.'); return; }
-  _dlCsv(
-    ['Child SKU','CN Name','Parent CMB SKU(s)','Parent CMB CN Name(s)','Sold CMB Qty','Inv Stock','Inv WIP','Image Link'],
-    rows.map(row => [
+  const exportRows = rows.flatMap(row => (row.parent_sales || []).map(parentSale => {
+    const parent = _masterSkuMap[parentSale.sku] || {};
+    return [
       row.sku,
       row.cn_name || '',
-      (row.parents || []).join(' | '),
-      (row.parents || []).map(parentSku => String((_masterSkuMap[parentSku] || {}).cn_name || '')).filter(Boolean).join(' | '),
+      parentSale.sku,
+      parent.cn_name || '',
+      parentSale.sold_qty,
       row.sold_qty,
       row.inv_stock,
       row.inv_wip,
       row.image_url || ''
-    ]),
+    ];
+  }));
+  _dlCsv(
+    ['Child SKU','CN Name','Parent CMB SKU','Parent CMB CN Name','Parent CMB Sold Qty','Total Sold Qty Across Parent CMBs','Inv Stock','Inv WIP','Image Link'],
+    exportRows,
     'attention_rakhi_child_stock_below_40'
   );
 }
