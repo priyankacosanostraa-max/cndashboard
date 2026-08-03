@@ -1,5 +1,9 @@
 # ============================================================
-# Cosa Nostraa — V23.5 (RAKHI / OTHERS SALES FILTER)
+# Cosa Nostraa — V23.6 (OOS INVENTORY COLUMN CLEANUP)
+# V23.6:
+#   • OOS Lost Sales table now shows current Inv Stock beside Inv WIP.
+#   • Baseline Sale is removed from the on-screen table and CSV export while
+#     the same pre-OOS history still powers Average Daily Sale internally.
 # V23.5:
 #   • Sales Comparison adds a Rakhi / Others product-group filter.
 #   • The selected group updates KPIs, daily chart, both tables and CSV export.
@@ -16109,19 +16113,19 @@ function renderOosLostSales(){
     <td>${escHtml(r.affected)}</td>
     <td class="ops-num">${r.lastSale?escHtml(r.lastSale):'—'}</td>
     <td class="ops-num" style="font-weight:900;color:#b3261e">${r.oosDays===null?'—':r.oosDays}</td>
-    <td class="ops-num">${_bizNum(r.baselineQty,1)}</td>
     <td class="ops-num">${r.drr.toFixed(2)}</td>
     <td><span style="font-size:9px;font-weight:800;color:${r.drr>0?'#2f6f3e':'#8b5e00'}">${escHtml(r.demandBasis)}</span></td>
     <td class="ops-num">${r.avgSp>0?_bizMoney(r.avgSp):'—'}</td>
     <td class="ops-num" style="font-weight:900">${_bizNum(r.lostQty,1)}</td>
     <td class="ops-num" style="font-weight:900;color:#b3261e">${_bizMoney(r.lostRevenue)}</td>
     <td class="ops-num">${r.targetPct===null?'—':_bizPctText(r.targetPct)}</td>
+    <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
   </tr>`).join('');
   const emptyMessage=allRows.length
     ?'No OOS SKU meets the Minimum Daily Sale filter. Set Minimum Daily Sale to 0 to show every current OOS SKU.'
     :'No current Inv Stock = 0 SKU matches the selected Product Group, Taxon or SKU search.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv Stock</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
   _olsRows=rows;
 }
 function exportOosLostSales(){
@@ -16129,8 +16133,8 @@ function exportOosLostSales(){
   const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
   if(!rows.length){alert('No OOS lost-sales rows to export');return;}
   _dlCsv(
-    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Baseline Sold Qty','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
-    rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
+    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
+    rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
     'oos_lost_sales_revenue'
   );
 }
