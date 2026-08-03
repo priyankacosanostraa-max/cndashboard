@@ -5920,13 +5920,13 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head">
     <div><div class="insights-title">At-Risk Customers</div></div>
     <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadAtRisk()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadAtRisk(true)">Refresh Now</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportAtRisk()">Export CSV</button>
     </div>
   </div>
   <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">Not ordered for</label>
-      <select class="fs" id="arGap" onchange="loadAtRisk()">
+      <select class="fs" id="arGap" onchange="loadAtRisk(true)">
         <option value="60">60+ days</option>
         <option value="90">90+ days</option>
         <option value="120">120+ days</option>
@@ -5934,6 +5934,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       </select></div>
   </div>
   <p style="color:var(--cn-mid);font-size:.85rem;margin:0 0 12px">Customers who used to order regularly (2+ orders) but haven't returned. Reach out before they're lost.</p>
+  <div id="arFreshness" style="display:flex;align-items:center;gap:7px;color:var(--cn-mid);font-size:.72rem;font-weight:700;margin:-4px 0 13px">
+    <span style="width:7px;height:7px;border-radius:50%;background:#22a06b;box-shadow:0 0 9px rgba(34,160,107,.55)"></span>
+    <span id="arFreshnessText">Auto-refresh is active while this tab is open.</span>
+  </div>
   <div id="arSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(2,1fr)"></div>
   <div id="arContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:70vh"></div>
   </div>
@@ -12696,25 +12700,58 @@ window.exportProfit = exportProfit;
 
 /* ── AT-RISK CUSTOMERS ── */
 let _arData = null;
-function loadAtRisk(){
+let _arFetchController = null;
+const AR_AUTO_REFRESH_MS = 60000;
+
+function _arTimeLabel(iso){
+  if (!iso) return '—';
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone:'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit'
+    }).format(new Date(iso));
+  } catch(e) { return String(iso); }
+}
+
+function loadAtRisk(force=false, silent=false){
   const host = document.getElementById('arContent');
   const sumHost = document.getElementById('arSummary');
+  const freshness = document.getElementById('arFreshnessText');
   if (!host) return;
-  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
-  if (sumHost) sumHost.innerHTML = '';
+  if (_arFetchController) _arFetchController.abort();
+  const controller = new AbortController();
+  _arFetchController = controller;
+  if (!silent) {
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Loading latest customer activity…</div>';
+    if (sumHost) sumHost.innerHTML = '';
+  }
+  if (freshness) freshness.textContent = 'Checking for updates…';
   const gap = encodeURIComponent(document.getElementById('arGap')?.value || '60');
-  fetch('/api/at-risk?gap=' + gap, {headers:{'ngrok-skip-browser-warning':'true'}})
+  const url = '/api/at-risk?gap=' + gap + (force ? '&fresh=1' : '') + '&_=' + Date.now();
+  fetch(url, {
+    cache:'no-store', signal:controller.signal,
+    headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}
+  })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      if (controller.signal.aborted) return;
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       _arData = d; renderAtRisk();
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => {
+      if (err && err.name === 'AbortError') return;
+      if (!silent) host.innerHTML = '<div class="home-empty" style="padding:30px">Failed: ' + escHtml(err.message||err) + '</div>';
+      if (freshness) freshness.textContent = 'Update failed — the previous results are still shown.';
+    })
+    .finally(() => { if (_arFetchController === controller) _arFetchController = null; });
 }
 function renderAtRisk(){
   const host = document.getElementById('arContent');
   const sumHost = document.getElementById('arSummary');
+  const freshness = document.getElementById('arFreshnessText');
   const d = _arData; if (!host || !d) return;
+  if (freshness) {
+    freshness.textContent = `Live · checked ${_arTimeLabel(d.checked_at)} · source synced ${_arTimeLabel(d.source_updated_at)} · every 60 sec`;
+  }
   const emp = (LOGIN_ROLE === 'employee');
   if (sumHost){
     sumHost.innerHTML = `
@@ -12749,6 +12786,13 @@ function exportAtRisk(){
   _dlCsv(headers, rows, 'at_risk_customers');
 }
 window.loadAtRisk = loadAtRisk; window.renderAtRisk = renderAtRisk; window.exportAtRisk = exportAtRisk;
+
+// Lightweight polling: only this small endpoint is checked, and only while
+// At-Risk Customers is the visible tab. The heavy dashboard dataset continues
+// to use its background refresh cycle, so this does not make the site hang.
+setInterval(() => {
+  if (_loggedIn && currentTab === 'atrisk' && !_arFetchController) loadAtRisk(false, true);
+}, AR_AUTO_REFRESH_MS);
 
 /* ── TAXON DETAILS ── */
 let _taxonData = null; let _txTypesFilled = false;
@@ -17983,13 +18027,26 @@ def api_sku_costs():
 # ════════════════════════════════════════════════════════════════
 #  ⚠️ AT-RISK CUSTOMERS — pehle regular the, ab 60+ din se nahi aaye
 # ════════════════════════════════════════════════════════════════
-_RISK_CACHE = {"data": None, "ts": 0}
+_RISK_CACHE = {"items": {}}
+_RISK_LOCK = threading.Lock()
 
-def _build_at_risk(gap_days=60, min_orders=2):
-    if _RISK_CACHE["data"] is not None and (time.time() - _RISK_CACHE["ts"] < 600):
-        return _RISK_CACHE["data"]
-    comp = get_data()[0]
+def _build_at_risk(gap_days=60, min_orders=2, force=False):
+    # Cache must be isolated by filter and by the exact source snapshot.
+    # Earlier a single 10-minute cache made 90/120/180-day selections return
+    # the previously calculated 60-day result, and it stayed stale after a
+    # background sheet refresh.
+    data_snapshot = get_data()
+    comp = data_snapshot[0]
+    source_version = float(CACHE.get("ts") or 0)
     today = now_ist().date()
+    today_key = today.isoformat()
+    cache_key = (source_version, today_key, int(gap_days), int(min_orders))
+    if not force:
+        with _RISK_LOCK:
+            cached = _RISK_CACHE["items"].get(cache_key)
+        if cached is not None:
+            return cached
+
     # customer -> {dates:set, qty, rev, type}
     cust = {}
     for it in comp:
@@ -18042,9 +18099,20 @@ def _build_at_risk(gap_days=60, min_orders=2):
         "count": len(rows),
         "total_value_at_risk": round(sum(r["total_rev"] for r in rows), 2),
         "gap_days": gap_days,
+        "generated_at": now_ist().isoformat(),
+        "source_updated_at": (
+            datetime.fromtimestamp(source_version, TZ).isoformat()
+            if source_version else now_ist().isoformat()
+        ),
     }
-    _RISK_CACHE["data"] = data
-    _RISK_CACHE["ts"] = time.time()
+    with _RISK_LOCK:
+        # Keep only the current source/day entries: at most four gap filters,
+        # so old snapshots cannot accumulate in a long-running worker.
+        _RISK_CACHE["items"] = {
+            k: v for k, v in _RISK_CACHE["items"].items()
+            if k[0] == source_version and k[1] == today_key
+        }
+        _RISK_CACHE["items"][cache_key] = data
     cust.clear()
     _gc.collect(); _malloc_trim()
     return data
@@ -18057,8 +18125,16 @@ def api_at_risk():
         gap = int(request.args.get("gap", "60") or 60)
     except Exception:
         gap = 60
+    if gap not in (60, 90, 120, 180):
+        gap = 60
+    fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
     try:
-        return jsonify(_build_at_risk(gap))
+        payload = dict(_build_at_risk(gap, force=fresh))
+        payload["checked_at"] = now_ist().isoformat()
+        resp = jsonify(payload)
+        resp.headers["Cache-Control"] = "no-store, no-cache, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
     except Exception as e:
         return jsonify({"error": f"at-risk failed: {e}"}), 500
 
