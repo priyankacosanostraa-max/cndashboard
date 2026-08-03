@@ -1470,10 +1470,14 @@ def _refresh_data():
     except Exception:
         pass
 
-    # ── Rakhi sales source: dedicated cossa_orderdate sheet ───────────────
+    # ── Order-date source: Rakhi sales + live customer activity ──────────
     # Every Rakhi table/KPI/export must use Order Date, not Dispatch Date.
-    # Keep only RKH/CMB rows so the extra source adds very little memory.
+    # At-Risk Customers also needs this source: a newly placed order must make
+    # a customer active immediately even when that order has not dispatched.
+    # Only a compact customer aggregate is retained; raw rows are still freed.
     rakhi_sales_exact = {}
+    orderdate_customer_activity = {}
+    orderdate_customer_activity_ts = 0.0
     try:
         _wstage("fetching", "Downloading order-date sales sheet for Rakhi…")
         cosa_od = _fetch_csv_fresh(COSA_ORDERDATE_URL)
@@ -1514,6 +1518,35 @@ def _refresh_data():
                 continue
             order_date_iso = dt_od.strftime("%Y-%m-%d")
 
+            qty = to_num(r.get(OD_QTY, 0)) if OD_QTY else 0.0
+            ret = to_num(r.get(OD_RET, 0)) if OD_RET else 0.0
+            sp  = to_num(r.get(OD_SP, 0)) if OD_SP else 0.0
+            rev = to_num(r.get(OD_REV, 0)) if OD_REV else 0.0
+            if not (-100000 <= qty <= 100000): qty = 0.0
+            if not (-100000 <= ret <= 100000): ret = 0.0
+
+            cust = norm_cust(r.get(OD_CUST, "Unknown")) if OD_CUST else "Unknown"
+            typ  = norm_type(r.get(OD_TYPE, "Regular")) if OD_TYPE else "Regular"
+
+            # One customer can have many SKU/order lines on one day. Dates are
+            # de-duplicated, while Qty/Revenue retain every valid positive line.
+            # Punctuation/case/spacing variants share one stable identity key.
+            customer_key = re.sub(r"[^a-z0-9]", "", str(cust).casefold())
+            is_website = str(typ).strip().casefold() == "website"
+            if (customer_key and customer_key not in ("unknown", "website")
+                    and not is_website and (qty > 0 or rev > 0)):
+                activity = orderdate_customer_activity.setdefault(customer_key, {
+                    "customer": cust, "dates": set(), "qty": 0.0,
+                    "rev": 0.0, "type": typ, "last_date": "",
+                })
+                activity["dates"].add(order_date_iso)
+                activity["qty"] += max(0.0, float(qty))
+                activity["rev"] += max(0.0, float(rev))
+                if order_date_iso >= activity["last_date"]:
+                    activity["last_date"] = order_date_iso
+                    activity["customer"] = cust
+                    activity["type"] = typ
+
             raw_sku = clean(r.get(OD_SKU, "")) if OD_SKU else ""
             if not raw_sku:
                 continue
@@ -1535,18 +1568,9 @@ def _refresh_data():
             if not re.match(r"^(RKH|CMB)", str(mapped_sku or "").strip(), re.I):
                 continue
 
-            qty = to_num(r.get(OD_QTY, 0)) if OD_QTY else 0.0
-            ret = to_num(r.get(OD_RET, 0)) if OD_RET else 0.0
-            sp  = to_num(r.get(OD_SP, 0)) if OD_SP else 0.0
-            rev = to_num(r.get(OD_REV, 0)) if OD_REV else 0.0
-            if not (-100000 <= qty <= 100000): qty = 0.0
-            if not (-100000 <= ret <= 100000): ret = 0.0
-
             fy = norm_fy(r.get(OD_FY, "")) if OD_FY else ""
             if not fy:
                 fy = fy_bounds(dt_od)[0]
-            cust = norm_cust(r.get(OD_CUST, "Unknown")) if OD_CUST else "Unknown"
-            typ  = norm_type(r.get(OD_TYPE, "Regular")) if OD_TYPE else "Regular"
             channel = calc_channel(cust, typ)
             sub_channel = calc_sub_channel(cust, channel, typ)
             if str(typ).strip().lower() == "website":
@@ -1567,8 +1591,14 @@ def _refresh_data():
 
         dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
         dbg["cossa_orderdate_rakhi_rows"] = sum(len(v.get("entries", [])) for v in rakhi_sales_exact.values())
+        dbg["cossa_orderdate_active_customers"] = len(orderdate_customer_activity)
+        orderdate_customer_activity_ts = time.time()
     except Exception as e:
         dbg["errors"].append(f"cossa_orderdate: {e}")
+        # A temporary sheet/network failure must not replace the last known
+        # Order-Date customer activity with Dispatch-Date-only results.
+        orderdate_customer_activity = CACHE.get("orderdate_customer_activity", {}) or {}
+        orderdate_customer_activity_ts = float(CACHE.get("orderdate_customer_activity_ts") or 0)
     finally:
         try:
             del cosa_od
@@ -2012,6 +2042,8 @@ def _refresh_data():
     CACHE["channels"] = sorted([c for c in channels_ if c])
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
     CACHE["website_payment_summary"] = website_payment_summary
+    CACHE["orderdate_customer_activity"] = orderdate_customer_activity
+    CACHE["orderdate_customer_activity_ts"] = orderdate_customer_activity_ts
     CACHE["ts"]    = time.time()
     _COSTS_CACHE["rows"] = None   # profit margin cache bhi refresh karo
     CACHE["debug"] = dbg
@@ -5933,7 +5965,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="180">180+ days</option>
       </select></div>
   </div>
-  <p style="color:var(--cn-mid);font-size:.85rem;margin:0 0 12px">Customers who used to order regularly (2+ orders) but haven't returned. Reach out before they're lost.</p>
+  <p style="color:var(--cn-mid);font-size:.85rem;margin:0 0 12px">Customers who ordered on 2+ different dates but have not placed another order within the selected gap. Latest activity is checked by Order Date, not Dispatch Date.</p>
   <div id="arFreshness" style="display:flex;align-items:center;gap:7px;color:var(--cn-mid);font-size:.72rem;font-weight:700;margin:-4px 0 13px">
     <span style="width:7px;height:7px;border-radius:50%;background:#22a06b;box-shadow:0 0 9px rgba(34,160,107,.55)"></span>
     <span id="arFreshnessText">Auto-refresh is active while this tab is open.</span>
@@ -12750,7 +12782,7 @@ function renderAtRisk(){
   const freshness = document.getElementById('arFreshnessText');
   const d = _arData; if (!host || !d) return;
   if (freshness) {
-    freshness.textContent = `Live · checked ${_arTimeLabel(d.checked_at)} · source synced ${_arTimeLabel(d.source_updated_at)} · every 60 sec`;
+    freshness.textContent = `Live · ${d.date_basis || 'Order Date'} · checked ${_arTimeLabel(d.checked_at)} · source synced ${_arTimeLabel(d.source_updated_at)} · every 60 sec`;
   }
   const emp = (LOGIN_ROLE === 'employee');
   if (sumHost){
@@ -18037,7 +18069,11 @@ def _build_at_risk(gap_days=60, min_orders=2, force=False):
     # background sheet refresh.
     data_snapshot = get_data()
     comp = data_snapshot[0]
-    source_version = float(CACHE.get("ts") or 0)
+    order_activity = CACHE.get("orderdate_customer_activity") or {}
+    source_version = float(
+        CACHE.get("orderdate_customer_activity_ts")
+        or CACHE.get("ts") or 0
+    )
     today = now_ist().date()
     today_key = today.isoformat()
     cache_key = (source_version, today_key, int(gap_days), int(min_orders))
@@ -18047,27 +18083,56 @@ def _build_at_risk(gap_days=60, min_orders=2, force=False):
         if cached is not None:
             return cached
 
-    # customer -> {dates:set, qty, rev, type}
+    # customer -> {dates:set, qty, rev, type}. Dedicated Order Date activity
+    # is authoritative: Dispatch Date can lag a newly placed order and was the
+    # reason active customers appeared as inactive. Main COSA is fallback only.
     cust = {}
-    for it in comp:
-        for e in it.get("sales_entries", []):
-            name = (e.get("cust") or "").strip()
-            if not name or name.lower() == "website":
+    date_basis = "Order Date"
+    if order_activity:
+        for c in order_activity.values():
+            name = str(c.get("customer") or "").strip()
+            if not name:
                 continue
-            d = e.get("date")
-            if not d or d == "N/A":
-                continue
-            c = cust.setdefault(name, {"dates": set(), "qty": 0.0, "rev": 0.0, "type": (e.get("type") or "")})
-            c["dates"].add(d)
-            c["qty"] += float(e.get("qty") or 0)
-            c["rev"] += float(e.get("rev") or 0)
+            cust[name] = {
+                "dates": set(c.get("dates") or []),
+                "qty": float(c.get("qty") or 0),
+                "rev": float(c.get("rev") or 0),
+                "type": str(c.get("type") or ""),
+            }
+    else:
+        date_basis = "Order Date fallback"
+        for it in comp:
+            for e in it.get("sales_entries", []):
+                name = (e.get("cust") or "").strip()
+                if not name or name.casefold() in ("website", "unknown"):
+                    continue
+                # Prefer Order Date whenever the main source supplies it; use
+                # Dispatch Date only when no Order Date exists at all.
+                d = e.get("order_date")
+                if not d or d == "N/A":
+                    d = e.get("date")
+                if not d or d == "N/A":
+                    continue
+                qty = float(e.get("qty") or 0)
+                rev = float(e.get("rev") or 0)
+                if qty <= 0 and rev <= 0:
+                    continue
+                customer_key = re.sub(r"[^a-z0-9]", "", name.casefold())
+                c = cust.setdefault(customer_key, {
+                    "customer": name, "dates": set(), "qty": 0.0,
+                    "rev": 0.0, "type": (e.get("type") or ""),
+                })
+                c["dates"].add(d)
+                c["qty"] += max(0.0, qty)
+                c["rev"] += max(0.0, rev)
 
     def _d(iso):
         try: return date(int(iso[0:4]), int(iso[5:7]), int(iso[8:10]))
         except Exception: return None
 
     rows = []
-    for name, c in cust.items():
+    for name_key, c in cust.items():
+        name = c.get("customer") or name_key
         dts = sorted([x for x in (_d(s) for s in c["dates"]) if x])
         if len(dts) < min_orders:
             continue          # "regular" the tabhi count — kam se kam min_orders
@@ -18099,6 +18164,7 @@ def _build_at_risk(gap_days=60, min_orders=2, force=False):
         "count": len(rows),
         "total_value_at_risk": round(sum(r["total_rev"] for r in rows), 2),
         "gap_days": gap_days,
+        "date_basis": date_basis,
         "generated_at": now_ist().isoformat(),
         "source_updated_at": (
             datetime.fromtimestamp(source_version, TZ).isoformat()
