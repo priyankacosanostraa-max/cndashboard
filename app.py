@@ -5288,11 +5288,25 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 .rkh-rev-filters{display:flex;align-items:flex-end;justify-content:flex-end;gap:9px;flex-wrap:wrap}.rkh-rev-filter{display:flex;flex-direction:column;gap:5px}.rkh-rev-filter span{font-size:7px;letter-spacing:1.25px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-rev-filter input,.rkh-rev-filter select{height:36px;min-width:132px;padding:0 9px;border:1px solid rgba(123,91,33,.17);border-radius:10px;background:#fffefb;color:#201a12;font-size:9px;font-weight:800;outline:none}.rkh-rev-filter select{min-width:170px}.rkh-rev-filter input:focus,.rkh-rev-filter select:focus{border-color:#b88930;box-shadow:0 0 0 3px rgba(184,137,48,.12)}
 .rkh-rev-btn{height:36px;padding:0 13px;border:0;border-radius:10px;background:linear-gradient(145deg,#ebcf88,#a87920);color:#21170a;font-size:8px;letter-spacing:1.2px;font-weight:950;cursor:pointer}.rkh-rev-btn.alt{background:#fffefb;border:1px solid rgba(123,91,33,.17);color:#765317}
 .rkh-rev-kpis{display:grid;grid-template-columns:repeat(4,minmax(135px,1fr));gap:10px;margin:17px 0 12px}.rkh-rev-kpi{padding:12px 14px;border:1px solid rgba(123,91,33,.11);border-radius:14px;background:rgba(255,255,255,.62)}.rkh-rev-kpi span{display:block;font-size:7px;letter-spacing:1.25px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-rev-kpi b{display:block;margin-top:5px;color:#201a12;font-size:18px;font-weight:950}.rkh-rev-kpi small{display:block;margin-top:3px;color:#847968;font-size:8px;font-weight:700}
-.rkh-rev-chart-wrap{overflow-x:auto;border:1px solid rgba(123,91,33,.1);border-radius:16px;background:#fffefb}.rkh-rev-chart{display:block;width:100%;min-width:720px;height:320px}.rkh-rev-empty{min-height:250px;display:grid;place-items:center;text-align:center;color:#847968;font-size:11px;font-weight:750}.rkh-rev-error{margin-top:9px;color:#b42318;font-size:9px;font-weight:850;min-height:13px}
+.rkh-rev-chart-wrap{position:relative;overflow-x:auto;border:1px solid rgba(123,91,33,.1);border-radius:16px;background:#fffefb}.rkh-rev-chart{display:block;width:100%;min-width:720px;height:320px}.rkh-rev-empty{min-height:250px;display:grid;place-items:center;text-align:center;color:#847968;font-size:11px;font-weight:750}.rkh-rev-error{margin-top:9px;color:#b42318;font-size:9px;font-weight:850;min-height:13px}
+.rkh-rev-tooltip{position:absolute;z-index:8;display:none;min-width:155px;padding:11px 12px;border:1px solid rgba(216,183,95,.46);border-radius:12px;background:rgba(32,26,18,.96);color:#fff9ec;box-shadow:0 14px 34px rgba(32,26,18,.24);pointer-events:none;transform:translate(-50%,calc(-100% - 13px));white-space:nowrap}.rkh-rev-tooltip.is-visible{display:block}.rkh-rev-tooltip-date{font-size:8px;letter-spacing:1.25px;text-transform:uppercase;color:#d8b75f;font-weight:900}.rkh-rev-tooltip-row{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:7px;font-size:9px;color:#d8cdb9;font-weight:750}.rkh-rev-tooltip-row b{color:#fffefb;font-size:12px;font-weight:950}.rkh-rev-hit{cursor:crosshair;outline:none}.rkh-rev-hit:focus{stroke:#6f4d10;stroke-width:2;fill:rgba(216,183,95,.12)}
 @media(max-width:760px){.rkh-rev-panel{padding:15px;border-radius:18px}.rkh-rev-title{font-size:25px}.rkh-rev-filters{width:100%;justify-content:flex-start}.rkh-rev-filter{flex:1 1 140px}.rkh-rev-filter input,.rkh-rev-filter select{width:100%;min-width:0}.rkh-rev-kpis{grid-template-columns:1fr 1fr}.rkh-rev-chart{height:280px}}
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
-@media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
+
+/* One-day Sawan Somvaar login greeting — active only on 03 August 2026 (IST). */
+.cnx-sawan-wish{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:22px;background:rgba(27,20,10,.48);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
+.cnx-sawan-wish.is-open{opacity:1;visibility:visible;pointer-events:auto}
+.cnx-sawan-card{position:relative;width:min(500px,94vw);overflow:hidden;padding:46px 42px 38px;border:1px solid rgba(168,121,32,.28);border-radius:30px;text-align:center;background:radial-gradient(circle at 50% -8%,rgba(232,204,132,.4),transparent 38%),linear-gradient(145deg,#fffefb 0%,#fbf3e4 66%,#ead8b8 100%);box-shadow:0 45px 110px rgba(39,28,10,.32),0 2px 0 rgba(255,255,255,.9) inset;transform:perspective(900px) translateY(30px) rotateX(8deg) scale(.94);transition:transform .5s cubic-bezier(.18,.85,.24,1.12)}
+.cnx-sawan-wish.is-open .cnx-sawan-card{transform:perspective(900px) translateY(0) rotateX(0) scale(1)}
+.cnx-sawan-card:before,.cnx-sawan-card:after{content:"";position:absolute;border-radius:50%;pointer-events:none}.cnx-sawan-card:before{width:240px;height:240px;right:-115px;top:-130px;border:1px solid rgba(168,121,32,.12);box-shadow:0 0 0 24px rgba(168,121,32,.045),0 0 0 48px rgba(168,121,32,.028)}.cnx-sawan-card:after{width:180px;height:180px;left:-105px;bottom:-115px;background:radial-gradient(circle,rgba(216,183,95,.22),transparent 68%)}
+.cnx-sawan-close{position:absolute;right:17px;top:17px;z-index:2;width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(123,91,33,.15);border-radius:11px;background:rgba(255,254,251,.74);color:#765317;font-size:22px;line-height:1;cursor:pointer;transition:transform .2s,background .2s}.cnx-sawan-close:hover{transform:rotate(6deg);background:#fff}
+.cnx-sawan-icon{position:relative;width:78px;height:78px;display:grid;place-items:center;margin:0 auto 20px;border:1px solid rgba(168,121,32,.3);border-radius:25px;background:linear-gradient(145deg,#fffdf7,#ead39d);color:#7b5414;font-family:Georgia,serif;font-size:36px;box-shadow:0 18px 35px rgba(124,86,21,.17),inset 0 1px rgba(255,255,255,.9);animation:cnxSawanFloat 3.8s ease-in-out infinite}
+.cnx-sawan-kicker{position:relative;color:#9a6b18;font-size:9px;font-weight:950;letter-spacing:2.4px;text-transform:uppercase}.cnx-sawan-title{position:relative;margin:11px 0 9px;color:#201a12;font-family:'Nirmala UI','Mangal','Noto Sans Devanagari',sans-serif;font-size:clamp(35px,7vw,48px);line-height:1.14;font-weight:800;letter-spacing:-.5px}.cnx-sawan-copy{position:relative;max-width:390px;margin:0 auto;color:#706553;font-size:12px;font-weight:650;line-height:1.7}
+.cnx-sawan-cta{position:relative;min-width:170px;height:48px;margin-top:26px;padding:0 22px;border:0;border-radius:13px;background:linear-gradient(145deg,#e9cc82,#a87920);color:#201708;box-shadow:0 14px 30px rgba(168,121,32,.22),inset 0 1px rgba(255,255,255,.6);font-size:9px;font-weight:950;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:transform .2s,box-shadow .2s}.cnx-sawan-cta:hover{transform:translateY(-2px);box-shadow:0 19px 36px rgba(168,121,32,.28)}
+@keyframes cnxSawanFloat{50%{transform:translateY(-6px) rotate(2deg)}}
+@media(max-width:560px){.cnx-sawan-card{padding:42px 24px 30px;border-radius:24px}.cnx-sawan-icon{width:68px;height:68px;border-radius:21px;font-size:32px}.cnx-sawan-copy{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu,.cnx-sawan-icon{animation:none!important;transition:none!important}.cnx-sawan-card{transition:none!important}}
 
 </style></head><body data-tab="home">
 
@@ -5367,6 +5381,17 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="lg-submit" type="button" onclick="doLogin(); return false;"><span>Sign In Securely</span><b>→</b></button>
       <div class="lg-foot-note">Protected internal system · Salasar Balaji Creations Pvt. Ltd.</div>
     </section>
+  </div>
+</div>
+
+<div id="cnxSawanWish" class="cnx-sawan-wish" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="cnxSawanTitle" onclick="if(event.target===this)closeSawanSomvaarWish()">
+  <div class="cnx-sawan-card">
+    <button class="cnx-sawan-close" type="button" aria-label="Close greeting" onclick="closeSawanSomvaarWish()">&times;</button>
+    <div class="cnx-sawan-icon" aria-hidden="true">ॐ</div>
+    <div class="cnx-sawan-kicker">First Sawan Somvaar</div>
+    <div class="cnx-sawan-title" id="cnxSawanTitle">हर हर महादेव</div>
+    <p class="cnx-sawan-copy">Wishing you a blessed first Sawan Somvaar. May Lord Shiva fill your day with peace, strength and prosperity.</p>
+    <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">Begin the day</button>
   </div>
 </div>
 
@@ -9692,6 +9717,42 @@ function playLoginSuccessSound(){
   } catch(e){}
 }
 
+const CNX_SAWAN_WISH_DATE = '2026-08-03';
+
+function cnxIstDateKey(at){
+  const moment = at instanceof Date ? at : new Date();
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone:'Asia/Kolkata', year:'numeric', month:'2-digit', day:'2-digit'
+    }).formatToParts(moment);
+    const values = {};
+    parts.forEach(part => { if (part.type !== 'literal') values[part.type] = part.value; });
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch(e) {
+    return new Date(moment.getTime() + (330 * 60000)).toISOString().slice(0, 10);
+  }
+}
+
+function showSawanSomvaarWish(at){
+  if (cnxIstDateKey(at) !== CNX_SAWAN_WISH_DATE) return false;
+  const wish = document.getElementById('cnxSawanWish');
+  if (!wish) return false;
+  wish.classList.add('is-open');
+  wish.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => document.getElementById('cnxSawanClose')?.focus());
+  return true;
+}
+
+function closeSawanSomvaarWish(){
+  const wish = document.getElementById('cnxSawanWish');
+  if (!wish) return;
+  wish.classList.remove('is-open');
+  wish.setAttribute('aria-hidden', 'true');
+}
+
+window.showSawanSomvaarWish = showSawanSomvaarWish;
+window.closeSawanSomvaarWish = closeSawanSomvaarWish;
+
 async function doLogin(){
   // Prime audio while the click/Enter gesture is active; play only after success.
   primeLoginSound();
@@ -9710,6 +9771,8 @@ async function doLogin(){
     if (err) err.textContent = '';
     playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
+    // Common success path: Admin and Employee both receive today's greeting.
+    setTimeout(() => showSawanSomvaarWish(), 220);
   } else {
     if (err) err.textContent = 'Invalid username or password.';
     const pw = document.getElementById('lgPass'); if (pw) { pw.value = ''; pw.focus(); }
@@ -9738,6 +9801,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const u = document.getElementById('lgUser'); if (u) u.focus();
 
   window.addEventListener('paste', handleFinderPaste);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && document.getElementById('cnxSawanWish')?.classList.contains('is-open')) {
+      closeSawanSomvaarWish();
+    }
+  });
 });
 
 /* ===== Premium UI enhancements ===== */
@@ -10877,6 +10945,38 @@ function _rkhRevenueFilterMarkup({from,to,sku,type,skuOptions,typeOptions,maxDat
     <button type="button" class="rkh-rev-btn" onclick="renderRakhiRevenueTrend()">APPLY</button><button type="button" class="rkh-rev-btn alt" onclick="resetRakhiRevenueTrend()">RESET</button>
   </div></div><div class="rkh-rev-error">${error?escHtml(error):''}</div>`;
 }
+function moveRakhiRevenueTooltip(ev){
+  const target=ev&&(ev.currentTarget||ev.target);
+  const wrap=target&&target.closest?target.closest('.rkh-rev-chart-wrap'):null;
+  const tip=wrap&&wrap.querySelector?wrap.querySelector('.rkh-rev-tooltip'):null;
+  if(!wrap||!tip) return;
+  const wr=wrap.getBoundingClientRect();
+  const tr=target.getBoundingClientRect();
+  const cx=Number.isFinite(ev.clientX)&&ev.clientX>0?ev.clientX:(tr.left+tr.width/2);
+  const cy=Number.isFinite(ev.clientY)&&ev.clientY>0?ev.clientY:(tr.top+tr.height/2);
+  const maxLeft=Math.max(90,(wrap.scrollWidth||wrap.clientWidth||180)-90);
+  const left=Math.max(90,Math.min(maxLeft,cx-wr.left+(wrap.scrollLeft||0)));
+  const top=Math.max(72,cy-wr.top+(wrap.scrollTop||0));
+  tip.style.left=left+'px';tip.style.top=top+'px';
+}
+function showRakhiRevenueTooltip(ev,date,revenue,qty){
+  const target=ev&&(ev.currentTarget||ev.target);
+  const wrap=target&&target.closest?target.closest('.rkh-rev-chart-wrap'):null;
+  const tip=wrap&&wrap.querySelector?wrap.querySelector('.rkh-rev-tooltip'):null;
+  if(!tip) return;
+  tip.innerHTML=`<div class="rkh-rev-tooltip-date">${escHtml(_rkhFmtShortDate(date))}</div><div class="rkh-rev-tooltip-row"><span>Net Revenue</span><b>${escHtml(cnxCompactMoney(revenue))}</b></div><div class="rkh-rev-tooltip-row"><span>Sold Qty</span><b>${Math.round(Number(qty)||0).toLocaleString('en-IN')}</b></div>`;
+  tip.classList.add('is-visible');
+  moveRakhiRevenueTooltip(ev);
+}
+function hideRakhiRevenueTooltip(ev){
+  const target=ev&&(ev.currentTarget||ev.target);
+  const wrap=target&&target.closest?target.closest('.rkh-rev-chart-wrap'):null;
+  const tip=wrap&&wrap.querySelector?wrap.querySelector('.rkh-rev-tooltip'):null;
+  if(tip)tip.classList.remove('is-visible');
+}
+window.showRakhiRevenueTooltip=showRakhiRevenueTooltip;
+window.moveRakhiRevenueTooltip=moveRakhiRevenueTooltip;
+window.hideRakhiRevenueTooltip=hideRakhiRevenueTooltip;
 function renderRakhiRevenueTrend(){
   const host=document.getElementById('rakhiRevenueTrend');
   if(!host) return;
@@ -10907,8 +11007,12 @@ function renderRakhiRevenueTrend(){
   const filtered=rows.filter(r=>r.date>=from&&r.date<=to&&(sku==='All'||String(r.sku||'').trim().toUpperCase()===sku)&&(type==='All'||String(r.type||'').trim()===type));
   const keys=_rkhRevenueDateKeys(from,to);
   const byDate={};
-  filtered.forEach(r=>{byDate[r.date]=(byDate[r.date]||0)+(Number(r.rev)||0);});
-  const daily=keys.map(date=>({date,revenue:byDate[date]||0}));
+  filtered.forEach(r=>{
+    if(!byDate[r.date])byDate[r.date]={revenue:0,qty:0};
+    byDate[r.date].revenue+=Number(r.rev)||0;
+    byDate[r.date].qty+=Number(r.qty)||0;
+  });
+  const daily=keys.map(date=>({date,revenue:byDate[date]?.revenue||0,qty:byDate[date]?.qty||0}));
   const total=filtered.reduce((sum,r)=>sum+(Number(r.rev)||0),0);
   const average=daily.length?total/daily.length:0;
   const best=daily.length?daily.reduce((a,b)=>b.revenue>a.revenue?b:a,daily[0]):null;
@@ -10935,8 +11039,9 @@ function renderRakhiRevenueTrend(){
   const tickCount=Math.min(7,daily.length);
   const tickIdx=Array.from(new Set(Array.from({length:tickCount},(_,i)=>Math.round(i*(daily.length-1)/Math.max(1,tickCount-1)))));
   const xTicks=tickIdx.map(i=>`<text x="${xAt(i)}" y="${H-19}" text-anchor="middle" fill="#847968" font-size="10" font-family="Inter,Arial">${escHtml(_rkhFmtShortDate(daily[i].date))}</text>`).join('');
-  const markers=daily.length<=45?daily.map((d,i)=>`<circle cx="${xAt(i)}" cy="${yAt(d.revenue)}" r="4" fill="#fffefb" stroke="#a87920" stroke-width="2"><title>${escHtml(_rkhFmtShortDate(d.date))} · ${escHtml(cnxCompactMoney(d.revenue))}</title></circle>`).join(''):'';
-  const chart=`<div class="rkh-rev-chart-wrap"><svg class="rkh-rev-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily Rakhi Net Revenue from ${escHtml(from)} to ${escHtml(to)}">${yGrid}<line x1="${L}" y1="${zeroY}" x2="${W-R}" y2="${zeroY}" stroke="#9f917b" stroke-width="1.2"/><polygon points="${area}" fill="#d9b968" fill-opacity=".13"/><polyline points="${points}" fill="none" stroke="#a87920" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>${markers}${xTicks}</svg></div>`;
+  const markers=daily.length<=45?daily.map((d,i)=>`<circle cx="${xAt(i)}" cy="${yAt(d.revenue)}" r="4" fill="#fffefb" stroke="#a87920" stroke-width="2"/>`).join(''):'';
+  const hoverTargets=daily.map((d,i)=>`<circle class="rkh-rev-hit" cx="${xAt(i)}" cy="${yAt(d.revenue)}" r="12" fill="transparent" stroke="transparent" tabindex="0" role="button" aria-label="${escHtml(_rkhFmtShortDate(d.date))}, Net Revenue ${escHtml(cnxCompactMoney(d.revenue))}, Sold Qty ${Math.round(Number(d.qty)||0).toLocaleString('en-IN')}" onmouseenter="showRakhiRevenueTooltip(event,'${d.date}',${Number(d.revenue)||0},${Number(d.qty)||0})" onmousemove="moveRakhiRevenueTooltip(event)" onmouseleave="hideRakhiRevenueTooltip(event)" onfocus="showRakhiRevenueTooltip(event,'${d.date}',${Number(d.revenue)||0},${Number(d.qty)||0})" onblur="hideRakhiRevenueTooltip(event)"/>`).join('');
+  const chart=`<div class="rkh-rev-chart-wrap"><svg class="rkh-rev-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily Rakhi Net Revenue from ${escHtml(from)} to ${escHtml(to)}">${yGrid}<line x1="${L}" y1="${zeroY}" x2="${W-R}" y2="${zeroY}" stroke="#9f917b" stroke-width="1.2"/><polygon points="${area}" fill="#d9b968" fill-opacity=".13"/><polyline points="${points}" fill="none" stroke="#a87920" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>${markers}${hoverTargets}${xTicks}</svg><div class="rkh-rev-tooltip" aria-live="polite"></div></div>`;
   host.innerHTML=`<section class="rkh-rev-panel">${filterMarkup}${kpis}${chart}</section>`;
 }
 function resetRakhiRevenueTrend(){
