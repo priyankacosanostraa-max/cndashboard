@@ -5427,46 +5427,103 @@ select.lg-in option{background:#fff;color:#1a1610}
 .lg-in{min-height:50px;margin:0 0 17px;padding:13px 15px;border-color:rgba(122,88,27,.17);border-radius:13px;background:#fffdf9;color:#201a12;box-shadow:0 7px 17px rgba(72,50,14,.045),inset 0 1px 2px rgba(72,50,14,.035)}.lg-submit{width:100%;min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border:0;border-radius:13px;background:linear-gradient(145deg,#2b2113,#7d5717);color:#fff9ec;box-shadow:0 17px 34px rgba(83,58,16,.22),inset 0 1px rgba(255,255,255,.18);font:900 10px 'Inter',sans-serif;letter-spacing:2px;text-transform:uppercase;cursor:pointer;transition:transform .22s,box-shadow .22s}.lg-submit b{width:28px;height:28px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.25);border-radius:9px;font-size:15px}.lg-submit:hover{transform:translateY(-2px);box-shadow:0 22px 42px rgba(83,58,16,.28)}.lg-foot-note{text-align:center;color:#9a8e7d;font-size:8px;letter-spacing:.7px;margin-top:18px}.lg-error{color:#b93d3d;font-size:10px;font-weight:850;min-height:16px;margin:-4px 0 10px}
 @keyframes cnxLoginIn{from{opacity:0;transform:translateY(22px) scale(.98)}to{opacity:1;transform:none}}
 @media(max-width:820px){ #loginGate{padding:14px;align-items:flex-start!important;overflow:auto!important}.lg-layout{width:100%;min-height:0;grid-template-columns:1fr;margin:auto 0;border-radius:23px}.lg-showcase{min-height:235px;padding:76px 27px 27px;justify-content:flex-start}.lg-showcase:before{inset:11px;border-radius:17px}.lg-brand-chip{left:27px;top:24px;width:42px;height:42px;border-radius:13px;font-size:18px}.lg-show-kicker{margin-bottom:9px}.lg-show-title{font-size:38px}.lg-show-sub{font-size:10px;margin-top:12px}.lg-feature-grid{display:none}.lg-secure{display:none}.lg-card{padding:31px 26px 33px}.lg-card-title{font-size:34px}.lg-card-sub{margin-bottom:22px}}
-</style>
-  <div class="lg-wm" style="top:6%;left:4%;font-size:clamp(20px,3.2vw,44px);animation:lgFloatA 14s ease-in-out infinite">Cosa Nostraa</div>
-  <div class="lg-wm" style="top:14%;right:-2%;font-size:clamp(14px,2.2vw,30px);opacity:.7;animation:lgFloatB 18s ease-in-out infinite">Cosa Nostraa</div>
-  <div class="lg-wm" style="top:34%;left:-4%;font-size:clamp(28px,4.5vw,64px);opacity:.5;filter:blur(1px);animation:lgFloatC 20s ease-in-out infinite">Cosa Nostraa</div>
-  <div class="lg-wm" style="top:48%;right:3%;font-size:clamp(18px,3vw,40px);animation:lgFloatA 16s ease-in-out infinite 2s">Cosa Nostraa</div>
-  <div class="lg-wm" style="bottom:26%;left:6%;font-size:clamp(13px,2vw,26px);opacity:.6;animation:lgFloatB 22s ease-in-out infinite 1s">Cosa Nostraa</div>
-  <div class="lg-wm" style="bottom:12%;right:-3%;font-size:clamp(26px,4vw,58px);opacity:.45;filter:blur(1.5px);animation:lgFloatC 17s ease-in-out infinite 3s">Cosa Nostraa</div>
-  <div class="lg-wm" style="bottom:4%;left:30%;font-size:clamp(12px,1.8vw,24px);opacity:.55;animation:lgFloatA 19s ease-in-out infinite 4s">Cosa Nostraa</div>
-  <div class="lg-wm" style="top:2%;left:42%;font-size:clamp(12px,1.6vw,22px);opacity:.5;animation:lgFloatB 15s ease-in-out infinite 2.5s">Cosa Nostraa</div>
 
-  <div class="lg-layout">
-    <section class="lg-showcase">
-      <div class="lg-brand-chip">CN</div>
-      <div class="lg-show-kicker">Management Intelligence</div>
-      <div class="lg-show-title">Operate with clarity.<br>Grow with confidence.</div>
-      <div class="lg-show-sub">A unified command center for live sales, inventory, production, targets and forecasting — designed for faster, sharper business decisions.</div>
-      <div class="lg-feature-grid">
-        <div class="lg-feature"><b>Live</b><span>Sales &amp; Revenue</span></div>
-        <div class="lg-feature"><b>360°</b><span>Inventory View</span></div>
-        <div class="lg-feature"><b>Smart</b><span>Action Alerts</span></div>
-      </div>
-      <div class="lg-secure"><i></i>Secure role-based access</div>
+/* Sculpted Command Portal — selected final login direction. */
+#loginGate{
+  padding:0!important;display:flex!important;align-items:stretch!important;justify-content:stretch!important;
+  overflow:hidden!important;background:#18140f!important;color:#f8f1e4;
+  isolation:isolate;font-family:'Inter','Montserrat',sans-serif;
+}
+#loginGate:before{content:"";position:absolute;inset:14px;border:1px solid rgba(204,156,57,.14);pointer-events:none;z-index:8}
+.lg-wm,.lg-layout{display:none!important}
+.lg-portal{position:relative;width:100%;min-height:100vh;overflow:hidden;animation:lgPortalIn .7s cubic-bezier(.2,.8,.2,1) both}
+.lg-portal-brand{position:absolute;z-index:5;left:clamp(42px,7vw,112px);top:clamp(36px,7vh,82px);display:flex;align-items:center;gap:20px}
+.lg-portal-mark{width:78px;height:78px;display:grid;place-items:center;border:1px solid #b98527;border-radius:24px;color:#e7c676;background:#1d1812;box-shadow:0 20px 42px rgba(0,0,0,.28),inset 0 1px rgba(255,255,255,.06);font:700 29px/1 'Cormorant Garamond',Georgia,serif;letter-spacing:2px}
+.lg-portal-brand-copy{display:grid;gap:8px}.lg-portal-brand-copy strong{font:600 clamp(30px,3.4vw,48px)/1 'Cormorant Garamond',Georgia,serif;letter-spacing:4px;color:#fff8e9}.lg-portal-brand-copy small{color:#c59232;font-size:10px;font-weight:900;letter-spacing:4px;text-transform:uppercase}
+.lg-editorial{position:absolute;z-index:4;left:clamp(42px,7vw,112px);top:50%;width:min(40vw,550px);transform:translateY(-38%)}
+.lg-editorial h1{margin:0;color:#fff9ec;font:500 clamp(55px,6.1vw,86px)/.91 'Cormorant Garamond',Georgia,serif;letter-spacing:-2.5px}
+.lg-editorial-rule{width:min(370px,70%);height:1px;margin:33px 0 28px;background:#b98527;position:relative}.lg-editorial-rule:before{content:"";position:absolute;left:0;top:-4px;width:9px;height:9px;border:1px solid #d2a347;border-radius:50%;background:#18140f}
+.lg-editorial-kicker{color:#d0a24d;font-size:10px;font-weight:950;letter-spacing:3.2px;text-transform:uppercase}.lg-editorial p{max-width:430px;margin:18px 0 0;color:#c8bda9;font-size:12px;font-weight:650;line-height:1.75}
+.lg-cn-watermark{position:absolute;z-index:1;left:5.7vw;bottom:-3vh;color:rgba(255,247,225,.035);font:700 clamp(170px,25vw,350px)/.72 'Cormorant Garamond',Georgia,serif;letter-spacing:-28px;pointer-events:none}
+.lg-plane{position:absolute;z-index:2;right:-8%;top:19%;width:67%;height:96%;background:#f3ede2;clip-path:polygon(20% 14%,100% 0,100% 100%,0 100%);filter:drop-shadow(-28px 34px 34px rgba(0,0,0,.34));pointer-events:none}
+.lg-plane:after{content:"";position:absolute;inset:13% 7% 8% 17%;border:1px solid rgba(91,65,24,.14);border-radius:54px 8px 0 54px}
+.lg-card{
+  position:absolute!important;z-index:6!important;right:clamp(55px,10vw,154px)!important;top:50%!important;
+  width:min(430px,38vw)!important;max-width:none!important;padding:0!important;transform:translateY(-28%)!important;
+  display:block!important;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;text-align:left!important;
+}
+.lg-card-kicker{color:#976615!important;font-size:9px!important;font-weight:950!important;letter-spacing:2.8px!important;margin-bottom:18px!important;text-transform:uppercase!important}
+.lg-card-title{margin:0 0 9px!important;color:#211a12!important;font:600 clamp(28px,2.7vw,40px)/1.02 'Cormorant Garamond',Georgia,serif!important;letter-spacing:-.5px!important}
+.lg-card-sub{margin:0 0 22px!important;color:#73695c!important;font-size:10px!important;line-height:1.55!important}
+.lg-role-options{display:grid;grid-template-columns:1fr 1fr;border:1px solid #b9ad99;border-radius:14px;overflow:hidden;margin-bottom:17px;background:rgba(255,255,255,.16)}
+.lg-role-btn{min-height:64px;padding:10px 14px;border:0;border-right:1px solid #b9ad99;background:transparent;color:#655b4f;text-align:left;cursor:pointer;transition:background .2s,color .2s,box-shadow .2s}.lg-role-btn:last-child{border-right:0}.lg-role-btn strong,.lg-role-btn small{display:block}.lg-role-btn strong{font-size:11px}.lg-role-btn small{margin-top:4px;font-size:8px;opacity:.72}.lg-role-btn.is-active{background:#211a12;color:#fff8e9;box-shadow:inset 0 0 0 1px #9c7022,0 9px 20px rgba(44,31,13,.18)}
+.lg-label{display:block!important;color:#735116!important;font-size:8px!important;letter-spacing:1.4px!important;text-transform:uppercase!important;font-weight:950!important;margin:0 0 6px 1px!important}
+.lg-in{width:100%!important;min-height:48px!important;margin:0 0 14px!important;padding:12px 14px!important;border:1px solid #b9ad99!important;border-radius:11px!important;background:rgba(255,255,255,.26)!important;color:#211a12!important;box-shadow:inset 0 1px 2px rgba(56,38,14,.04)!important;font-size:12px!important;font-weight:700!important;outline:0!important}.lg-in:focus{border-color:#a6741c!important;box-shadow:0 0 0 3px rgba(166,116,28,.12)!important}.lg-in::placeholder{color:#998f82!important}
+.lg-pass-wrap{position:relative}.lg-pass-wrap .lg-in{padding-right:68px!important}.lg-show-pass{position:absolute;right:5px;top:5px;height:38px;padding:0 12px;border:0;border-radius:8px;background:rgba(255,255,255,.34);color:#835b16;font-size:9px;font-weight:900;cursor:pointer}.lg-show-pass:hover{background:#fffaf0}
+.lg-caps{min-height:0;margin:-9px 2px 9px;color:#ad3d35;font-size:8px;font-weight:850;display:none}.lg-caps.is-visible{display:block}
+.lg-login-options{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 1px 18px;color:#746a5d;font-size:9px}.lg-remember{display:inline-flex;align-items:center;gap:8px}.lg-remember input{width:15px;height:15px;accent-color:#9b6d18}.lg-encrypted{display:inline-flex;align-items:center;gap:8px;color:#167b57;font-weight:900}.lg-encrypted i{width:7px;height:7px;border-radius:50%;background:#2aab7a;box-shadow:0 0 0 4px rgba(42,171,122,.1)}
+.lg-submit{width:100%!important;min-height:54px!important;padding:0 16px!important;border:1px solid #936315!important;border-radius:12px!important;background:#a9761b!important;color:#fff9e9!important;box-shadow:0 16px 30px rgba(100,67,15,.22),inset 0 1px rgba(255,255,255,.2)!important;font:900 9px 'Inter',sans-serif!important;letter-spacing:1.8px!important;text-transform:uppercase!important;cursor:pointer!important;transition:transform .2s,box-shadow .2s,background .2s!important}.lg-submit:hover{transform:translateY(-2px)!important;background:#8e6117!important;box-shadow:0 21px 36px rgba(100,67,15,.28)!important}.lg-submit:disabled{cursor:wait!important;opacity:.72!important;transform:none!important}.lg-submit b{width:auto!important;height:auto!important;border:0!important;border-radius:0!important;font-size:8px!important;font-weight:800!important;opacity:.78}
+.lg-error{min-height:16px!important;margin:-4px 0 8px!important;color:#aa3b33!important;font-size:9px!important;font-weight:850!important}
+.lg-security-footer{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;margin-top:24px;padding-top:14px;border-top:1px solid #b9ad99;color:#756b5e}.lg-security-copy{display:grid;gap:3px}.lg-security-copy strong{font-size:9px;color:#463b2e}.lg-security-copy small{font-size:7px;line-height:1.35}.lg-login-date{color:#8e6317;font-size:8px;font-weight:950;letter-spacing:1.2px;text-transform:uppercase}
+.lg-security-seal{width:35px;height:35px;display:grid;place-items:center;border:1px solid #b9ad99;border-radius:10px;color:#8d631a;font-size:8px;font-weight:950}
+.lg-live{position:absolute;z-index:6;left:clamp(42px,7vw,112px);bottom:clamp(35px,8vh,82px);display:flex;align-items:center;gap:12px;color:#aa9d88;font-size:8px;font-weight:850;letter-spacing:1.7px;text-transform:uppercase}.lg-live i{width:9px;height:9px;border-radius:50%;background:#c89534;box-shadow:0 0 0 5px rgba(200,149,52,.09)}.lg-live b{color:#3caa80;font-weight:900;letter-spacing:1px}
+.lg-foot-note{display:none!important}
+@keyframes lgPortalIn{from{opacity:0;transform:scale(1.015)}to{opacity:1;transform:none}}
+@media(max-width:980px){.lg-plane{right:-18%;top:27%;width:84%;height:92%}.lg-card{right:7vw!important;width:min(430px,44vw)!important}.lg-editorial{top:48%;width:39vw}.lg-editorial h1{font-size:53px}.lg-portal-brand-copy strong{font-size:31px}}
+@media(max-width:760px){ #loginGate{overflow:auto!important}.lg-portal{min-height:900px}.lg-portal-brand{left:24px;top:24px}.lg-portal-mark{width:52px;height:52px;border-radius:16px;font-size:21px}.lg-portal-brand-copy strong{font-size:24px;letter-spacing:2.5px}.lg-portal-brand-copy small{font-size:7px;letter-spacing:2.5px}.lg-editorial{left:24px;right:24px;top:145px;width:auto;transform:none}.lg-editorial h1{font-size:48px;max-width:470px}.lg-editorial-rule{margin:18px 0 16px}.lg-editorial p{font-size:10px;margin-top:10px}.lg-cn-watermark{display:none}.lg-plane{left:0;right:0;top:405px;width:100%;height:610px;clip-path:polygon(0 7%,100% 0,100% 100%,0 100%);filter:none}.lg-plane:after{display:none}.lg-card{left:24px!important;right:24px!important;top:455px!important;width:auto!important;transform:none!important}.lg-card-title{font-size:34px!important}.lg-live{left:24px;bottom:18px}.lg-security-footer{margin-top:17px}.lg-role-btn{min-height:58px}}
+@media(min-width:761px) and (max-height:700px){.lg-portal-brand{top:25px}.lg-portal-mark{width:56px;height:56px;border-radius:17px;font-size:22px}.lg-editorial{top:48%;transform:translateY(-35%)}.lg-editorial h1{font-size:55px}.lg-editorial-rule{margin:20px 0}.lg-live{bottom:22px}.lg-plane{top:15%;height:104%}.lg-card{top:48%!important;transform:translateY(-25%)!important}.lg-card-title{font-size:31px!important}.lg-card-sub{margin-bottom:13px!important}.lg-role-options{margin-bottom:11px}.lg-role-btn{min-height:50px}.lg-in{min-height:40px!important;margin-bottom:9px!important}.lg-show-pass{height:30px}.lg-login-options{margin-bottom:11px}.lg-submit{min-height:45px!important}.lg-security-footer{margin-top:14px;padding-top:10px}}
+@media(prefers-reduced-motion:reduce){.lg-portal{animation:none!important}.lg-submit,.lg-role-btn{transition:none!important}}
+</style>
+  <div class="lg-portal">
+    <header class="lg-portal-brand" aria-label="Cosa Nostraa Management System">
+      <div class="lg-portal-mark" aria-hidden="true">CN</div>
+      <div class="lg-portal-brand-copy"><strong>Cosa Nostraa</strong><small>Management System</small></div>
+    </header>
+
+    <section class="lg-editorial" aria-label="Welcome message">
+      <h1>Welcome to<br>your command<br>centre.</h1>
+      <div class="lg-editorial-rule" aria-hidden="true"></div>
+      <div class="lg-editorial-kicker">Clarity for every decision.</div>
+      <p>One refined workspace for live sales, inventory, production and targets.</p>
     </section>
-    <section class="lg-card">
-      <div class="lg-card-kicker">Welcome back</div>
-      <div class="lg-card-title">Sign in to Command Center</div>
-      <div class="lg-card-sub">Use your authorized Cosa Nostraa credentials to continue.</div>
-      <label class="lg-label" for="lgRole">Access Role</label>
-      <select id="lgRole" class="lg-in">
-        <option value="admin">Admin Login</option>
-        <option value="employee">Employee Login</option>
-      </select>
+    <div class="lg-cn-watermark" aria-hidden="true">CN</div>
+    <div class="lg-plane" aria-hidden="true"></div>
+
+    <section class="lg-card" aria-labelledby="lgTitle">
+      <div class="lg-card-kicker">Secure sign-in</div>
+      <div class="lg-card-title" id="lgTitle">Enter your workspace.</div>
+      <div class="lg-card-sub">Choose your access level and continue securely.</div>
+
+      <div class="lg-role-options" aria-label="Choose access role">
+        <button class="lg-role-btn is-active" id="lgRoleAdmin" type="button" aria-pressed="true" onclick="setLoginRoleChoice('admin')"><strong>Admin</strong><small>Complete access</small></button>
+        <button class="lg-role-btn" id="lgRoleEmployee" type="button" aria-pressed="false" onclick="setLoginRoleChoice('employee')"><strong>Employee</strong><small>Daily workspace</small></button>
+      </div>
+      <select id="lgRole" hidden aria-hidden="true"><option value="admin">Admin Login</option><option value="employee">Employee Login</option></select>
+
       <label class="lg-label" for="lgUser">Username</label>
       <input id="lgUser" class="lg-in" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
       <label class="lg-label" for="lgPass">Password</label>
-      <input id="lgPass" class="lg-in" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
-      <div id="lgErr" class="lg-error"></div>
-      <button class="lg-submit" type="button" onclick="doLogin(); return false;"><span>Sign In Securely</span><b>→</b></button>
-      <div class="lg-foot-note">Protected internal system · Salasar Balaji Creations Pvt. Ltd.</div>
+      <div class="lg-pass-wrap">
+        <input id="lgPass" class="lg-in" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="detectLoginCaps(event);if(event.key==='Enter')doLogin()" onkeyup="detectLoginCaps(event)" onblur="hideLoginCaps()">
+        <button class="lg-show-pass" id="lgShowPass" type="button" aria-label="Show password" onclick="toggleLoginPassword()">Show</button>
+      </div>
+      <div id="lgCaps" class="lg-caps">Caps Lock is on</div>
+
+      <div class="lg-login-options">
+        <label class="lg-remember"><input type="checkbox" checked><span>Remember this device</span></label>
+        <span class="lg-encrypted"><i aria-hidden="true"></i>Encrypted</span>
+      </div>
+      <div id="lgErr" class="lg-error" role="status" aria-live="polite"></div>
+      <button class="lg-submit" id="lgSubmit" type="button" onclick="doLogin(); return false;"><span>Sign in to command centre</span><b>Continue</b></button>
+
+      <div class="lg-security-footer">
+        <div class="lg-security-seal" aria-hidden="true">CN</div>
+        <div class="lg-security-copy"><strong>Secure. Private. Encrypted.</strong><small>Your data is protected with enterprise-grade access controls.</small></div>
+        <div class="lg-login-date" id="lgLoginDate">04 AUG 2026</div>
+      </div>
     </section>
+
+    <div class="lg-live"><i aria-hidden="true"></i><span>Live system status</span><b>All systems operational</b></div>
   </div>
 </div>
 
@@ -9521,21 +9578,27 @@ function exportRO(fmtType){
       const narrowed = roTxns.filter(t => selectedSkuSet.has(t.sku));
       if (narrowed.length) txns = narrowed;
     }
-    const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {};
-    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; stoneMap[it.sku] = it.stone_color || ''; } });
+    const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {}, itemMap = {};
+    ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { const key=String(it.sku).trim().toUpperCase(); itemMap[key]=it; dimMap[key] = it.dimensions || ''; mrpMap[key] = it.mrp || 0; packMap[key] = it.pack_details || ''; nameMap[key] = it.sku_name || ''; stoneMap[key] = it.stone_color || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
-    const data = txns.map(t => {
-      const mrp0 = parseFloat(mrpMap[t.sku]) || 0;
+    const headers = ['Row Type','Dispatch Date','SKU','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const data = [];
+    txns.forEach(t => {
+      const skuKey=String(t.sku||'').trim().toUpperCase();
+      const parentItem=itemMap[skuKey]||{};
+      const children=Array.isArray(parentItem.combo_details)?parentItem.combo_details:[];
+      const mrp0 = parseFloat(mrpMap[skuKey]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
       const discPct0 = (mrp0 > 0 && sp0 > 0 && sp0 < mrp0) ? Math.round((mrp0 - sp0) / mrp0 * 100 * 10) / 10 : 0;
-      return {
+      data.push({
+      'Row Type': children.length ? 'Gift Set' : 'Product',
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
-      'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[t.sku]),
-      'Stone Color': stoneMap[t.sku] || '',
-      'Product Dimensions': (t.dimensions || dimMap[t.sku] || ''),
-      'Pack Details': packMap[t.sku] || '',
+      'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
+      'Set Item Of': '',
+      'Stone Color': stoneMap[skuKey] || '',
+      'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
+      'Pack Details': packMap[skuKey] || '',
       Customer: t.cust,
       Type: t.type,
       'Sold Qty': parseFloat(t.qty) || 0,
@@ -9545,7 +9608,28 @@ function exportRO(fmtType){
       'Inv WIP': parseInt(t.inv_wip) || 0,
       'Remark': roRemarks[t.sku] || '',
       'Image Link': t.image_url || '',
-      };
+      });
+      children.forEach(c=>{
+        const childKey=String(c.sku||'').trim().toUpperCase();
+        data.push({
+          'Row Type':'— Set Item',
+          'Dispatch Date':t.date==='N/A'?'':t.date,
+          SKU:c.sku||'',
+          'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
+          'Set Item Of':t.sku,
+          'Stone Color':c.stone_color||stoneMap[childKey]||'',
+          'Product Dimensions':c.dimensions||dimMap[childKey]||'',
+          'Pack Details':c.pack_details||packMap[childKey]||'',
+          Customer:t.cust, Type:t.type,
+          'Sold Qty':parseFloat(t.qty)||0,
+          'MRP':parseFloat(c.mrp)||parseFloat(mrpMap[childKey])||0,
+          ...(emp0?{}:{'Net Revenue':'','Discount %':''}),
+          'Inv Stock':parseInt(c.inv_stock)||0,
+          'Inv WIP':parseInt(c.inv_wip)||0,
+          'Remark':'Child SKU of '+t.sku,
+          'Image Link':c.image_url||''
+        });
+      });
     });
     downloadTable(headers, data, 'repeat_orders_transactions', fmtType);
     return;
@@ -9952,9 +10036,64 @@ function closeSawanSomvaarWish(){
 window.showSawanSomvaarWish = showSawanSomvaarWish;
 window.closeSawanSomvaarWish = closeSawanSomvaarWish;
 
+function setLoginRoleChoice(role){
+  const chosen = role === 'employee' ? 'employee' : 'admin';
+  const select = document.getElementById('lgRole');
+  if (select) select.value = chosen;
+  const admin = document.getElementById('lgRoleAdmin');
+  const employee = document.getElementById('lgRoleEmployee');
+  if (admin) {
+    const active = chosen === 'admin';
+    admin.classList.toggle('is-active', active);
+    admin.setAttribute('aria-pressed', String(active));
+  }
+  if (employee) {
+    const active = chosen === 'employee';
+    employee.classList.toggle('is-active', active);
+    employee.setAttribute('aria-pressed', String(active));
+  }
+}
+
+function toggleLoginPassword(){
+  const input = document.getElementById('lgPass');
+  const button = document.getElementById('lgShowPass');
+  if (!input || !button) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  button.textContent = show ? 'Hide' : 'Show';
+  button.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+}
+
+function detectLoginCaps(event){
+  const caps = document.getElementById('lgCaps');
+  if (!caps) return;
+  caps.classList.toggle('is-visible', Boolean(event?.getModifierState?.('CapsLock')));
+}
+
+function hideLoginCaps(){ document.getElementById('lgCaps')?.classList.remove('is-visible'); }
+
+function updateLoginDate(){
+  const el = document.getElementById('lgLoginDate');
+  if (!el) return;
+  try {
+    el.textContent = new Intl.DateTimeFormat('en-GB', {
+      timeZone:'Asia/Kolkata', day:'2-digit', month:'short', year:'numeric'
+    }).format(new Date()).toUpperCase();
+  } catch(e){}
+}
+
+window.setLoginRoleChoice = setLoginRoleChoice;
+window.toggleLoginPassword = toggleLoginPassword;
+window.detectLoginCaps = detectLoginCaps;
+window.hideLoginCaps = hideLoginCaps;
+
 async function doLogin(){
   // Prime audio while the click/Enter gesture is active; play only after success.
   primeLoginSound();
+  const submit = document.getElementById('lgSubmit');
+  const submitText = submit?.querySelector('span');
+  if (submit) { submit.disabled = true; submit.classList.add('is-loading'); }
+  if (submitText) submitText.textContent = 'Verifying access…';
   const u = (document.getElementById('lgUser')?.value || '').trim();
   const p = (document.getElementById('lgPass')?.value || '');
   const err = document.getElementById('lgErr');
@@ -9968,12 +10107,15 @@ async function doLogin(){
 
   if (ok) {
     if (err) err.textContent = '';
+    if (submitText) submitText.textContent = 'Access verified';
     playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
     // Common success path: Admin and Employee both receive today's greeting.
     setTimeout(() => showSawanSomvaarWish(), 220);
   } else {
     if (err) err.textContent = 'Invalid username or password.';
+    if (submit) { submit.disabled = false; submit.classList.remove('is-loading'); }
+    if (submitText) submitText.textContent = 'Sign in to command centre';
     const pw = document.getElementById('lgPass'); if (pw) { pw.value = ''; pw.focus(); }
   }
 }
@@ -9990,11 +10132,19 @@ async function doLogout(){
   const gate = document.getElementById('loginGate'); if (gate) gate.style.display = 'flex';
   const pw = document.getElementById('lgPass'); if (pw) pw.value = '';
   const u = document.getElementById('lgUser'); if (u) { u.value=''; u.focus(); }
+  const submit = document.getElementById('lgSubmit');
+  const submitText = submit?.querySelector('span');
+  if (submit) { submit.disabled = false; submit.classList.remove('is-loading'); }
+  if (submitText) submitText.textContent = 'Sign in to command centre';
+  setLoginRoleChoice('admin');
+  updateLoginDate();
 }
 window.doLogout = doLogout;
 
 document.addEventListener('DOMContentLoaded', () => {
   const r = document.getElementById('lgRole'); if (r) r.addEventListener('change', applyRoleUI);
+  setLoginRoleChoice('admin');
+  updateLoginDate();
   const u = document.getElementById('lgUser'); if (u) u.focus();
 
   window.addEventListener('paste', handleFinderPaste);
@@ -11559,29 +11709,38 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['CMB / Direct SKU','Rakhi Child SKU(s)','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['SKU','Row Type','Parent CMB','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
-    // One export row per direct SKU/CMB. A CMB's Rakhi child SKUs stay in the
-    // same row (column B), so Sales, Revenue and DRR can never shift into the
-    // wrong columns or be duplicated by export-only child rows.
+    // Parent first; every child SKU follows immediately underneath it.
+    // Child Sales inherits the parent CMB quantity for operational planning.
+    // Revenue stays only on the parent row so financial totals are not doubled.
     const parentItem = _masterSkuMap[String(r.sku || '').trim().toUpperCase()] || {};
     const details = Array.isArray(parentItem.combo_details) ? parentItem.combo_details : [];
     const taxonRakhiChildren = details.filter(c => /rakhi/i.test(String((c && c.taxon) || '')));
     const rakhiChildren = taxonRakhiChildren.length
       ? taxonRakhiChildren
       : details.filter(c => _rkhIsRakhiSku(c && c.sku));
-    const childSkus = Array.from(new Set(rakhiChildren
-      .map(c => String((c && c.sku) || '').trim().toUpperCase())
-      .filter(Boolean)));
+    const uniqueChildren=[];
+    const seenChildren=new Set();
+    rakhiChildren.forEach(c=>{ const key=String((c&&c.sku)||'').trim().toUpperCase(); if(key&&!seenChildren.has(key)){seenChildren.add(key);uniqueChildren.push(c);} });
     const exactRevenue = Math.round((Number(r.revenue) || 0) * 100) / 100;
     data.push([
-      r.sku, childSkus.join(' | '), exportSkuName(r.sku, r.sku_name),
+      r.sku, uniqueChildren.length ? 'Gift Set' : 'Product', '', exportSkuName(r.sku, r.sku_name),
       Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
       r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
       ...(emp ? [] : [exactRevenue]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
     ]);
+    uniqueChildren.forEach(c=>{
+      const stock=Math.round(Number(c.inv_stock ?? c.stock) || 0);
+      const wip=Math.round(Number(c.inv_wip ?? c.wip) || 0);
+      data.push([
+        String(c.sku||'').trim().toUpperCase(), '— Set Item', r.sku, exportSkuName(c.sku,c.sku_name),
+        stock, wip, stock+wip, Math.round(r.sales),
+        '', '', '', '', '', ...(emp?[]:['']), '', '', 'Child SKU of '+r.sku
+      ]);
+    });
   });
 
   const csv = [headers].concat(data).map(r => r.map(c => {
@@ -11694,7 +11853,7 @@ function exportRakhi(){
       data.push([
         'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), c.cn_name||'', c.religion_class||'Unclassified', '', '',
         ...(emp ? [] : ['']),
-        '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
+        Math.round(r.qty), parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
     });
   });
@@ -13487,7 +13646,18 @@ function renderRepeatPlanner(){
 }
 function exportRepeatPlanner(){
   const rows=_repeatPlannerFiltered(); if(!rows.length){alert('No repeat-planner rows to export');return;}
-  _dlCsv(['SKU','SKU Name','Taxon','Image Link','Window Sale','DRR','Inv Stock','Inv WIP','Lead-Time Demand','Safety Stock','Recommended Repeat Qty','Stock Cover Days','Status'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.image,Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]),'auto_repeat_order_recommendation');
+  const out=[];
+  rows.forEach(r=>{
+    const children=Array.isArray(r.item&&r.item.combo_details)?r.item.combo_details:[];
+    out.push([r.sku,children.length?'Gift Set':'Product','',exportSkuName(r.sku,r.skuName),r.taxon,r.image,Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]);
+    const seen=new Set();
+    children.forEach(c=>{
+      const childKey=String(c&&c.sku||'').trim().toUpperCase(); if(!childKey||seen.has(childKey))return; seen.add(childKey);
+      const child=_masterSkuMap[childKey]||c||{};
+      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
+    });
+  });
+  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','Taxon','Image Link','Window Sale','DRR','Inv Stock','Inv WIP','Lead-Time Demand','Safety Stock','Recommended Repeat Qty','Stock Cover Days','Status'],out,'auto_repeat_order_recommendation');
 }
 
 function _buildComboRiskRows(){
