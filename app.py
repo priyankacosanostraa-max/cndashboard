@@ -6733,7 +6733,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
-      <div><div class="ops-title">Operations — Exhibition CMB Selection</div><div class="ops-sub">Calculates how many CMBs can actually be assembled from every mapped child SKU. BT child consumption follows Pack Details (for example, Pack of 7 Buttons consumes 7 BT units per CMB). Shared child stock is allocated once, in higher-selling CMB priority.</div></div>
+      <div><div class="ops-title">Operations — Exhibition CMB Selection</div><div class="ops-sub">Calculates how many CMBs can actually be assembled from every mapped child SKU. Child consumption for every product type follows Pack Details; shared child stock is allocated once, in higher-selling CMB priority.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
@@ -6742,7 +6742,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Assembly rule: each non-BT child normally consumes 1 unit per CMB. For child SKUs beginning BT (case-insensitive), Button quantity is read from the parent CMB Pack Details—e.g. Pack of 7 Buttons means stock 8 builds 1 CMB and stock 14 builds 2. WIP is informational and is not used. Shared child inventory is never double-counted.</div>
+    <div class="ops-note">Assembly rule: quantities for all child types are read from the parent CMB Pack Details. Example: one mapped child with Pack of 7 consumes 7 units, while Set of 5 Rakhi with five distinct mapped Rakhi SKUs consumes 1 of each. WIP is informational and is not used. Shared child inventory is never double-counted.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -13758,16 +13758,39 @@ function exportComboRisk(){
    is allocated once across parent CMBs; it is never independently reused for
    every combo that references the same child. */
 let _opAvailRows=[];
-function _opAvailRequiredQty(parent,childSku){
-  const sku=_opsSkuKey(childSku),pack=String(parent&&parent.pack_details||'');
-  if(!/^BT(?:[-_]|\d)/i.test(sku))return 1;
-  const patterns=[
-    /(?:pack|set)\s*(?:of\s*)?(\d+)\s*(?:pcs?\s*)?(?:buttons?|btns?)/i,
-    /(\d+)\s*(?:buttons?|btns?)\b/i,
-    /(?:buttons?|btns?)\s*[:x×-]?\s*(\d+)\b/i
-  ];
-  for(const re of patterns){const m=pack.match(re);if(m&&Number(m[1])>0)return Math.max(1,Math.floor(Number(m[1])));}
-  return 1;
+function _opAvailRequiredQtys(parent,children){
+  const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
+  if(!pack)return req;
+  const aliases={
+    button:['button','btn','bt'],rakhi:['rakhi','rkh'],brooch:['brooch','bh','br'],
+    cufflink:['cufflink','cf'],lapel:['lapel','lp'],pin:['pin'],tie:['tie','ct'],
+    chain:['chain'],bracelet:['bracelet'],ring:['ring'],pendant:['pendant']
+  };
+  const childText=c=>`${c.sku||''} ${c.skuName||''} ${c.cn_name||''} ${c.taxon||''}`.toLowerCase();
+  const matchesKind=(c,kind)=>{
+    const t=childText(c),k=String(kind||'').toLowerCase().replace(/[^a-z]/g,'');
+    if(!k)return false;
+    const roots=Object.entries(aliases).find(([root,words])=>root.startsWith(k)||k.startsWith(root)||words.some(w=>w===k||w.startsWith(k)||k.startsWith(w)));
+    const words=roots?[roots[0],...roots[1]]:[k];
+    return words.some(w=>w.length>1&&(t.includes(w)||new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(String(c.sku||''))));
+  };
+  const parts=[];
+  const re=/(\d+)\s*(?:pcs?|pieces?|units?|x)?\s*([a-z][a-z -]{1,28})/ig;let m;
+  while((m=re.exec(pack))){
+    const qty=Math.max(1,Math.floor(Number(m[1])||1));
+    const kind=String(m[2]||'').replace(/\b(?:and|with|plus|set|pack|of)\b.*$/i,'').trim().split(/\s+/).slice(0,2).join(' ');
+    parts.push({qty,kind});
+  }
+  if(!parts.length){const n=pack.match(/(?:pack|set)\s*(?:of\s*)?(\d+)/i);if(n)parts.push({qty:Math.max(1,Math.floor(Number(n[1])||1)),kind:''});}
+  parts.forEach(part=>{
+    let matched=part.kind?children.filter(c=>matchesKind(c,part.kind)):[];
+    if(!matched.length&&children.length===1)matched=children.slice();
+    if(!matched.length&&part.qty===children.length)matched=children.slice();
+    if(!matched.length)return;
+    const each=part.qty===matched.length?1:matched.length===1?part.qty:Math.max(1,Math.ceil(part.qty/matched.length));
+    matched.forEach(c=>req.set(c.sku,Math.max(req.get(c.sku)||1,each)));
+  });
+  return req;
 }
 function _opAvailChildren(parent){
   const out=[],seen=new Set(),parentKey=_opsSkuKey(parent&&parent.sku);
@@ -13786,7 +13809,7 @@ function _buildOperationsAvailability(){
   const candidates=(master||[]).map(parent=>{
     const sku=_opsSkuKey(parent&&parent.sku),children=_opAvailChildren(parent);
     if(!sku||!/^CMB[-_]/i.test(sku)||!children.length)return null;
-    children.forEach(ch=>{ch.requiredQty=_opAvailRequiredQty(parent,ch.sku);});
+    const required=_opAvailRequiredQtys(parent,children);children.forEach(ch=>{ch.requiredQty=required.get(ch.sku)||1;});
     return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
   }).filter(Boolean).sort((a,b)=>b.totalSold-a.totalSold||b.stock-a.stock||a.sku.localeCompare(b.sku));
   const remaining=new Map();
