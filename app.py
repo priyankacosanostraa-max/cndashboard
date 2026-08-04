@@ -1,26 +1,5 @@
 # ============================================================
-# Cosa Nostraa — V23.9 (PARENT-WISE RAKHI SOLD QTY)
-# V23.9:
-#   • The login Rakhi alert now shows sold quantity against every individual
-#     parent CMB containing the same child SKU.
-#   • CSV export writes one child-parent row per CMB so each parent's sold
-#     quantity remains explicit and audit-friendly.
-# V23.8:
-#   • Login opens an exportable "Attention to These Rakhi SKUs" popup after
-#     live data is ready (and after the dated Sawan greeting, when applicable).
-#   • It includes only Rakhi child SKUs belonging to sold curated CMBs, excludes
-#     zero-sale CMBs, and shows children only when current Inv Stock is below 40.
-#   • Child SKU, CN Name, parent CMBs, sold CMB qty, Inv Stock, Inv WIP and image
-#     link are shown and exported from one reconciled dataset.
-# V23.7:
-#   • Every generic CSV/XLS export automatically inserts CN Name immediately
-#     after its primary SKU column without creating duplicate CN Name fields.
-#   • Uploaded-file reports and Bulk Combo imports show the matched AF-column
-#     CN Name beside the SKU; Overall Details Excel/PDF and quotations carry it.
-# V23.6:
-#   • OOS Lost Sales table now shows current Inv Stock beside Inv WIP.
-#   • Baseline Sale is removed from the on-screen table and CSV export while
-#     the same pre-OOS history still powers Average Daily Sale internally.
+# Cosa Nostraa — V23.5 (RAKHI / OTHERS SALES FILTER)
 # V23.5:
 #   • Sales Comparison adds a Rakhi / Others product-group filter.
 #   • The selected group updates KPIs, daily chart, both tables and CSV export.
@@ -5401,13 +5380,6 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 @media(max-width:560px){.cnx-sawan-card{padding:42px 24px 30px;border-radius:24px}.cnx-sawan-icon{width:68px;height:68px;border-radius:21px;font-size:32px}.cnx-sawan-copy{font-size:11px}}
 @media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu,.cnx-sawan-icon{animation:none!important;transition:none!important}.cnx-sawan-card{transition:none!important}}
 
-/* Login-time Rakhi child-stock attention popup. */
-.rkh-attn-modal{position:fixed;inset:0;z-index:10045;display:grid;place-items:center;padding:22px;background:rgba(30,22,11,.54);backdrop-filter:blur(11px);-webkit-backdrop-filter:blur(11px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .28s ease,visibility .28s ease}.rkh-attn-modal.is-open{opacity:1;visibility:visible;pointer-events:auto}
-.rkh-attn-card{width:min(1120px,96vw);max-height:min(84vh,780px);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(168,121,32,.28);border-radius:27px;background:linear-gradient(145deg,#fffefb,#f6ecda);box-shadow:0 42px 110px rgba(39,28,10,.36),inset 0 1px rgba(255,255,255,.9);transform:perspective(1000px) translateY(24px) rotateX(4deg) scale(.97);transition:transform .4s cubic-bezier(.2,.82,.2,1)}.rkh-attn-modal.is-open .rkh-attn-card{transform:none}
-.rkh-attn-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:22px 24px 17px;border-bottom:1px solid rgba(123,91,33,.14);background:radial-gradient(circle at 90% 0,rgba(222,184,91,.28),transparent 40%)}.rkh-attn-title-row{display:flex;gap:14px;align-items:flex-start}.rkh-attn-icon{width:46px;height:46px;flex:0 0 46px;display:grid;place-items:center;border-radius:15px;background:linear-gradient(145deg,#f2d98e,#a87920);color:#281c0a;font-size:21px;font-weight:950;box-shadow:0 12px 25px rgba(168,121,32,.2)}.rkh-attn-kicker{font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#9a6b18;font-weight:950}.rkh-attn-title{margin-top:5px;font-family:'Cormorant Garamond',Georgia,serif;font-size:clamp(27px,3.4vw,40px);line-height:1;color:#201a12;font-weight:900}.rkh-attn-sub{margin-top:7px;color:#706553;font-size:10px;line-height:1.55;font-weight:700}.rkh-attn-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.rkh-attn-btn{min-height:38px;padding:0 14px;border:0;border-radius:11px;background:linear-gradient(145deg,#e9cb7d,#a87920);color:#211709;font-size:8px;letter-spacing:1.2px;font-weight:950;text-transform:uppercase;cursor:pointer;box-shadow:0 9px 20px rgba(168,121,32,.17)}.rkh-attn-btn.alt{background:#fffefb;border:1px solid rgba(123,91,33,.17);color:#765317;box-shadow:none}.rkh-attn-btn:disabled{opacity:.45;cursor:not-allowed}
-.rkh-attn-summary{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr));gap:10px;padding:14px 24px}.rkh-attn-chip{padding:11px 13px;border:1px solid rgba(123,91,33,.12);border-radius:13px;background:rgba(255,255,255,.68)}.rkh-attn-chip span{display:block;font-size:7px;letter-spacing:1.2px;text-transform:uppercase;color:#8a6119;font-weight:950}.rkh-attn-chip b{display:block;margin-top:4px;color:#201a12;font-size:17px;font-weight:950}.rkh-attn-table-wrap{margin:0 24px 18px;overflow:auto;border:1px solid rgba(123,91,33,.14);border-radius:16px;background:#fff}.rkh-attn-table{width:100%;min-width:980px;border-collapse:collapse}.rkh-attn-table th{position:sticky;top:0;z-index:2;padding:10px 11px;background:#f1e3c9;color:#7d5614;font-size:7px;letter-spacing:1.05px;text-transform:uppercase;text-align:left;white-space:nowrap}.rkh-attn-table td{padding:10px 11px;border-top:1px solid #eee5d6;color:#342a1d;font-size:9px;font-weight:700;vertical-align:middle}.rkh-attn-table tr:nth-child(even) td{background:#fdf9f1}.rkh-attn-photo{width:42px;height:42px;object-fit:cover;border-radius:10px;border:1px solid #e5d7bd;background:#f7f0e3}.rkh-attn-sku{display:block;padding:0;border:0;background:transparent;color:#9a6b18;font:900 10px 'Inter',sans-serif;cursor:pointer;text-align:left}.rkh-attn-table td small{display:block;margin-top:4px;color:#847968;font-size:7px}.rkh-attn-parents,.rkh-attn-parent-sales{display:flex;flex-direction:column;gap:5px;align-items:flex-start}.rkh-attn-parent,.rkh-attn-parent-qty{display:inline-flex;align-items:center;min-height:22px;padding:4px 7px;border-radius:7px;background:#f4ead7;color:#684812;font-size:8px;font-weight:850;white-space:nowrap}.rkh-attn-parent-qty{background:#eaf5ed;color:#23613d}.rkh-attn-parent-qty b{margin-left:5px;font-size:10px}.rkh-attn-link{color:#936410;font-weight:900;text-decoration:none}.rkh-attn-stock{font-size:15px!important;font-weight:950!important;color:#b3261e!important}.rkh-attn-empty{padding:38px 20px;text-align:center;color:#397044;font-size:12px;font-weight:850}.rkh-attn-empty span{display:block;margin-top:7px;color:#847968;font-size:9px}.rkh-attn-cap{padding:9px 12px;color:#847968;font-size:8px;font-weight:750}.rkh-attn-note{padding:0 24px 19px;color:#847968;font-size:8px;line-height:1.55;font-weight:700}
-@media(max-width:720px){.rkh-attn-modal{padding:10px}.rkh-attn-card{width:100%;max-height:92vh;border-radius:20px}.rkh-attn-head{padding:17px;flex-direction:column}.rkh-attn-actions{width:100%;justify-content:flex-start}.rkh-attn-summary{padding:12px 17px;grid-template-columns:1fr 1fr}.rkh-attn-table-wrap{margin:0 17px 14px}.rkh-attn-note{padding:0 17px 15px}}
-
 /* Large-data smooth mode. Premium styling remains, while expensive repeated
    transforms, blur layers and entry animations are reduced once live catalog
    data is loaded. This protects low/mid-range office laptops from paint jank. */
@@ -5506,18 +5478,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="cnx-sawan-title" id="cnxSawanTitle">हर हर महादेव</div>
     <p class="cnx-sawan-copy">Wishing you a blessed first Sawan Somvaar. May Lord Shiva fill your day with peace, strength and prosperity.</p>
     <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">Begin the day</button>
-  </div>
-</div>
-
-<div id="rakhiAttentionPopup" class="rkh-attn-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="rakhiAttentionTitle" onclick="if(event.target===this)closeRakhiAttentionPopup()">
-  <div class="rkh-attn-card">
-    <div class="rkh-attn-head">
-      <div class="rkh-attn-title-row"><div class="rkh-attn-icon" aria-hidden="true">!</div><div><div class="rkh-attn-kicker">Low child stock alert</div><div class="rkh-attn-title" id="rakhiAttentionTitle">Attention to These Rakhi SKUs</div><div class="rkh-attn-sub">Sold curated Rakhi CMBs only · child Inv Stock below 40 · zero-sale CMBs excluded</div></div></div>
-      <div class="rkh-attn-actions"><button class="rkh-attn-btn" id="rakhiAttentionExport" type="button" onclick="exportRakhiAttentionCSV()">Export CSV</button><button class="rkh-attn-btn alt" id="rakhiAttentionClose" type="button" onclick="closeRakhiAttentionPopup()">Close</button></div>
-    </div>
-    <div id="rakhiAttentionSummary" class="rkh-attn-summary"></div>
-    <div id="rakhiAttentionContent" class="rkh-attn-table-wrap"></div>
-    <div class="rkh-attn-note">Sales = FY 2026-27 Order Date quantity of each listed curated parent CMB. A child SKU appearing in multiple sold CMBs is shown once, with every parent CMB and its own sold quantity. CSV export writes one row per child-parent combination. Inv Stock and Inv WIP come from the current All Product inventory snapshot.</div>
   </div>
 </div>
 
@@ -7230,48 +7190,6 @@ function exportSkuName(sku, name){
 }
 window.exportSkuName = exportSkuName;
 
-// All Product AF-column CN Name for imports/exports. Keep this lookup in one
-// place so every present and future export gets the same value for a SKU.
-function exportCnName(sku){
-  const key=String(sku==null?'':sku).trim().toUpperCase();
-  if(!key)return '';
-  const item=_masterSkuMap[key]||((typeof master!=='undefined'&&master)||[]).find(it=>String(it&&it.sku||'').trim().toUpperCase()===key);
-  return item?String(item.cn_name||'').trim():'';
-}
-function _exportPrimarySkuIndex(headers){
-  const accepted=new Set(['sku','child sku','child sku (rkh)','parent sku','rakhi sku','cmb sku','order sku','sku / channel','cmb / direct sku','matched sku']);
-  return (headers||[]).findIndex(h=>accepted.has(String(h==null?'':h).trim().toLowerCase()));
-}
-function augmentExportWithCnName(headers,rows){
-  const outHeaders=(headers||[]).slice();
-  const sourceRows=(rows||[]);
-  const skuIdx=_exportPrimarySkuIndex(outHeaders);
-  if(skuIdx<0)return {headers:outHeaders,rows:sourceRows.slice()};
-  const existingCnIdx=outHeaders.findIndex(h=>String(h||'').trim().toLowerCase()==='cn name');
-  if(existingCnIdx>=0){
-    if(existingCnIdx===skuIdx+1)return {headers:outHeaders,rows:sourceRows.slice()};
-    outHeaders.splice(existingCnIdx,1);
-    const adjustedSkuIdx=skuIdx-(existingCnIdx<skuIdx?1:0);
-    outHeaders.splice(adjustedSkuIdx+1,0,'CN Name');
-    const reordered=sourceRows.map(row=>{
-      if(!Array.isArray(row))return Object.assign({},row||{});
-      const next=row.slice(),cnValue=next.splice(existingCnIdx,1)[0];next.splice(adjustedSkuIdx+1,0,cnValue);return next;
-    });
-    return {headers:outHeaders,rows:reordered};
-  }
-  const skuHeader=outHeaders[skuIdx];
-  outHeaders.splice(skuIdx+1,0,'CN Name');
-  const outRows=sourceRows.map(row=>{
-    if(Array.isArray(row)){
-      const next=row.slice();next.splice(skuIdx+1,0,exportCnName(next[skuIdx]));return next;
-    }
-    const source=(row&&typeof row==='object')?row:{};
-    return Object.assign({},source,{'CN Name':exportCnName(source[skuHeader])});
-  });
-  return {headers:outHeaders,rows:outRows};
-}
-window.exportCnName=exportCnName;window.augmentExportWithCnName=augmentExportWithCnName;
-
 function roInvContext(typeSel, chanSel, subChanSel){
   const words = []
     .concat(typeSel || [])
@@ -8440,7 +8358,6 @@ function augmentWithDailySTR(headers, data){
 
 function downloadTable(headers, data, baseName, fmtType){
   ({headers, data} = augmentWithDailySTR(headers, data));
-  const cnAugmented=augmentExportWithCnName(headers,data);headers=cnAugmented.headers;data=cnAugmented.rows;
   function downloadBlob(content, mime, filename){
     const blob = new Blob([content], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -8537,7 +8454,6 @@ function loadData(force){
   if (!force && master && master.length){
     if (L) L.style.display='none';
     showTab('home');
-    scheduleRakhiAttentionPopup(650);
     return;
   }
   // Double click / overlapping retry se multi-megabyte /api/data response
@@ -8672,7 +8588,6 @@ function loadData(force){
       // Home here and then immediately rendered it again inside showTab.
       _dataLoadBusy = false;
       showTab('home');
-      scheduleRakhiAttentionPopup(650);
     })
     .catch(err => {
       clearTimeout(timer);
@@ -8940,7 +8855,7 @@ function _matrixExportMeta(){
 }
 function _matrixInvLookup(){
   const invBy = {};
-  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
+  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
   return invBy;
 }
 function _matrixBuildPayload(kind){
@@ -8948,9 +8863,9 @@ function _matrixBuildPayload(kind){
   const invBy = _matrixInvLookup();
   if (kind === 'transactions'){
     return _matrixTxns.map(t => {
-      const iv = invBy[t.sku] || {s:0, w:0, b:0, img:'', cn:''};
+      const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
       return {
-        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || exportCnName(t.sku), customer: t.cust, type: t.type,
+        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, customer: t.cust, type: t.type,
         qty: parseFloat(t.qty) || 0, revenue: showRev ? Math.round(parseFloat(t.rev) || 0) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
         image_url: iv.img || ''
@@ -8958,9 +8873,9 @@ function _matrixBuildPayload(kind){
     });
   }
   return _matrixPivot.map(p => {
-    const iv = invBy[p.sku] || {s:0, w:0, img:'', cn:''};
+    const iv = invBy[p.sku] || {s:0, w:0, img:''};
     return {
-      customer: p.cust, sku: p.sku, cn_name: iv.cn || exportCnName(p.sku), qty: p.qty, revenue: showRev ? Math.round(p.rev) : null,
+      customer: p.cust, sku: p.sku, qty: p.qty, revenue: showRev ? Math.round(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
       image_url: iv.img || ''
     };
@@ -8989,7 +8904,13 @@ function exportMatrixCSV(kind){
       return line;
     });
   }
-  _dlCsv(headers,csvRows,meta.base+'_'+kind);
+  const csv = [headers].concat(csvRows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = meta.base + '_' + kind + '.csv'; a.click();
 }
 function exportMatrixExcel(kind){
   const rows = _matrixBuildPayload(kind);
@@ -9603,7 +9524,7 @@ function exportRO(fmtType){
     const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {};
     ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { dimMap[it.sku] = it.dimensions || ''; mrpMap[it.sku] = it.mrp || 0; packMap[it.sku] = it.pack_details || ''; nameMap[it.sku] = it.sku_name || ''; stoneMap[it.sku] = it.stone_color || ''; } });
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Dispatch Date','SKU','SKU Name','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = txns.map(t => {
       const mrp0 = parseFloat(mrpMap[t.sku]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
@@ -9619,7 +9540,7 @@ function exportRO(fmtType){
       Type: t.type,
       'Sold Qty': parseFloat(t.qty) || 0,
       'MRP': mrp0,
-      ...(emp0 ? {} : {'Selling Price': sp0, 'Discount %': discPct0 + '%'}),
+      ...(emp0 ? {} : {'Net Revenue': parseFloat(t.rev) || 0, 'Discount %': discPct0 + '%'}),
       'Inv Stock': parseInt(t.inv_stock) || 0,
       'Inv WIP': parseInt(t.inv_wip) || 0,
       'Remark': roRemarks[t.sku] || '',
@@ -10026,185 +9947,10 @@ function closeSawanSomvaarWish(){
   if (!wish) return;
   wish.classList.remove('is-open');
   wish.setAttribute('aria-hidden', 'true');
-  // The stock alert deliberately waits for the dated greeting so two
-  // login dialogs never compete for focus.
-  if (_rakhiAttentionPending) scheduleRakhiAttentionPopup(180);
 }
 
 window.showSawanSomvaarWish = showSawanSomvaarWish;
 window.closeSawanSomvaarWish = closeSawanSomvaarWish;
-
-/* Login-only Rakhi child-stock alert. The source of truth is one compact
-   reconciled array which is reused by the table and CSV export. */
-let _rakhiAttentionRows = [];
-let _rakhiAttentionShownForLogin = false;
-let _rakhiAttentionPending = false;
-let _rakhiAttentionTimer = null;
-
-function _buildRakhiAttentionRows(){
-  if (!master || !master.length) return [];
-
-  // Parent sales are FY 2026-27 Order Date quantities. Only curated CMBs
-  // with actual positive sales qualify; zero-sale CMBs are never expanded.
-  const parentSales = new Map();
-  (_rkhBuildRows() || []).forEach(row => {
-    const parentSku = String((row && row.sku) || '').trim().toUpperCase();
-    const soldQty = Math.max(0, Number(row && row.qty) || 0);
-    if (!_rkhInWhitelist(parentSku) || !_rkhIsComboSku(parentSku) || soldQty <= 0) return;
-    parentSales.set(parentSku, (parentSales.get(parentSku) || 0) + soldQty);
-  });
-
-  const children = new Map();
-  parentSales.forEach((soldQty, parentSku) => {
-    const parent = _masterSkuMap[parentSku];
-    if (!parent || soldQty <= 0) return;
-    _rkhStrictRakhiChildDetails(parent).forEach(detail => {
-      const childSku = String((detail && detail.sku) || '').trim().toUpperCase();
-      if (!childSku) return;
-      const current = _masterSkuMap[childSku] || detail || {};
-      const invStock = Math.max(0, Number(current.inv_stock) || 0);
-      if (invStock >= 40) return;
-      const invWip = Math.max(0, Number(current.inv_wip) || 0);
-      let rec = children.get(childSku);
-      if (!rec) {
-        rec = {
-          sku: childSku,
-          sku_name: String(current.sku_name || detail.sku_name || ''),
-          cn_name: String(current.cn_name || detail.cn_name || ''),
-          parents: [],
-          parent_sales: [],
-          sold_qty: 0,
-          inv_stock: invStock,
-          inv_wip: invWip,
-          image_url: String(current.image_url || detail.image_url || '')
-        };
-      }
-      if (!rec.parents.includes(parentSku)) {
-        rec.parents.push(parentSku);
-        rec.parent_sales.push({sku: parentSku, sold_qty: soldQty});
-        rec.sold_qty += soldQty;
-      }
-      children.set(childSku, rec);
-    });
-  });
-
-  return Array.from(children.values())
-    .map(rec => ({
-      ...rec,
-      parents: rec.parents.slice().sort(),
-      parent_sales: rec.parent_sales.slice().sort((a, b) => a.sku.localeCompare(b.sku))
-    }))
-    .sort((a, b) => a.inv_stock - b.inv_stock || b.sold_qty - a.sold_qty || a.sku.localeCompare(b.sku));
-}
-
-function _renderRakhiAttentionPopup(){
-  const summary = document.getElementById('rakhiAttentionSummary');
-  const host = document.getElementById('rakhiAttentionContent');
-  const exportBtn = document.getElementById('rakhiAttentionExport');
-  if (!summary || !host) return;
-  const rows = _rakhiAttentionRows || [];
-  const parentCount = new Set(rows.flatMap(row => row.parents || [])).size;
-  const oosCount = rows.filter(row => Number(row.inv_stock) <= 0).length;
-  summary.innerHTML = [
-    ['Child SKUs', rows.length.toLocaleString('en-IN')],
-    ['Sold Parent CMBs', parentCount.toLocaleString('en-IN')],
-    ['Out of Stock', oosCount.toLocaleString('en-IN')]
-  ].map(([label, value]) => `<div class="rkh-attn-chip"><span>${escHtml(label)}</span><b>${escHtml(value)}</b></div>`).join('');
-  if (exportBtn) exportBtn.disabled = rows.length === 0;
-
-  if (!rows.length) {
-    host.innerHTML = '<div class="rkh-attn-empty"><b>No urgent Rakhi child SKU right now.</b><span>No child with Inv Stock below 40 was found inside a sold curated Rakhi CMB.</span></div>';
-    return;
-  }
-
-  const shown = rows.slice(0, 120);
-  const body = shown.map((row, index) => {
-    const imageUrl = String(row.image_url || '').trim();
-    const photo = imageUrl
-      ? `<img class="rkh-attn-photo" src="${escHtml(imageUrl)}" loading="lazy" decoding="async" alt="${escHtml(row.sku)}" onerror="this.style.display='none'">`
-      : '<span class="rkh-attn-no-photo">—</span>';
-    const imageLink = imageUrl
-      ? `<a class="rkh-attn-link" href="${escHtml(imageUrl)}" target="_blank" rel="noopener">Open image</a>`
-      : '—';
-    const parentHtml = (row.parents || []).map(parentSku => {
-      const parent = _masterSkuMap[parentSku] || {};
-      const label = exportSkuName(parentSku, parent.sku_name || '');
-      return `<span class="rkh-attn-parent">${escHtml(label)}</span>`;
-    }).join('');
-    const parentSalesHtml = (row.parent_sales || []).map(parentSale =>
-      `<span class="rkh-attn-parent-qty">${escHtml(parentSale.sku)}<b>${Math.round(parentSale.sold_qty).toLocaleString('en-IN')}</b></span>`
-    ).join('');
-    return `<tr><td>${index + 1}</td><td>${photo}</td><td><button class="rkh-attn-sku" type="button" onclick="closeRakhiAttentionPopup();openSkuDetails('${String(row.sku).replace(/'/g, "\\'")}')">${escHtml(row.sku)}</button><small>${escHtml(row.sku_name || '')}</small></td><td>${escHtml(row.cn_name || '—')}</td><td><div class="rkh-attn-parents">${parentHtml}</div></td><td><div class="rkh-attn-parent-sales">${parentSalesHtml}</div><small>Total: ${Math.round(row.sold_qty).toLocaleString('en-IN')}</small></td><td><b class="rkh-attn-stock">${Math.round(row.inv_stock).toLocaleString('en-IN')}</b></td><td>${Math.round(row.inv_wip).toLocaleString('en-IN')}</td><td>${imageLink}</td></tr>`;
-  }).join('');
-  host.innerHTML = `<table class="rkh-attn-table"><thead><tr><th>#</th><th>Photo</th><th>Child SKU</th><th>CN Name</th><th>Parent CMB(s)</th><th>Sold Qty by Parent</th><th>Inv Stock</th><th>Inv WIP</th><th>Image Link</th></tr></thead><tbody>${body}</tbody></table>${rows.length > shown.length ? `<div class="rkh-attn-cap">Showing first ${shown.length} of ${rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
-}
-
-function showRakhiAttentionPopup(){
-  if (!_loggedIn || _rakhiAttentionShownForLogin || !master || !master.length) return false;
-  if (document.getElementById('cnxSawanWish')?.classList.contains('is-open')) {
-    _rakhiAttentionPending = true;
-    return false;
-  }
-  const popup = document.getElementById('rakhiAttentionPopup');
-  if (!popup) return false;
-  _rakhiAttentionRows = _buildRakhiAttentionRows();
-  _renderRakhiAttentionPopup();
-  popup.classList.add('is-open');
-  popup.setAttribute('aria-hidden', 'false');
-  _rakhiAttentionShownForLogin = true;
-  _rakhiAttentionPending = false;
-  requestAnimationFrame(() => document.getElementById('rakhiAttentionClose')?.focus());
-  return true;
-}
-
-function scheduleRakhiAttentionPopup(delay=650){
-  clearTimeout(_rakhiAttentionTimer);
-  _rakhiAttentionPending = true;
-  _rakhiAttentionTimer = setTimeout(() => {
-    _rakhiAttentionTimer = null;
-    if (!_loggedIn || _rakhiAttentionShownForLogin) return;
-    // Data load completion will schedule again; no polling and no duplicate
-    // multi-megabyte request are introduced by this feature.
-    if (!master || !master.length) return;
-    showRakhiAttentionPopup();
-  }, Math.max(0, Number(delay) || 0));
-}
-
-function closeRakhiAttentionPopup(){
-  const popup = document.getElementById('rakhiAttentionPopup');
-  if (!popup) return;
-  popup.classList.remove('is-open');
-  popup.setAttribute('aria-hidden', 'true');
-}
-
-function exportRakhiAttentionCSV(){
-  const rows = _rakhiAttentionRows || [];
-  if (!rows.length) { alert('No urgent Rakhi child SKU to export.'); return; }
-  const exportRows = rows.flatMap(row => (row.parent_sales || []).map(parentSale => {
-    const parent = _masterSkuMap[parentSale.sku] || {};
-    return [
-      row.sku,
-      row.cn_name || '',
-      parentSale.sku,
-      parent.cn_name || '',
-      parentSale.sold_qty,
-      row.sold_qty,
-      row.inv_stock,
-      row.inv_wip,
-      row.image_url || ''
-    ];
-  }));
-  _dlCsv(
-    ['Child SKU','CN Name','Parent CMB SKU','Parent CMB CN Name','Parent CMB Sold Qty','Total Sold Qty Across Parent CMBs','Inv Stock','Inv WIP','Image Link'],
-    exportRows,
-    'attention_rakhi_child_stock_below_40'
-  );
-}
-
-window.showRakhiAttentionPopup = showRakhiAttentionPopup;
-window.scheduleRakhiAttentionPopup = scheduleRakhiAttentionPopup;
-window.closeRakhiAttentionPopup = closeRakhiAttentionPopup;
-window.exportRakhiAttentionCSV = exportRakhiAttentionCSV;
 
 async function doLogin(){
   // Prime audio while the click/Enter gesture is active; play only after success.
@@ -10223,9 +9969,6 @@ async function doLogin(){
   if (ok) {
     if (err) err.textContent = '';
     playLoginSuccessSound();
-    _rakhiAttentionRows = [];
-    _rakhiAttentionShownForLogin = false;
-    _rakhiAttentionPending = true;
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
     // Common success path: Admin and Employee both receive today's greeting.
     setTimeout(() => showSawanSomvaarWish(), 220);
@@ -10243,12 +9986,6 @@ async function doLogout(){
   } catch(e){}
   _loggedIn = false;
   LOGIN_ROLE = 'admin';
-  clearTimeout(_rakhiAttentionTimer);
-  _rakhiAttentionTimer = null;
-  _rakhiAttentionRows = [];
-  _rakhiAttentionShownForLogin = false;
-  _rakhiAttentionPending = false;
-  closeRakhiAttentionPopup();
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'none';
   const gate = document.getElementById('loginGate'); if (gate) gate.style.display = 'flex';
   const pw = document.getElementById('lgPass'); if (pw) pw.value = '';
@@ -10262,10 +9999,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('paste', handleFinderPaste);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && document.getElementById('rakhiAttentionPopup')?.classList.contains('is-open')) {
-      closeRakhiAttentionPopup();
-      return;
-    }
     if (event.key === 'Escape' && document.getElementById('cnxSawanWish')?.classList.contains('is-open')) {
       closeSawanSomvaarWish();
     }
@@ -11171,7 +10904,13 @@ function exportDiscount(){
   const headers = ['SKU','SKU Name','Stone Color','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
   const rows = d.rows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
     Math.round(r.last_sp), r.disc_pct, Math.round(r.per_unit_gap), r.qty, Math.round(r.leakage), Math.round(r.net_revenue)]);
-  _dlCsv(headers,rows,'discount_leakage');
+  const csv = [headers].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'discount_leakage.csv'; a.click();
 }
 window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
 
@@ -11820,7 +11559,7 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['CMB / Direct SKU','CN Name','Rakhi Child SKU(s)','Rakhi Child CN Name(s)','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['CMB / Direct SKU','Rakhi Child SKU(s)','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
@@ -11838,14 +11577,22 @@ function exportRakhiOverallSummaryCSV(){
       .filter(Boolean)));
     const exactRevenue = Math.round((Number(r.revenue) || 0) * 100) / 100;
     data.push([
-      r.sku, exportCnName(r.sku), childSkus.join(' | '), childSkus.map(exportCnName).join(' | '), exportSkuName(r.sku, r.sku_name),
+      r.sku, childSkus.join(' | '), exportSkuName(r.sku, r.sku_name),
       Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales),
       r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
       ...(emp ? [] : [exactRevenue]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
     ]);
   });
 
-  _dlCsv(headers,data,'rakhi_sku_wise_summary');
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const str = String(c == null ? '' : c);
+    return /[",\n]/.test(str) ? '"' + str.replace(/"/g, '""') + '"' : str;
+  }).join(',')).join('\n');
+  // UTF-8 BOM keeps rupee signs, em-dashes and Hindi/English punctuation
+  // readable when the CSV is opened directly in Microsoft Excel.
+  const blob = new Blob(['\ufeff', csv], {type: 'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_sku_wise_summary.csv'; a.click();
 }
 window.renderRakhiOverallSummary = renderRakhiOverallSummary;
 window.exportRakhiOverallSummaryCSV = exportRakhiOverallSummaryCSV;
@@ -11951,7 +11698,13 @@ function exportRakhi(){
       ]);
     });
   });
-  _dlCsv(headers,data,'rakhi_orders');
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_orders.csv'; a.click();
 }
 window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
 
@@ -12032,7 +11785,13 @@ function exportRakhiPivotCSV(){
     ...(emp ? [] : [Math.round(r.totalRev)]),
     parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
   ]);
-  _dlCsv(headers,data,'rakhi_pivot');
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_pivot.csv'; a.click();
 }
 window.renderRakhiPivot = renderRakhiPivot; window.exportRakhiPivotCSV = exportRakhiPivotCSV;
 
@@ -12507,16 +12266,20 @@ function renderRakhiCommonSkus(){
 function exportRakhiCommonSkusCSV(){
   const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
   if (!list.length){ alert('No common Rakhi child SKU summary to export.'); return; }
-  const headers = ['Child SKU (RKH)', 'CN Name', 'No. of CMBs', 'CMB SKUs', 'CMB CN Names', 'Image Link'];
+  const headers = ['Child SKU (RKH)', 'No. of CMBs', 'CMB SKUs', 'Image Link'];
   const data = list.map(r => [
     r.sku,
-    exportCnName(r.sku),
     r.parents.length,
     r.parents.map(p => p.sku).join(', '),
-    r.parents.map(p => exportCnName(p.sku)).join(' | '),
     r.image_url || ''
   ]);
-  _dlCsv(headers,data,'rakhi_common_child_sku_summary');
+  const csv = [headers].concat(data).map(row => row.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_common_child_sku_summary.csv'; a.click();
 }
 window.renderRakhiCommonSkus = renderRakhiCommonSkus;
 window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
@@ -12616,7 +12379,13 @@ function exportRakhiTopSkusCSV(){
       ]);
     });
   });
-  _dlCsv(headers,data,'rakhi_top_skus');
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_top_skus.csv'; a.click();
 }
 window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = exportRakhiTopSkusCSV;
 
@@ -12727,7 +12496,13 @@ function exportRakhiSlowMoversCSV(){
       ]);
     });
   });
-  _dlCsv(headers,data,'rakhi_slow_movers');
+  const csv = [headers].concat(data).map(r => r.map(c => {
+    const s = String(c == null ? '' : c);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'rakhi_slow_movers.csv'; a.click();
 }
 window.renderRakhiSlowMovers = renderRakhiSlowMovers; window.exportRakhiSlowMoversCSV = exportRakhiSlowMoversCSV;
 
@@ -12984,7 +12759,13 @@ function exportProduction(){
   const headers = ['Order Date','Order No.','SKU','SKU Name','Inv Stock','Inv (WIP)','Stone Color','Taxon','Type','Channel','All Order Nos.','Times Ordered','Order Qty','Recv Qty','Balance Qty','Total Balance (All Orders)','Delivery Date','Receiving Date','Image Link'];
   const rows = d.rows.map(r => [r.date_disp, r.order_no, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.inv_stock||0), Math.round(r.inv_wip||0), r.stone_color||'', r.taxon, r.order_type, r.channel, (r.all_orders||[]).join(' | '),
     (r.repeat_count||0), Math.round(r.order_qty||0), Math.round(r.recv_qty||0), Math.round(r.bal_qty||0), Math.round(r.sku_total_balance||0), r.delivery_date, r.receiving_date, r.image_url||'']);
-  _dlCsv(headers,rows,'production_ppc_wip');
+  const csv = [headers].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'production_ppc_wip.csv'; a.click();
 }
 window.loadProduction = loadProduction; window.exportProduction = exportProduction;
 window.resetProduction = resetProduction; window.prodSearchDebounced = prodSearchDebounced;
@@ -13141,7 +12922,7 @@ function exportProfit(){
   const sku = (document.getElementById('pmSkuSearch')?.value || '').trim();
   const pmMatch = (PM_CATALOG || []).find(c => c.sku === sku);
   const pmName = pmMatch ? exportSkuName(sku, pmMatch.sku_name) : '';
-  const rows = [['SKU', sku || '(manual)'], ['CN Name', sku ? exportCnName(sku) : ''], ['SKU Name', pmName]];
+  const rows = [['SKU', sku || '(manual)'], ['SKU Name', pmName]];
   ded.forEach(d => rows.push(d));
   rows.push(['Total Deductions (per unit)', Math.round(totalDed)]);
   rows.push(['Profit Amount (per unit)', Math.round(profit)]);
@@ -13745,7 +13526,7 @@ function renderComboRisk(){
 }
 function exportComboRisk(){
   const rows=_comboRiskFiltered(); if(!rows.length){alert('No combo-risk rows to export');return;}
-  _dlCsv(['Child SKU','CN Name','Child SKU Name','Image Link','Combo Group','Child Taxon','No. of CMBs','Affected CMB SKUs','Affected CMB CN Names','Child Stock','Child WIP','Parent 30D Sale','Horizon Child Demand','Potential Blocked Combo Qty','Risk'],rows.map(r=>[r.sku,exportCnName(r.sku),exportSkuName(r.sku,r.skuName),r.image,r.group,r.taxon,r.cmbs.length,r.cmbs.join(' | '),r.cmbs.map(exportCnName).join(' | '),Math.round(r.stock),Math.round(r.wip),Math.round(r.parent30),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_production_risk');
+  _dlCsv(['Child SKU','Child SKU Name','Image Link','Combo Group','Child Taxon','No. of CMBs','Affected CMB SKUs','Child Stock','Child WIP','Parent 30D Sale','Horizon Child Demand','Potential Blocked Combo Qty','Risk'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.image,r.group,r.taxon,r.cmbs.length,r.cmbs.join(' | '),Math.round(r.stock),Math.round(r.wip),Math.round(r.parent30),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_production_risk');
 }
 
 function _loadOpsSupport(fresh){
@@ -14716,15 +14497,13 @@ window.exportPaymentsPlanning = exportPaymentsPlanning;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
-  const cnAugmented=augmentExportWithCnName(headers,rows);headers=cnAugmented.headers;rows=cnAugmented.rows;
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   }).join(',')).join('\n');
-  const blob = new Blob(['\ufeff',csv], {type:'text/csv;charset=utf-8'});
+  const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name + '.csv'; a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),1200);
 }
 window._dlCsv = _dlCsv;
 
@@ -15209,7 +14988,6 @@ async function bulkExportPDF(){
     const basePrice = bulkPriceOf(item);
     return {
       sku: String(item.sku || r.sku || '').trim(),
-      cn_name: String(item.cn_name || '').trim(),
       product_name: String(item.sku_name || '').trim(),
       qty: qty,
       mrp: basePrice,
@@ -15327,7 +15105,7 @@ function bulkRenderCombo(forcedMessage){
     }
     return `<tr>
       <td style="width:104px">${image}</td>
-      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(skuCodeWithFlag(it.sku))}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div><div class="bulk-product-meta" style="color:#765317">CN Name: ${escHtml(it.cn_name||'—')}</div>${priceSource}</td>
+      <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(skuCodeWithFlag(it.sku))}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
       <td style="width:115px"><input class="bulk-qty" type="number" min="1" step="1" value="${r.qty}" data-sku="${escHtml(it.sku)}" onchange="bulkUpdateQty(this.dataset.sku,this.value)"></td>
       <td class="bulk-money" style="width:145px">${bulkFmtMoney(r.price)}</td>
       <td class="bulk-money" style="width:155px;color:#15803d">${bulkFmtMoney(r.line)}</td>
@@ -16078,7 +15856,7 @@ function renderConcentrationRisk(){
 
 function exportConcentrationRisk(){
   if(!_concExportRows.length)renderConcentrationRisk(); if(!_concExportRows.length){alert('No concentration rows to export');return;}
-  _dlCsv(['Dimension','Name','CN Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[0]==='SKU'?exportCnName(r[1]):'',r[2],Number(r[3].toFixed(2)),Number(r[4].toFixed(2)),Number(r[5].toFixed(2))]),'sales_concentration_risk');
+  _dlCsv(['Dimension','Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[2],Number(r[3].toFixed(2)),Number(r[4].toFixed(2)),Number(r[5].toFixed(2))]),'sales_concentration_risk');
 }
 
 const _DP_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -16331,19 +16109,19 @@ function renderOosLostSales(){
     <td>${escHtml(r.affected)}</td>
     <td class="ops-num">${r.lastSale?escHtml(r.lastSale):'—'}</td>
     <td class="ops-num" style="font-weight:900;color:#b3261e">${r.oosDays===null?'—':r.oosDays}</td>
+    <td class="ops-num">${_bizNum(r.baselineQty,1)}</td>
     <td class="ops-num">${r.drr.toFixed(2)}</td>
     <td><span style="font-size:9px;font-weight:800;color:${r.drr>0?'#2f6f3e':'#8b5e00'}">${escHtml(r.demandBasis)}</span></td>
     <td class="ops-num">${r.avgSp>0?_bizMoney(r.avgSp):'—'}</td>
     <td class="ops-num" style="font-weight:900">${_bizNum(r.lostQty,1)}</td>
     <td class="ops-num" style="font-weight:900;color:#b3261e">${_bizMoney(r.lostRevenue)}</td>
     <td class="ops-num">${r.targetPct===null?'—':_bizPctText(r.targetPct)}</td>
-    <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
   </tr>`).join('');
   const emptyMessage=allRows.length
     ?'No OOS SKU meets the Minimum Daily Sale filter. Set Minimum Daily Sale to 0 to show every current OOS SKU.'
     :'No current Inv Stock = 0 SKU matches the selected Product Group, Taxon or SKU search.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv Stock</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Taxon</th><th>Affected Channel</th><th>Last Sale</th><th>Est. OOS Days</th><th>Baseline Sale</th><th>Avg Daily Sale</th><th>Demand Basis</th><th>Avg Selling Price</th><th>Est. Lost Qty</th><th>Est. Lost Revenue</th><th>% of Current Target</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="15" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
   _olsRows=rows;
 }
 function exportOosLostSales(){
@@ -16351,8 +16129,8 @@ function exportOosLostSales(){
   const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
   if(!rows.length){alert('No OOS lost-sales rows to export');return;}
   _dlCsv(
-    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
-    rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
+    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Baseline Sold Qty','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
+    rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
     'oos_lost_sales_revenue'
   );
 }
@@ -18222,10 +18000,10 @@ def api_overall_export_xlsx():
         ws.title = "Pivot" if kind == "pivot" else "Transactions"
 
         if kind == "pivot":
-            headers = ["Customer", "SKU", "CN Name", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
-            headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Sold Qty"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Dispatch Date", "SKU", "Customer", "Type", "Sold Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
 
         ws.append(headers)
@@ -18236,12 +18014,12 @@ def api_overall_export_xlsx():
         num_cols = {"Sold Qty", "Total Qty", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"}
         for r in rows:
             if kind == "pivot":
-                line = [r.get("customer", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("qty", 0)]
+                line = [r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
             else:
-                line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
+                line = [r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
@@ -18352,22 +18130,22 @@ def api_overall_export_pdf():
             elements.append(Spacer(1, 6))
 
         if kind == "pivot":
-            headers = ["Photo", "Customer", "SKU", "CN Name", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Photo", "Customer", "SKU", "Total Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP"]
         else:
-            headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Qty"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Photo", "Date", "SKU", "Customer", "Type", "Qty"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP", "Blocked"]
 
         table_data = [headers]
         for r in rows:
             img_cell = _img_flowable(r.get("image_url"))
             if kind == "pivot":
-                line = [img_cell, r.get("customer", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("qty", 0)]
+                line = [img_cell, r.get("customer", ""), r.get("sku", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
             else:
-                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
+                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
@@ -19935,10 +19713,8 @@ def api_bulk_combo_export_pdf():
             mrp = max(0.0, to_num(raw.get("mrp")))
             image_url = clean(raw.get("image_url"))
             product_name = clean(raw.get("product_name"))
-            cn_name = clean(raw.get("cn_name"))
             rows.append({
                 "sku": sku,
-                "cn_name": cn_name,
                 "product_name": product_name,
                 "qty": qty,
                 "mrp": mrp,
@@ -20203,13 +19979,9 @@ def api_bulk_combo_export_pdf():
         table_data = [headers]
         for item in rows:
             name = item.get("product_name") or ""
-            cn_name = item.get("cn_name") or ""
             safe_sku = xml_escape(str(item["sku"]))
             safe_name = xml_escape(str(name))
-            safe_cn_name = xml_escape(str(cn_name))
             product_parts = [f"<b>{safe_sku}</b>"]
-            if cn_name:
-                product_parts.append(f"<font color='#765317'>CN Name: {safe_cn_name}</font>")
             if name and name.strip().upper() != item["sku"].strip().upper():
                 product_parts.append(f"<font color='#64748B'>{safe_name}</font>")
             product_text = "<br/>".join(product_parts)
@@ -20359,11 +20131,6 @@ def api_bulk_combo_upload():
         sku_idx = 0
 
     rows = []
-    catalog = get_data()[0]
-    cn_name_by_sku = {
-        re.sub(r"[^A-Z0-9]", "", str(it.get("sku", "")).upper()): clean(it.get("cn_name", ""))
-        for it in catalog if clean(it.get("sku", ""))
-    }
     for ridx in range(start_row, min(len(df), 5000)):
         row = df.iloc[ridx]
         raw_sku = clean(row.iloc[sku_idx]) if sku_idx < len(row) else ""
@@ -20374,8 +20141,7 @@ def api_bulk_combo_upload():
             q = to_num(row.iloc[qty_idx])
             if q > 0:
                 qty = max(1, int(round(q)))
-        sku_key = re.sub(r"[^A-Z0-9]", "", raw_sku.upper())
-        rows.append({"sku": raw_sku, "cn_name": cn_name_by_sku.get(sku_key, ""), "qty": qty})
+        rows.append({"sku": raw_sku, "qty": qty})
 
     if not rows:
         return jsonify({"error": "No SKU values were found in the uploaded file."}), 400
@@ -20429,7 +20195,6 @@ def api_upload_report():
         rec = dict(src)
         rec.update({
             "Matched SKU": matched.get("sku", "") if matched else "",
-            "CN Name": matched.get("cn_name", "") if matched else "",
             "Taxon": matched.get("taxon", "") if matched else "",
             "Status": matched.get("status", "") if matched else "",
             "Inv Stock": matched.get("inv_stock", "") if matched else "",
