@@ -6733,7 +6733,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
-      <div><div class="ops-title">Operations — Exhibition CMB Selection</div><div class="ops-sub">Calculates how many CMBs can actually be assembled from every mapped child SKU. Child consumption for every product type follows Pack Details; shared child stock is allocated once, in higher-selling CMB priority.</div></div>
+      <div><div class="ops-title">Operations — Exhibition CMB Selection</div><div class="ops-sub">Shows only CMBs that can be assembled now from mapped child inventory. Child consumption for every product type follows Pack Details; shared child stock is allocated once, in higher-selling CMB priority.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
@@ -6742,7 +6742,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Assembly rule: quantities for all child types are read from the parent CMB Pack Details. Example: one mapped child with Pack of 7 consumes 7 units, while Set of 5 Rakhi with five distinct mapped Rakhi SKUs consumes 1 of each. WIP is informational and is not used. Shared child inventory is never double-counted.</div>
+    <div class="ops-note">Only new CMBs buildable from child Inventory Stock are included; existing parent-CMB stock and WIP are not added to buildable quantity. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -13613,7 +13613,7 @@ let _opsSupportPromise = null;
 let _smartAlertRows = [];
 let _inventoryAgeRows = [];
 
-function _opsNum(v){ const n = Number(v); return Number.isFinite(n) ? n : 0; }
+function _opsNum(v){ const n = Number(typeof v==='string'?v.replace(/,/g,'').trim():v); return Number.isFinite(n) ? n : 0; }
 function _opsSkuKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
 function _opsDateDays(iso){
   const s = String(iso || '').slice(0,10);
@@ -13774,20 +13774,23 @@ function _opAvailRequiredQtys(parent,children){
     const words=roots?[roots[0],...roots[1]]:[k];
     return words.some(w=>w.length>1&&(t.includes(w)||new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(String(c.sku||''))));
   };
-  const parts=[];
-  const re=/(\d+)\s*(?:pcs?|pieces?|units?|x)?\s*([a-z][a-z -]{1,28})/ig;let m;
-  while((m=re.exec(pack))){
-    const qty=Math.max(1,Math.floor(Number(m[1])||1));
-    const kind=String(m[2]||'').replace(/\b(?:and|with|plus|set|pack|of)\b.*$/i,'').trim().split(/\s+/).slice(0,2).join(' ');
-    parts.push({qty,kind});
-  }
-  if(!parts.length){const n=pack.match(/(?:pack|set)\s*(?:of\s*)?(\d+)/i);if(n)parts.push({qty:Math.max(1,Math.floor(Number(n[1])||1)),kind:''});}
+  const parts=[],partKeys=new Set();
+  const addPart=(qty,kind)=>{qty=Math.max(1,Math.floor(Number(qty)||1));kind=String(kind||'').trim().split(/\s+/).slice(0,2).join(' ');const key=`${qty}|${kind.toLowerCase()}`;if(!partKeys.has(key)){partKeys.add(key);parts.push({qty,kind});}};
+  // Parse explicit Pack/Set counts and recognised product quantities only.
+  // Measurements such as 32x41mm must never become child requirements.
+  const packRe=/(?:pack|set)\s*(?:of\s*)?(\d+)\s*(?:pcs?|pieces?|units?)?\s*([a-z][a-z -]{0,24})?/ig;let m;
+  while((m=packRe.exec(pack)))addPart(m[1],String(m[2]||'').replace(/\b(?:and|with|plus|set|pack|of)\b.*$/i,'').trim());
+  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*(buttons?|btns?|rakhis?|brooch(?:es)?|cufflinks?|lapel pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?)/ig;
+  while((m=typedRe.exec(pack)))addPart(m[1],m[2]);
   parts.forEach(part=>{
     let matched=part.kind?children.filter(c=>matchesKind(c,part.kind)):[];
-    if(!matched.length&&children.length===1)matched=children.slice();
+    if(!matched.length&&!part.kind&&children.length===1)matched=children.slice();
+    if(!matched.length&&children.length===1&&/(?:pack|set)\s*(?:of\s*)?\d+/i.test(pack))matched=children.slice();
     if(!matched.length&&part.qty===children.length)matched=children.slice();
     if(!matched.length)return;
-    const each=part.qty===matched.length?1:matched.length===1?part.qty:Math.max(1,Math.ceil(part.qty/matched.length));
+    // Multiple distinct mapped child rows represent distinct pieces. Repeated
+    // pack quantity is applied only when one child SKU represents the pack.
+    const each=matched.length===1?part.qty:1;
     matched.forEach(c=>req.set(c.sku,Math.max(req.get(c.sku)||1,each)));
   });
   return req;
@@ -13844,17 +13847,17 @@ function renderOperationsAvailability(){
   const host=document.getElementById('opAvailContent'),sum=document.getElementById('opAvailSummary');if(!host)return;
   const rows=_operationsAvailabilityFiltered(),childSet=new Set();rows.forEach(r=>r.children.forEach(c=>childSet.add(c.sku)));
   const cmbStock=rows.reduce((s,r)=>s+r.stock,0),cmbWip=rows.reduce((s,r)=>s+r.wip,0),buildable=rows.reduce((s,r)=>s+r.buildQty,0);
-  if(sum)sum.innerHTML=_opsKpi('Exhibition-ready CMBs',rows.length.toLocaleString('en-IN'),'CMB designs with complete child stock')+_opsKpi('CMBs Buildable',Math.round(buildable).toLocaleString('en-IN'),'After child quantity and shared-stock allocation')+_opsKpi('Selected CMB Inv Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Current assembled CMB stock')+_opsKpi('Selected CMB Inv WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Shown for information only');
+  if(sum)sum.innerHTML=_opsKpi('Buildable CMB Designs',rows.length.toLocaleString('en-IN'),'Every required child has usable stock')+_opsKpi('CMBs Buildable',Math.round(buildable).toLocaleString('en-IN'),'Child inventory only; shared stock allocated once')+_opsKpi('CMB Inv Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Reference only; not added to buildable qty')+_opsKpi('CMB Inv WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Reference only; not added to buildable qty');
   const body=rows.map(r=>{
     const span=r.children.length;
     return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">Need ${c.requiredQty.toLocaleString('en-IN')} per CMB · Child stock ${Math.round(c.stock).toLocaleString('en-IN')} · ${escHtml(c.source)}</div></td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
   }).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>CMB Photo</th><th>CMB Inv Stock</th><th>CMB Inv WIP</th><th>All Child SKUs &amp; Stock Check</th><th>CMBs Buildable</th><th>CMB Total Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="ops-empty">No CMB can be assembled from the currently available child inventory stock.</td></tr>'}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>CMB Photo</th><th>CMB Inv Stock</th><th>CMB Inv WIP</th><th>All Child SKUs &amp; Stock Check</th><th>CMBs Buildable</th><th>CMB Total Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="ops-empty">No CMB can currently be assembled from complete child inventory stock.</td></tr>'}</tbody></table>`;
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
   const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,c.requiredQty,Math.round(c.stock),r.group,Math.round(r.stock),Math.round(r.wip),Math.round(r.buildQty),Math.round(r.totalSold),r.packDetails,r.image])));
-  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Child Qty Needed per CMB','Child Inv Stock Used for Check','Combo Group','CMB Inv Stock','CMB Inv WIP','CMBs Buildable','CMB Total Sold Qty','Pack Details','CMB Image Link'],data,'operations_exhibition_ready_cmbs');
+  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Child Qty Needed per CMB','Child Inv Stock Used for Check','Combo Group','CMB Inv Stock (Reference)','CMB Inv WIP (Reference)','CMBs Buildable from Child Stock','CMB Total Sold Qty','Pack Details','CMB Image Link'],data,'operations_exhibition_ready_cmbs');
 }
 const renderOperationsAvailability_d=_debounce(()=>renderOperationsAvailability(),220);
 window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;
