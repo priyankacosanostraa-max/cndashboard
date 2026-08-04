@@ -6847,9 +6847,15 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">SKU Dependency Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk_d()"></div>
+      <div class="fc"><label class="fl">Top 20 Sales Platform</label><select class="fs" id="concTopPlatform" onchange="renderConcentrationTop20()"><option value="Overall" selected>Overall — Listed Platforms</option><option value="Website">Website</option><option value="Myntra">Myntra</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+      <div class="fc"><label class="fl">Top 20 Rank By</label><select class="fs" id="concTopRank" onchange="renderConcentrationTop20()"><option value="qty" selected>Sold Qty</option><option value="revenue">Net Revenue</option></select></div>
     </div>
     <div id="concSummary" class="ops-kpis"></div>
     <div id="concAlert"></div>
+    <div class="ops-section" style="margin:16px 0">
+      <div class="ops-section-head"><div><div class="ops-section-title">Top 20 Selling SKUs by Platform</div><div class="small-note">Current date, product-group, taxon, type, channel and SKU-search filters are applied.</div></div><button class="go-btn" style="width:auto;padding:9px 13px;background:#2f6f3e" onclick="exportConcentrationTop20()">Export Top 20 CSV</button></div>
+      <div id="concTop20" class="ops-table-wrap"></div>
+    </div>
     <div id="concContent"></div>
     <div class="ops-note">Top-city contribution is based on Website/D2C billing-city rows. Revenue uses the Website sheet where available; otherwise it is estimated from city quantity × that SKU’s filtered Website average selling price. Revenue-at-Risk is the top SKU’s selected-period revenue when its contribution crosses the chosen dependency threshold, avoiding double-counting across dimensions.</div>
   </div>
@@ -15845,7 +15851,7 @@ function _bizEvents(){
     };
     (it.sales_entries||[]).forEach(e=>{
       const date=_bizEntryDate(e); if(!date)return;
-      out.push({...base,date,qty:_opsNum(e.qty),rev:_opsNum(e.rev),ret:_opsNum(e.ret),sp:_opsNum(e.sp),type:String(e.type||''),channel:String(e.channel||''),subChannel:String(e.sub_channel||'')});
+      out.push({...base,date,qty:_opsNum(e.qty),rev:_opsNum(e.rev),ret:_opsNum(e.ret),sp:_opsNum(e.sp),type:String(e.type||''),channel:String(e.channel||''),subChannel:String(e.sub_channel||''),customer:String(e.cust||'')});
     });
   });
   _bizEventCache=out;
@@ -15980,6 +15986,62 @@ function _concTypeChannelShare(it,typeSel,channelSel,sourceSel='Overall'){
   if(channelSel!=='All')return String(it.best_channel||'')===channelSel?1:0;
   return (typeSel==='All'&&sourceSel==='Overall')?1:0;
 }
+
+let _concTop20ExportRows=[];
+function _concSalesPlatform(e){
+  const sub=String(e&&e.subChannel||e&&e.sub_channel||'').toLowerCase();
+  const type=String(e&&e.type||'').toLowerCase();
+  const channel=String(e&&e.channel||'').toLowerCase();
+  const customer=String(e&&e.customer||e&&e.cust||'').toLowerCase();
+  const hay=`${sub} ${type} ${channel} ${customer}`;
+  if(/myntra/.test(hay))return 'Myntra';
+  if(/nykaa/.test(hay))return 'Nykaa';
+  if(/ajio/.test(hay))return 'Ajio';
+  if(/tata|cliq/.test(hay))return 'Tata';
+  if(/flipkart/.test(hay))return 'Flipkart';
+  if(/amazon/.test(hay))return 'Amazon';
+  if(/website|online|d2c|direct/.test(hay))return 'Website';
+  if(/purchase/.test(hay))return 'Purchase';
+  if(/bulk/.test(hay))return 'Bulk';
+  if(/exhib/.test(hay))return 'Exhibition';
+  return 'Other';
+}
+function _concBuildTop20(){
+  const predicate=_bizBaseFilter('conc',true);
+  const platform=document.getElementById('concTopPlatform')?.value||'Overall';
+  const rankBy=document.getElementById('concTopRank')?.value||'qty';
+  const allowed=new Set(['Website','Myntra','Purchase','Bulk','Exhibition','Nykaa','Ajio','Tata','Flipkart','Amazon']);
+  const map=new Map();
+  _bizEvents().forEach(e=>{
+    if(!predicate(e))return;
+    const bucket=_concSalesPlatform(e);
+    if(!allowed.has(bucket)||(platform!=='Overall'&&bucket!==platform))return;
+    const qty=Math.max(0,_opsNum(e.qty)),rev=Math.max(0,_opsNum(e.rev));
+    if(qty<=0&&rev<=0)return;
+    const r=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,platforms:new Set()};
+    r.qty+=qty;r.rev+=rev;r.platforms.add(bucket);map.set(e.sku,r);
+  });
+  const allRows=Array.from(map.values());
+  const totalQty=allRows.reduce((s,r)=>s+r.qty,0),totalRev=allRows.reduce((s,r)=>s+r.rev,0);
+  allRows.forEach(r=>{r.qtyContribution=_bizPct(r.qty,totalQty);r.revenueContribution=_bizPct(r.rev,totalRev);});
+  return allRows.sort((a,b)=>rankBy==='revenue'?(b.rev-a.rev||b.qty-a.qty||a.sku.localeCompare(b.sku)):(b.qty-a.qty||b.rev-a.rev||a.sku.localeCompare(b.sku))).slice(0,20);
+}
+function renderConcentrationTop20(){
+  const host=document.getElementById('concTop20');if(!host)return;
+  const rows=_concBuildTop20(),emp=String(LOGIN_ROLE||'').toLowerCase()==='employee';
+  _concTop20ExportRows=rows;
+  const body=rows.map((r,i)=>{
+    const item=r.item||{},img=String(item.image_url||r.image||'').trim();
+    const photo=img&&img.toLowerCase()!=='nan'?`<img src="${escHtml(img)}" alt="${escHtml(r.sku)}" loading="lazy" style="width:52px;height:52px;object-fit:contain;background:#fff;border:1px solid #e8ddc7;border-radius:9px;padding:3px" onerror="this.style.display='none'">`:'—';
+    return `<tr><td class="ops-num">${i+1}</td><td>${photo}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.platforms).sort().join(', '))}</td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${_bizPctText(r.qtyContribution)}</b></td>${emp?'':`<td class="ops-num"><b>${_bizMoney(r.rev)}</b></td><td class="ops-num"><b>${_bizPctText(r.revenueContribution)}</b></td>`}<td class="ops-num">${Math.round(_opsNum(item.inv_stock)).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(_opsNum(item.inv_wip)).toLocaleString('en-IN')}</td></tr>`;
+  }).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Sales Platform</th><th>Sold Qty</th><th>Qty Contribution %</th>${emp?'':'<th>Net Revenue</th><th>Revenue Contribution %</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr></thead><tbody>${body||`<tr><td colspan="${emp?8:10}" class="ops-empty">No selling SKUs match the selected platform and filters.</td></tr>`}</tbody></table>`;
+}
+function exportConcentrationTop20(){
+  const rows=_concBuildTop20();if(!rows.length){alert('No Top 20 rows to export.');return;}
+  const emp=String(LOGIN_ROLE||'').toLowerCase()==='employee';
+  _dlCsv(['Rank','Sales Platform','SKU','SKU Name','Sold Qty','Qty Contribution %',...(emp?[]:['Net Revenue','Revenue Contribution %']),'Inv Stock','Inv WIP','Image Link'],rows.map((r,i)=>{const item=r.item||{};return [i+1,Array.from(r.platforms).sort().join(' | '),r.sku,exportSkuName(r.sku,r.skuName),Number(r.qty.toFixed(2)),Number(r.qtyContribution.toFixed(2)),...(emp?[]:[Number(r.rev.toFixed(2)),Number(r.revenueContribution.toFixed(2))]),Math.round(_opsNum(item.inv_stock)),Math.round(_opsNum(item.inv_wip)),item.image_url||''];}),'top_20_selling_skus_by_platform');
+}
 function loadConcentrationRisk(){
   _bizInitFilters('conc');
   const fromEl=document.getElementById('concD1'),toEl=document.getElementById('concD2');
@@ -15995,6 +16057,7 @@ function loadConcentrationRisk(){
 function renderConcentrationRisk(){
   const host=document.getElementById('concContent'),sum=document.getElementById('concSummary'),alertHost=document.getElementById('concAlert'); if(!host)return;
   const predicate=_bizBaseFilter('conc',true);
+  renderConcentrationTop20();
   const selectedSource=document.getElementById('concSource')?.value||'Overall';
   const events=_bizEvents().filter(e=>predicate(e)&&_concSourceMatchesEvent(e,selectedSource));
   const sku=new Map(),channel=new Map(),taxon=new Map(); let totalRev=0,totalQty=0;
@@ -16356,7 +16419,7 @@ function exportOosLostSales(){
   );
 }
 
-window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;
+window.loadConcentrationRisk=loadConcentrationRisk;window.renderConcentrationRisk=renderConcentrationRisk;window.exportConcentrationRisk=exportConcentrationRisk;window.renderConcentrationTop20=renderConcentrationTop20;window.exportConcentrationTop20=exportConcentrationTop20;
 window.loadDemandPatterns=loadDemandPatterns;window.renderDemandPatterns=renderDemandPatterns;window.exportDemandPatterns=exportDemandPatterns;
 window.loadOosLostSales=loadOosLostSales;window.renderOosLostSales=renderOosLostSales;window.exportOosLostSales=exportOosLostSales;
 
