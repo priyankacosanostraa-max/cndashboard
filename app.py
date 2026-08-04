@@ -280,6 +280,7 @@ COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJ
 COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
+MYNTRA_SALES_URL = os.environ.get("MYNTRA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1751797609&single=true&output=csv")
 # Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
@@ -6716,10 +6717,12 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="ops-filters">
       <div class="fc"><label class="fl">Search Child / CMB</label><input class="fi" id="crSearch" placeholder="RKH-… / CMB-…" oninput="renderComboRisk_d()"></div>
+      <div class="fc"><label class="fl">CMB Filter</label><select class="fs" id="crCmb" onchange="renderComboRisk()"><option value="All">All CMBs</option></select></div>
+      <div class="fc"><label class="fl">SKU–Combo Rows</label><select class="fs" id="crRelation" onchange="renderComboRisk()"><option value="all">All Child SKUs &amp; Combos</option><option value="shared">Child in Multiple CMBs</option><option value="single">Child in One CMB</option></select></div>
       <div class="fc"><label class="fl">Combo Group</label><select class="fs" id="crGroup" onchange="renderComboRisk()"><option value="All">All Combos</option><option value="Rakhi">Rakhi Combos</option><option value="Others">Other Combos</option></select></div>
       <div class="fc"><label class="fl">Child Taxon</label><select class="fs" id="crTaxon" onchange="renderComboRisk()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Demand Horizon</label><select class="fs" id="crHorizon" onchange="renderComboRisk()"><option value="15">15 Days</option><option value="30" selected>30 Days</option><option value="45">45 Days</option><option value="60">60 Days</option></select></div>
-      <div class="fc"><label class="fl">Risk Rows</label><select class="fs" id="crRiskOnly" onchange="renderComboRisk()"><option value="yes">Only Shortage Risk</option><option value="all">All Child SKUs</option></select></div>
+      <div class="fc"><label class="fl">Risk Rows</label><select class="fs" id="crRiskOnly" onchange="renderComboRisk()"><option value="all" selected>All Child SKUs</option><option value="yes">Only Shortage Risk</option></select></div>
       <div class="fc"><label class="fl">Include WIP in Support</label><select class="fs" id="crIncludeWip" onchange="renderComboRisk()"><option value="no">No — Stock Only</option><option value="yes">Yes — Stock + WIP</option></select></div>
     </div>
     <div id="crSummary" class="ops-kpis"></div>
@@ -6837,6 +6840,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="concD1" onchange="renderConcentrationRisk()"></div>
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
+      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="renderConcentrationRisk()"><option value="Overall" selected>Overall — All Sales</option><option value="Website">Website</option><option value="Myntra">Myntra</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
@@ -11999,7 +12003,7 @@ function _rkhBuildTopCities(cityRows){
   const map = {};
   // Har State/UT ko 0 se seed karo pehle — taaki jinme sale hi nahi hui
   // wo bhi table me dikhein.
-  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, orders: 0, cities: []}; });
+  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, websiteQty:0, myntraQty:0, orders: 0, cities: []}; });
   (cityRows || []).forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs / CMBs
@@ -12014,13 +12018,16 @@ function _rkhBuildTopCities(cityRows){
       const pin = String(r.pin || '').replace(/\D/g, '').slice(0, 3);
       city = pin ? `PIN ${pin} Area` : (state === 'Delhi' ? 'New Delhi' : state);
     }
-    if (!map[state]) map[state] = {state, qty: 0, orders: 0, cities: []};
+    if (!map[state]) map[state] = {state, qty: 0, websiteQty:0, myntraQty:0, orders: 0, cities: []};
     const soldQty = Number(r.qty) || 0;
+    const source = String(r.source || 'Website');
     map[state].qty += soldQty;
+    if (source === 'Myntra') map[state].myntraQty += soldQty; else map[state].websiteQty += soldQty;
     map[state].orders += 1;
     let c = map[state].cities.find(x => x.city === city);
-    if (!c){ c = {city, qty: 0, orders: 0, productMap: {}, products: []}; map[state].cities.push(c); }
+    if (!c){ c = {city, qty: 0, websiteQty:0, myntraQty:0, orders: 0, productMap: {}, products: []}; map[state].cities.push(c); }
     c.qty += soldQty;
+    if (source === 'Myntra') c.myntraQty += soldQty; else c.websiteQty += soldQty;
     c.orders += 1;
     if (!c.productMap[sku]) c.productMap[sku] = {sku, qty: 0, orders: 0};
     c.productMap[sku].qty += soldQty;
@@ -12098,13 +12105,13 @@ async function renderRakhiTopCities(){
   const qualityNote = corrected > 0
     ? `<div class="small-note" style="margin:0 0 8px;color:#7a5a00"><b>Data check:</b> ${corrected.toLocaleString('en-IN')} source city label${corrected===1?' was':'s were'} corrected using the billing PIN before grouping.</div>`
     : '';
-  const head = `<tr><th>#</th><th>State / UT</th><th>Sold Qty</th><th>Order Lines</th></tr>`;
+  const head = `<tr><th>#</th><th>State / UT</th><th>Overall Sold Qty</th><th>Website Qty</th><th>Myntra Qty</th><th>Order Lines</th></tr>`;
   const body = list.map((r, i) => {
     const hasCities = r.cities && r.cities.length;
     const cityRows = hasCities ? r.cities.map((c, ci) => `<tr>
         <td style="color:#8f7a47;vertical-align:top">${ci + 1}</td>
         <td style="vertical-align:top"><b>${escHtml(c.city)}</b></td>
-        <td style="vertical-align:top"><b>${Math.round(c.qty).toLocaleString('en-IN')}</b></td>
+        <td style="vertical-align:top"><b>${Math.round(c.qty).toLocaleString('en-IN')}</b></td><td style="vertical-align:top">${Math.round(c.websiteQty||0).toLocaleString('en-IN')}</td><td style="vertical-align:top">${Math.round(c.myntraQty||0).toLocaleString('en-IN')}</td>
         <td style="vertical-align:top">${c.orders.toLocaleString('en-IN')}</td>
         <td style="vertical-align:top">${_rkhCityTopProductsHtml(c)}</td>
       </tr>`).join('') : `<tr><td colspan="5" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
@@ -12112,12 +12119,14 @@ async function renderRakhiTopCities(){
       <td><b>${i + 1}</b></td>
       <td><span id="rkhStateArrow${i}" style="display:inline-block;width:18px;color:#d4af5a">${hasCities ? '▶' : '•'}</span><b>${escHtml(r.state)}</b></td>
       <td><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td>
+      <td>${Math.round(r.websiteQty||0).toLocaleString('en-IN')}</td>
+      <td>${Math.round(r.myntraQty||0).toLocaleString('en-IN')}</td>
       <td>${r.orders.toLocaleString('en-IN')}</td>
     </tr>
     <tr id="rkhCityRow${i}" style="display:none;background:rgba(212,175,90,.035)">
-      <td></td><td colspan="3" style="padding:10px 14px">
+      <td></td><td colspan="5" style="padding:10px 14px">
         <table class="ro" style="width:100%;min-width:900px;border-collapse:collapse">
-          <thead><tr><th>#</th><th>City</th><th>Sold Qty</th><th>Order Lines</th><th>Top 3 Rakhi / CMB Products</th></tr></thead>
+          <thead><tr><th>#</th><th>City</th><th>Overall Qty</th><th>Website Qty</th><th>Myntra Qty</th><th>Order Lines</th><th>Top 3 Rakhi / CMB Products</th></tr></thead>
           <tbody>${cityRows}</tbody>
         </table>
       </td>
@@ -12128,8 +12137,8 @@ async function renderRakhiTopCities(){
 function exportRakhiTopCitiesCSV(){
   const list = _rakhiTopCityRows || [];
   if (!list.length){ alert('No State/UT data to export.'); return; }
-  const headers = ['Rank', 'State / UT', 'Sold Qty', 'Order Lines'];
-  const data = list.map((r, i) => [i + 1, r.state, Math.round(r.qty), r.orders]);
+  const headers = ['Rank', 'State / UT', 'Overall Sold Qty', 'Website Qty', 'Myntra Qty', 'Order Lines'];
+  const data = list.map((r, i) => [i + 1, r.state, Math.round(r.qty), Math.round(r.websiteQty||0), Math.round(r.myntraQty||0), r.orders]);
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -13688,29 +13697,40 @@ function _buildComboRiskRows(){
   });
   const horizon=Math.max(1,_opsNum(document.getElementById('crHorizon')?.value||30));
   const includeWip=(document.getElementById('crIncludeWip')?.value||'no')==='yes';
-  _crRows=Object.values(childMap).map(r=>{
-    const demand=r.parents.reduce((s,p)=>s+p.drr*horizon,0); const support=r.stock+(includeWip?r.wip:0); const blocked=Math.max(0,Math.ceil(demand-support)); const cmbs=Array.from(new Set(r.parents.map(p=>p.sku))); const groups=new Set(r.parents.map(p=>p.group)); const group=groups.size===1?Array.from(groups)[0]:'Mixed';
+  _crRows=[];
+  Object.values(childMap).forEach(r=>{
+    const demand=r.parents.reduce((s,p)=>s+p.drr*horizon,0);
+    const support=r.stock+(includeWip?r.wip:0);
+    const blocked=Math.max(0,Math.ceil(demand-support));
+    const parentCount=r.parents.length;
     const risk=r.stock<=0&&demand>0?{key:'critical',label:'Child OOS'}:blocked>0?{key:'high',label:'Combo Production Blocked'}:support<demand*1.25?{key:'medium',label:'Low Buffer'}:{key:'good',label:'Covered'};
-    return {...r,group,cmbs,demand,support,blocked,parent30:r.parents.reduce((s,p)=>s+p.qty30,0),risk};
-  }).sort((a,b)=>b.blocked-a.blocked||b.demand-a.demand||b.cmbs.length-a.cmbs.length);
+    r.parents.forEach(p=>_crRows.push({...r,parents:undefined,cmb:p.sku,cmbName:p.skuName,group:p.group,parentCount,comboSoldQty:p.qty30,comboDrr:p.drr,comboDemand:p.drr*horizon,demand,support,blocked,risk}));
+  });
+  _crRows.sort((a,b)=>b.blocked-a.blocked||b.parentCount-a.parentCount||b.comboSoldQty-a.comboSoldQty||a.sku.localeCompare(b.sku)||a.cmb.localeCompare(b.cmb));
   _opsFillTaxon('crTaxon',_crRows,r=>r.taxon);
+  _bizSetSelect('crCmb',_crRows.map(r=>r.cmb),'All CMBs');
   return _crRows;
 }
 function _comboRiskFiltered(){
-  const rows=_crRows.length?_crRows:_buildComboRiskRows(); const q=String(document.getElementById('crSearch')?.value||'').trim().toLowerCase(); const g=document.getElementById('crGroup')?.value||'All'; const tx=document.getElementById('crTaxon')?.value||'All'; const only=document.getElementById('crRiskOnly')?.value||'yes';
-  return rows.filter(r=>(!q||`${r.sku} ${r.skuName} ${r.cmbs.join(' ')}`.toLowerCase().includes(q))&&(g==='All'||r.group===g||(g==='Rakhi'&&r.group==='Mixed'))&&(tx==='All'||r.taxon===tx)&&(only!=='yes'||r.blocked>0));
+  const rows=_crRows.length?_crRows:_buildComboRiskRows();
+  const q=String(document.getElementById('crSearch')?.value||'').trim().toLowerCase();
+  const g=document.getElementById('crGroup')?.value||'All',tx=document.getElementById('crTaxon')?.value||'All';
+  const cmb=document.getElementById('crCmb')?.value||'All',relation=document.getElementById('crRelation')?.value||'all';
+  const only=document.getElementById('crRiskOnly')?.value||'all';
+  return rows.filter(r=>(!q||`${r.sku} ${r.skuName} ${r.cmb} ${r.cmbName}`.toLowerCase().includes(q))&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(cmb==='All'||r.cmb===cmb)&&(relation==='all'||(relation==='shared'?r.parentCount>1:r.parentCount===1))&&(only!=='yes'||r.blocked>0));
 }
 function loadComboRisk(){_crRows=[];_buildComboRiskRows();renderComboRisk();}
 function renderComboRisk(){
   _crRows=[];_buildComboRiskRows(); const rows=_comboRiskFiltered(); const sum=document.getElementById('crSummary'); const host=document.getElementById('crContent'); if(!host)return;
-  const impacted=new Set(); rows.forEach(r=>r.cmbs.forEach(x=>impacted.add(x))); const blocked=rows.reduce((s,r)=>s+r.blocked,0); const demand=rows.reduce((s,r)=>s+r.demand,0); const childOos=rows.filter(r=>r.stock<=0&&r.demand>0).length;
-  if(sum)sum.innerHTML=_opsKpi('Risky Child SKUs',rows.filter(r=>r.blocked>0).length.toLocaleString('en-IN'),'Common and unique children')+_opsKpi('Impacted CMBs',impacted.size.toLocaleString('en-IN'),'Unique parent combos')+_opsKpi('Potential Blocked Qty',Math.round(blocked).toLocaleString('en-IN'),'Across selected horizon')+_opsKpi('Child OOS',childOos.toLocaleString('en-IN'),`Projected demand ${Math.ceil(demand).toLocaleString('en-IN')}`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${r.cmbs.length.toLocaleString('en-IN')}</td><td class="ops-list">${r.cmbs.map(x=>`<button class="sku-link" onclick="openSkuDetails('${String(x).replace(/'/g,"\\'")}')">${escHtml(x)}</button>`).join(', ')}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.parent30).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.demand).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.blocked>0?'#b3261e':'#15803d'}">${r.blocked.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>Child SKU</th><th>Combo Group</th><th>Child Taxon</th><th>No. of CMBs</th><th>Affected CMB SKUs</th><th>Child Stock</th><th>Child WIP</th><th>Parent 30D Sale</th><th>Horizon Child Demand</th><th>Potential Blocked Combo Qty</th><th>Risk</th></tr></thead><tbody>${body||'<tr><td colspan="13" class="ops-empty">No child-SKU shortages match the current filters.</td></tr>'}</tbody></table>`;
+  const children=new Map(),impacted=new Set();rows.forEach(r=>{impacted.add(r.cmb);children.set(r.sku,r);});
+  const blocked=Array.from(children.values()).reduce((s,r)=>s+r.blocked,0),demand=Array.from(children.values()).reduce((s,r)=>s+r.demand,0),childOos=Array.from(children.values()).filter(r=>r.stock<=0&&r.demand>0).length;
+  if(sum)sum.innerHTML=_opsKpi('Child SKUs',children.size.toLocaleString('en-IN'),`${rows.length.toLocaleString('en-IN')} SKU–CMB rows`)+_opsKpi('CMBs',impacted.size.toLocaleString('en-IN'),'Unique parent combos')+_opsKpi('Potential Blocked Qty',Math.round(blocked).toLocaleString('en-IN'),'Unique child-wise; no duplicate sum')+_opsKpi('Child OOS',childOos.toLocaleString('en-IN'),`Projected child demand ${Math.ceil(demand).toLocaleString('en-IN')}`);
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td><button class="sku-link" onclick="openSkuDetails('${String(r.cmb).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.cmb,r.cmbName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${r.parentCount.toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.comboSoldQty).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.comboDrr.toFixed(2)}</td><td class="ops-num">${Math.ceil(r.comboDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.demand).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.blocked>0?'#b3261e':'#15803d'}">${r.blocked.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>Child SKU</th><th>Parent CMB</th><th>Combo Group</th><th>Child Taxon</th><th>CMB Count for Child</th><th>Child Inv Stock</th><th>Child Inv WIP</th><th>Combo Sold Qty (30D)</th><th>Combo DRR</th><th>CMB Horizon Demand</th><th>Total Child Demand</th><th>Potential Blocked Qty</th><th>Risk</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No SKU–CMB relationships match the current filters.</td></tr>'}</tbody></table>`;
 }
 function exportComboRisk(){
   const rows=_comboRiskFiltered(); if(!rows.length){alert('No combo-risk rows to export');return;}
-  _dlCsv(['Child SKU','Child SKU Name','Image Link','Combo Group','Child Taxon','No. of CMBs','Affected CMB SKUs','Child Stock','Child WIP','Parent 30D Sale','Horizon Child Demand','Potential Blocked Combo Qty','Risk'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.image,r.group,r.taxon,r.cmbs.length,r.cmbs.join(' | '),Math.round(r.stock),Math.round(r.wip),Math.round(r.parent30),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_production_risk');
+  _dlCsv(['Child SKU','Child SKU Name','Parent CMB','Parent CMB Name','Image Link','Combo Group','Child Taxon','CMB Count for Child','Child Inv Stock','Child Inv WIP','Combo Sold Qty 30D','Combo DRR','CMB Horizon Demand','Total Child Demand Across CMBs','Potential Blocked Qty','Risk'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.cmb,exportSkuName(r.cmb,r.cmbName),r.image,r.group,r.taxon,r.parentCount,Math.round(r.stock),Math.round(r.wip),Math.round(r.comboSoldQty),Number(r.comboDrr.toFixed(3)),Math.ceil(r.comboDemand),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_production_risk');
 }
 
 function _loadOpsSupport(fresh){
@@ -15859,35 +15879,48 @@ function _bizRankTable(title,rows,nameLabel='Name',limit=10){
   return `<div class="ops-section ops-rank-section"><div class="ops-section-head"><div class="ops-section-title">${escHtml(title)}</div></div><div class="ops-table-wrap"><table class="ops-table ops-rank-table"><thead><tr><th>#</th><th>${escHtml(nameLabel)}</th><th>Revenue</th><th>Qty</th><th>Contribution</th><th>Share</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="ops-empty">No matching data.</td></tr>'}</tbody></table></div></div>`;
 }
 
+function _concEventSource(e){
+  const type=String(e&&e.type||'').toLowerCase(), channel=String(e&&e.channel||'').toLowerCase();
+  const sub=String(e&&e.subChannel||e&&e.sub_channel||'').toLowerCase();
+  if(sub.includes('myntra'))return 'Myntra';
+  if(type.includes('website')||type.includes('online')||channel.includes('d2c')||channel.includes('website'))return 'Website';
+  return 'Other';
+}
+function _concSourceMatchesEvent(e,source){ return source==='Overall'||_concEventSource(e)===source; }
+
 function _concCityRanks(filterMeta,totalRevenue){
   const city=new Map();
   const d1=_bizIso(document.getElementById('concD1')?.value), d2=_bizIso(document.getElementById('concD2')?.value);
   const type=document.getElementById('concType')?.value||'All';
   const channel=document.getElementById('concChannel')?.value||'All';
-  const cityAllowed=(type==='All'||/website|online|d2c|direct/i.test(type))&&(channel==='All'||/d2c|website|online|direct/i.test(channel));
-  if(!cityAllowed)return {rows:[],total:0,coverage:0};
-  (master||[]).forEach(it=>{
-    const meta={group:_opsGroup(it),taxon:String(it.taxon||'General'),sku:String(it.sku||''),skuName:String(it.sku_name||'')};
+  const source=document.getElementById('concSource')?.value||'Overall';
+  const geoRows=Array.isArray(_rkhCityRows)?_rkhCityRows:[];
+  const priceCache=new Map();
+  geoRows.forEach(ev=>{
+    const evSource=String(ev.source||'Website');
+    if(source!=='Overall'&&evSource!==source)return;
+    const date=_bizIso(ev.date||ev.d); if(d1&&(!date||date<d1))return;if(d2&&(!date||date>d2))return;
+    const skuKey=String(ev.sku||'').trim().toUpperCase();const it=_masterSkuMap[skuKey]||{};
+    const meta={group:_opsGroup(it),taxon:String(it.taxon||'General'),sku:skuKey,skuName:String(it.sku_name||'')};
     if(!filterMeta(meta))return;
-    const webSales=(it.sales_entries||[]).filter(e=>{
-      const date=_bizEntryDate(e); if(!date)return false;
-      if(d1&&date<d1)return false; if(d2&&date>d2)return false;
-      return /website|online/i.test(String(e.type||''))||/d2c/i.test(String(e.channel||''));
-    });
-    const webQty=webSales.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0);
-    const webRev=webSales.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
-    const fallbackSp=webQty>0&&webRev>0?webRev/webQty:Math.max(0,_opsNum(it.website_selling_price)||_opsNum(it.avg_selling_price)||_opsNum(it.mrp));
-    (it.website_city_events||[]).forEach(ev=>{
-      const date=_bizIso(ev.d); if(!date)return;
-      if(d1&&date<d1)return; if(d2&&date>d2)return;
-      const cityName=String(ev.c||'').trim(); if(!cityName)return;
-      const stateName=String(ev.s||'').trim();
-      const name=stateName&&!cityName.toLowerCase().includes(stateName.toLowerCase())?`${cityName}, ${stateName}`:cityName;
-      const qty=Math.max(0,_opsNum(ev.q));
-      const directRev=Math.max(0,_opsNum(ev.r));
-      const rev=directRev>0?directRev:qty*fallbackSp;
-      const x=city.get(name)||{rev:0,qty:0}; x.rev+=rev; x.qty+=qty; city.set(name,x);
-    });
+    if(type!=='All'||channel!=='All'){
+      const matching=(it.sales_entries||[]).some(e=>_concSourceMatchesEvent(e,evSource)&&(type==='All'||String(e.type||'')===type)&&(channel==='All'||String(e.channel||'')===channel));
+      if(!matching)return;
+    }
+    const cityName=String(ev.city||ev.c||'').trim();if(!cityName)return;
+    const stateName=String(ev.state||ev.s||'').trim();
+    const name=stateName&&!cityName.toLowerCase().includes(stateName.toLowerCase())?`${cityName}, ${stateName}`:cityName;
+    const qty=Math.max(0,_opsNum(ev.qty??ev.q));let rev=Math.max(0,_opsNum(ev.revenue??ev.r));
+    if(rev<=0){
+      const cacheKey=skuKey+'|'+evSource;
+      if(!priceCache.has(cacheKey)){
+        const sales=(it.sales_entries||[]).filter(e=>_concSourceMatchesEvent(e,evSource));
+        const sq=sales.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0),sr=sales.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
+        priceCache.set(cacheKey,sq>0&&sr>0?sr/sq:Math.max(0,_opsNum(it.avg_selling_price)||_opsNum(it.website_selling_price)||_opsNum(it.mrp)));
+      }
+      rev=qty*(priceCache.get(cacheKey)||0);
+    }
+    const x=city.get(name)||{rev:0,qty:0};x.rev+=rev;x.qty+=qty;city.set(name,x);
   });
   const total=Array.from(city.values()).reduce((s,v)=>s+v.rev,0);
   const rows=Array.from(city.entries()).map(([name,v])=>({name,...v,share:_bizPct(v.rev,total)})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
@@ -15929,13 +15962,14 @@ function _concItemFilter(it){
   if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;
   return true;
 }
-function _concTypeChannelShare(it,typeSel,channelSel){
-  if(typeSel==='All'&&channelSel==='All')return 1;
+function _concTypeChannelShare(it,typeSel,channelSel,sourceSel='Overall'){
+  if(typeSel==='All'&&channelSel==='All'&&sourceSel==='Overall')return 1;
   const ents=it.sales_entries||[];
   let all=0,matched=0;
   ents.forEach(e=>{
     const q=Math.max(0,_opsNum(e.qty)); if(q<=0)return;
     all+=q;
+    if(!_concSourceMatchesEvent(e,sourceSel))return;
     if(typeSel!=='All'&&String(e.type||'')!==typeSel)return;
     if(channelSel!=='All'&&String(e.channel||'')!==channelSel)return;
     matched+=q;
@@ -15944,7 +15978,7 @@ function _concTypeChannelShare(it,typeSel,channelSel){
   // No transaction split available: a specifically selected filter cannot be
   // apportioned safely, so keep the SKU only when its known best channel fits.
   if(channelSel!=='All')return String(it.best_channel||'')===channelSel?1:0;
-  return typeSel==='All'?1:0;
+  return (typeSel==='All'&&sourceSel==='Overall')?1:0;
 }
 function loadConcentrationRisk(){
   _bizInitFilters('conc');
@@ -15956,11 +15990,13 @@ function loadConcentrationRisk(){
     if(latest&&fromEl&&toEl){toEl.value=latest;fromEl.value=_bizShift(latest,-179);}
   }
   renderConcentrationRisk();
+  _rkhLoadCityRows(false).then(()=>renderConcentrationRisk()).catch(()=>{});
 }
 function renderConcentrationRisk(){
   const host=document.getElementById('concContent'),sum=document.getElementById('concSummary'),alertHost=document.getElementById('concAlert'); if(!host)return;
   const predicate=_bizBaseFilter('conc',true);
-  const events=_bizEvents().filter(predicate);
+  const selectedSource=document.getElementById('concSource')?.value||'Overall';
+  const events=_bizEvents().filter(e=>predicate(e)&&_concSourceMatchesEvent(e,selectedSource));
   const sku=new Map(),channel=new Map(),taxon=new Map(); let totalRev=0,totalQty=0;
   events.forEach(e=>{
     const rev=Math.max(0,e.rev),qty=Math.max(0,e.qty); totalRev+=rev; totalQty+=qty;
@@ -15984,7 +16020,7 @@ function renderConcentrationRisk(){
     fallbackUsed=true;
     (master||[]).forEach(it=>{
       if(!_concItemFilter(it))return;
-      const share=_concTypeChannelShare(it,selectedType,selectedChannel);
+      const share=_concTypeChannelShare(it,selectedType,selectedChannel,selectedSource);
       if(share<=0)return;
       const qty=Math.max(0,_concSummaryQty(it,rangeDays)*share);
       if(qty<=0)return;
@@ -15993,7 +16029,7 @@ function renderConcentrationRisk(){
       const key=String(it.sku||'').trim();if(!key)return;
       sku.set(key,{rev:value,qty,item:it});
       const tx=String(it.taxon||'General')||'General';const t=taxon.get(tx)||{rev:0,qty:0};t.rev+=value;t.qty+=qty;taxon.set(tx,t);
-      const ch=selectedChannel!=='All'?selectedChannel:(String(it.best_channel||'').trim()||'Unclassified');
+      const ch=selectedChannel!=='All'?selectedChannel:(selectedSource!=='Overall'?selectedSource:(String(it.best_channel||'').trim()||'Unclassified'));
       const c=channel.get(ch)||{rev:0,qty:0};c.rev+=value;c.qty+=qty;channel.set(ch,c);
       totalRev+=value;totalQty+=qty;fallbackSkuCount++;
     });
@@ -16016,12 +16052,13 @@ function renderConcentrationRisk(){
   const dependent=!!topSku&&topSku.share>=threshold;
   const atRisk=dependent?topSku.rev:0;
   const metricLabel=revenueMode?(fallbackUsed?'Estimated Revenue':'Revenue'):'Qty Proxy';
-  const basisText=fallbackUsed?`${fallbackSkuCount.toLocaleString('en-IN')} SKUs · ${rangeDays}-day rolling-summary estimate`:`${events.length.toLocaleString('en-IN')} dated transaction lines`;
+  const sourceLabel=selectedSource==='Overall'?'Overall sales':selectedSource;
+  const basisText=fallbackUsed?`${sourceLabel} · ${fallbackSkuCount.toLocaleString('en-IN')} SKUs · ${rangeDays}-day estimate`:`${sourceLabel} · ${events.length.toLocaleString('en-IN')} dated transaction lines`;
   if(sum)sum.innerHTML=
     _opsKpi(`Total ${metricLabel}`,revenueMode?_bizMoney(totalRev):_bizNum(totalRev,0),basisText)+
     _opsKpi('Top 5 SKU Contribution',_bizPctText(_bizPct(top5,totalRev)),`${skuRows.length.toLocaleString('en-IN')} active SKUs`)+
     _opsKpi('Top Channel',topChannel?`${escHtml(topChannel.name)} · ${_bizPctText(topChannel.share)}`:'—',topChannel?(revenueMode?_bizMoney(topChannel.rev):_bizNum(topChannel.rev,0)):'No data')+
-    _opsKpi('Top City (Website/D2C)',topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% overall coverage`:'No city rows')+
+    _opsKpi(`Top City (${selectedSource==='Overall'?'Website + Myntra':selectedSource})`,topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% selected-sales coverage`:'No city rows')+
     _opsKpi('Top Taxon',topTaxon?`${escHtml(topTaxon.name)} · ${_bizPctText(topTaxon.share)}`:'—',topTaxon?(revenueMode?_bizMoney(topTaxon.rev):_bizNum(topTaxon.rev,0)):'No data')+
     _opsKpi('Revenue at Risk',revenueMode?_bizMoney(atRisk):_bizNum(atRisk,0),dependent?`Top SKU above ${threshold}% dependency`:`No SKU above ${threshold}%`);
   if(alertHost){
@@ -16030,17 +16067,17 @@ function renderConcentrationRisk(){
     alertHost.innerHTML=basis+dep;
   }
   const skuTableRows=skuRows.slice(0,10).map(r=>({...r,name:r.display}));
-  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable(fallbackUsed?'Channel Concentration — Estimated Mix':'Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable('City Concentration — Website/D2C',cityInfo.rows,'City',12)}</div>`;
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable(fallbackUsed?'Channel Concentration — Estimated Mix':'Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable(`City Concentration — ${selectedSource==='Overall'?'Website + Myntra':selectedSource}`,cityInfo.rows,'City',12)}</div>`;
   _concExportRows=[];
-  skuRows.forEach(r=>_concExportRows.push(['SKU',r.name,r.item?.sku_name||'',r.rev,r.qty,r.share]));
-  channelRows.forEach(r=>_concExportRows.push(['Channel',r.name,'',r.rev,r.qty,r.share]));
-  taxonRows.forEach(r=>_concExportRows.push(['Taxon',r.name,'',r.rev,r.qty,r.share]));
-  cityInfo.rows.forEach(r=>_concExportRows.push(['City',r.name,'',r.rev,r.qty,r.share]));
+  skuRows.forEach(r=>_concExportRows.push([selectedSource,'SKU',r.name,r.item?.sku_name||'',r.rev,r.qty,r.share]));
+  channelRows.forEach(r=>_concExportRows.push([selectedSource,'Channel',r.name,'',r.rev,r.qty,r.share]));
+  taxonRows.forEach(r=>_concExportRows.push([selectedSource,'Taxon',r.name,'',r.rev,r.qty,r.share]));
+  cityInfo.rows.forEach(r=>_concExportRows.push([selectedSource,'City',r.name,'',r.rev,r.qty,r.share]));
 }
 
 function exportConcentrationRisk(){
   if(!_concExportRows.length)renderConcentrationRisk(); if(!_concExportRows.length){alert('No concentration rows to export');return;}
-  _dlCsv(['Dimension','Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[2],Number(r[3].toFixed(2)),Number(r[4].toFixed(2)),Number(r[5].toFixed(2))]),'sales_concentration_risk');
+  _dlCsv(['Sales Source','Dimension','Name','SKU Name','Revenue / Qty Proxy','Sold Qty','Contribution %'],_concExportRows.map(r=>[r[0],r[1],r[2],r[3],Number(r[4].toFixed(2)),Number(r[5].toFixed(2)),Number(r[6].toFixed(2))]),'sales_concentration_risk');
 }
 
 const _DP_DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -18001,6 +18038,7 @@ def _fetch_rkh_sku_city_rows():
         C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
                  or (cols[4] if len(cols) > 4 else None)
         C_STATUS = find_col(cols, "Sale Order Status", "Order Status", "status")
+        C_DATE = find_col(cols, "Created", "Created At", "Order Date", "Dispatch Date", "Date")
         diag["sku_col"] = C_SKU
         diag["qty_col"] = C_QTY
         diag["addr_col"] = C_ADDR
@@ -18032,7 +18070,9 @@ def _fetch_rkh_sku_city_rows():
                     qty = 1.0
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state,
-                    "city": city, "pin": pin,
+                    "city": city, "pin": pin, "source": "Website",
+                    "date": (parse_date_any(r.get(C_DATE, "")).strftime("%Y-%m-%d")
+                             if C_DATE and parse_date_any(r.get(C_DATE, "")) else ""),
                 })
                 diag["rows_used"] += 1
         else:
@@ -18040,6 +18080,57 @@ def _fetch_rkh_sku_city_rows():
     except Exception as e:
         diag["error"] = str(e)[:300]
         print("Rakhi SKU-city rows fetch failed:", str(e)[:160])
+
+    # Myntra source: SKU No., Qty., Destination pincode and Destination City.
+    # PIN remains authoritative for State; the supplied city is validated
+    # against it before being exposed to Rakhi and concentration views.
+    diag.update({"myntra_rows_total": 0, "myntra_rows_used": 0,
+                 "myntra_columns_found": False, "myntra_error": None})
+    try:
+        mdf = _fetch_csv_fresh(MYNTRA_SALES_URL)
+        mdf.columns = [str(c).strip() for c in mdf.columns]
+        mcols = list(mdf.columns)
+        diag["myntra_rows_total"] = len(mdf)
+        diag["myntra_all_columns"] = mcols[:24]
+        M_SKU = find_col(mcols, "SKU No.", "SKU No", "Seller_sku", "Seller SKU", "SKU", "Item Code")
+        M_QTY = find_col(mcols, "Qty.", "Qty", "Quantity", "Sold Qty")
+        M_PIN = find_col(mcols, "Destination pincode", "Destination Pincode", "Destination PIN", "Pincode")
+        M_CITY = find_col(mcols, "Destination City", "City")
+        M_DATE = find_col(mcols, "Packed On", "Order Date", "Created", "Created At", "Date")
+        M_STATUS = find_col(mcols, "Status", "Order Status")
+        M_MRP = find_col(mcols, "MRP", "Selling Price", "Net Revenue", "Revenue")
+        diag["myntra_resolved"] = {"sku": M_SKU, "qty": M_QTY, "pin": M_PIN,
+                                   "city": M_CITY, "date": M_DATE, "status": M_STATUS}
+        if M_SKU and M_PIN and M_CITY:
+            diag["myntra_columns_found"] = True
+            for _, r in mdf.iterrows():
+                status = str(r.get(M_STATUS, "") or "").strip().casefold() if M_STATUS else ""
+                if status and any(x in status for x in ("cancel", "void", "failed", "return")):
+                    continue
+                sku = clean(r.get(M_SKU, ""))
+                pin = re.sub(r"\D", "", str(r.get(M_PIN, "") or ""))[:6]
+                if not sku or len(pin) != 6:
+                    continue
+                state = _pincode_to_state(pin)
+                if not state:
+                    continue
+                raw_city = clean(r.get(M_CITY, ""))
+                city = _normalize_city_for_state(raw_city, state, pin)
+                qty = to_num(r.get(M_QTY, 0)) if M_QTY else 1.0
+                if qty <= 0:
+                    continue
+                dt = parse_date_any(r.get(M_DATE, "")) if M_DATE else None
+                mrp = to_num(r.get(M_MRP, 0)) if M_MRP else 0.0
+                out.append({"sku": sku, "qty": float(qty), "state": state,
+                            "city": city, "pin": pin, "source": "Myntra",
+                            "date": dt.strftime("%Y-%m-%d") if dt else "",
+                            "revenue": round(float(mrp) * float(qty), 2) if mrp > 0 else 0.0})
+                diag["myntra_rows_used"] += 1
+        else:
+            diag["myntra_error"] = "Could not find SKU / Destination pincode / Destination City columns."
+    except Exception as e:
+        diag["myntra_error"] = str(e)[:300]
+        print("Myntra SKU-city rows fetch failed:", str(e)[:160])
     _RKH_CITY_CACHE["rows"] = out
     _RKH_CITY_CACHE["diag"] = diag
     _RKH_CITY_CACHE["ts"] = time.time()
