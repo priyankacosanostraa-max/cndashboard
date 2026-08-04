@@ -6733,19 +6733,15 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
-      <div><div class="ops-title">Operations — Available CMB Builder</div><div class="ops-sub">Shows only assembled or child-inventory-buildable CMBs. Shared child stock is allocated once across competing CMBs, prioritised by latest 30-day CMB sales.</div></div>
+      <div><div class="ops-title">Operations — Exhibition CMB Selection</div><div class="ops-sub">Shows only CMB designs whose every mapped child SKU has Inventory Stock. Shared child stock is reserved once across CMBs; higher total-selling CMB designs receive priority.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
-      <div class="fc"><label class="fl">Search CMB / Child SKU</label><input class="fi" id="opAvailSearch" placeholder="CMB-… / child SKU…" oninput="renderOperationsAvailability_d()"></div>
-      <div class="fc"><label class="fl">CMB Filter</label><select class="fs" id="opAvailCmb" onchange="renderOperationsAvailability()"><option value="All">All Available CMBs</option></select></div>
-      <div class="fc"><label class="fl">Combo Group</label><select class="fs" id="opAvailGroup" onchange="renderOperationsAvailability()"><option value="All">All Combos</option><option value="Rakhi">Rakhi Combos</option><option value="Others">Other Combos</option></select></div>
-      <div class="fc"><label class="fl">Child Availability</label><select class="fs" id="opAvailSupport" onchange="loadOperationsAvailability()"><option value="stock" selected>Child Inv Stock Only</option><option value="stock_wip">Child Stock + WIP</option></select></div>
-      <div class="fc"><label class="fl">Available CMB Basis</label><select class="fs" id="opAvailBasis" onchange="renderOperationsAvailability()"><option value="all" selected>Assembled + Buildable</option><option value="assembled">Assembled CMB Stock/WIP</option><option value="buildable">Buildable from Children</option></select></div>
+      <div class="fc"><label class="fl">Search CMB</label><input class="fi" id="opAvailSearch" placeholder="Enter CMB SKU or name…" oninput="renderOperationsAvailability_d()"></div>
     </div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Pack Details and mapped combo details are checked for child SKUs. One unit of each unique child is assumed per CMB. Shared child inventory is never duplicated across CMBs; the first unit is allocated fairly to the highest-selling eligible CMBs, then remaining demand is filled in priority order.</div>
+    <div class="ops-note">Exhibition rule: one display unit of every selected CMB reserves one Inventory Stock unit from each unique child. WIP is shown for information but is not used for eligibility. Pack Details and mapped combo details are both checked. No 30-day projection is used.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -13775,47 +13771,39 @@ function _opAvailChildren(parent){
   return out;
 }
 function _buildOperationsAvailability(){
-  const includeWip=(document.getElementById('opAvailSupport')?.value||'stock')==='stock_wip';
   const candidates=(master||[]).map(parent=>{
     const sku=_opsSkuKey(parent&&parent.sku),children=_opAvailChildren(parent);
     if(!sku||!/^CMB[-_]/i.test(sku)||!children.length)return null;
-    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),sold30:Math.max(0,_opsNum(parent.qty_1m)),children,allocated:0,target:Math.max(1,Math.ceil(Math.max(0,_opsNum(parent.qty_1m))))};
-  }).filter(Boolean).sort((a,b)=>b.sold30-a.sold30||b.stock-a.stock||a.sku.localeCompare(b.sku));
+    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0};
+  }).filter(Boolean).sort((a,b)=>b.totalSold-a.totalSold||b.stock-a.stock||a.sku.localeCompare(b.sku));
   const remaining=new Map();
-  candidates.forEach(c=>c.children.forEach(ch=>{if(!remaining.has(ch.sku))remaining.set(ch.sku,Math.floor(ch.stock+(includeWip?ch.wip:0)));}));
+  candidates.forEach(c=>c.children.forEach(ch=>{if(!remaining.has(ch.sku))remaining.set(ch.sku,Math.floor(ch.stock));}));
   const canBuild=c=>c.children.every(ch=>(remaining.get(ch.sku)||0)>=1);
-  const take=(c,n)=>{if(n<=0)return;c.children.forEach(ch=>remaining.set(ch.sku,Math.max(0,(remaining.get(ch.sku)||0)-n)));c.allocated+=n;};
-  // Fair first pass: one unit per highest-selling eligible CMB.
-  candidates.forEach(c=>{if(canBuild(c))take(c,1);});
-  // Then fill remaining demand in priority order without reusing child stock.
-  candidates.forEach(c=>{
-    const need=Math.max(0,c.target-c.allocated);if(!need)return;
-    const maxChild=Math.min(...c.children.map(ch=>remaining.get(ch.sku)||0));
-    take(c,Math.max(0,Math.min(need,maxChild)));
-  });
-  _opAvailRows=candidates.map(c=>({...c,assembled:c.stock+c.wip,available:c.stock+c.wip+c.allocated})).filter(c=>c.available>0);
-  _bizSetSelect('opAvailCmb',_opAvailRows.map(r=>r.sku),'All Available CMBs');
+  // Exhibition assortment: reserve exactly one display unit per chosen CMB.
+  // Higher all-time selling CMBs are evaluated first. A shared child with
+  // stock 3 can therefore support at most the first three eligible CMBs.
+  candidates.forEach(c=>{if(!canBuild(c))return;c.children.forEach(ch=>remaining.set(ch.sku,(remaining.get(ch.sku)||0)-1));c.selected=1;});
+  _opAvailRows=candidates.filter(c=>c.selected===1);
   return _opAvailRows;
 }
 function _operationsAvailabilityFiltered(){
   const rows=_opAvailRows.length?_opAvailRows:_buildOperationsAvailability();
   const q=String(document.getElementById('opAvailSearch')?.value||'').trim().toLowerCase();
-  const cmb=document.getElementById('opAvailCmb')?.value||'All',group=document.getElementById('opAvailGroup')?.value||'All',basis=document.getElementById('opAvailBasis')?.value||'all';
-  return rows.filter(r=>(cmb==='All'||r.sku===cmb)&&(group==='All'||r.group===group)&&(basis==='all'||(basis==='assembled'?r.assembled>0:r.allocated>0))&&(!q||`${r.sku} ${r.skuName} ${r.packDetails} ${r.children.map(c=>c.sku+' '+c.skuName).join(' ')}`.toLowerCase().includes(q)));
+  return rows.filter(r=>!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q));
 }
 function loadOperationsAvailability(){_opAvailRows=[];_buildOperationsAvailability();renderOperationsAvailability();}
 function renderOperationsAvailability(){
   const host=document.getElementById('opAvailContent'),sum=document.getElementById('opAvailSummary');if(!host)return;
   const rows=_operationsAvailabilityFiltered(),childSet=new Set();rows.forEach(r=>r.children.forEach(c=>childSet.add(c.sku)));
-  const assembled=rows.reduce((s,r)=>s+r.stock+r.wip,0),buildable=rows.reduce((s,r)=>s+r.allocated,0),available=rows.reduce((s,r)=>s+r.available,0);
-  if(sum)sum.innerHTML=_opsKpi('Available CMB SKUs',rows.length.toLocaleString('en-IN'),'Only assembled or inventory-buildable')+_opsKpi('Distinct Child SKUs',childSet.size.toLocaleString('en-IN'),'Pack + combo mapping')+_opsKpi('Allocated Buildable Qty',Math.round(buildable).toLocaleString('en-IN'),'Shared child stock counted once')+_opsKpi('Total Available CMB Qty',Math.round(available).toLocaleString('en-IN'),`Assembled/WIP ${Math.round(assembled).toLocaleString('en-IN')}`);
-  let rank=0;const body=rows.map(r=>r.children.map((c,ci)=>{rank++;return `<tr><td class="ops-num">${rank}</td><td>${ci===0?_opsPhoto(r.image):''}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${_opsPhoto(c.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.allocated).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${Math.round(r.available).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(r.sold30).toLocaleString('en-IN')}</td><td class="ops-list">${escHtml(r.packDetails||'—')}</td></tr>`;}).join('')).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>CMB Photo</th><th>CMB</th><th>Child Photo</th><th>Child SKU</th><th>CMB Inv Stock</th><th>CMB Inv WIP</th><th>Child Inv Stock</th><th>Child Inv WIP</th><th>Allocated Buildable Qty</th><th>Total Available CMB Qty</th><th>CMB Sold Qty 30D</th><th>Pack Details</th></tr></thead><tbody>${body||'<tr><td colspan="13" class="ops-empty">No inventory-available CMB matches the selected filters.</td></tr>'}</tbody></table>`;
+  const cmbStock=rows.reduce((s,r)=>s+r.stock,0),cmbWip=rows.reduce((s,r)=>s+r.wip,0);
+  if(sum)sum.innerHTML=_opsKpi('Exhibition-ready CMBs',rows.length.toLocaleString('en-IN'),'One display unit per CMB design')+_opsKpi('Distinct Child SKUs',childSet.size.toLocaleString('en-IN'),'Every selected child has Inv Stock')+_opsKpi('Selected CMB Inv Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Current assembled stock')+_opsKpi('Selected CMB Inv WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Shown for information only');
+  let rank=0;const body=rows.map(r=>r.children.map((c,ci)=>{rank++;return `<tr><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">${ci?'↳ ':''}${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td>${ci===0?_opsPhoto(r.image):''}</td><td>${_opsPhoto(c.image)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(c.stock).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td class="ops-list">${escHtml(r.packDetails||'—')}</td></tr>`;}).join('')).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Child SKU</th><th>CMB Photo</th><th>Child Photo</th><th>CMB Inv Stock</th><th>CMB Inv WIP</th><th>Child Inv Stock</th><th>Child Inv WIP</th><th>CMB Total Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No exhibition-ready CMB has Inventory Stock available for every child SKU.</td></tr>'}</tbody></table>`;
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
-  const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,r.group,Math.round(r.stock),Math.round(r.wip),Math.round(c.stock),Math.round(c.wip),Math.round(r.allocated),Math.round(r.available),Math.round(r.sold30),r.packDetails,r.image,c.image])));
-  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Combo Group','CMB Inv Stock','CMB Inv WIP','Child Inv Stock','Child Inv WIP','Allocated Buildable Qty','Total Available CMB Qty','CMB Sold Qty 30D','Pack Details','CMB Image Link','Child Image Link'],data,'operations_available_cmbs');
+  const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,r.group,Math.round(r.stock),Math.round(r.wip),Math.round(c.stock),Math.round(c.wip),Math.round(r.totalSold),r.packDetails,r.image,c.image])));
+  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Combo Group','CMB Inv Stock','CMB Inv WIP','Child Inv Stock','Child Inv WIP','CMB Total Sold Qty','Pack Details','CMB Image Link','Child Image Link'],data,'operations_exhibition_ready_cmbs');
 }
 const renderOperationsAvailability_d=_debounce(()=>renderOperationsAvailability(),220);
 window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;
@@ -15635,7 +15623,7 @@ showTab = function(t){
       oos: 'OOS — STOCKOUT RISK',
       repeatplanner: 'AUTO REPEAT PLANNER',
       comborisk: 'COMBO PRODUCTION RISK',
-      operations: 'OPERATIONS — AVAILABLE CMB BUILDER',
+      operations: 'OPERATIONS — EXHIBITION CMB SELECTION',
       smartops: 'SMART ALERTS & AGEING',
       opportunity: 'SKU OPPORTUNITY SCORE',
       salesanomaly: 'SALES ANOMALY DETECTION',
