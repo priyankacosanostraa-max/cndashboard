@@ -5430,7 +5430,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 /* Sculpted Command Portal — selected final login direction. */
 #loginGate{
-  padding:0!important;display:flex!important;align-items:stretch!important;justify-content:stretch!important;
+  padding:0!important;display:flex;align-items:stretch!important;justify-content:stretch!important;
   overflow:hidden!important;background:#18140f!important;color:#f8f1e4;
   isolation:isolate;font-family:'Inter','Montserrat',sans-serif;
 }
@@ -8529,7 +8529,7 @@ function loadData(force){
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
   fetch('/api/data?force=' + force + '&role=' + encodeURIComponent(LOGIN_ROLE || 'admin'), {headers:{'ngrok-skip-browser-warning':'true'}, signal: ctrl.signal})
-    .then(r => { if (r.status === 401) { const g=document.getElementById('loginGate'); if(g) g.style.display='flex'; const a=document.getElementById('appRoot'); if(a) a.style.display='none'; throw new Error('Session expired — please sign in again.'); } return r; })
+    .then(r => { if (r.status === 401) { setLoginGateVisible(true); const a=document.getElementById('appRoot'); if(a) a.style.display='none'; throw new Error('Session expired — please sign in again.'); } return r; })
     .then(r => {
       // 202 = server abhi data warm kar raha hai. Error mat do — thodi der baad
       // khud retry karo (reload-loop ke bina). Loader warmup-status dikhata rahega.
@@ -9885,7 +9885,7 @@ function stopWarmupPoll(){ if (_warmPoll){ clearInterval(_warmPoll); _warmPoll =
 // Har refresh/reload par DOBARA login maange — auto-restore hata diya.
 // (Pehle /api/me se session restore ho jati thi; ab nahi.)
 document.addEventListener('DOMContentLoaded', () => {
-  const gate = document.getElementById('loginGate'); if (gate) gate.style.display = 'flex';
+  setLoginGateVisible(true);
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'none';
 });
 
@@ -9942,14 +9942,28 @@ function unlockKpis(section='matrix'){
   }
 }
 
+function setLoginGateVisible(visible){
+  const gate=document.getElementById('loginGate');
+  if(!gate)return;
+  gate.style.setProperty('display',visible?'flex':'none','important');
+  gate.setAttribute('aria-hidden',visible?'false':'true');
+}
+
 function enterApp(role){
   LOGIN_ROLE = role;
   _loggedIn = true;
-  const gate = document.getElementById('loginGate'); if (gate) gate.style.display = 'none';
+  setLoginGateVisible(false);
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'block';
-  applyRoleUI();
-  if (typeof showTab === 'function') showTab('home');
-  if (typeof loadData === 'function') setTimeout(() => { try { loadData(false); } catch(e){ console.error(e); } }, 50);
+  // Login overlay ko pehle browser paint karne do. Home rendering and the
+  // multi-megabyte data sync run on the next task, so successful sign-in feels
+  // instant even on slower machines or a Railway cold start.
+  requestAnimationFrame(() => setTimeout(() => {
+    try {
+      applyRoleUI();
+      if (typeof showTab === 'function') showTab('home');
+      if (typeof loadData === 'function') loadData(false);
+    } catch(e){ console.error('Post-login initialization error:',e); }
+  }, 0));
 }
 
 /* Short premium login chime. Web Audio keeps the dashboard self-contained. */
@@ -10129,7 +10143,7 @@ async function doLogout(){
   _loggedIn = false;
   LOGIN_ROLE = 'admin';
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'none';
-  const gate = document.getElementById('loginGate'); if (gate) gate.style.display = 'flex';
+  setLoginGateVisible(true);
   const pw = document.getElementById('lgPass'); if (pw) pw.value = '';
   const u = document.getElementById('lgUser'); if (u) { u.value=''; u.focus(); }
   const submit = document.getElementById('lgSubmit');
