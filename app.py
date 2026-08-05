@@ -1368,7 +1368,7 @@ def _refresh_data():
         wcols = list(web_orders.columns)
         def _wat(i): return wcols[i] if len(wcols) > i else None
 
-        # Customer/address order identity must follow Order Date (Shopify-style
+        # Customer/address order identity must follow Order Date (order-level
         # order day), not a later dispatch day.
         W_DATE = (find_col(web_orders.columns, "Display Order Date", "Order Date",
                            "order date", "Dispatch Date", "date") or _wat(1))
@@ -6825,7 +6825,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-filters">
         <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scAovD1" onchange="renderSalesComparisonAov()"></div>
         <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scAovD2" onchange="renderSalesComparisonAov()"></div>
-        <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Amazon">Amazon</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Other SOR Channels">Other SOR Channels</option></select></div>
+        <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
         <div class="fc"><label class="fl">Price / Sales View</label><select class="fs" id="scAovMrpView" onchange="renderSalesComparisonAov()"><option value="low_high">Low Price · High Sales</option><option value="low_low">Low Price · Low Sales</option><option value="high_high">High Price · High Sales</option><option value="high_low">High Price · Low Sales</option></select></div>
         <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonAov()">Reset</button>
       </div>
@@ -6836,12 +6836,12 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="ops-section" style="margin-top:22px">
       <div class="ops-head" style="margin-bottom:12px">
-        <div><div class="ops-title" style="font-size:26px">Shopify-Style AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. For Website, the same date + same customer + same billing address is counted as one order even when that order contains multiple SKUs.</div></div>
+        <div><div class="ops-title" style="font-size:26px">AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. For Website, the same date + same customer + same billing address is counted as one order even when that order contains multiple SKUs.</div></div>
         <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonOrders()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonOrders()">Export CSV</button></div>
       </div>
       <div class="ops-filters">
         <div class="fc"><label class="fl">Comparison</label><select class="fs" id="scOrderPreset" onchange="_scOrderPresetChanged()"><option value="days">Yesterday vs Day Before</option><option value="months">Previous Month vs Month Before</option><option value="custom">Custom Two Dates</option></select></div>
-        <div class="fc"><label class="fl">Type</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Types</option></select></div>
+        <div class="fc"><label class="fl">Channel</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
         <div class="fc"><label class="fl">Baseline Date</label><input class="fi" type="date" id="scOrderDateA" onchange="renderSalesComparisonOrders()"></div>
         <div class="fc"><label class="fl">Comparison Date</label><input class="fi" type="date" id="scOrderDateB" onchange="renderSalesComparisonOrders()"></div>
         <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonOrders()">Reset</button>
@@ -7320,6 +7320,7 @@ let imgB64 = null;
 let bulkComboRows = [];
 let bulkMissingSkus = [];
 let _bulkSkuLookup = {};
+let _roExactSkuLookup = {}; // Repeat export: compact full SKU -> exact master item (no base-SKU fallback)
 
 let selectedSkuSet = new Set();
 let roRemarks = {};   // sku -> remark text (admin/employee dono likh sakte hain)
@@ -7574,8 +7575,20 @@ function roExactSkuItem(item){
   // child miss na ho. Full compact SKU hi match hota hai; base-SKU fallback
   // intentionally nahi use karte, warna kisi variant ka stock aa sakta hai.
   const compact = key.replace(/[^A-Z0-9]/g, '');
-  if (compact && _bulkSkuLookup[compact]) return _bulkSkuLookup[compact];
+  if (compact && _roExactSkuLookup[compact]) return _roExactSkuLookup[compact];
   return item || {};
+}
+
+// Exported set-item rows always show that child SKU's own overall inventory.
+// Active sales filters affect sales quantities, but must never replace child
+// Inv Stock/WIP with CMB inventory or a channel-specific zero-value snapshot.
+function roChildOwnInventory(rawChild){
+  const item = roExactSkuItem(rawChild);
+  return {
+    item,
+    stock: Number(item && item.inv_stock) || 0,
+    wip: Number(item && item.inv_wip) || 0
+  };
 }
 
 // Exact child SKU ki direct sales. Combo child demand me parent CMB ki sale
@@ -8007,7 +8020,7 @@ const MENU_TAB_META = {
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
   m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
-  m31: {name:"Sales Comparison", desc:"Rel/Non-Rel, Top 20 products and Shopify-style AOV drivers."},
+  m31: {name:"Sales Comparison", desc:"Rel/Non-Rel, Top 20 products and channel-wise AOV drivers."},
   m21: {name:"Bulk",             desc:"Build combo quotations and export them."},
   m22: {name:"Stockout",         desc:"Low-stock SKUs and stockout risk."},
   m23: {name:"Reorder Plan",     desc:"Suggested repeat quantities and reorder actions."},
@@ -8992,6 +9005,7 @@ function loadData(force){
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
+      _roExactSkuLookup = {};
       master.forEach(it => {
         if (it && it.sku) {
           const skuKey = String(it.sku).trim().toUpperCase();
@@ -9012,6 +9026,7 @@ function loadData(force){
           _masterSkuMap[skuKey] = it;
           const compactKey = skuKey.replace(/[^A-Z0-9]/g, '');
           const baseKey = String(skuKey.split('_')[0] || '').replace(/[^A-Z0-9]/g, '');
+          if (compactKey && !_roExactSkuLookup[compactKey]) _roExactSkuLookup[compactKey] = it;
           if (compactKey && !_bulkSkuLookup[compactKey]) _bulkSkuLookup[compactKey] = it;
           if (baseKey && !_bulkSkuLookup[baseKey]) _bulkSkuLookup[baseKey] = it;
           const stone = String(it.gift_set_stone_details || '').trim().replace(/[<>]/g, '');
@@ -10031,8 +10046,8 @@ function exportRO(fmtType){
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
-      const parentItem=itemMap[skuKey]||{};
-      const parentExact=roExactSkuItem(parentItem.sku ? parentItem : t);
+      const parentExact=roExactSkuItem(itemMap[skuKey]||t);
+      const parentItem=parentExact;
       const parentStock=roInvStock(parentExact, roInvCtxTx);
       const parentWip=roAnuModeTx ? roAnuWipFor(parentExact.sku || t.sku) : roInvWip(parentExact, roInvCtxTx);
       const children=Array.isArray(parentItem.combo_details)?parentItem.combo_details:[];
@@ -10060,9 +10075,10 @@ function exportRO(fmtType){
       });
       children.forEach(c=>{
         const childKey=String(c.sku||'').trim().toUpperCase();
-        const childItem=roExactSkuItem(c);
-        const childStock=roInvStock(childItem, roInvCtxTx);
-        const childWip=roAnuModeTx ? roAnuWipFor(childItem.sku || c.sku) : roInvWip(childItem, roInvCtxTx);
+        const childInv=roChildOwnInventory(c);
+        const childItem=childInv.item;
+        const childStock=childInv.stock;
+        const childWip=childInv.wip;
         data.push({
           'Row Type':'— Set Item',
           'Dispatch Date':t.date==='N/A'?'':t.date,
@@ -10178,7 +10194,8 @@ function exportRO(fmtType){
     // apni direct sale. Yeh sirf exported display rows hain; KPI/master totals
     // me child rows add nahi hote.
     (item.combo_details || []).forEach(c => {
-      const childItem = roExactSkuItem(c);
+      const childInv = roChildOwnInventory(c);
+      const childItem = childInv.item;
       const childDirect = roSaleTotalsForItem(childItem, {...roSaleCtxX,parentSku:item.sku});
       const c7 = Math.round(r7 + childDirect.q7);
       const c15 = Math.round(r15 + childDirect.q15);
@@ -10198,8 +10215,8 @@ function exportRO(fmtType){
         'Sold Qty': cSold,
         'MRP': parseFloat(c.mrp) || 0,
         ...(emp1 ? {} : {'Selling Price': '', 'Discount %': ''}),
-        'Inv Stock': chStock(childItem),
-        'Inv WIP': chWip(childItem),
+        'Inv Stock': childInv.stock,
+        'Inv WIP': childInv.wip,
         'Blocked Qty': c.blocked_qty || 0,
         'Forecast Sold Qty': c.forecast_60d || 0,
         'Reorder Qty': c.reorder_qty || 0,
@@ -15945,7 +15962,6 @@ function _scPopulateFilters(){
   const type=document.getElementById('scType'),orderType=document.getElementById('scOrderType'),tax=document.getElementById('scTaxon');
   const typeOptions='<option value="All">All Types</option>'+Array.from(new Set(allTypes||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   if(type&&type.options.length<=1)type.innerHTML=typeOptions;
-  if(orderType&&orderType.options.length<=1)orderType.innerHTML=typeOptions;
   if(tax&&tax.options.length<=1)tax.innerHTML='<option value="All">All Taxons</option>'+Array.from(new Set(allTaxons||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   if(!_scInitialized){
     const end=todayISO||new Date().toISOString().slice(0,10),start=_scShiftDate(end,-29);
@@ -15976,6 +15992,7 @@ function _scAovInit(){
 }
 function _scAovChannel(e){
   const hay=`${e&&e.subChannel||e&&e.sub_channel||''} ${e&&e.type||''} ${e&&e.channel||''} ${e&&e.customer||e&&e.cust||''}`.toLowerCase();
+  if(/myntra/.test(hay))return 'Myntra';
   if(/amazon/.test(hay))return 'Amazon';
   if(/nykaa/.test(hay))return 'Nykaa';
   if(/ajio/.test(hay))return 'Ajio';
@@ -16037,7 +16054,7 @@ function renderSalesComparisonAov(){
   if(sum)sum.innerHTML=_opsKpi('Median Effective Price',data.medianPriceReference?fmt(data.medianPriceReference):'—','Filtered Net Revenue ÷ Sold Qty')+_opsKpi('Median Sales Score',`${data.medianSalesScore.toFixed(1)}`,'50% Qty + 50% Revenue percentile')+_opsKpi(`${label} SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Quadrant Net Revenue',fmt(data.rev),`${Math.round(data.qty).toLocaleString('en-IN')} sold qty`);
   const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.priceReference)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td class="ops-num">${r.qtyScore.toFixed(1)}</td><td class="ops-num">${r.revenueScore.toFixed(1)}</td><td class="ops-num"><b>${r.salesScore.toFixed(1)}</b></td><td>${_opsRiskBadge(highSales?'good':'medium',label)}</td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Channel Mix</th><th>Effective Price (Net Rev ÷ Qty)</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>Qty Score</th><th>Revenue Score</th><th>Sales Score</th><th>Price / Sales View</th></tr></thead><tbody>${body||'<tr><td colspan="12" class="ops-empty">No selling products match the selected Price / Sales view and filters.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Top 20 ${label} products. High-sales views rank the strongest combined Sales Score first; low-sales views rank the weakest first. Low/high price classification now uses Effective Price = filtered Net Revenue ÷ filtered Sold Qty, which is also the displayed AOV. Sales Score = 50% Qty percentile + 50% Revenue percentile; low/high boundaries use filtered medians across ${data.all.length.toLocaleString('en-IN')} selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
+  if(note)note.textContent=`Top 20 ${label} products. High-sales views rank the strongest combined Sales Score first; low-sales views rank the weakest first. Low/high price classification now uses Effective Price = filtered Net Revenue ÷ filtered Sold Qty, which is also the displayed AOV. Sales Score = 50% Qty percentile + 50% Revenue percentile; low/high boundaries use filtered medians across ${data.all.length.toLocaleString('en-IN')} selling SKUs. All Channels can include additional sources not shown separately.`;
 }
 function resetSalesComparisonAov(){
   _scAovInitialized=false;const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2'),ch=document.getElementById('scAovChannel'),mode=document.getElementById('scAovMrpView');if(d1)d1.value='';if(d2)d2.value='';if(ch)ch.value='All';if(mode)mode.value='low_high';_scAovInit();renderSalesComparisonAov();
@@ -16146,19 +16163,19 @@ function _scChannelOrderSessionIndex(){
   });
   _scChannelOrderIndex=orderIndex;return orderIndex;
 }
-function _scOrderPeriod(from,to,type){
+function _scOrderPeriod(from,to,channelFilter){
   const sessionIndex=_scOrderSessionIndex(),channelOrderIndex=_scChannelOrderSessionIndex();
   const marketplaceNames=new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
   const skuMap=new Map(),allOrders=new Set(),addressOrders=new Set(),marketplaceOrders=new Set(),purchaseOrders=new Set();
   const websiteFallbackOrders=new Set(),marketplaceFallbackOrders=new Set(),purchaseFallbackOrders=new Set(),otherIdentityOrders=new Set(),otherFallbackOrders=new Set();
   _scOrderEvents().forEach((e,index)=>{
     if(!e.date||e.date<from||e.date>to)return;
-    if(type!=='All'&&String(e.type||'')!==type)return;
+    const orderChannel=_scOrderChannel(e);
+    if(channelFilter!=='All'&&orderChannel!==channelFilter)return;
     const qty=Math.max(0,_opsNum(e.qty)),rev=Math.max(0,_opsNum(e.rev));if(qty<=0&&rev<=0)return;
     const sku=String(e.sku||'').trim().toUpperCase();
     const row=skuMap.get(sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,orderKeys:new Set()};
     row.qty+=qty;row.rev+=rev;row.lines++;
-    const orderChannel=_scOrderChannel(e);
     if(orderChannel==='Website'){
       const sessions=sessionIndex.get(`${sku}|${e.date}`);
       if(sessions&&sessions.size){
@@ -16201,9 +16218,9 @@ function _scOrderDeltaText(current,base,isMoney){
   return `${sign}${delta<0?'-':''}${amount}${pct===null?'':` (${pct>=0?'+':''}${pct.toFixed(1)}%)`}`;
 }
 function _scBuildOrderComparison(){
-  _scOrderInit();const ranges=_scOrderRanges(),type=document.getElementById('scOrderType')?.value||'All';
-  if(!ranges.a1||!ranges.b1)return {error:'Choose both comparison dates.',ranges,type,drivers:[]};
-  const a=_scOrderPeriod(ranges.a1,ranges.a2,type),b=_scOrderPeriod(ranges.b1,ranges.b2,type);
+  _scOrderInit();const ranges=_scOrderRanges(),channel=document.getElementById('scOrderType')?.value||'All';
+  if(!ranges.a1||!ranges.b1)return {error:'Choose both comparison dates.',ranges,channel,drivers:[]};
+  const a=_scOrderPeriod(ranges.a1,ranges.a2,channel),b=_scOrderPeriod(ranges.b1,ranges.b2,channel);
   const am=new Map(a.rows.map(r=>[String(r.sku).toUpperCase(),r])),bm=new Map(b.rows.map(r=>[String(r.sku).toUpperCase(),r]));
   const keys=new Set([...am.keys(),...bm.keys()]),drivers=[];
   keys.forEach(key=>{
@@ -16221,7 +16238,7 @@ function _scBuildOrderComparison(){
     drivers.push({sku:y.sku||x.sku,skuName:y.skuName||x.skuName,item:y.item||x.item,a:x,b:y,qtyDelta,revDelta,orderDelta,aovDelta,lowAov,lowAovMix,reasons,drag});
   });
   drivers.sort((x,y)=>y.drag-x.drag||x.revDelta-y.revDelta||y.b.qty-x.b.qty||String(x.sku).localeCompare(String(y.sku)));
-  return {error:'',ranges,type,a,b,drivers};
+  return {error:'',ranges,channel,a,b,drivers};
 }
 function renderSalesComparisonOrders(){
   const host=document.getElementById('scOrderContent'),sum=document.getElementById('scOrderSummary'),insight=document.getElementById('scOrderInsight'),note=document.getElementById('scOrderNote');if(!host)return;
@@ -16241,7 +16258,7 @@ function renderSalesComparisonOrders(){
   const shown=data.drivers.slice(0,50);
   const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${r.reasons.map(x=>`<span class="insight-pill warn" style="display:inline-block;margin:2px">${escHtml(x)}</span>`).join('')}</td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Diagnosis</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No negative product/AOV drivers found for this comparison.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Type: ${data.type==='All'?'All Types':data.type}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
+  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
 }
 function resetSalesComparisonOrders(){
   _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';_scOrderInit();renderSalesComparisonOrders();
@@ -16249,7 +16266,7 @@ function resetSalesComparisonOrders(){
 function exportSalesComparisonOrders(){
   const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No product AOV driver rows to export.');return;}
   const r=data.ranges;
-  _dlCsv(['Type Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.type,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_shopify_aov_product_drivers');
+  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
