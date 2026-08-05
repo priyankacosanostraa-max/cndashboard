@@ -15225,11 +15225,11 @@ function renderPaymentsPlanning(){
     </tr>`;
   const noteHtml = d.error ? `<p style="color:#a33;font-size:.72rem;margin:6px 0">${escHtml(d.error)}</p>` : '';
   host.innerHTML = `
-    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; As of: ${escHtml(d.today||'')}</p>
+    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">Period: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; Updated till: ${escHtml(d.today||'')}</p>
     ${noteHtml}
     <table class="ro" style="width:100%;min-width:820px">
       <thead><tr>
-        <th>Category</th><th>Inward Projection</th><th>Actual</th><th>Pending</th>
+        <th>Channel</th><th>Inward Projection</th><th>Actual</th><th>Pending</th>
         <th>% Ach</th><th>Actual STR</th><th>Required STR</th>
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
@@ -15238,7 +15238,7 @@ function renderPaymentsPlanning(){
 function exportPaymentsPlanning(){
   const d = _planData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const headers = ['Category','Inward Projection','Actual','Pending','% Ach','Actual STR','Required STR'];
+  const headers = ['Channel','Inward Projection','Actual','Pending','% Ach','Actual STR','Required STR'];
   const rows = (d.rows||[]).map(r => [r.category, Math.round(r.inward_projection||0), Math.round(r.actual||0),
     Math.round(r.pending||0), r.pct_achievement === null ? 'NA' : r.pct_achievement,
     Math.round(r.actual_str||0), Math.round(r.required_str||0)]);
@@ -20265,155 +20265,140 @@ def _build_payments():
     return data
 
 # ════════════════════════════════════════════════════════════════
-#  📋 PAYMENTS PLANNING — same "payments spreadsheet" ki "Planning"
-#  sheet se manually-filled monthly "Inward Projection" (Designer/
-#  SOR/Online & Website), Payments tab ke "Actual" (collected this
-#  month, tag-wise, jo already _build_payments() nikaal raha hai) ke
-#  saath jodta hai — Pending / % Ach / Actual STR / Required STR
-#  bilkul Priyanka ke diye formulas ke hisaab se nikalte hain.
-#
-#  Category mapping:
-#    "Designer"          ← Planning sheet ki category "Designer"/"Purchase"
-#                           ← Actual = Payments Tag "Purchase"/"Designer" ka collected_month
-#    "SOR"                ← Planning sheet ki category "SOR"
-#                           ← Actual = Payments Tag "SOR" ka collected_month
-#    "Online & Website"   ← Planning sheet ki category "Online"/"Website"/
-#                            "Online & Website" (dono jud jate hain)
-#                           ← Actual = Payments Tag "Online" + "Website" ka collected_month
-#
-#  ⚠️ IMPORTANT: PAY_PLANNING_URL abhi placeholder hai — Priyanka ko apni
-#  "Planning" sheet ka "Publish to web → CSV" link (File > Share > Publish
-#  to web, sheet = Planning, format = CSV) dena hoga, us gid ko neeche
-#  daal dena / PAY_PLANNING_URL environment variable set kar dena Railway
-#  par. Column names kuch bhi ho ("Month"/"Category"/"Inward Projection"
-#  jaise) — case/format kaisa bhi ho, find_col() se robust match hota hai.
+#  📋 PAYMENTS PLANNING — published Planning sheet is the source of truth
+#  for Channel, Inward Projection, Actual, Pending, % Ach, Actual STR and
+#  Required STR. The loader discovers the real header below the title rows.
 # ════════════════════════════════════════════════════════════════
-PAY_PLANNING_URL = os.environ.get("PAY_PLANNING_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=919749386&single=true&output=csv")
+PAY_PLANNING_URL = (
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmZIJi58MyrgdxhjR2fvtxBwDuCJgPBjSK6puZ-w2qk2fL-fhytUAfExU2v4C-QcwKnj8aA1H_PAx7/"
+    "pub?gid=0&single=true&output=csv"
+)
 
-_PLAN_CATS = ["Designer", "SOR", "Online & Website"]
 _PLAN_CACHE = {"data": None, "ts": 0}
 _PLAN_CACHE_TTL = max(0, int(os.environ.get("PAY_PLAN_CACHE_TTL_SECONDS", "30") or 30))
 
-def _plan_bucket(cat_raw):
-    c = str(cat_raw or "").strip().lower()
-    if "designer" in c or "purchase" in c:
-        return "Designer"
-    if "sor" in c:
-        return "SOR"
-    if "online" in c or "website" in c:
-        return "Online & Website"
+def _plan_norm(v):
+    return re.sub(r"[^a-z0-9]+", "", str(v or "").strip().lower())
+
+def _plan_col_index(header, *aliases):
+    normalized = [_plan_norm(v) for v in header]
+    wanted = [_plan_norm(v) for v in aliases]
+    for key in wanted:
+        if key in normalized:
+            return normalized.index(key)
+    for key in wanted:
+        for i, cell in enumerate(normalized):
+            if key and cell and (key in cell or cell in key):
+                return i
     return None
 
-def _plan_month_matches(val, today):
-    """Month column kisi bhi format me ho (date, 'Jul-26', 'July 2026',
-    '2026-07', '07/2026' etc.) — sab handle karta hai."""
-    if val is None or str(val).strip() == "":
-        return False
-    s = str(val).strip()
-    try:
-        dt = parse_date_any(s)
-        if isinstance(dt, datetime):
-            dt = dt.date()
-        if dt and dt.year == today.year and dt.month == today.month:
-            return True
-    except Exception:
-        pass
-    candidates = {
-        today.strftime("%b-%y").lower(), today.strftime("%B-%y").lower(),
-        today.strftime("%b-%Y").lower(), today.strftime("%B %Y").lower(),
-        today.strftime("%b %Y").lower(), today.strftime("%Y-%m"),
-        today.strftime("%m/%Y"), today.strftime("%b'%y").lower(),
-        today.strftime("%b%y").lower(), today.strftime("%B").lower() + str(today.year),
-    }
-    sl = s.lower().replace(" ", "")
-    return any(c.replace(" ", "") in sl or sl in c.replace(" ", "") for c in candidates)
+def _plan_cell(row, index):
+    return row[index] if index is not None and index < len(row) else ""
+
+def _plan_percent(v, fallback=None):
+    raw = clean(v)
+    if not raw:
+        return fallback
+    num = to_num(raw)
+    if "%" not in raw and 0 < abs(num) <= 1:
+        num *= 100
+    return round(num, 1)
 
 def _build_payments_planning():
     if (_PLAN_CACHE_TTL > 0 and _PLAN_CACHE["data"] is not None
             and (time.time() - _PLAN_CACHE["ts"] < _PLAN_CACHE_TTL)):
         return _PLAN_CACHE["data"]
 
-    import calendar
     today = now_ist().date()
-
-    # ---- Inward Projection: Planning sheet se, current month ke rows ----
-    inward = {c: 0.0 for c in _PLAN_CATS}
+    rows = []
+    source_totals = None
+    period_label = ""
+    updated_till = ""
     plan_err = None
     try:
         pdf = _fetch_csv_fresh(PAY_PLANNING_URL)
-        C_MONTH = find_col(pdf.columns, "Month", "period", "month year", "for month", "planning month")
-        C_CAT   = find_col(pdf.columns, "Category", "Channel", "Tag", "Type", "channel category", "channel type")
-        C_AMT   = find_col(pdf.columns, "Inward Projection", "Projection", "Inward", "Amount",
-                            "Target", "projected amount", "inward amount")
-        if C_CAT and C_AMT:
-            months = pdf[C_MONTH].tolist() if C_MONTH else [None] * len(pdf)
-            cats = pdf[C_CAT].tolist()
-            amts = pdf[C_AMT].tolist()
-            for i in range(len(pdf)):
-                if C_MONTH and not _plan_month_matches(months[i], today):
+        raw_rows = [[clean(v) for v in row] for row in pdf.itertuples(index=False, name=None)]
+        header_at = None
+        for i, row in enumerate(raw_rows):
+            keys = {_plan_norm(v) for v in row if clean(v)}
+            if "channel" in keys and "inwardprojection" in keys and "actual" in keys:
+                header_at = i
+                break
+        if header_at is None:
+            raise ValueError("Channel/Inward projection/Actual header row nahi mila")
+
+        for row in raw_rows[:header_at]:
+            for value in row:
+                text = clean(value)
+                if not text:
                     continue
-                b = _plan_bucket(cats[i])
-                if not b:
-                    continue
-                inward[b] += to_num(amts[i])
-        else:
-            plan_err = f"Planning sheet me Category/Inward Projection column nahi mila. Columns: {list(pdf.columns)[:12]}"
+                match = re.search(r"updated\s+till\s*[-:=]?\s*(.+)$", text, re.I)
+                if match:
+                    updated_till = clean(match.group(1))
+                if re.match(r"^from\s+", text, re.I):
+                    period_label = text
+
+        header = raw_rows[header_at]
+        c_channel = _plan_col_index(header, "Channel", "Category", "Type")
+        c_inward = _plan_col_index(header, "Inward projection", "Projection", "Inward")
+        c_actual = _plan_col_index(header, "Actual")
+        c_pending = _plan_col_index(header, "Pending")
+        c_pct = _plan_col_index(header, "% Ach", "Ach", "Achievement")
+        c_actual_str = _plan_col_index(header, "Actual STR")
+        c_required_str = _plan_col_index(header, "Required STR")
+        required = [c_channel, c_inward, c_actual, c_pending, c_pct, c_actual_str, c_required_str]
+        if any(index is None for index in required):
+            raise ValueError("Planning table ke required columns complete nahi mile")
+
+        for row in raw_rows[header_at + 1:]:
+            category = clean(_plan_cell(row, c_channel))
+            if not category:
+                continue
+            inward = round(to_num(_plan_cell(row, c_inward)), 0)
+            actual = round(to_num(_plan_cell(row, c_actual)), 0)
+            pending_raw = clean(_plan_cell(row, c_pending))
+            pending = round(to_num(pending_raw), 0) if pending_raw else round(inward - actual, 0)
+            pct = _plan_percent(
+                _plan_cell(row, c_pct),
+                round(actual / inward * 100, 1) if inward else None,
+            )
+            actual_str = round(to_num(_plan_cell(row, c_actual_str)), 0)
+            required_str = round(to_num(_plan_cell(row, c_required_str)), 0)
+            parsed = {
+                "category": category,
+                "inward_projection": inward,
+                "actual": actual,
+                "pending": pending,
+                "pct_achievement": pct,
+                "actual_str": actual_str,
+                "required_str": required_str,
+            }
+            if _plan_norm(category) in ("total", "grandtotal"):
+                source_totals = {k: v for k, v in parsed.items() if k != "category"}
+                break
+            rows.append(parsed)
+        if not rows:
+            raise ValueError("Planning table me channel rows nahi mile")
     except Exception as e:
-        plan_err = f"Planning sheet fetch nahi ho payi: {str(e)[:200]} — pehle PAY_PLANNING_URL sahi gid ke saath set karein."
+        plan_err = f"Planning sheet fetch/parse nahi ho payi: {str(e)[:200]}"
 
-    # ---- Actual: Full_Ledger_Main ke ALL current-month Credit rows se ----
-    pay_data = _build_payments()
-    tag_collected = {}
-    direct_collected = pay_data.get("collected_by_tag") or {}
-    if direct_collected:
-        for tg, amt in direct_collected.items():
-            tag_collected[(tg or "").strip().lower()] = amt or 0
-    else:
-        # Backward-safe fallback for an older cached/API shape.
-        for s in pay_data.get("tag_summary", []):
-            tag_collected[(s.get("tag") or "").strip().lower()] = s.get("collected_month", 0) or 0
-
-    actual = {c: 0.0 for c in _PLAN_CATS}
-    actual["Designer"] = (tag_collected.get("purchase", 0) or 0) + (tag_collected.get("designer", 0) or 0)
-    actual["SOR"] = tag_collected.get("sor", 0) or 0
-    actual["Online & Website"] = (tag_collected.get("online", 0) or 0) + (tag_collected.get("website", 0) or 0) \
-        + (tag_collected.get("online & website", 0) or 0)
-
-    # ---- STR formulas (bilkul jaisa bataya) ----
-    days_in_month = calendar.monthrange(today.year, today.month)[1]           # DAY(EOMONTH(TODAY(),0))
-    yday = today - timedelta(days=1)
-    days_in_month_yday = calendar.monthrange(yday.year, yday.month)[1]        # DAY(EOMONTH(TODAY()-1,0))
-    remaining_days = days_in_month_yday - yday.day                            # - INT(TEXT(TODAY()-1,"dd"))
-
-    rows = []
-    tot = {"inward_projection": 0.0, "actual": 0.0, "pending": 0.0}
-    for c in _PLAN_CATS:
-        inw = round(inward.get(c, 0) or 0, 0)
-        act = round(actual.get(c, 0) or 0, 0)
-        pend = inw - act
-        pct_ach = round((act / inw * 100), 1) if inw else None                # % Ach = Actual/Inward Projection
-        actual_str = round(inw / days_in_month, 0) if days_in_month else 0    # Actual STR = Inward Projection/days-in-month
-        required_str = round(pend / remaining_days, 0) if remaining_days > 0 else pend   # Required STR = IFERROR(Pending/remaining,Pending)
-        rows.append({
-            "category": c, "inward_projection": inw, "actual": act, "pending": pend,
-            "pct_achievement": pct_ach, "actual_str": actual_str, "required_str": required_str,
-        })
-        tot["inward_projection"] += inw; tot["actual"] += act; tot["pending"] += pend
-
-    tot_pct = round((tot["actual"] / tot["inward_projection"] * 100), 1) if tot["inward_projection"] else None
-    tot_actual_str = round(tot["inward_projection"] / days_in_month, 0) if days_in_month else 0
-    tot_required_str = round(tot["pending"] / remaining_days, 0) if remaining_days > 0 else tot["pending"]
+    if source_totals is None:
+        total_inward = sum(r["inward_projection"] for r in rows)
+        total_actual = sum(r["actual"] for r in rows)
+        source_totals = {
+            "inward_projection": round(total_inward, 0),
+            "actual": round(total_actual, 0),
+            "pending": round(sum(r["pending"] for r in rows), 0),
+            "pct_achievement": round(total_actual / total_inward * 100, 1) if total_inward else None,
+            "actual_str": round(sum(r["actual_str"] for r in rows), 0),
+            "required_str": round(sum(r["required_str"] for r in rows), 0),
+        }
 
     data = {
         "rows": rows,
-        "totals": {
-            "inward_projection": round(tot["inward_projection"], 0), "actual": round(tot["actual"], 0),
-            "pending": round(tot["pending"], 0), "pct_achievement": tot_pct,
-            "actual_str": tot_actual_str, "required_str": tot_required_str,
-        },
-        "month_label": today.strftime("%b-%y"),
-        "today": today.strftime("%d-%b-%y"),
+        "totals": source_totals,
+        "month_label": period_label or today.strftime("%b-%y"),
+        "today": updated_till or today.strftime("%d-%b-%y"),
         "error": plan_err,
     }
     _PLAN_CACHE["data"] = data
