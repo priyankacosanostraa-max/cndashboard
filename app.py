@@ -6576,7 +6576,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="ops-section" style="margin-top:22px">
       <div class="ops-head" style="margin-bottom:12px">
-        <div><div class="ops-title" style="font-size:26px">Selling Price × Sales Performance — Top 20</div><div class="ops-sub">Compare low/high actual Selling Price with low/high sales performance calculated from both Sold Qty and Net Revenue. AOV remains visible for every SKU.</div></div>
+        <div><div class="ops-title" style="font-size:26px">Net Revenue Price × Sales Performance — Top 20</div><div class="ops-sub">Low/high price uses effective price calculated as filtered Net Revenue ÷ Sold Qty; sales performance uses both Sold Qty and Net Revenue. AOV remains visible for every SKU.</div></div>
         <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonAov()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonAov()">Export CSV</button></div>
       </div>
       <div class="ops-filters">
@@ -15581,46 +15581,45 @@ function _scQuadrantLabel(view){
 function _scBuildAovRows(){
   _scAovInit();
   const d1=_bizIso(document.getElementById('scAovD1')?.value),d2=_bizIso(document.getElementById('scAovD2')?.value),channel=document.getElementById('scAovChannel')?.value||'All',mode=document.getElementById('scAovMrpView')?.value||'low_high';
-  if(!d1||!d2||d1>d2)return {error:'Choose a valid From and To date.',d1,d2,channel,mode,all:[],segment:[],top:[],qty:0,rev:0,lines:0,medianSellingPrice:0,medianSalesScore:0};
+  if(!d1||!d2||d1>d2)return {error:'Choose a valid From and To date.',d1,d2,channel,mode,all:[],segment:[],top:[],qty:0,rev:0,lines:0,medianPriceReference:0,medianSalesScore:0};
   const map=new Map();let lines=0;
   _bizEvents().forEach(e=>{
     if(e.date<d1||e.date>d2)return;
     const bucket=_scAovChannel(e);if(channel!=='All'&&bucket!==channel)return;
-    const q=Math.max(0,_opsNum(e.qty)),r=Math.max(0,_opsNum(e.rev)),sp=Math.max(0,_opsNum(e.sp));if(q<=0)return;
-    const row=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,spWeighted:0,spQty:0,channels:new Set()};
-    row.qty+=q;row.rev+=r;row.lines++;if(sp>0){row.spWeighted+=sp*q;row.spQty+=q;}row.channels.add(bucket);map.set(e.sku,row);lines++;
+    const q=Math.max(0,_opsNum(e.qty)),r=Math.max(0,_opsNum(e.rev));if(q<=0)return;
+    const row=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,channels:new Set()};
+    row.qty+=q;row.rev+=r;row.lines++;row.channels.add(bucket);map.set(e.sku,row);lines++;
   });
   const all=Array.from(map.values()).map(r=>{
-    const fallback=Math.max(0,_opsNum(r.item&&r.item.avg_selling_price)||_opsNum(r.item&&r.item.last_selling_price)||_opsNum(r.item&&r.item.website_selling_price));
-    const sellingPrice=r.spQty>0?r.spWeighted/r.spQty:(r.qty>0&&r.rev>0?r.rev/r.qty:fallback);
-    return {...r,sellingPrice,aov:r.qty>0?r.rev/r.qty:0};
-  }).filter(r=>r.qty>0&&r.sellingPrice>0);
-  const medianSellingPrice=_scMedian(all.map(r=>r.sellingPrice)),qtyPct=_scPercentileBy(all,'qty'),revPct=_scPercentileBy(all,'rev');
+    const aov=r.qty>0?r.rev/r.qty:0;
+    return {...r,priceReference:aov,aov};
+  }).filter(r=>r.qty>0&&r.priceReference>0);
+  const medianPriceReference=_scMedian(all.map(r=>r.priceReference)),qtyPct=_scPercentileBy(all,'qty'),revPct=_scPercentileBy(all,'rev');
   all.forEach(r=>{r.qtyScore=qtyPct.get(r.sku)||0;r.revenueScore=revPct.get(r.sku)||0;r.salesScore=(r.qtyScore+r.revenueScore)/2;});
   const medianSalesScore=_scMedian(all.map(r=>r.salesScore));
-  all.forEach(r=>{const price=r.sellingPrice<=medianSellingPrice?'low':'high',sales=r.salesScore>=medianSalesScore?'high':'low';r.quadrant=`${price}_${sales}`;});
+  all.forEach(r=>{const price=r.priceReference<=medianPriceReference?'low':'high',sales=r.salesScore>=medianSalesScore?'high':'low';r.quadrant=`${price}_${sales}`;});
   const segment=all.filter(r=>r.quadrant===mode),highSales=mode.endsWith('_high');
   segment.sort((a,b)=>(highSales?b.salesScore-a.salesScore:a.salesScore-b.salesScore)||(highSales?b.qty-a.qty:a.qty-b.qty)||(highSales?b.rev-a.rev:a.rev-b.rev)||b.aov-a.aov||a.sku.localeCompare(b.sku));
   const qty=segment.reduce((s,r)=>s+r.qty,0),rev=segment.reduce((s,r)=>s+r.rev,0);
-  return {error:'',d1,d2,channel,mode,all,segment,top:segment.slice(0,20),qty,rev,lines,medianSellingPrice,medianSalesScore};
+  return {error:'',d1,d2,channel,mode,all,segment,top:segment.slice(0,20),qty,rev,lines,medianPriceReference,medianSalesScore};
 }
 function renderSalesComparisonAov(){
   const host=document.getElementById('scAovContent'),sum=document.getElementById('scAovSummary'),note=document.getElementById('scAovNote');if(!host)return;
   const data=_scBuildAovRows();_scAovExportRows=data.top;
   if(data.error){if(sum)sum.innerHTML='';host.innerHTML=`<div class="ops-empty">${escHtml(data.error)}</div>`;if(note)note.textContent='';return;}
   const top=data.top,label=_scQuadrantLabel(data.mode),highSales=data.mode.endsWith('_high');
-  if(sum)sum.innerHTML=_opsKpi('Median Selling Price',data.medianSellingPrice?fmt(data.medianSellingPrice):'—','Actual filtered transaction Selling Price')+_opsKpi('Median Sales Score',`${data.medianSalesScore.toFixed(1)}`,'50% Qty + 50% Revenue percentile')+_opsKpi(`${label} SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Quadrant Net Revenue',fmt(data.rev),`${Math.round(data.qty).toLocaleString('en-IN')} sold qty`);
-  const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.sellingPrice)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td class="ops-num">${r.qtyScore.toFixed(1)}</td><td class="ops-num">${r.revenueScore.toFixed(1)}</td><td class="ops-num"><b>${r.salesScore.toFixed(1)}</b></td><td>${_opsRiskBadge(highSales?'good':'medium',label)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Channel Mix</th><th>Avg Selling Price</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>Qty Score</th><th>Revenue Score</th><th>Sales Score</th><th>Price / Sales View</th></tr></thead><tbody>${body||'<tr><td colspan="12" class="ops-empty">No selling products match the selected Price / Sales view and filters.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Top 20 ${label} products. High-sales views rank the strongest combined Sales Score first; low-sales views rank the weakest first. Selling Price is quantity-weighted from actual transaction Selling Price, with Net Revenue ÷ Sold Qty as fallback. AOV = Net Revenue ÷ Sold Qty. Sales Score = 50% Qty percentile + 50% Revenue percentile; low/high boundaries use filtered medians across ${data.all.length.toLocaleString('en-IN')} selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
+  if(sum)sum.innerHTML=_opsKpi('Median Effective Price',data.medianPriceReference?fmt(data.medianPriceReference):'—','Filtered Net Revenue ÷ Sold Qty')+_opsKpi('Median Sales Score',`${data.medianSalesScore.toFixed(1)}`,'50% Qty + 50% Revenue percentile')+_opsKpi(`${label} SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Quadrant Net Revenue',fmt(data.rev),`${Math.round(data.qty).toLocaleString('en-IN')} sold qty`);
+  const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.priceReference)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td class="ops-num">${r.qtyScore.toFixed(1)}</td><td class="ops-num">${r.revenueScore.toFixed(1)}</td><td class="ops-num"><b>${r.salesScore.toFixed(1)}</b></td><td>${_opsRiskBadge(highSales?'good':'medium',label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Channel Mix</th><th>Effective Price (Net Rev ÷ Qty)</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>Qty Score</th><th>Revenue Score</th><th>Sales Score</th><th>Price / Sales View</th></tr></thead><tbody>${body||'<tr><td colspan="12" class="ops-empty">No selling products match the selected Price / Sales view and filters.</td></tr>'}</tbody></table>`;
+  if(note)note.textContent=`Top 20 ${label} products. High-sales views rank the strongest combined Sales Score first; low-sales views rank the weakest first. Low/high price classification now uses Effective Price = filtered Net Revenue ÷ filtered Sold Qty, which is also the displayed AOV. Sales Score = 50% Qty percentile + 50% Revenue percentile; low/high boundaries use filtered medians across ${data.all.length.toLocaleString('en-IN')} selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
 }
 function resetSalesComparisonAov(){
   _scAovInitialized=false;const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2'),ch=document.getElementById('scAovChannel'),mode=document.getElementById('scAovMrpView');if(d1)d1.value='';if(d2)d2.value='';if(ch)ch.value='All';if(mode)mode.value='low_high';_scAovInit();renderSalesComparisonAov();
 }
 function exportSalesComparisonAov(){
-  const data=_scBuildAovRows();_scAovExportRows=data.top;if(data.error){alert(data.error);return;}if(!data.top.length){alert('No Selling Price vs Sales decision rows to export.');return;}
+  const data=_scBuildAovRows();_scAovExportRows=data.top;if(data.error){alert(data.error);return;}if(!data.top.length){alert('No Net Revenue price vs Sales decision rows to export.');return;}
   const label=_scQuadrantLabel(data.mode);
-  _dlCsv(['From Date','To Date','Channel Filter','Price / Sales View','Median Selling Price','Median Sales Score','Rank','SKU','SKU Name','Channel Mix','Avg Selling Price','Sold Qty','Net Revenue','AOV','Qty Score','Revenue Score','Sales Score','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianSellingPrice.toFixed(2)),Number(data.medianSalesScore.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.sellingPrice.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),Number(r.qtyScore.toFixed(2)),Number(r.revenueScore.toFixed(2)),Number(r.salesScore.toFixed(2)),r.item?.image_url||'']),'sales_comparison_price_sales_quadrant_top_20');
+  _dlCsv(['From Date','To Date','Channel Filter','Price / Sales View','Median Effective Price','Median Sales Score','Rank','SKU','SKU Name','Channel Mix','Effective Price (Net Revenue / Sold Qty)','Sold Qty','Net Revenue','AOV','Qty Score','Revenue Score','Sales Score','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianPriceReference.toFixed(2)),Number(data.medianSalesScore.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.priceReference.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),Number(r.qtyScore.toFixed(2)),Number(r.revenueScore.toFixed(2)),Number(r.salesScore.toFixed(2)),r.item?.image_url||'']),'sales_comparison_net_revenue_price_sales_quadrant_top_20');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();renderSalesComparison();renderSalesComparisonAov();}
 function renderSalesComparison(){
