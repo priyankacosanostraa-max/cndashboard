@@ -6587,6 +6587,23 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="scChart" class="rel-compare-chart"></div>
     <div id="scContent" class="ro-table-wrap" style="padding:0;overflow:auto;margin-top:16px"></div>
     <div id="scNote" class="rel-note"></div>
+
+    <div class="ops-section" style="margin-top:22px">
+      <div class="ops-head" style="margin-bottom:12px">
+        <div><div class="ops-title" style="font-size:26px">Top 20 AOV Products — MRP Segment</div><div class="ops-sub">First filters selling SKUs into Low or High MRP, then ranks the selected segment by AOV from highest to lowest.</div></div>
+        <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonAov()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonAov()">Export CSV</button></div>
+      </div>
+      <div class="ops-filters">
+        <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scAovD1" onchange="renderSalesComparisonAov()"></div>
+        <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scAovD2" onchange="renderSalesComparisonAov()"></div>
+        <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Amazon">Amazon</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Other SOR Channels">Other SOR Channels</option></select></div>
+        <div class="fc"><label class="fl">MRP Segment</label><select class="fs" id="scAovMrpView" onchange="renderSalesComparisonAov()"><option value="low">Low MRP</option><option value="high">High MRP</option></select></div>
+        <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonAov()">Reset</button>
+      </div>
+      <div id="scAovSummary" class="rel-compare-kpis" style="margin-top:12px"></div>
+      <div id="scAovContent" class="ro-table-wrap" style="padding:0;overflow:auto;margin-top:14px"></div>
+      <div id="scAovNote" class="rel-note"></div>
+    </div>
   </div>
 
 
@@ -15525,6 +15542,8 @@ function renderMarketplaces(){
 /* ── ALL-PRODUCT SALES COMPARISON: AF Name Rel vs Non-Rel ── */
 let _scInitialized=false;
 let _scExportRows=[];
+let _scAovInitialized=false;
+let _scAovExportRows=[];
 function _scShiftDate(iso,days){const p=String(iso||'').split('-').map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)))return '';return new Date(Date.UTC(p[0],p[1]-1,p[2])+days*86400000).toISOString().slice(0,10);}
 function _scShortDate(iso){const p=String(iso||'').split('-').map(Number);if(p.length!==3)return String(iso||'');return new Date(Date.UTC(p[0],p[1]-1,p[2])).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});}
 function _scPopulateFilters(){
@@ -15550,7 +15569,63 @@ function _scChartHtml(daily,metric){
   const hits=daily.map((d,i)=>`<g><circle cx="${x(i)}" cy="${y(d.rel[metric])}" r="4" fill="#fff" stroke="#a87920" stroke-width="2"><title>${escHtml(_scShortDate(d.date))} · Rel ${escHtml(fmtV(d.rel[metric]))}</title></circle><circle cx="${x(i)}" cy="${y(d.nonRel[metric])}" r="4" fill="#fff" stroke="#17895e" stroke-width="2"><title>${escHtml(_scShortDate(d.date))} · Non-Rel ${escHtml(fmtV(d.nonRel[metric]))}</title></circle></g>`).join('');
   return `<div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 15px 0;flex-wrap:wrap"><b style="font-size:11px;color:#201a12">Daily ${metric==='rev'?'Net Revenue':'Sold Qty'}</b><div class="rel-legend"><span><i style="background:#a87920"></i>Rel</span><span><i style="background:#17895e"></i>Non-Rel</span></div></div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Rel versus Non-Rel daily sales comparison">${grids}<polyline points="${relPts}" fill="none" stroke="#a87920" stroke-width="3.3" stroke-linejoin="round"/><polyline points="${nonPts}" fill="none" stroke="#17895e" stroke-width="3.3" stroke-linejoin="round"/>${hits}${ticks}</svg>`;
 }
-function loadSalesComparison(){_scPopulateFilters();renderSalesComparison();}
+function _scAovInit(){
+  if(_scAovInitialized)return;
+  const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2');
+  const latest=_bizEvents().reduce((mx,e)=>e.date>mx?e.date:mx,'')||todayISO||new Date().toISOString().slice(0,10);
+  if(d2&&!d2.value)d2.value=latest;
+  if(d1&&!d1.value)d1.value=_scShiftDate(latest,-29);
+  _scAovInitialized=true;
+}
+function _scAovChannel(e){
+  const hay=`${e&&e.subChannel||e&&e.sub_channel||''} ${e&&e.type||''} ${e&&e.channel||''} ${e&&e.customer||e&&e.cust||''}`.toLowerCase();
+  if(/amazon/.test(hay))return 'Amazon';
+  if(/nykaa/.test(hay))return 'Nykaa';
+  if(/ajio/.test(hay))return 'Ajio';
+  if(/tata|cliq/.test(hay))return 'Tata';
+  if(/flipkart/.test(hay))return 'Flipkart';
+  if(/purchase/.test(hay))return 'Purchase';
+  if(/website|online|d2c|direct/.test(hay))return 'Website';
+  return 'Other SOR Channels';
+}
+function _scBuildAovRows(){
+  _scAovInit();
+  const d1=_bizIso(document.getElementById('scAovD1')?.value),d2=_bizIso(document.getElementById('scAovD2')?.value),channel=document.getElementById('scAovChannel')?.value||'All',mode=document.getElementById('scAovMrpView')?.value||'low';
+  if(!d1||!d2||d1>d2)return {error:'Choose a valid From and To date.',d1,d2,channel,mode,all:[],segment:[],top:[],qty:0,rev:0,lines:0,medianMrp:0};
+  const map=new Map();let lines=0;
+  _bizEvents().forEach(e=>{
+    if(e.date<d1||e.date>d2)return;
+    const bucket=_scAovChannel(e);if(channel!=='All'&&bucket!==channel)return;
+    const q=Math.max(0,_opsNum(e.qty)),r=Math.max(0,_opsNum(e.rev));if(q<=0)return;
+    const row=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,channels:new Set()};
+    row.qty+=q;row.rev+=r;row.lines++;row.channels.add(bucket);map.set(e.sku,row);lines++;
+  });
+  const all=Array.from(map.values()).map(r=>({...r,mrp:Math.max(0,_opsNum(r.item&&r.item.mrp)),aov:r.qty>0?r.rev/r.qty:0})).filter(r=>r.qty>0&&r.mrp>0);
+  const mrps=all.map(r=>r.mrp).sort((a,b)=>a-b),mid=Math.floor(mrps.length/2),medianMrp=!mrps.length?0:(mrps.length%2?mrps[mid]:(mrps[mid-1]+mrps[mid])/2);
+  const segment=all.filter(r=>mode==='high'?r.mrp>medianMrp:r.mrp<=medianMrp);
+  segment.sort((a,b)=>b.aov-a.aov||b.rev-a.rev||b.qty-a.qty||b.mrp-a.mrp||a.sku.localeCompare(b.sku));
+  const qty=segment.reduce((s,r)=>s+r.qty,0),rev=segment.reduce((s,r)=>s+r.rev,0);
+  return {error:'',d1,d2,channel,mode,all,segment,top:segment.slice(0,20),qty,rev,lines,medianMrp};
+}
+function renderSalesComparisonAov(){
+  const host=document.getElementById('scAovContent'),sum=document.getElementById('scAovSummary'),note=document.getElementById('scAovNote');if(!host)return;
+  const data=_scBuildAovRows();_scAovExportRows=data.top;
+  if(data.error){if(sum)sum.innerHTML='';host.innerHTML=`<div class="ops-empty">${escHtml(data.error)}</div>`;if(note)note.textContent='';return;}
+  const top=data.top,modeLow=data.mode==='low',signal=modeLow?'Low MRP AOV Leader':'High MRP AOV Leader',topAov=top[0]?.aov||0;
+  if(sum)sum.innerHTML=_opsKpi('Filtered Median MRP',data.medianMrp?fmt(data.medianMrp):'—','Used to split Low MRP and High MRP')+_opsKpi(`${modeLow?'Low':'High'} MRP Selling SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Highest AOV',topAov?fmt(topAov):'—','Selected MRP segment')+_opsKpi('Segment Net Revenue',fmt(data.rev),`${_scShortDate(data.d1)} – ${_scShortDate(data.d2)}`);
+  const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.mrp)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td>${_opsRiskBadge(modeLow?'good':'medium',signal)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>AOV Rank</th><th>SKU / Product</th><th>Channel Mix</th><th>MRP</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>MRP Segment</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="ops-empty">No selling products with valid MRP match the selected filters.</td></tr>'}</tbody></table>`;
+  if(note)note.textContent=`Top 20 ${modeLow?'Low':'High'} MRP SKUs ranked by AOV high to low. AOV = filtered Net Revenue ÷ filtered Sold Qty. Median MRP is ${data.medianMrp?fmt(data.medianMrp):'unavailable'} across ${data.all.length.toLocaleString('en-IN')} filtered selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
+}
+function resetSalesComparisonAov(){
+  _scAovInitialized=false;const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2'),ch=document.getElementById('scAovChannel'),mode=document.getElementById('scAovMrpView');if(d1)d1.value='';if(d2)d2.value='';if(ch)ch.value='All';if(mode)mode.value='low';_scAovInit();renderSalesComparisonAov();
+}
+function exportSalesComparisonAov(){
+  const data=_scBuildAovRows();_scAovExportRows=data.top;if(data.error){alert(data.error);return;}if(!data.top.length){alert('No MRP vs Sales decision rows to export.');return;}
+  const label=data.mode==='low'?'Low MRP':'High MRP';
+  _dlCsv(['From Date','To Date','Channel Filter','MRP Segment','Filtered Median MRP','AOV Rank','SKU','SKU Name','Channel Mix','MRP','Sold Qty','Net Revenue','AOV','Segment Signal','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianMrp.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.mrp.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),data.mode==='low'?'Low MRP AOV Leader':'High MRP AOV Leader',r.item?.image_url||'']),'sales_comparison_top_20_aov_by_mrp_segment');
+}
+function loadSalesComparison(){_scPopulateFilters();_scAovInit();renderSalesComparison();renderSalesComparisonAov();}
 function renderSalesComparison(){
   _scPopulateFilters();
   _scExportRows=[];
@@ -15585,7 +15660,7 @@ function renderSalesComparison(){
 }
 function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';if(productGroup)productGroup.value='All';renderSalesComparison();}
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
-window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;
+window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;
 
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
