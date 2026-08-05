@@ -1,4 +1,8 @@
 # ============================================================
+# Cosa Nostraa — V23.7 (SIMPLE SEARCHABLE MENU)
+# V23.7:
+#   • Menu tab names are simpler; every item explains what the tab contains.
+#   • Search at the top filters allowed tabs without exposing role-hidden views.
 # Cosa Nostraa — V23.5 (RAKHI / OTHERS SALES FILTER)
 # V23.5:
 #   • Sales Comparison adds a Rakhi / Others product-group filter.
@@ -5234,15 +5238,21 @@ body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparen
   color:#281f13;font-weight:800;padding:8px 12px 22px;margin-bottom:15px;border-bottom:1px solid var(--cnx-line);
 }
 #navMenu .menu-item{
-  display:flex!important;align-items:center;gap:11px;width:100%;min-height:48px;text-align:left;
-  border:0!important;background:transparent!important;color:#716858!important;padding:7px 10px!important;
+  display:flex!important;align-items:flex-start;gap:11px;width:100%;min-height:60px;text-align:left;
+  border:0!important;background:transparent!important;color:#716858!important;padding:8px 10px!important;
   border-radius:14px!important;margin:3px 0!important;font-size:10.5px!important;font-weight:850!important;
   letter-spacing:.55px!important;text-transform:none!important;transition:transform .24s,background .24s,color .24s!important;
 }
+#navMenu .menu-item[hidden]{display:none!important}
 #navMenu .menu-item:hover{color:#201a12!important;background:var(--cnx-gold-soft)!important;transform:translateX(4px)}
 #navMenu .menu-item.active{color:#201a12!important;background:linear-gradient(90deg,rgba(235,204,130,.38),rgba(255,255,255,.3))!important;box-shadow:inset 3px 0 var(--cnx-gold),0 8px 20px rgba(115,83,26,.08)!important}
 #navMenu .menu-item>span:nth-child(2){display:block!important;visibility:visible!important;opacity:1!important;min-width:0;line-height:1.25}
-.cn-menu-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 auto;border:1px solid var(--cnx-line);border-radius:10px;color:var(--cnx-gold);background:rgba(255,255,255,.62);box-shadow:0 5px 12px rgba(86,64,24,.09),inset 0 1px rgba(255,255,255,.95);transition:transform .25s}
+#navMenu .menu-item>span.cn-menu-copy:nth-child(2){display:flex!important;flex:1;flex-direction:column;gap:3px;min-width:0;padding-top:1px}
+.cn-menu-title{color:#3d3427;font-size:10.5px;font-weight:900;line-height:1.2;letter-spacing:.45px}
+.cn-menu-desc{color:#928877;font-size:8px;font-weight:650;line-height:1.35;letter-spacing:0}
+#navMenu .menu-item:hover .cn-menu-title,#navMenu .menu-item.active .cn-menu-title{color:#201a12}
+#navMenu .menu-item:hover .cn-menu-desc,#navMenu .menu-item.active .cn-menu-desc{color:#6f6049}
+.cn-menu-icon{width:30px;height:30px;display:grid;place-items:center;flex:0 0 auto;margin-top:2px;border:1px solid var(--cnx-line);border-radius:10px;color:var(--cnx-gold);background:rgba(255,255,255,.62);box-shadow:0 5px 12px rgba(86,64,24,.09),inset 0 1px rgba(255,255,255,.95);transition:transform .25s}
 .cn-menu-icon svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #navMenu .menu-item:hover .cn-menu-icon{transform:translateY(-2px) rotate(-4deg) scale(1.08)}
 #navMenu .menu-item.active .cn-menu-icon{background:linear-gradient(145deg,#fff2c8,#e5bd61);color:#17120a;border-color:rgba(154,109,27,.22);box-shadow:0 8px 18px rgba(154,109,27,.2),inset 0 1px rgba(255,255,255,.85)}
@@ -5329,6 +5339,12 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 #navMenu.cn-open{transform:translateX(0);opacity:1;pointer-events:auto}
 #navMenu:before{position:absolute;left:22px;right:58px;top:18px;padding:0 0 15px!important;margin:0!important;font-size:17px!important;line-height:1.25!important;white-space:pre!important}
 .cn-menu-close{position:absolute;right:18px;top:18px;width:38px;height:38px;border:1px solid var(--cnx-line);border-radius:11px;background:#fff;color:#6f4d10;font-size:22px;line-height:1;cursor:pointer;box-shadow:0 8px 18px rgba(86,64,24,.1);z-index:2}.cn-menu-close:hover{background:#f5e8ce;transform:rotate(5deg)}
+.cn-menu-search{position:relative;margin:0 3px 12px}
+.cn-menu-search svg{position:absolute;left:12px;top:50%;width:16px;height:16px;transform:translateY(-50%);fill:none;stroke:#9a7b41;stroke-width:2;stroke-linecap:round;pointer-events:none}
+.cn-menu-search input{width:100%;height:42px;padding:0 12px 0 37px;border:1px solid rgba(123,91,33,.18)!important;border-radius:12px!important;background:#fffefb!important;color:#201a12!important;font-size:10px!important;font-weight:750!important;box-shadow:inset 0 1px 3px rgba(86,64,24,.05)!important}
+.cn-menu-search input:focus{outline:none!important;border-color:#b88930!important;box-shadow:0 0 0 3px rgba(184,137,48,.13)!important}
+.cn-menu-search input::placeholder{color:#9a9184!important;font-weight:650!important}
+.cn-menu-no-results{display:none;padding:10px 12px 14px;color:#8b7f6e;font-size:9px;font-weight:750;line-height:1.4}
 .cn-nav-backdrop{position:fixed;inset:0;z-index:301;background:rgba(33,25,14,.34);backdrop-filter:blur(5px);opacity:0;pointer-events:none;transition:opacity .28s}.cn-nav-backdrop.cn-open{opacity:1;pointer-events:auto}body.cn-menu-open{overflow:hidden!important}
 
 /* Ultra-premium shared module system */
@@ -5556,6 +5572,11 @@ select.lg-in option{background:#fff;color:#1a1610}
 
 <div class="nav-menu" id="navMenu">
   <button class="cn-menu-close" onclick="toggleNavMenu(false)" title="Close menu" aria-label="Close menu">×</button>
+  <div class="cn-menu-search">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg>
+    <input id="menuTabSearch" type="search" placeholder="Search tabs…" aria-label="Search menu tabs" autocomplete="off" oninput="filterMenuTabs(this.value)">
+  </div>
+  <div class="cn-menu-no-results" id="menuNoResults">No matching tab found.</div>
   <button class="menu-item" id="m1" onclick="showTab('home')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6"/></svg></span><span>Home</span></button>
   <button class="menu-item" id="m2" onclick="showTab('matrix')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V4h4v16M16 20v-7h4v7M3 20h18"/></svg></span><span>Overall Details</span></button>
   <button class="menu-item" id="m3" onclick="showTab('repeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m17 3 4 4-4 4M21 7H7a4 4 0 0 0-4 4v1M7 21l-4-4 4-4M3 17h14a4 4 0 0 0 4-4v-1"/></svg></span><span>Repeat Orders</span></button>
@@ -7671,6 +7692,81 @@ function sdSearchGo(){
 }
 document.addEventListener('click',ev=>{const shell=ev.target&&ev.target.closest?ev.target.closest('.sd-search-shell'):null;if(!shell)document.getElementById('sdSearchResults')?.classList.remove('is-open');});
 window.sdSearchInput=sdSearchInput;window.sdSearchGo=sdSearchGo;window.sdPickSearch=sdPickSearch;window.cnClassOf=cnClassOf;window.cnClassBadge=cnClassBadge;
+
+const MENU_TAB_META = {
+  m1:  {name:"Home",             desc:"Sales, stock, targets and current priorities."},
+  m2:  {name:"Overview",         desc:"All SKU sales, revenue, stock and filters."},
+  m3:  {name:"Repeat Orders",    desc:"Demand, stock, WIP and repeat-order needs."},
+  m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
+  m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
+  m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
+  m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
+  m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
+  m14: {name:"Profit",           desc:"SKU revenue, cost, margin and profit."},
+  m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
+  m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
+  m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
+  m31: {name:"Sales Comparison", desc:"Rel vs Non-Rel and Top 20 AOV products."},
+  m21: {name:"Bulk",             desc:"Build combo quotations and export them."},
+  m22: {name:"Stockout",         desc:"Low-stock SKUs and stockout risk."},
+  m23: {name:"Reorder Plan",     desc:"Suggested repeat quantities and reorder actions."},
+  m24: {name:"Combo Risk",       desc:"Combo availability from child-SKU stock."},
+  m32: {name:"Operations",       desc:"Exhibition CMB selection and operations planning."},
+  m25: {name:"Alerts",           desc:"Stock, ageing and action alerts."},
+  m26: {name:"Opportunities",    desc:"SKU growth and sales opportunity scores."},
+  m27: {name:"Sales Alerts",     desc:"Unusual sales increases and drops."},
+  m28: {name:"Sales Risk",       desc:"Revenue dependence on top SKUs and customers."},
+  m29: {name:"Demand",           desc:"Day, week and seasonal demand patterns."},
+  m30: {name:"Lost Sales",       desc:"Estimated sales and revenue lost due to OOS."},
+  m17: {name:"Payments",         desc:"Website COD and prepaid order analysis."},
+  m11: {name:"Help",             desc:"Daily action guide for employees."}
+};
+
+function _menuTabAllowedForRole(item){
+  const id = String(item?.id || '');
+  const employee = LOGIN_ROLE === 'employee';
+  if (employee) return !['m2','m7','m12','m14','m21'].includes(id);
+  return id !== 'm11';
+}
+
+function filterMenuTabs(value){
+  const q = String(value || '').trim().toLowerCase();
+  const items = document.querySelectorAll('#navMenu .menu-item');
+  let visible = 0;
+  items.forEach(item => {
+    const meta = MENU_TAB_META[item.id] || {};
+    const hay = String(item.dataset.menuSearch || `${meta.name || ''} ${meta.desc || ''} ${item.textContent || ''}`).toLowerCase();
+    const show = _menuTabAllowedForRole(item) && (!q || hay.includes(q));
+    item.hidden = !show;
+    if (show) visible++;
+  });
+  const empty = document.getElementById('menuNoResults');
+  if (empty) empty.style.display = visible ? 'none' : 'block';
+}
+
+function initializeMenuGuide_(){
+  Object.entries(MENU_TAB_META).forEach(([id, meta]) => {
+    const item = document.getElementById(id);
+    if (!item) return;
+    const copy = item.children[1];
+    if (!copy) return;
+    copy.className = 'cn-menu-copy';
+    copy.textContent = '';
+    const title = document.createElement('span');
+    const desc = document.createElement('span');
+    title.className = 'cn-menu-title';
+    title.textContent = meta.name;
+    desc.className = 'cn-menu-desc';
+    desc.textContent = meta.desc;
+    copy.append(title, desc);
+    item.dataset.menuSearch = `${meta.name} ${meta.desc}`;
+    item.setAttribute('aria-label', `${meta.name}: ${meta.desc}`);
+  });
+  const search = document.getElementById('menuTabSearch');
+  filterMenuTabs(search?.value || '');
+}
+
+document.addEventListener('DOMContentLoaded', initializeMenuGuide_);
 
 function toggleNavMenu(force){
   const menu = document.getElementById('navMenu');
@@ -9949,6 +10045,9 @@ function applyRoleUI(){
   const insBtn = document.getElementById('m6');
   if (tgtBtn) tgtBtn.style.display = '';
   if (insBtn) insBtn.style.display = '';
+
+  const menuSearch = document.getElementById('menuTabSearch');
+  if (typeof filterMenuTabs === 'function') filterMenuTabs(menuSearch?.value || '');
 
   if (isEmployee && (currentTab === 'matrix' || currentTab === 'marketplaces')) {
     showTab('home');
@@ -15730,31 +15829,31 @@ showTab = function(t){
   if (appBarSub) {
     const labels = {
       home: 'HOME',
-      matrix: 'OVERALL DETAILS',
+      matrix: 'OVERVIEW',
       repeat: 'REPEAT ORDERS',
       finder: 'SKU FINDER',
       skudetails: 'SKU DETAILS',
       insights: 'INSIGHTS',
       target: 'TARGET',
-      discount: 'DISCOUNT LEAKAGE',
+      discount: 'DISCOUNTS',
       production: 'PRODUCTION',
-      profit: 'PROFIT MARGIN',
-      atrisk: 'AT-RISK CUSTOMERS',
-      taxon: 'TAXON DETAILS',
+      profit: 'PROFIT',
+      atrisk: 'CUSTOMER RISK',
+      taxon: 'CATEGORIES',
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
       salescomparison: 'SALES COMPARISON',
       bulk: 'BULK — MAKE COMBO',
-      oos: 'OOS — STOCKOUT RISK',
-      repeatplanner: 'AUTO REPEAT PLANNER',
-      comborisk: 'COMBO PRODUCTION RISK',
+      oos: 'STOCKOUT',
+      repeatplanner: 'REORDER PLAN',
+      comborisk: 'COMBO RISK',
       operations: 'OPERATIONS — EXHIBITION CMB SELECTION',
-      smartops: 'SMART ALERTS & AGEING',
-      opportunity: 'SKU OPPORTUNITY SCORE',
-      salesanomaly: 'SALES ANOMALY DETECTION',
-      concentration: 'SALES CONCENTRATION RISK',
-      demandpatterns: 'DEMAND PATTERN INTELLIGENCE',
-      ooslost: 'OOS LOST SALES & REVENUE',
+      smartops: 'ALERTS',
+      opportunity: 'OPPORTUNITIES',
+      salesanomaly: 'SALES ALERTS',
+      concentration: 'SALES RISK',
+      demandpatterns: 'DEMAND',
+      ooslost: 'LOST SALES',
       payments: 'PAYMENTS',
       help: 'HELP',
       marketplaces: 'MARKETPLACES',
