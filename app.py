@@ -1175,8 +1175,10 @@ def _refresh_data():
         wcols = list(web_orders.columns)
         def _wat(i): return wcols[i] if len(wcols) > i else None
 
-        W_DATE = (find_col(web_orders.columns, "Dispatch Date", "Display Order Date",
-                           "Order Date", "order date", "date") or _wat(1))
+        # Customer/address order identity must follow Order Date (Shopify-style
+        # order day), not a later dispatch day.
+        W_DATE = (find_col(web_orders.columns, "Display Order Date", "Order Date",
+                           "order date", "Dispatch Date", "date") or _wat(1))
         W_NAME = (find_col(web_orders.columns, "Billing Address Name",
                            "Billing Name", "Customer Name", "customer name") or _wat(3))
         W_ADDR = (find_col(web_orders.columns, "Final Billing Address",
@@ -5005,7 +5007,7 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 #vBulk .bulk-final-card .bulk-sum-value{color:#f2d778}
 #vBulk .bulk-final-card .bulk-sum-sub{color:#d8d1c2}
 #vBulk .bulk-table-wrap{overflow:auto;max-height:66vh;border:1px solid var(--cn-line);border-radius:16px;background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.05)}
-#vBulk table.bulk-table{width:100%;border-collapse:collapse;min-width:820px;table-layout:fixed}
+#vBulk table.bulk-table{width:100%;border-collapse:collapse;min-width:930px;table-layout:fixed}
 #vBulk table.bulk-table thead th{position:sticky;top:0;z-index:3;background:var(--cn-ivory);color:var(--cn-gold);font-size:9px;letter-spacing:1.8px;text-transform:uppercase;text-align:left;padding:12px;border-bottom:1px solid var(--cn-line)}
 #vBulk table.bulk-table td{padding:11px 12px;border-bottom:1px solid #eee9df;vertical-align:middle;font-size:12px;color:#334155;font-weight:700}
 #vBulk table.bulk-table tbody tr:hover td{background:#fffdf8}
@@ -6611,6 +6613,24 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="scAovContent" class="ro-table-wrap" style="padding:0;overflow:auto;margin-top:14px"></div>
       <div id="scAovNote" class="rel-note"></div>
     </div>
+
+    <div class="ops-section" style="margin-top:22px">
+      <div class="ops-head" style="margin-bottom:12px">
+        <div><div class="ops-title" style="font-size:26px">Shopify-Style AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. For Website, the same date + same customer + same billing address is counted as one order even when that order contains multiple SKUs.</div></div>
+        <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonOrders()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonOrders()">Export CSV</button></div>
+      </div>
+      <div class="ops-filters">
+        <div class="fc"><label class="fl">Comparison</label><select class="fs" id="scOrderPreset" onchange="_scOrderPresetChanged()"><option value="days">Yesterday vs Day Before</option><option value="months">Previous Month vs Month Before</option><option value="custom">Custom Two Dates</option></select></div>
+        <div class="fc"><label class="fl">Type</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Types</option></select></div>
+        <div class="fc"><label class="fl">Baseline Date</label><input class="fi" type="date" id="scOrderDateA" onchange="renderSalesComparisonOrders()"></div>
+        <div class="fc"><label class="fl">Comparison Date</label><input class="fi" type="date" id="scOrderDateB" onchange="renderSalesComparisonOrders()"></div>
+        <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonOrders()">Reset</button>
+      </div>
+      <div id="scOrderSummary" class="rel-compare-kpis" style="margin-top:12px"></div>
+      <div id="scOrderInsight" class="ops-note" style="margin-top:12px"></div>
+      <div id="scOrderContent" class="ro-table-wrap" style="padding:0;overflow:auto;margin-top:14px"></div>
+      <div id="scOrderNote" class="rel-note"></div>
+    </div>
   </div>
 
 
@@ -6627,7 +6647,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div>
           <label class="fl">Paste SKUs</label>
           <textarea id="bulkSkuInput" class="bulk-textarea" placeholder="Paste one SKU per line, or separate SKUs with commas/spaces.\nExample:\nBH-1320\nCMB-0817\nBT-0057"></textarea>
-          <div class="small-note" style="margin-top:7px">You may also paste two columns as SKU + Qty. Repeated SKUs are automatically combined into one row with the correct quantity.</div>
+          <div class="small-note" style="margin-top:7px">You may also paste two columns as SKU + Qty. Repeated SKUs are automatically combined into one row with the correct quantity. Inv Stock is shown here for internal availability only and is excluded from the customer PDF quotation.</div>
           <div class="bulk-actions">
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px" onclick="bulkMakeCombo()">Make Combo</button>
             <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:1.5px;background:#1d6f42" onclick="bulkExportPDF()">Export PDF Quotation</button>
@@ -7324,6 +7344,67 @@ function roInvWip(item, ctx){
   return Number(item.inv_wip ?? 0) || 0;
 }
 
+// Repeat Order export me combo ke embedded snapshot ki jagah SKU master ka
+// exact record use karo. Isse CMB row par CMB aur child row par child ka hi
+// stock/WIP aata hai, including the active channel/type WIP context.
+function roExactSkuItem(item){
+  const key = String(item && item.sku || '').trim().toUpperCase();
+  if (key && _masterSkuMap[key]) return _masterSkuMap[key];
+  // Separator differences (BH-1382 / BH 1382 / BH_1382) ki wajah se exact
+  // child miss na ho. Full compact SKU hi match hota hai; base-SKU fallback
+  // intentionally nahi use karte, warna kisi variant ka stock aa sakta hai.
+  const compact = key.replace(/[^A-Z0-9]/g, '');
+  if (compact && _bulkSkuLookup[compact]) return _bulkSkuLookup[compact];
+  return item || {};
+}
+
+// Exact child SKU ki direct sales. Combo child demand me parent CMB ki sale
+// ke saath yeh quantity add hoti hai; master/KPI totals ko change nahi karti.
+function roSaleTotalsForItem(rawItem, saleCtx){
+  const item = roExactSkuItem(rawItem);
+  const ctx = saleCtx || {};
+  const itemKey = String(item.sku || '').trim().toUpperCase();
+  const parentKey = String(ctx.parentSku || '').trim().toUpperCase();
+  if (!itemKey || (parentKey && itemKey === parentKey)) return {q7:0,q15:0,q30:0,sold:0};
+
+  const types = Array.isArray(ctx.types) ? ctx.types : [];
+  const channels = Array.isArray(ctx.channels) ? ctx.channels : [];
+  const subChannels = Array.isArray(ctx.subChannels) ? ctx.subChannels : [];
+  const customer = String(ctx.customer || '').trim().toLowerCase();
+  const d1 = _bizIso(ctx.d1), d2 = _bizIso(ctx.d2);
+  const hasEntryFilter = !!(types.length || channels.length || subChannels.length || customer || d1 || d2);
+  if (!hasEntryFilter) {
+    return {
+      q7: Number(item.qty_7d) || 0,
+      q15: Number(item.qty_15d) || 0,
+      q30: Number(item.qty_1m) || 0,
+      sold: Number(item.final_qty) || 0
+    };
+  }
+
+  const entries = (item.sales_entries || []).filter(e => {
+    if (types.length && !types.includes(e.type)) return false;
+    if (channels.length && !channels.includes(e.channel)) return false;
+    if (subChannels.length && !subChannels.includes(e.sub_channel)) return false;
+    if (customer && !String(e.cust || '').toLowerCase().includes(customer)) return false;
+    if (d1 || d2) {
+      const date = _bizEntryDate(e);
+      if (!date || (d1 && date < d1) || (d2 && date > d2)) return false;
+    }
+    return true;
+  });
+  const now = _bizIso(todayISO) || new Date().toISOString().slice(0,10);
+  const D7 = _bizShift(now,-7), D15 = _bizShift(now,-15), D30 = _bizShift(now,-30);
+  const win = since => entries.reduce((sum,e) => {
+    const date = _bizEntryDate(e);
+    return sum + (date && date >= since ? (Number(e.qty) || 0) : 0);
+  },0);
+  return {
+    q7: win(D7), q15: win(D15), q30: win(D30),
+    sold: entries.reduce((sum,e) => sum + (Number(e.qty) || 0), 0)
+  };
+}
+
 /* ── "Anu Ma'am" virtual Type filter (Repeat Order tab only) ──
    Yeh koi real dispatch Type nahi hai — tick karne par us SKU ki
    Production (PPC-WIP) sheet me "Top Seller Ordering - Anu Ma'am"
@@ -7706,7 +7787,7 @@ const MENU_TAB_META = {
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
   m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
-  m31: {name:"Sales Comparison", desc:"Rel vs Non-Rel and Top 20 AOV products."},
+  m31: {name:"Sales Comparison", desc:"Rel/Non-Rel, Top 20 products and Shopify-style AOV drivers."},
   m21: {name:"Bulk",             desc:"Build combo quotations and export them."},
   m22: {name:"Stockout",         desc:"Low-stock SKUs and stockout risk."},
   m23: {name:"Reorder Plan",     desc:"Suggested repeat quantities and reorder actions."},
@@ -8685,6 +8766,7 @@ function loadData(force){
 
       master = d.inventory || [];
       _bizEventCache = null;
+      _scWebsiteSessionIndex = null;
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
@@ -9480,7 +9562,11 @@ function applyRO(){
     const comboWip = (c) => wipOf(c);
     const wipLabel = roAnuMode ? "WIP (Anu Ma'am)" : (roInvCtx.wipLabel || 'WIP');
     // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboStock, comboWip, wipLabel, typeSel, {q7:q7, q15:q15, q30:q30, sold:qty});
+    const comboHtml = _renderComboDetails(
+      item.combo_details, comboStock, comboWip, wipLabel, typeSel,
+      {q7:q7, q15:q15, q30:q30, sold:qty},
+      {parentSku:item.sku, types:typeSel, channels:chanSel, subChannels:subChanSel, customer:custQ, d1, d2}
+    );
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
@@ -9642,7 +9728,15 @@ function applyColFilters(){
     const comboWip2 = (c) => wipOfCF(c);
     const wipLabel2 = roAnuModeCF ? "WIP (Anu Ma'am)" : (roInvCtxCF.wipLabel || 'WIP');
     // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF, {q7:q7, q15:q15, q30:q30, sold:qty});
+    const comboHtml = _renderComboDetails(
+      item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF,
+      {q7:q7, q15:q15, q30:q30, sold:qty},
+      {
+        parentSku:item.sku, types:typeSelCF, channels:chanSelCF, subChannels:subChanSelCF,
+        customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),
+        d1:document.getElementById('rD1')?.value||'', d2:document.getElementById('rD2')?.value||''
+      }
+    );
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
@@ -9704,12 +9798,21 @@ function exportRO(fmtType){
     }
     const dimMap = {}, mrpMap = {}, packMap = {}, nameMap = {}, stoneMap = {}, itemMap = {};
     ((typeof master !== 'undefined' && master) || []).forEach(it => { if (it && it.sku) { const key=String(it.sku).trim().toUpperCase(); itemMap[key]=it; dimMap[key] = it.dimensions || ''; mrpMap[key] = it.mrp || 0; packMap[key] = it.pack_details || ''; nameMap[key] = it.sku_name || ''; stoneMap[key] = it.stone_color || ''; } });
+    const typeSelRawTx = getSelectedTypes('rType');
+    const roAnuModeTx = typeSelRawTx.includes(ANU_MAAM_TYPE_VALUE);
+    const typeSelTx = roAnuModeTx ? typeSelRawTx.filter(v => v !== ANU_MAAM_TYPE_VALUE) : typeSelRawTx;
+    const chanSelTx = getSelectedChannels('rChan');
+    const subChanSelTx = getSelectedSubChannels('rSubChan');
+    const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
     const headers = ['Row Type','Dispatch Date','SKU','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Sold Qty','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
       const parentItem=itemMap[skuKey]||{};
+      const parentExact=roExactSkuItem(parentItem.sku ? parentItem : t);
+      const parentStock=roInvStock(parentExact, roInvCtxTx);
+      const parentWip=roAnuModeTx ? roAnuWipFor(parentExact.sku || t.sku) : roInvWip(parentExact, roInvCtxTx);
       const children=Array.isArray(parentItem.combo_details)?parentItem.combo_details:[];
       const mrp0 = parseFloat(mrpMap[skuKey]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
@@ -9728,13 +9831,16 @@ function exportRO(fmtType){
       'Sold Qty': parseFloat(t.qty) || 0,
       'MRP': mrp0,
       ...(emp0 ? {} : {'Net Revenue': parseFloat(t.rev) || 0, 'Discount %': discPct0 + '%'}),
-      'Inv Stock': parseInt(t.inv_stock) || 0,
-      'Inv WIP': parseInt(t.inv_wip) || 0,
+      'Inv Stock': parentStock,
+      'Inv WIP': parentWip,
       'Remark': roRemarks[t.sku] || '',
       'Image Link': t.image_url || '',
       });
       children.forEach(c=>{
         const childKey=String(c.sku||'').trim().toUpperCase();
+        const childItem=roExactSkuItem(c);
+        const childStock=roInvStock(childItem, roInvCtxTx);
+        const childWip=roAnuModeTx ? roAnuWipFor(childItem.sku || c.sku) : roInvWip(childItem, roInvCtxTx);
         data.push({
           'Row Type':'— Set Item',
           'Dispatch Date':t.date==='N/A'?'':t.date,
@@ -9748,8 +9854,8 @@ function exportRO(fmtType){
           'Sold Qty':parseFloat(t.qty)||0,
           'MRP':parseFloat(c.mrp)||parseFloat(mrpMap[childKey])||0,
           ...(emp0?{}:{'Net Revenue':'','Discount %':''}),
-          'Inv Stock':parseInt(c.inv_stock)||0,
-          'Inv WIP':parseInt(c.inv_wip)||0,
+          'Inv Stock':childStock,
+          'Inv WIP':childWip,
           'Remark':'Child SKU of '+t.sku,
           'Image Link':c.image_url||''
         });
@@ -9776,17 +9882,26 @@ function exportRO(fmtType){
   const chanSel = getSelectedChannels('rChan');
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtxX = roInvContext(typeSel, chanSel, subChanSel);
-  const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0);
+  const custSelX = (document.getElementById('rCust')?.value||'').trim().toLowerCase();
+  const d1SelX = document.getElementById('rD1')?.value||'', d2SelX = document.getElementById('rD2')?.value||'';
+  const roSaleCtxX = {
+    types:typeSel, channels:chanSel, subChannels:subChanSel,
+    customer:custSelX, d1:d1SelX, d2:d2SelX
+  };
+  const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || custSelX || d1SelX || d2SelX);
   const nowX = todayISO || new Date().toISOString().slice(0,10);
   const _dAgo = n => new Date(new Date(nowX) - n*86400000).toISOString().slice(0,10);
   const D7 = _dAgo(7), D15 = _dAgo(15), D30 = _dAgo(30);
   // entries ko type filter ke hisaab se le aao (filter na ho to saari)
   const filtEnts = (it) => {
-    if (typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0) {
-      return (it._fe && it._fe.length) ? it._fe : (it.sales_entries || []).filter(e =>
+    if (!roNoFilterX) {
+      return (it.sales_entries || []).filter(e =>
         (!typeSel.length || typeSel.includes(e.type)) &&
         (!chanSel.length || chanSel.includes(e.channel)) &&
-        (!subChanSel.length || subChanSel.includes(e.sub_channel))
+        (!subChanSel.length || subChanSel.includes(e.sub_channel)) &&
+        (!custSelX || String(e.cust||'').toLowerCase().includes(custSelX)) &&
+        (!d1SelX || (e.date!=='N/A' && e.date>=d1SelX)) &&
+        (!d2SelX || (e.date!=='N/A' && e.date<=d2SelX))
       );
     }
     return it.sales_entries || [];
@@ -9804,7 +9919,7 @@ function exportRO(fmtType){
     if (!roNoFilterX) {
       const fe = filtEnts(item);
       r7 = winQty(fe, D7); r15 = winQty(fe, D15); r30 = winQty(fe, D30);
-      rSold = item._fQty ?? fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
+      rSold = fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
     } else {
       r7 = item.qty_7d||0; r15 = item.qty_15d||0; r30 = item.qty_1m||0;
       rSold = item.final_qty||0;
@@ -9837,14 +9952,16 @@ function exportRO(fmtType){
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
     });
-    // Gift set ke andar wale (stone details) SKUs: export me har child SKU ko
-    // parent CMB ki wahi filtered 7D/15D/30D/Sold sale dikhani hai. Yeh sirf
-    // exported display rows hain; KPI/master totals me child rows add nahi hote.
+    // Gift set ke andar child demand = parent CMB ki filtered sale + child ki
+    // apni direct sale. Yeh sirf exported display rows hain; KPI/master totals
+    // me child rows add nahi hote.
     (item.combo_details || []).forEach(c => {
-      const c7 = Math.round(r7);
-      const c15 = Math.round(r15);
-      const c30 = Math.round(r30);
-      const cSold = Math.round(rSold);
+      const childItem = roExactSkuItem(c);
+      const childDirect = roSaleTotalsForItem(childItem, {...roSaleCtxX,parentSku:item.sku});
+      const c7 = Math.round(r7 + childDirect.q7);
+      const c15 = Math.round(r15 + childDirect.q15);
+      const c30 = Math.round(r30 + childDirect.q30);
+      const cSold = Math.round(rSold + childDirect.sold);
       data.push({
         'Row Type': '— Set Item',
         SKU: c.sku,
@@ -9859,8 +9976,8 @@ function exportRO(fmtType){
         'Sold Qty': cSold,
         'MRP': parseFloat(c.mrp) || 0,
         ...(emp1 ? {} : {'Selling Price': '', 'Discount %': ''}),
-        'Inv Stock': chStock(c),
-        'Inv WIP': chWip(c),
+        'Inv Stock': chStock(childItem),
+        'Inv WIP': chWip(childItem),
         'Blocked Qty': c.blocked_qty || 0,
         'Forecast Sold Qty': c.forecast_60d || 0,
         'Reorder Qty': c.reorder_qty || 0,
@@ -10291,46 +10408,25 @@ function escHtml(v){
     .replace(/'/g, '&#39;');
 }
 
-/* ── Helper: combo SKU ka filter-aware HTML (Type filter ke hisaab se
-   7D/15D/30D/Sold sales dikhata hai, warna pre-computed totals).
-   WIP bhi channel-aware (comboWipFn(c) se). ── */
-function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, typeSel, parentSales) {
+/* ── Helper: combo SKU ka filter-aware HTML. Har child ki demand = parent
+   CMB usage + child ki apni direct sale. KPI/master totals unchanged rehte
+   hain; yeh sirf set-item demand display hai. ── */
+function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, typeSel, parentSales, saleContext) {
   if (!combo_details || !combo_details.length) return '';
-  // Display-only rule for Gift Sets: every child/set-item inherits the parent CMB
-  // sale figures. Underlying master/filtered rows are NOT changed, so KPI totals
-  // continue to count the CMB sale only once.
   const parentSaleVals = (parentSales && typeof parentSales === 'object') ? {
     q7: Math.round(parseFloat(parentSales.q7) || 0),
     q15: Math.round(parseFloat(parentSales.q15) || 0),
     q30: Math.round(parseFloat(parentSales.q30) || 0),
     sold: Math.round(parseFloat(parentSales.sold) || 0)
   } : null;
-  const now = todayISO || new Date().toISOString().slice(0,10);
-  const cd7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
-  const cd15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
-  const cd30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
   const items_html = combo_details.map(c => {
-    let cQ7, cQ15, cQ30, cSold;
-    if (parentSaleVals) {
-      // Example: CMB-0817 Sold Qty = 10 => each child SKU shows Sold Qty = 10.
-      cQ7 = parentSaleVals.q7;
-      cQ15 = parentSaleVals.q15;
-      cQ30 = parentSaleVals.q30;
-      cSold = parentSaleVals.sold;
-    } else if (typeSel && typeSel.length > 0) {
-      const masterC = _masterSkuMap[String(c.sku).toUpperCase()];
-      if (masterC) {
-        const fe = (masterC.sales_entries || []).filter(e => typeSel.includes(e.type));
-        cQ7   = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
-        cQ15  = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
-        cQ30  = Math.round(fe.filter(e=>e.date!=='N/A'&&e.date>=cd30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
-        cSold = Math.round(fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0));
-      } else {
-        cQ7 = c.qty_7d||0; cQ15 = c.qty_15d||0; cQ30 = c.qty_1m||0; cSold = c.final_qty||0;
-      }
-    } else {
-      cQ7 = c.qty_7d||0; cQ15 = c.qty_15d||0; cQ30 = c.qty_1m||0; cSold = c.final_qty||0;
-    }
+    const exactChild = roExactSkuItem(c);
+    const direct = roSaleTotalsForItem(exactChild, saleContext || {});
+    const base = parentSaleVals || {q7:0,q15:0,q30:0,sold:0};
+    const cQ7 = Math.round(base.q7 + direct.q7);
+    const cQ15 = Math.round(base.q15 + direct.q15);
+    const cQ30 = Math.round(base.q30 + direct.q30);
+    const cSold = Math.round(base.sold + direct.sold);
     const skuEscC = String(c.sku).replace(/'/g, "\\\\'");
     return '<div class="combo-detail">'
       + '<button class="combo-sku" onclick="openSkuDetails(\'' + skuEscC + '\')">' + escHtml(skuLabel(c.sku, c.sku_name)) + '</button>'
@@ -10340,8 +10436,8 @@ function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, 
       + '<span>15D <b>' + cQ15 + '</b></span>'
       + '<span>30D <b>' + cQ30 + '</b></span>'
       + '<span>Sold <b>' + cSold + '</b></span>'
-      + '<span>Stock <b>' + (comboStockFn(c)||0) + '</b></span>'
-      + '<span>WIP <b>' + (comboWipFn(c)||0) + '</b></span>'
+      + '<span>Stock <b>' + (comboStockFn(exactChild)||0) + '</b></span>'
+      + '<span>WIP <b>' + (comboWipFn(exactChild)||0) + '</b></span>'
       + '<span>Fcast <b>' + (c.forecast_60d||0) + '</b></span>'
       + '<span>Reorder <b style="color:#b45309">' + (c.reorder_qty||0) + '</b></span>'
       + '</div></div>';
@@ -15479,7 +15575,8 @@ function bulkRenderCombo(forcedMessage){
     const item = bulkFindItem(r.sku);
     const qty = Math.max(1, Math.round(Number(r.qty) || 1));
     const price = bulkPriceOf(item);
-    return {item, sku:r.sku, qty, price, line:price*qty};
+    const stock = Math.max(0, _opsNum(item && item.inv_stock));
+    return {item, sku:r.sku, qty, stock, price, line:price*qty};
   }).filter(r => r.item);
 
   const pieces = rows.reduce((s,r) => s + r.qty, 0);
@@ -15527,6 +15624,7 @@ function bulkRenderCombo(forcedMessage){
       <td style="width:104px">${image}</td>
       <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(skuCodeWithFlag(it.sku))}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
       <td style="width:115px"><input class="bulk-qty" type="number" min="1" step="1" value="${r.qty}" data-sku="${escHtml(it.sku)}" onchange="bulkUpdateQty(this.dataset.sku,this.value)"></td>
+      <td class="bulk-money" style="width:115px;color:${r.stock>0?'#15803d':'#b91c1c'}"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td>
       <td class="bulk-money" style="width:145px">${bulkFmtMoney(r.price)}</td>
       <td class="bulk-money" style="width:155px;color:#15803d">${bulkFmtMoney(r.line)}</td>
       <td style="width:105px;text-align:center"><button class="bulk-remove" data-sku="${escHtml(it.sku)}" onclick="bulkRemoveSku(this.dataset.sku)">Remove</button></td>
@@ -15534,12 +15632,12 @@ function bulkRenderCombo(forcedMessage){
   }).join('');
 
   host.innerHTML = `<table class="bulk-table">
-    <thead><tr><th style="width:104px">Photo</th><th>SKU / Product</th><th style="width:115px">Qty</th><th style="width:145px;text-align:right">Selling Price</th><th style="width:155px;text-align:right">Line Total</th><th style="width:105px;text-align:center">Action</th></tr></thead>
+    <thead><tr><th style="width:104px">Photo</th><th>SKU / Product</th><th style="width:115px">Qty</th><th style="width:115px;text-align:right">Inv Stock</th><th style="width:145px;text-align:right">Selling Price</th><th style="width:155px;text-align:right">Line Total</th><th style="width:105px;text-align:center">Action</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot>
-      <tr><td colspan="4" style="text-align:right">Original Total</td><td class="bulk-money">${bulkFmtMoney(original)}</td><td></td></tr>
-      <tr><td colspan="4" style="text-align:right">Discount (${discount.toLocaleString('en-IN',{maximumFractionDigits:1})}%)</td><td class="bulk-money">- ${bulkFmtMoney(discountAmount)}</td><td></td></tr>
-      <tr><td colspan="4" style="text-align:right">Final Combo Price</td><td class="bulk-money">${bulkFmtMoney(finalTotal)}</td><td></td></tr>
+      <tr><td colspan="5" style="text-align:right">Original Total</td><td class="bulk-money">${bulkFmtMoney(original)}</td><td></td></tr>
+      <tr><td colspan="5" style="text-align:right">Discount (${discount.toLocaleString('en-IN',{maximumFractionDigits:1})}%)</td><td class="bulk-money">- ${bulkFmtMoney(discountAmount)}</td><td></td></tr>
+      <tr><td colspan="5" style="text-align:right">Final Combo Price</td><td class="bulk-money">${bulkFmtMoney(finalTotal)}</td><td></td></tr>
     </tfoot>
   </table>`;
 }
@@ -15614,11 +15712,16 @@ let _scInitialized=false;
 let _scExportRows=[];
 let _scAovInitialized=false;
 let _scAovExportRows=[];
+let _scOrderInitialized=false;
+let _scOrderExportRows=[];
+let _scWebsiteSessionIndex=null;
 function _scShiftDate(iso,days){const p=String(iso||'').split('-').map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)))return '';return new Date(Date.UTC(p[0],p[1]-1,p[2])+days*86400000).toISOString().slice(0,10);}
 function _scShortDate(iso){const p=String(iso||'').split('-').map(Number);if(p.length!==3)return String(iso||'');return new Date(Date.UTC(p[0],p[1]-1,p[2])).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});}
 function _scPopulateFilters(){
-  const type=document.getElementById('scType'),tax=document.getElementById('scTaxon');
-  if(type&&type.options.length<=1)type.innerHTML='<option value="All">All Types</option>'+Array.from(new Set(allTypes||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  const type=document.getElementById('scType'),orderType=document.getElementById('scOrderType'),tax=document.getElementById('scTaxon');
+  const typeOptions='<option value="All">All Types</option>'+Array.from(new Set(allTypes||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  if(type&&type.options.length<=1)type.innerHTML=typeOptions;
+  if(orderType&&orderType.options.length<=1)orderType.innerHTML=typeOptions;
   if(tax&&tax.options.length<=1)tax.innerHTML='<option value="All">All Taxons</option>'+Array.from(new Set(allTaxons||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   if(!_scInitialized){
     const end=todayISO||new Date().toISOString().slice(0,10),start=_scShiftDate(end,-29);
@@ -15720,7 +15823,159 @@ function exportSalesComparisonAov(){
   const label=_scQuadrantLabel(data.mode);
   _dlCsv(['From Date','To Date','Channel Filter','Price / Sales View','Median Effective Price','Median Sales Score','Rank','SKU','SKU Name','Channel Mix','Effective Price (Net Revenue / Sold Qty)','Sold Qty','Net Revenue','AOV','Qty Score','Revenue Score','Sales Score','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianPriceReference.toFixed(2)),Number(data.medianSalesScore.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.priceReference.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),Number(r.qtyScore.toFixed(2)),Number(r.revenueScore.toFixed(2)),Number(r.salesScore.toFixed(2)),r.item?.image_url||'']),'sales_comparison_net_revenue_price_sales_quadrant_top_20');
 }
-function loadSalesComparison(){_scPopulateFilters();_scAovInit();renderSalesComparison();renderSalesComparisonAov();}
+
+function _scOrderDateLabel(iso){
+  const d=_bizDate(iso);return d?d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):String(iso||'');
+}
+function _scOrderRangeLabel(a,b){return a===b?_scOrderDateLabel(a):`${_scOrderDateLabel(a)} – ${_scOrderDateLabel(b)}`;}
+function _scOrderMonthBounds(anchor,offset){
+  const d=_bizDate(anchor)||new Date();
+  const first=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+offset,1));
+  const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+offset+1,0));
+  return {from:first.toISOString().slice(0,10),to:last.toISOString().slice(0,10)};
+}
+function _scOrderLatestCompleteDate(){
+  const today=_bizIso(todayISO)||new Date().toISOString().slice(0,10),cutoff=_bizShift(today,-1);
+  let latest='';_bizEvents().forEach(e=>{if(e.date&&e.date<=cutoff&&e.date>latest)latest=e.date;});
+  if(!latest)_bizEvents().forEach(e=>{if(e.date&&e.date>latest)latest=e.date;});
+  return latest||cutoff;
+}
+function _scOrderApplyPreset(doRender){
+  const preset=document.getElementById('scOrderPreset')?.value||'days';
+  const a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB');
+  if(!a||!b)return;
+  a.disabled=preset!=='custom';b.disabled=preset!=='custom';
+  if(preset==='days'){
+    b.value=_scOrderLatestCompleteDate();a.value=_bizShift(b.value,-1);
+  }else if(preset==='months'){
+    const anchor=_bizIso(todayISO)||new Date().toISOString().slice(0,10);
+    a.value=_scOrderMonthBounds(anchor,-2).from;b.value=_scOrderMonthBounds(anchor,-1).from;
+  }else{
+    if(!b.value)b.value=_scOrderLatestCompleteDate();
+    if(!a.value)a.value=_bizShift(b.value,-1);
+  }
+  if(doRender)renderSalesComparisonOrders();
+}
+function _scOrderPresetChanged(){_scOrderApplyPreset(true);}
+function _scOrderInit(){
+  _scPopulateFilters();
+  if(_scOrderInitialized)return;
+  const type=document.getElementById('scOrderType');
+  if(type){const website=Array.from(type.options).find(o=>String(o.value).toLowerCase()==='website');type.value=website?website.value:'All';}
+  const preset=document.getElementById('scOrderPreset');if(preset)preset.value='days';
+  _scOrderInitialized=true;_scOrderApplyPreset(false);
+}
+function _scOrderRanges(){
+  _scOrderInit();
+  const preset=document.getElementById('scOrderPreset')?.value||'days';
+  const da=_bizIso(document.getElementById('scOrderDateA')?.value),db=_bizIso(document.getElementById('scOrderDateB')?.value);
+  if(preset==='months'){
+    const anchor=_bizIso(todayISO)||new Date().toISOString().slice(0,10),a=_scOrderMonthBounds(anchor,-2),b=_scOrderMonthBounds(anchor,-1);
+    return {preset,a1:a.from,a2:a.to,b1:b.from,b2:b.to,labelA:_scOrderRangeLabel(a.from,a.to),labelB:_scOrderRangeLabel(b.from,b.to)};
+  }
+  return {preset,a1:da,a2:da,b1:db,b2:db,labelA:_scOrderRangeLabel(da,da),labelB:_scOrderRangeLabel(db,db)};
+}
+function _scOrderNormCustomer(v){return String(v||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+function _scOrderIsWebsite(e){return _scAovChannel(e)==='Website';}
+function _scOrderSessionIndex(){
+  if(_scWebsiteSessionIndex)return _scWebsiteSessionIndex;
+  const sessionIndex=new Map();
+  (master||[]).forEach(item=>{
+    const sku=String(item.sku||'').trim().toUpperCase();if(!sku)return;
+    (item.website_customer_events||[]).forEach(ev=>{
+      const date=_bizIso(ev.d||ev.date);if(!date)return;
+      const token=String(ev.s||`${ev.c||''}|${date}`).trim();if(!token)return;
+      const key=`${sku}|${date}`,set=sessionIndex.get(key)||new Set();set.add(token);sessionIndex.set(key,set);
+    });
+  });
+  _scWebsiteSessionIndex=sessionIndex;return sessionIndex;
+}
+function _scOrderPeriod(from,to,type){
+  const sessionIndex=_scOrderSessionIndex();
+  const skuMap=new Map(),allOrders=new Set(),addressOrders=new Set(),fallbackOrders=new Set();
+  _bizEvents().forEach((e,index)=>{
+    if(!e.date||e.date<from||e.date>to)return;
+    if(type!=='All'&&String(e.type||'')!==type)return;
+    const qty=Math.max(0,_opsNum(e.qty)),rev=Math.max(0,_opsNum(e.rev));if(qty<=0&&rev<=0)return;
+    const sku=String(e.sku||'').trim().toUpperCase();
+    const row=skuMap.get(sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,orderKeys:new Set()};
+    row.qty+=qty;row.rev+=rev;row.lines++;
+    if(_scOrderIsWebsite(e)){
+      const sessions=sessionIndex.get(`${sku}|${e.date}`);
+      if(sessions&&sessions.size){
+        sessions.forEach(token=>{const key=`WEB|${token}`;row.orderKeys.add(key);allOrders.add(key);addressOrders.add(key);});
+      }else{
+        const key=`WEB-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);fallbackOrders.add(key);
+      }
+    }else{
+      const customer=_scOrderNormCustomer(e.customer),generic=!customer||['unknown','na','n a'].includes(customer);
+      const key=generic?`LINE|${index}`:`CUSTOMER-DAY|${e.date}|${e.type||''}|${e.channel||''}|${customer}`;
+      row.orderKeys.add(key);allOrders.add(key);
+    }
+    skuMap.set(sku,row);
+  });
+  const rows=Array.from(skuMap.values()).map(r=>({...r,orders:r.orderKeys.size,aov:r.orderKeys.size?r.rev/r.orderKeys.size:0}));
+  const qty=rows.reduce((s,r)=>s+r.qty,0),rev=rows.reduce((s,r)=>s+r.rev,0),orders=allOrders.size;
+  return {from,to,rows,qty,rev,orders,aov:orders?rev/orders:0,addressOrders:addressOrders.size,fallbackOrders:fallbackOrders.size};
+}
+function _scOrderPct(current,base){return base?((current-base)/Math.abs(base)*100):null;}
+function _scOrderDeltaText(current,base,isMoney){
+  const delta=current-base,pct=_scOrderPct(current,base),sign=delta>0?'+':'';
+  const amount=isMoney?fmt(Math.abs(delta)):Math.abs(Math.round(delta)).toLocaleString('en-IN');
+  return `${sign}${delta<0?'-':''}${amount}${pct===null?'':` (${pct>=0?'+':''}${pct.toFixed(1)}%)`}`;
+}
+function _scBuildOrderComparison(){
+  _scOrderInit();const ranges=_scOrderRanges(),type=document.getElementById('scOrderType')?.value||'All';
+  if(!ranges.a1||!ranges.b1)return {error:'Choose both comparison dates.',ranges,type,drivers:[]};
+  const a=_scOrderPeriod(ranges.a1,ranges.a2,type),b=_scOrderPeriod(ranges.b1,ranges.b2,type);
+  const am=new Map(a.rows.map(r=>[String(r.sku).toUpperCase(),r])),bm=new Map(b.rows.map(r=>[String(r.sku).toUpperCase(),r]));
+  const keys=new Set([...am.keys(),...bm.keys()]),drivers=[];
+  keys.forEach(key=>{
+    const x=am.get(key)||{sku:key,skuName:'',item:_masterSkuMap[key]||{},qty:0,rev:0,orders:0,aov:0};
+    const y=bm.get(key)||{sku:key,skuName:x.skuName,item:x.item,qty:0,rev:0,orders:0,aov:0};
+    const qtyDelta=y.qty-x.qty,revDelta=y.rev-x.rev,orderDelta=y.orders-x.orders,aovDelta=y.aov-x.aov;
+    const lowAov=y.orders>0&&b.aov>0&&y.aov<b.aov,lowAovMix=lowAov&&(qtyDelta>0||orderDelta>0);
+    const reasons=[];
+    if(x.qty>0&&y.qty<=0)reasons.push('Stopped selling');else if(qtyDelta<0)reasons.push('Selling less');
+    if(revDelta<0)reasons.push('Revenue down');
+    if(x.aov>0&&aovDelta<0)reasons.push('Product AOV down');
+    if(lowAovMix)reasons.push('Low-AOV mix increased');else if(lowAov)reasons.push('Low-AOV product selling');
+    if(!reasons.length)return;
+    const drag=Math.max(0,-revDelta)+Math.max(0,-aovDelta)*Math.max(1,y.orders)+Math.max(0,b.aov-y.aov)*Math.max(0,orderDelta);
+    drivers.push({sku:y.sku||x.sku,skuName:y.skuName||x.skuName,item:y.item||x.item,a:x,b:y,qtyDelta,revDelta,orderDelta,aovDelta,lowAov,lowAovMix,reasons,drag});
+  });
+  drivers.sort((x,y)=>y.drag-x.drag||x.revDelta-y.revDelta||y.b.qty-x.b.qty||String(x.sku).localeCompare(String(y.sku)));
+  return {error:'',ranges,type,a,b,drivers};
+}
+function renderSalesComparisonOrders(){
+  const host=document.getElementById('scOrderContent'),sum=document.getElementById('scOrderSummary'),insight=document.getElementById('scOrderInsight'),note=document.getElementById('scOrderNote');if(!host)return;
+  const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];
+  if(data.error){if(sum)sum.innerHTML='';if(insight)insight.textContent=data.error;host.innerHTML='';if(note)note.textContent='';return;}
+  const {a,b,ranges}=data,orderPct=_scOrderPct(b.orders,a.orders),revPct=_scOrderPct(b.rev,a.rev),aovPct=_scOrderPct(b.aov,a.aov);
+  if(sum)sum.innerHTML=_opsKpi(`${ranges.labelB} Orders`,b.orders.toLocaleString('en-IN'),`${ranges.labelA}: ${a.orders.toLocaleString('en-IN')} · ${_scOrderDeltaText(b.orders,a.orders,false)}`)+_opsKpi(`${ranges.labelB} Net Revenue`,fmt(b.rev),`${ranges.labelA}: ${fmt(a.rev)} · ${_scOrderDeltaText(b.rev,a.rev,true)}`)+_opsKpi(`${ranges.labelB} AOV`,b.orders?fmt(b.aov):'—',`${ranges.labelA}: ${a.orders?fmt(a.aov):'—'} · ${_scOrderDeltaText(b.aov,a.aov,true)}`)+_opsKpi(`${ranges.labelB} Sold Qty`,Math.round(b.qty).toLocaleString('en-IN'),`${ranges.labelA}: ${Math.round(a.qty).toLocaleString('en-IN')} · ${_scOrderDeltaText(b.qty,a.qty,false)}`);
+  const topLoss=data.drivers.filter(r=>r.revDelta<0).slice(0,3),lowMix=data.drivers.filter(r=>r.lowAovMix).slice(0,3);
+  let headline='Revenue and AOV moved in line with order volume.';
+  if(b.orders>a.orders&&b.rev<a.rev)headline=`Orders increased ${orderPct===null?'':Math.abs(orderPct).toFixed(1)+'%'} but Net Revenue fell ${revPct===null?'':Math.abs(revPct).toFixed(1)+'%'}. This is a lower-value product-mix / AOV problem, not an order-volume problem.`;
+  else if(b.orders>a.orders&&b.aov<a.aov)headline=`Orders increased, but AOV fell ${aovPct===null?'':Math.abs(aovPct).toFixed(1)+'%'}; the extra orders are contributing less revenue per order.`;
+  else if(b.rev<a.rev)headline=`Net Revenue fell ${revPct===null?'':Math.abs(revPct).toFixed(1)+'%'} with ${orderPct!==null&&orderPct<0?'fewer orders':'a weaker AOV/product mix'}.`;
+  else if(b.rev>a.rev)headline=`Net Revenue improved ${revPct===null?'':Math.abs(revPct).toFixed(1)+'%'}; check the table for products still dragging AOV.`;
+  const lossText=topLoss.length?` Biggest revenue declines: ${topLoss.map(r=>`${r.sku} (${fmt(Math.abs(r.revDelta))} lower)`).join(', ')}.`:'';
+  const mixText=lowMix.length?` Low-AOV products gaining volume: ${lowMix.map(r=>r.sku).join(', ')}.`:'';
+  if(insight)insight.innerHTML=`<b>AOV analysis:</b> ${escHtml(headline+lossText+mixText)}`;
+  const shown=data.drivers.slice(0,50);
+  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${r.reasons.map(x=>`<span class="insight-pill warn" style="display:inline-block;margin:2px">${escHtml(x)}</span>`).join('')}</td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Diagnosis</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No negative product/AOV drivers found for this comparison.</td></tr>'}</tbody></table>`;
+  if(note)note.textContent=`Type: ${data.type==='All'?'All Types':data.type}. Website order count uses the customer+address identity token and collapses multiple SKUs bought by that customer on the same date into one order. ${b.addressOrders.toLocaleString('en-IN')} comparison-period Website orders used exact address identity; ${b.fallbackOrders.toLocaleString('en-IN')} Website lines without an address match were counted separately. Non-Website rows use date + customer identity. Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
+}
+function resetSalesComparisonOrders(){
+  _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';_scOrderInit();renderSalesComparisonOrders();
+}
+function exportSalesComparisonOrders(){
+  const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No product AOV driver rows to export.');return;}
+  const r=data.ranges;
+  _dlCsv(['Type Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.type,r.a1,r.a2,r.b1,r.b2,'Website: same date + same customer + same billing address = 1 order',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_shopify_aov_product_drivers');
+}
+function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
   _scPopulateFilters();
   _scExportRows=[];
@@ -15755,7 +16010,7 @@ function renderSalesComparison(){
 }
 function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';if(productGroup)productGroup.value='All';renderSalesComparison();}
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
-window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;
+window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
