@@ -5611,20 +5611,6 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vMatrix" style="display:none">
     <div class="matrix-page-title">Overall Details</div>
-    <div id="kpiLock" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:22px 0 8px">
-      <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#8c7a42;font-weight:700">🔒 Revenue KPIs are locked</span>
-      <input id="kpiPass" type="password" placeholder="Enter password" onkeydown="if(event.key==='Enter')unlockKpis('matrix')"
-        style="padding:9px 12px;border:1px solid #d8dee9;border-radius:8px;font-size:12px;outline:none;background:#fff;color:#111;width:160px">
-      <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px" onclick="unlockKpis('matrix')">Unlock</button>
-      <span id="kpiErr" style="color:#dc2626;font-size:11px;font-weight:700"></span>
-    </div>
-    <div class="kpis" id="kpiBox" style="display:none">
-      <div class="kpi"><div class="kpi-t">Yesterday Net Rev</div><div class="kpi-v" id="kY">₹0</div></div>
-      <div class="kpi"><div class="kpi-t">This Month Net Rev</div><div class="kpi-v" id="kM">₹0</div></div>
-      <div class="kpi"><div class="kpi-t">This FY Net Rev</div><div class="kpi-v" id="kF">₹0</div></div>
-      <div class="kpi"><div class="kpi-t">Previous FY Net Rev</div><div class="kpi-v" id="kPF">₹0</div></div>
-      <div class="kpi"><div class="kpi-t">Total Net Rev</div><div class="kpi-v" id="kT" style="color:#f1c40f">₹0</div></div>
-    </div>
 
     <div class="filter-box">
       <div class="fg">
@@ -6590,14 +6576,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="ops-section" style="margin-top:22px">
       <div class="ops-head" style="margin-bottom:12px">
-        <div><div class="ops-title" style="font-size:26px">Top 20 AOV Products — MRP Segment</div><div class="ops-sub">First filters selling SKUs into Low or High MRP, then ranks the selected segment by AOV from highest to lowest.</div></div>
+        <div><div class="ops-title" style="font-size:26px">Selling Price × Sales Performance — Top 20</div><div class="ops-sub">Compare low/high actual Selling Price with low/high sales performance calculated from both Sold Qty and Net Revenue. AOV remains visible for every SKU.</div></div>
         <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonAov()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonAov()">Export CSV</button></div>
       </div>
       <div class="ops-filters">
         <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scAovD1" onchange="renderSalesComparisonAov()"></div>
         <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scAovD2" onchange="renderSalesComparisonAov()"></div>
         <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Amazon">Amazon</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Other SOR Channels">Other SOR Channels</option></select></div>
-        <div class="fc"><label class="fl">MRP Segment</label><select class="fs" id="scAovMrpView" onchange="renderSalesComparisonAov()"><option value="low">Low MRP</option><option value="high">High MRP</option></select></div>
+        <div class="fc"><label class="fl">Price / Sales View</label><select class="fs" id="scAovMrpView" onchange="renderSalesComparisonAov()"><option value="low_high">Low Price · High Sales</option><option value="low_low">Low Price · Low Sales</option><option value="high_high">High Price · High Sales</option><option value="high_low">High Price · Low Sales</option></select></div>
         <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonAov()">Reset</button>
       </div>
       <div id="scAovSummary" class="rel-compare-kpis" style="margin-top:12px"></div>
@@ -9966,21 +9952,6 @@ function applyRoleUI(){
 
   if (isEmployee && (currentTab === 'matrix' || currentTab === 'marketplaces')) {
     showTab('home');
-  }
-}
-
-const KPI_PASS = "Mayuresh";
-function unlockKpis(section='matrix'){
-  const cfg = {passId:'kpiPass', lockId:'kpiLock', boxId:'kpiBox', errId:'kpiErr', display:'flex'};
-  const v = (document.getElementById(cfg.passId)?.value || '');
-  const err = document.getElementById(cfg.errId);
-  if (v === KPI_PASS) {
-    const lock = document.getElementById(cfg.lockId); if (lock) lock.style.display = 'none';
-    const box = document.getElementById(cfg.boxId);   if (box) box.style.display = cfg.display;
-    if (err) err.textContent = '';
-  } else {
-    if (err) err.textContent = 'Wrong password';
-    const p = document.getElementById(cfg.passId); if (p) { p.value=''; p.focus(); }
   }
 }
 
@@ -15588,42 +15559,68 @@ function _scAovChannel(e){
   if(/website|online|d2c|direct/.test(hay))return 'Website';
   return 'Other SOR Channels';
 }
+function _scMedian(values){
+  const a=(values||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y);
+  if(!a.length)return 0;
+  const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;
+}
+function _scPercentileBy(rows,key){
+  const sorted=(rows||[]).slice().sort((a,b)=>(_opsNum(a[key])-_opsNum(b[key]))||String(a.sku||'').localeCompare(String(b.sku||'')));
+  const out=new Map(),n=sorted.length;
+  for(let i=0;i<n;){
+    let j=i+1;while(j<n&&_opsNum(sorted[j][key])===_opsNum(sorted[i][key]))j++;
+    const avgRank=(i+j-1)/2,pct=n<=1?50:(avgRank/(n-1))*100;
+    for(let k=i;k<j;k++)out.set(sorted[k].sku,pct);
+    i=j;
+  }
+  return out;
+}
+function _scQuadrantLabel(view){
+  return ({low_high:'Low Price · High Sales',low_low:'Low Price · Low Sales',high_high:'High Price · High Sales',high_low:'High Price · Low Sales'})[view]||'Low Price · High Sales';
+}
 function _scBuildAovRows(){
   _scAovInit();
-  const d1=_bizIso(document.getElementById('scAovD1')?.value),d2=_bizIso(document.getElementById('scAovD2')?.value),channel=document.getElementById('scAovChannel')?.value||'All',mode=document.getElementById('scAovMrpView')?.value||'low';
-  if(!d1||!d2||d1>d2)return {error:'Choose a valid From and To date.',d1,d2,channel,mode,all:[],segment:[],top:[],qty:0,rev:0,lines:0,medianMrp:0};
+  const d1=_bizIso(document.getElementById('scAovD1')?.value),d2=_bizIso(document.getElementById('scAovD2')?.value),channel=document.getElementById('scAovChannel')?.value||'All',mode=document.getElementById('scAovMrpView')?.value||'low_high';
+  if(!d1||!d2||d1>d2)return {error:'Choose a valid From and To date.',d1,d2,channel,mode,all:[],segment:[],top:[],qty:0,rev:0,lines:0,medianSellingPrice:0,medianSalesScore:0};
   const map=new Map();let lines=0;
   _bizEvents().forEach(e=>{
     if(e.date<d1||e.date>d2)return;
     const bucket=_scAovChannel(e);if(channel!=='All'&&bucket!==channel)return;
-    const q=Math.max(0,_opsNum(e.qty)),r=Math.max(0,_opsNum(e.rev));if(q<=0)return;
-    const row=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,channels:new Set()};
-    row.qty+=q;row.rev+=r;row.lines++;row.channels.add(bucket);map.set(e.sku,row);lines++;
+    const q=Math.max(0,_opsNum(e.qty)),r=Math.max(0,_opsNum(e.rev)),sp=Math.max(0,_opsNum(e.sp));if(q<=0)return;
+    const row=map.get(e.sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,spWeighted:0,spQty:0,channels:new Set()};
+    row.qty+=q;row.rev+=r;row.lines++;if(sp>0){row.spWeighted+=sp*q;row.spQty+=q;}row.channels.add(bucket);map.set(e.sku,row);lines++;
   });
-  const all=Array.from(map.values()).map(r=>({...r,mrp:Math.max(0,_opsNum(r.item&&r.item.mrp)),aov:r.qty>0?r.rev/r.qty:0})).filter(r=>r.qty>0&&r.mrp>0);
-  const mrps=all.map(r=>r.mrp).sort((a,b)=>a-b),mid=Math.floor(mrps.length/2),medianMrp=!mrps.length?0:(mrps.length%2?mrps[mid]:(mrps[mid-1]+mrps[mid])/2);
-  const segment=all.filter(r=>mode==='high'?r.mrp>medianMrp:r.mrp<=medianMrp);
-  segment.sort((a,b)=>b.aov-a.aov||b.rev-a.rev||b.qty-a.qty||b.mrp-a.mrp||a.sku.localeCompare(b.sku));
+  const all=Array.from(map.values()).map(r=>{
+    const fallback=Math.max(0,_opsNum(r.item&&r.item.avg_selling_price)||_opsNum(r.item&&r.item.last_selling_price)||_opsNum(r.item&&r.item.website_selling_price));
+    const sellingPrice=r.spQty>0?r.spWeighted/r.spQty:(r.qty>0&&r.rev>0?r.rev/r.qty:fallback);
+    return {...r,sellingPrice,aov:r.qty>0?r.rev/r.qty:0};
+  }).filter(r=>r.qty>0&&r.sellingPrice>0);
+  const medianSellingPrice=_scMedian(all.map(r=>r.sellingPrice)),qtyPct=_scPercentileBy(all,'qty'),revPct=_scPercentileBy(all,'rev');
+  all.forEach(r=>{r.qtyScore=qtyPct.get(r.sku)||0;r.revenueScore=revPct.get(r.sku)||0;r.salesScore=(r.qtyScore+r.revenueScore)/2;});
+  const medianSalesScore=_scMedian(all.map(r=>r.salesScore));
+  all.forEach(r=>{const price=r.sellingPrice<=medianSellingPrice?'low':'high',sales=r.salesScore>=medianSalesScore?'high':'low';r.quadrant=`${price}_${sales}`;});
+  const segment=all.filter(r=>r.quadrant===mode),highSales=mode.endsWith('_high');
+  segment.sort((a,b)=>(highSales?b.salesScore-a.salesScore:a.salesScore-b.salesScore)||(highSales?b.qty-a.qty:a.qty-b.qty)||(highSales?b.rev-a.rev:a.rev-b.rev)||b.aov-a.aov||a.sku.localeCompare(b.sku));
   const qty=segment.reduce((s,r)=>s+r.qty,0),rev=segment.reduce((s,r)=>s+r.rev,0);
-  return {error:'',d1,d2,channel,mode,all,segment,top:segment.slice(0,20),qty,rev,lines,medianMrp};
+  return {error:'',d1,d2,channel,mode,all,segment,top:segment.slice(0,20),qty,rev,lines,medianSellingPrice,medianSalesScore};
 }
 function renderSalesComparisonAov(){
   const host=document.getElementById('scAovContent'),sum=document.getElementById('scAovSummary'),note=document.getElementById('scAovNote');if(!host)return;
   const data=_scBuildAovRows();_scAovExportRows=data.top;
   if(data.error){if(sum)sum.innerHTML='';host.innerHTML=`<div class="ops-empty">${escHtml(data.error)}</div>`;if(note)note.textContent='';return;}
-  const top=data.top,modeLow=data.mode==='low',signal=modeLow?'Low MRP AOV Leader':'High MRP AOV Leader',topAov=top[0]?.aov||0;
-  if(sum)sum.innerHTML=_opsKpi('Filtered Median MRP',data.medianMrp?fmt(data.medianMrp):'—','Used to split Low MRP and High MRP')+_opsKpi(`${modeLow?'Low':'High'} MRP Selling SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Highest AOV',topAov?fmt(topAov):'—','Selected MRP segment')+_opsKpi('Segment Net Revenue',fmt(data.rev),`${_scShortDate(data.d1)} – ${_scShortDate(data.d2)}`);
-  const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.mrp)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td>${_opsRiskBadge(modeLow?'good':'medium',signal)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>AOV Rank</th><th>Photo</th><th>SKU / Product</th><th>Channel Mix</th><th>MRP</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>MRP Segment</th></tr></thead><tbody>${body||'<tr><td colspan="9" class="ops-empty">No selling products with valid MRP match the selected filters.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Top 20 ${modeLow?'Low':'High'} MRP SKUs ranked by AOV high to low. AOV = filtered Net Revenue ÷ filtered Sold Qty. Median MRP is ${data.medianMrp?fmt(data.medianMrp):'unavailable'} across ${data.all.length.toLocaleString('en-IN')} filtered selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
+  const top=data.top,label=_scQuadrantLabel(data.mode),highSales=data.mode.endsWith('_high');
+  if(sum)sum.innerHTML=_opsKpi('Median Selling Price',data.medianSellingPrice?fmt(data.medianSellingPrice):'—','Actual filtered transaction Selling Price')+_opsKpi('Median Sales Score',`${data.medianSalesScore.toFixed(1)}`,'50% Qty + 50% Revenue percentile')+_opsKpi(`${label} SKUs`,data.segment.length.toLocaleString('en-IN'),`${data.channel==='All'?'All Channels':data.channel}`)+_opsKpi('Quadrant Net Revenue',fmt(data.rev),`${Math.round(data.qty).toLocaleString('en-IN')} sold qty`);
+  const body=top.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(Array.from(r.channels).sort().join(', '))}</td><td class="ops-num"><b>${fmt(r.sellingPrice)}</b></td><td class="ops-num"><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td><td class="ops-num"><b>${fmt(r.rev)}</b></td><td class="ops-num"><b>${fmt(r.aov)}</b></td><td class="ops-num">${r.qtyScore.toFixed(1)}</td><td class="ops-num">${r.revenueScore.toFixed(1)}</td><td class="ops-num"><b>${r.salesScore.toFixed(1)}</b></td><td>${_opsRiskBadge(highSales?'good':'medium',label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Channel Mix</th><th>Avg Selling Price</th><th>Sold Qty</th><th>Net Revenue</th><th>AOV</th><th>Qty Score</th><th>Revenue Score</th><th>Sales Score</th><th>Price / Sales View</th></tr></thead><tbody>${body||'<tr><td colspan="12" class="ops-empty">No selling products match the selected Price / Sales view and filters.</td></tr>'}</tbody></table>`;
+  if(note)note.textContent=`Top 20 ${label} products. High-sales views rank the strongest combined Sales Score first; low-sales views rank the weakest first. Selling Price is quantity-weighted from actual transaction Selling Price, with Net Revenue ÷ Sold Qty as fallback. AOV = Net Revenue ÷ Sold Qty. Sales Score = 50% Qty percentile + 50% Revenue percentile; low/high boundaries use filtered medians across ${data.all.length.toLocaleString('en-IN')} selling SKUs. Other SOR Channels includes Myntra and every source outside the individually listed channels.`;
 }
 function resetSalesComparisonAov(){
-  _scAovInitialized=false;const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2'),ch=document.getElementById('scAovChannel'),mode=document.getElementById('scAovMrpView');if(d1)d1.value='';if(d2)d2.value='';if(ch)ch.value='All';if(mode)mode.value='low';_scAovInit();renderSalesComparisonAov();
+  _scAovInitialized=false;const d1=document.getElementById('scAovD1'),d2=document.getElementById('scAovD2'),ch=document.getElementById('scAovChannel'),mode=document.getElementById('scAovMrpView');if(d1)d1.value='';if(d2)d2.value='';if(ch)ch.value='All';if(mode)mode.value='low_high';_scAovInit();renderSalesComparisonAov();
 }
 function exportSalesComparisonAov(){
-  const data=_scBuildAovRows();_scAovExportRows=data.top;if(data.error){alert(data.error);return;}if(!data.top.length){alert('No MRP vs Sales decision rows to export.');return;}
-  const label=data.mode==='low'?'Low MRP':'High MRP';
-  _dlCsv(['From Date','To Date','Channel Filter','MRP Segment','Filtered Median MRP','AOV Rank','SKU','SKU Name','Channel Mix','MRP','Sold Qty','Net Revenue','AOV','Segment Signal','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianMrp.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.mrp.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),data.mode==='low'?'Low MRP AOV Leader':'High MRP AOV Leader',r.item?.image_url||'']),'sales_comparison_top_20_aov_by_mrp_segment');
+  const data=_scBuildAovRows();_scAovExportRows=data.top;if(data.error){alert(data.error);return;}if(!data.top.length){alert('No Selling Price vs Sales decision rows to export.');return;}
+  const label=_scQuadrantLabel(data.mode);
+  _dlCsv(['From Date','To Date','Channel Filter','Price / Sales View','Median Selling Price','Median Sales Score','Rank','SKU','SKU Name','Channel Mix','Avg Selling Price','Sold Qty','Net Revenue','AOV','Qty Score','Revenue Score','Sales Score','Image Link'],data.top.map((r,i)=>[data.d1,data.d2,data.channel,label,Number(data.medianSellingPrice.toFixed(2)),Number(data.medianSalesScore.toFixed(2)),i+1,r.sku,exportSkuName(r.sku,r.skuName),Array.from(r.channels).sort().join(' | '),Number(r.sellingPrice.toFixed(2)),Number(r.qty.toFixed(2)),Number(r.rev.toFixed(2)),Number(r.aov.toFixed(2)),Number(r.qtyScore.toFixed(2)),Number(r.revenueScore.toFixed(2)),Number(r.salesScore.toFixed(2)),r.item?.image_url||'']),'sales_comparison_price_sales_quadrant_top_20');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();renderSalesComparison();renderSalesComparisonAov();}
 function renderSalesComparison(){
