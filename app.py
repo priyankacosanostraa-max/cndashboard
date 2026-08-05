@@ -12281,7 +12281,7 @@ window.rkhOnTypeFilterChange = rkhOnTypeFilterChange;
    figure for every channel (it's also the full-season total). */
 const RAKHI_CHANNEL_ORDER = ['Website', 'Blinkit', 'Instamart', 'Myntra', 'Nykaa', 'IGP', 'Flipkart', 'Amazon', 'Ajio', 'Others'];
 const RAKHI_TARGETS = {
-  'Website':   {launch: '22nd July', spAug: 17358600, qtyAug: 13079, spJul: 2200800, qtyJul: 1572},
+  'Website':   {launch: '22nd July', spAug: 20000000, qtyAug: 13079, spJul: 2200800, qtyJul: 1572},
   'Blinkit':   {launch: '',          spAug: 9427600,  qtyAug: 4900,  spJul: 0,       qtyJul: 0},
   'Instamart': {launch: '5th Aug',   spAug: 2828280,  qtyAug: 1470,  spJul: 0,       qtyJul: 0},
   'Myntra':    {launch: '29th July', spAug: 1678080,  qtyAug: 920,   spJul: 0,       qtyJul: 0},
@@ -17110,6 +17110,44 @@ def api_warmup_status():
 # ════════════════════════════════════════════════════════════════
 _TARGET_CACHE = {"rows": None, "ts": 0}
 
+# Approved one-month override: August 2026 Website SP target = ₹3 crore.
+# It is applied once in the shared target source, so Target vs Actual and
+# Daily Revenue Glimpse always calculate from the same Website target.
+WEBSITE_SP_TARGET_OVERRIDE_MONTH = "2026-08"
+WEBSITE_SP_TARGET_OVERRIDE_VALUE = 30000000.0
+
+def _apply_website_sp_target_override(rows):
+    matched = [
+        r for r in rows
+        if r.get("month") == WEBSITE_SP_TARGET_OVERRIDE_MONTH
+        and str(r.get("channel") or "").strip().casefold() in ("website", "online", "d2c")
+    ]
+    if not matched:
+        rows.append({
+            "month": WEBSITE_SP_TARGET_OVERRIDE_MONTH,
+            "month_label": "Aug 2026",
+            "stakeholder": "Website",
+            "channel": "Website",
+            "qty_target": 0.0,
+            "sp_target": WEBSITE_SP_TARGET_OVERRIDE_VALUE,
+        })
+        return rows
+
+    # Preserve multiple stakeholder rows if the sheet has them, while making
+    # their combined Website target exactly ₹3 crore (no double target).
+    old_total = sum(max(0.0, to_num(r.get("sp_target"))) for r in matched)
+    assigned = 0.0
+    for idx, row in enumerate(matched):
+        if idx == len(matched) - 1:
+            value = WEBSITE_SP_TARGET_OVERRIDE_VALUE - assigned
+        elif old_total > 0:
+            value = WEBSITE_SP_TARGET_OVERRIDE_VALUE * max(0.0, to_num(row.get("sp_target"))) / old_total
+        else:
+            value = WEBSITE_SP_TARGET_OVERRIDE_VALUE / len(matched)
+        row["sp_target"] = value
+        assigned += value
+    return rows
+
 def _fetch_target_rows():
     """Target sheet ko parse karke normalized rows deta hai (cache 10 min)."""
     if _TARGET_CACHE["rows"] is not None and (time.time() - _TARGET_CACHE["ts"] < 600):
@@ -17137,6 +17175,7 @@ def _fetch_target_rows():
         out.append({"month": mk, "month_label": dt.strftime("%b %Y"),
                     "stakeholder": sh or "—", "channel": ch or "—",
                     "qty_target": qt, "sp_target": st})
+    out = _apply_website_sp_target_override(out)
     _TARGET_CACHE["rows"] = out
     _TARGET_CACHE["ts"] = time.time()
     return out
