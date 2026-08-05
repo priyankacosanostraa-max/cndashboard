@@ -285,6 +285,13 @@ COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.c
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
 MYNTRA_SALES_URL = os.environ.get("MYNTRA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1751797609&single=true&output=csv")
+# Exact marketplace order identities used only by the Sales Comparison AOV
+# analysis.  Raw order numbers never leave the backend; short SHA-1 tokens are
+# attached to their SKU + Order Date + marketplace instead.
+AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1692691438&single=true&output=csv")
+NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
+TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
+AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
 # Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
@@ -947,9 +954,14 @@ def simple_forecast(entries, days_ahead=30):
 
 
 # ── Data Engine ──────────────────────────────────────────────
-def _fetch_csv_fresh(url):
+def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     """Google published-CSV ko Google ~5 min CDN-cache karta hai — cache-buster
-    param + no-cache headers se hamesha LATEST data milta hai."""
+    param + no-cache headers se hamesha LATEST data milta hai.
+
+    `select_groups`/`select_positions` optional hain. Large marketplace sheets
+    ke case me pandas sirf required columns materialize karta hai, isliye three-
+    year history refresh ka peak RAM aur processing time controlled rehta hai.
+    """
     bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
     headers = {"Cache-Control": "no-cache, no-store, max-age=0",
                "Pragma": "no-cache",
@@ -962,11 +974,192 @@ def _fetch_csv_fresh(url):
             txt = r.content.decode("utf-8", errors="replace")
             if "<html" in txt[:200].lower():
                 raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
-            return pd.read_csv(io.StringIO(txt), dtype=str, on_bad_lines="skip")
+            read_kwargs = {"dtype": str, "on_bad_lines": "skip"}
+            if select_groups or select_positions:
+                header = pd.read_csv(io.StringIO(txt), dtype=str, nrows=0, on_bad_lines="skip")
+                raw_cols = list(header.columns)
+                clean_cols = [str(c).strip() for c in raw_cols]
+                selected_indexes = set()
+                for group in (select_groups or []):
+                    if not group:
+                        continue
+                    resolved = find_col(clean_cols, *group)
+                    if resolved is not None:
+                        try:
+                            selected_indexes.add(clean_cols.index(resolved))
+                        except ValueError:
+                            pass
+                for idx in (select_positions or []):
+                    if isinstance(idx, int) and 0 <= idx < len(raw_cols):
+                        selected_indexes.add(idx)
+                if selected_indexes:
+                    read_kwargs["usecols"] = sorted(selected_indexes)
+            return pd.read_csv(io.StringIO(txt), **read_kwargs)
         except Exception as e:
             last_err = e
             time.sleep(2)
     raise last_err
+
+
+def _load_channel_order_events(inv_skus_map, dbg):
+    """Build a compact SKU/date/channel -> exact-order identity feed.
+
+    The source sheets retain their native column layouts.  Header matching is
+    preferred, while the user-confirmed positional order columns (H or D) stay
+    as fallbacks.  This keeps the loader tolerant of text/numeric order IDs,
+    Excel serial/text dates and minor header punctuation changes.
+    """
+    sources = [
+        {
+            "key": "amazon_flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "fixed_platform": "", "order_index": 7, "platform_index": 9,
+            "order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
+            "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code", "Seller SKU"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
+            "platform_names": ("Status", "Type", "Channel", "Marketplace"),
+            # J is the Amazon/Flipkart discriminator in this combined source,
+            # despite its current sheet header being named Status.
+            "status_names": (),
+        },
+        {
+            "key": "myntra", "url": MYNTRA_SALES_URL,
+            "fixed_platform": "Myntra", "order_index": 7,
+            "order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
+            "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code", "Seller SKU"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
+            "status_names": ("Status", "Order Status"),
+        },
+        {
+            "key": "nykaa", "url": NYKAA_SALES_URL,
+            "fixed_platform": "Nykaa", "order_index": 3,
+            "order_names": ("orderno", "Order No", "Order Number", "Order ID", "MagentoOrderNo"),
+            "sku_names": ("SKU", "SKUCode", "SKU Code", "Seller SKU"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate", "upddate"),
+            "status_names": ("Status", "Order Status"),
+        },
+        {
+            "key": "tata", "url": TATA_SALES_URL,
+            "fixed_platform": "Tata", "order_index": 3,
+            "order_names": ("OrderId", "Order ID", "Order No", "Order Number"),
+            "sku_names": ("SKU", "Seller SKU", "Item Code"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate", "Order Allocate Date"),
+            "status_names": ("OrderStatus", "Order Status", "Status"),
+        },
+        {
+            "key": "ajio", "url": AJIO_SALES_URL,
+            "fixed_platform": "Ajio", "order_index": 3,
+            "order_names": ("Cust Order No", "Customer Order No", "Order No", "Order ID"),
+            "sku_names": ("SKU", "Seller SKU", "Seller Style Code"),
+            "date_names": ("Order_Date", "Order Date", "Cust Order Date", "FWD PO Date"),
+            "status_names": ("Status", "Order Status"),
+        },
+    ]
+
+    event_sets = {}
+    source_debug = {}
+
+    def _platform_label(value):
+        token = re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+        if "amazon" in token:
+            return "Amazon"
+        if "flipkart" in token:
+            return "Flipkart"
+        return ""
+
+    for spec in sources:
+        frame = None
+        try:
+            _wstage("fetching", f"Downloading {spec['key']} order IDs for AOV…")
+            select_groups = [spec["order_names"], spec["sku_names"], spec["date_names"]]
+            if spec["status_names"]:
+                select_groups.append(spec["status_names"])
+            if spec.get("platform_names"):
+                select_groups.append(spec["platform_names"])
+            select_positions = [spec["order_index"]]
+            if spec.get("platform_index") is not None:
+                select_positions.append(spec["platform_index"])
+            frame = _fetch_csv_fresh(
+                spec["url"], select_groups=select_groups,
+                select_positions=select_positions,
+            )
+            frame.columns = [str(c).strip() for c in frame.columns]
+            src_cols = list(frame.columns)
+            src_at = lambda i: src_cols[i] if len(src_cols) > i else None
+
+            order_col = find_col(frame.columns, *spec["order_names"]) or src_at(spec["order_index"])
+            sku_col = find_col(frame.columns, *spec["sku_names"])
+            date_col = find_col(frame.columns, *spec["date_names"])
+            platform_col = (find_col(frame.columns, *spec.get("platform_names", ()))
+                            if spec.get("platform_names") else None)
+            if platform_col is None and spec.get("platform_index") is not None:
+                # This positional branch is mainly for the non-compact fallback;
+                # normal published sheets resolve via platform_names above.
+                platform_col = src_at(spec["platform_index"])
+            status_col = find_col(frame.columns, *spec["status_names"]) if spec["status_names"] else None
+
+            resolved = {
+                "rows": len(frame), "order": order_col, "sku": sku_col,
+                "date": date_col, "platform": platform_col,
+                "status": status_col, "events": 0, "skus": 0,
+            }
+            source_debug[spec["key"]] = resolved
+            if not order_col or not sku_col or not date_col:
+                raise ValueError(
+                    f"required column missing (order={order_col}, sku={sku_col}, date={date_col})"
+                )
+
+            source_skus = set()
+            for row in _df_chunks(frame):
+                status = str(row.get(status_col, "") or "").strip().casefold() if status_col else ""
+                if status and any(flag in status for flag in ("cancel", "void", "failed")):
+                    continue
+
+                raw_order = clean(row.get(order_col, ""))
+                raw_sku = clean(row.get(sku_col, ""))
+                dt = parse_date_any(row.get(date_col, ""))
+                if not raw_order or raw_order.casefold() in ("0", "unknown") or not raw_sku or dt is None:
+                    continue
+
+                platform = spec["fixed_platform"] or _platform_label(row.get(platform_col, ""))
+                if not platform:
+                    continue
+
+                normalized_sku = re.sub(r"[^A-Z0-9]", "", raw_sku.upper())
+                mapped_sku = inv_skus_map.get(normalized_sku, raw_sku.upper())
+                date_iso = dt.strftime("%Y-%m-%d")
+                order_token = hashlib.sha1(
+                    (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
+                ).hexdigest()[:20]
+                event_key = (platform, date_iso, order_token)
+                event_sets.setdefault(mapped_sku, {})[event_key] = {
+                    "d": _si(date_iso), "o": _si(order_token), "p": _si(platform)
+                }
+                source_skus.add(mapped_sku)
+
+            resolved["events"] = sum(
+                1 for sku_events in event_sets.values()
+                for platform, _day, _token in sku_events
+                if platform == spec["fixed_platform"] or (
+                    spec["key"] == "amazon_flipkart" and platform in ("Amazon", "Flipkart")
+                )
+            )
+            resolved["skus"] = len(source_skus)
+        except Exception as exc:
+            source_debug.setdefault(spec["key"], {})["error"] = str(exc)[:180]
+            dbg["errors"].append(f"{spec['key']} order IDs: {exc}")
+        finally:
+            if frame is not None:
+                del frame
+            _gc.collect()
+
+    compact = {
+        sku: sorted(events.values(), key=lambda event: (event["d"], event["p"], event["o"]))
+        for sku, events in event_sets.items()
+    }
+    dbg["channel_order_sources"] = source_debug
+    dbg["channel_order_skus"] = len(compact)
+    dbg["channel_order_events"] = sum(len(events) for events in compact.values())
+    return compact
 
 _DATA_LOCK = threading.Lock()
 _DF_REFS = {}
@@ -1371,6 +1564,11 @@ def _refresh_data():
         _DF_REFS.pop("website_repeat", None)
         _gc.collect()
 
+    # Marketplace AOV must use the actual source Order ID, not a customer-name
+    # approximation.  Sources are read sequentially and released immediately
+    # so a three-year refresh does not keep five large DataFrames in memory.
+    channel_order_events = _load_channel_order_events(inv_skus_map, dbg)
+
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
     channels_ = set()
@@ -1509,11 +1707,13 @@ def _refresh_data():
     except Exception:
         pass
 
-    # ── Order-date source: Rakhi sales + live customer activity ──────────
-    # Every Rakhi table/KPI/export must use Order Date, not Dispatch Date.
+    # ── Order-date source: Sales Comparison + Rakhi + customer activity ──
+    # Sales Comparison order/AOV and every Rakhi metric use Order Date, not
+    # Dispatch Date. Other dashboard views keep their existing date source.
     # At-Risk Customers also needs this source: a newly placed order must make
     # a customer active immediately even when that order has not dispatched.
     # Only a compact customer aggregate is retained; raw rows are still freed.
+    orderdate_sales_exact = {}
     rakhi_sales_exact = {}
     orderdate_customer_activity = {}
     orderdate_customer_activity_ts = 0.0
@@ -1603,10 +1803,6 @@ def _refresh_data():
                     mapped_sku = inv_skus_map[matches[0]] if matches else raw_sku.upper()
                     _fuzzy_cache["OD:" + n_key] = mapped_sku
 
-            # Rakhi page only needs direct Rakhi SKUs and CMB gift sets.
-            if not re.match(r"^(RKH|CMB)", str(mapped_sku or "").strip(), re.I):
-                continue
-
             fy = norm_fy(r.get(OD_FY, "")) if OD_FY else ""
             if not fy:
                 fy = fy_bounds(dt_od)[0]
@@ -1624,10 +1820,24 @@ def _refresh_data():
                 "channel": _si(channel), "sub_channel": _si(sub_channel),
                 "fy": _si(fy),
             }
-            bucket = rakhi_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
-            bucket["entries"].append(entry)
-            bucket["total_rev"] += rev
+            order_entry = {
+                "qty": qty, "rev": rev, "date": _si(order_date_iso),
+                "cust": _si(cust), "type": _si(typ),
+                "channel": _si(channel), "sub_channel": _si(sub_channel),
+            }
+            all_bucket = orderdate_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
+            all_bucket["entries"].append(order_entry)
+            all_bucket["total_rev"] += rev
 
+            # Rakhi page keeps its smaller RKH/CMB subset. Sales Comparison
+            # reads the complete Order-Date feed above.
+            if re.match(r"^(RKH|CMB)", str(mapped_sku or "").strip(), re.I):
+                bucket = rakhi_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
+                bucket["entries"].append(entry)
+                bucket["total_rev"] += rev
+
+        dbg["cossa_orderdate_all_skus"] = len(orderdate_sales_exact)
+        dbg["cossa_orderdate_all_rows"] = sum(len(v.get("entries", [])) for v in orderdate_sales_exact.values())
         dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
         dbg["cossa_orderdate_rakhi_rows"] = sum(len(v.get("entries", [])) for v in rakhi_sales_exact.values())
         dbg["cossa_orderdate_active_customers"] = len(orderdate_customer_activity)
@@ -1647,11 +1857,9 @@ def _refresh_data():
         _gc.collect()
 
     # Safe fallback only when the main source genuinely contains an Order Date
-    # column. We never substitute Dispatch Date for Rakhi.
-    if not rakhi_sales_exact and C_ODATE:
+    # column. We never substitute Dispatch Date for order-level AOV or Rakhi.
+    if not orderdate_sales_exact and C_ODATE:
         for sku_key, sd in sales_exact.items():
-            if not re.match(r"^(RKH|CMB)", str(sku_key or "").strip(), re.I):
-                continue
             od_entries = []
             for old_e in sd.get("entries", []):
                 od = old_e.get("order_date")
@@ -1662,10 +1870,15 @@ def _refresh_data():
                 ne["order_date"] = od
                 od_entries.append(ne)
             if od_entries:
-                rakhi_sales_exact[sku_key] = {
+                orderdate_sales_exact[sku_key] = {
                     "entries": od_entries,
                     "total_rev": sum(float(e.get("rev") or 0) for e in od_entries),
                 }
+    if not rakhi_sales_exact:
+        rakhi_sales_exact = {
+            sku_key: bucket for sku_key, bucket in orderdate_sales_exact.items()
+            if re.match(r"^(RKH|CMB)", str(sku_key or "").strip(), re.I)
+        }
 
     _lm = float(kpi_last_month); _ly = float(kpi_last_year_month)
     _yoy = round(((_lm - _ly) / _ly * 100), 1) if _ly else None
@@ -1812,6 +2025,8 @@ def _refresh_data():
 
         sd  = sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
         ent = sd["entries"]
+        od_sd = orderdate_sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
+        od_ent = od_sd["entries"]
         rkh_sd = rakhi_sales_exact.get(dedupe_key, {"entries": [], "total_rev": 0.0})
         rkh_ent = rkh_sd["entries"]
 
@@ -1893,8 +2108,10 @@ def _refresh_data():
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
             "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
+            "orderdate_sales_entries": od_ent,
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(dedupe_key, []),
+            "channel_order_events": channel_order_events.get(dedupe_key, []),
             "website_city_events": website_city_events.get(dedupe_key, []),
             "website_payment_events": website_payment_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
@@ -1947,11 +2164,12 @@ def _refresh_data():
     # bhi sheet ke total se exactly match karein. In SKUs ko All Product
     # sheet mein add karna hi asli data-hygiene fix hai — yeh sirf display
     # ko sahi karta hai.
-    for orphan_key, sd in sales_exact.items():
+    for orphan_key in set(sales_exact) | set(orderdate_sales_exact):
         if orphan_key in seen_skus:
             continue
-        ent = sd["entries"]
-        if not ent:
+        ent = sales_exact.get(orphan_key, {"entries": []})["entries"]
+        od_ent = orderdate_sales_exact.get(orphan_key, {"entries": []})["entries"]
+        if not ent and not od_ent:
             continue
         rkh_ent = rakhi_sales_exact.get(orphan_key, {"entries": []}).get("entries", [])
         seen_skus.add(orphan_key)
@@ -1971,8 +2189,10 @@ def _refresh_data():
             "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
             "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
             "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
+            "orderdate_sales_entries": od_ent,
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(orphan_key, []),
+            "channel_order_events": channel_order_events.get(orphan_key, []),
             "website_city_events": website_city_events.get(orphan_key, []),
             "website_payment_events": website_payment_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
@@ -8766,7 +8986,9 @@ function loadData(force){
 
       master = d.inventory || [];
       _bizEventCache = null;
+      _scOrderEventCache = null;
       _scWebsiteSessionIndex = null;
+      _scChannelOrderIndex = null;
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
@@ -15714,7 +15936,9 @@ let _scAovInitialized=false;
 let _scAovExportRows=[];
 let _scOrderInitialized=false;
 let _scOrderExportRows=[];
+let _scOrderEventCache=null;
 let _scWebsiteSessionIndex=null;
+let _scChannelOrderIndex=null;
 function _scShiftDate(iso,days){const p=String(iso||'').split('-').map(Number);if(p.length!==3||p.some(n=>!Number.isFinite(n)))return '';return new Date(Date.UTC(p[0],p[1]-1,p[2])+days*86400000).toISOString().slice(0,10);}
 function _scShortDate(iso){const p=String(iso||'').split('-').map(Number);if(p.length!==3)return String(iso||'');return new Date(Date.UTC(p[0],p[1]-1,p[2])).toLocaleDateString('en-GB',{day:'2-digit',month:'short'});}
 function _scPopulateFilters(){
@@ -15834,10 +16058,24 @@ function _scOrderMonthBounds(anchor,offset){
   const last=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+offset+1,0));
   return {from:first.toISOString().slice(0,10),to:last.toISOString().slice(0,10)};
 }
+function _scOrderEvents(){
+  if(_scOrderEventCache)return _scOrderEventCache;
+  const out=[];
+  (master||[]).forEach(item=>{
+    const sku=String(item.sku||'').trim();if(!sku)return;
+    const base={item,sku,skuName:String(item.sku_name||''),taxon:String(item.taxon||'General')||'General',group:_opsGroup(item),image:String(item.image_url||'')};
+    const entries=Array.isArray(item.orderdate_sales_entries)?item.orderdate_sales_entries:(item.sales_entries||[]);
+    entries.forEach(e=>{
+      const date=_bizEntryDate(e);if(!date)return;
+      out.push({...base,date,qty:_opsNum(e.qty),rev:_opsNum(e.rev),ret:_opsNum(e.ret),sp:_opsNum(e.sp),type:String(e.type||''),channel:String(e.channel||''),subChannel:String(e.sub_channel||''),customer:String(e.cust||'')});
+    });
+  });
+  _scOrderEventCache=out;return out;
+}
 function _scOrderLatestCompleteDate(){
   const today=_bizIso(todayISO)||new Date().toISOString().slice(0,10),cutoff=_bizShift(today,-1);
-  let latest='';_bizEvents().forEach(e=>{if(e.date&&e.date<=cutoff&&e.date>latest)latest=e.date;});
-  if(!latest)_bizEvents().forEach(e=>{if(e.date&&e.date>latest)latest=e.date;});
+  let latest='';_scOrderEvents().forEach(e=>{if(e.date&&e.date<=cutoff&&e.date>latest)latest=e.date;});
+  if(!latest)_scOrderEvents().forEach(e=>{if(e.date&&e.date>latest)latest=e.date;});
   return latest||cutoff;
 }
 function _scOrderApplyPreset(doRender){
@@ -15876,7 +16114,12 @@ function _scOrderRanges(){
   return {preset,a1:da,a2:da,b1:db,b2:db,labelA:_scOrderRangeLabel(da,da),labelB:_scOrderRangeLabel(db,db)};
 }
 function _scOrderNormCustomer(v){return String(v||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
-function _scOrderIsWebsite(e){return _scAovChannel(e)==='Website';}
+function _scOrderChannel(e){
+  const hay=`${e&&e.subChannel||e&&e.sub_channel||''} ${e&&e.type||''} ${e&&e.channel||''} ${e&&e.customer||e&&e.cust||''}`.toLowerCase();
+  if(/myntra/.test(hay))return 'Myntra';
+  return _scAovChannel(e);
+}
+function _scOrderIsWebsite(e){return _scOrderChannel(e)==='Website';}
 function _scOrderSessionIndex(){
   if(_scWebsiteSessionIndex)return _scWebsiteSessionIndex;
   const sessionIndex=new Map();
@@ -15890,33 +16133,66 @@ function _scOrderSessionIndex(){
   });
   _scWebsiteSessionIndex=sessionIndex;return sessionIndex;
 }
+function _scChannelOrderSessionIndex(){
+  if(_scChannelOrderIndex)return _scChannelOrderIndex;
+  const orderIndex=new Map();
+  (master||[]).forEach(item=>{
+    const sku=String(item.sku||'').trim().toUpperCase();if(!sku)return;
+    (item.channel_order_events||[]).forEach(ev=>{
+      const date=_bizIso(ev.d||ev.date),platform=String(ev.p||ev.platform||'').trim(),token=String(ev.o||ev.order||'').trim();
+      if(!date||!platform||!token)return;
+      const key=`${sku}|${date}|${platform}`,set=orderIndex.get(key)||new Set();set.add(token);orderIndex.set(key,set);
+    });
+  });
+  _scChannelOrderIndex=orderIndex;return orderIndex;
+}
 function _scOrderPeriod(from,to,type){
-  const sessionIndex=_scOrderSessionIndex();
-  const skuMap=new Map(),allOrders=new Set(),addressOrders=new Set(),fallbackOrders=new Set();
-  _bizEvents().forEach((e,index)=>{
+  const sessionIndex=_scOrderSessionIndex(),channelOrderIndex=_scChannelOrderSessionIndex();
+  const marketplaceNames=new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
+  const skuMap=new Map(),allOrders=new Set(),addressOrders=new Set(),marketplaceOrders=new Set(),purchaseOrders=new Set();
+  const websiteFallbackOrders=new Set(),marketplaceFallbackOrders=new Set(),purchaseFallbackOrders=new Set(),otherIdentityOrders=new Set(),otherFallbackOrders=new Set();
+  _scOrderEvents().forEach((e,index)=>{
     if(!e.date||e.date<from||e.date>to)return;
     if(type!=='All'&&String(e.type||'')!==type)return;
     const qty=Math.max(0,_opsNum(e.qty)),rev=Math.max(0,_opsNum(e.rev));if(qty<=0&&rev<=0)return;
     const sku=String(e.sku||'').trim().toUpperCase();
     const row=skuMap.get(sku)||{sku:e.sku,skuName:e.skuName,item:e.item,qty:0,rev:0,lines:0,orderKeys:new Set()};
     row.qty+=qty;row.rev+=rev;row.lines++;
-    if(_scOrderIsWebsite(e)){
+    const orderChannel=_scOrderChannel(e);
+    if(orderChannel==='Website'){
       const sessions=sessionIndex.get(`${sku}|${e.date}`);
       if(sessions&&sessions.size){
         sessions.forEach(token=>{const key=`WEB|${token}`;row.orderKeys.add(key);allOrders.add(key);addressOrders.add(key);});
       }else{
-        const key=`WEB-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);fallbackOrders.add(key);
+        const key=`WEB-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);websiteFallbackOrders.add(key);
+      }
+    }else if(marketplaceNames.has(orderChannel)){
+      const sourceOrders=channelOrderIndex.get(`${sku}|${e.date}|${orderChannel}`);
+      if(sourceOrders&&sourceOrders.size){
+        sourceOrders.forEach(token=>{const key=`MARKETPLACE|${orderChannel}|${token}`;row.orderKeys.add(key);allOrders.add(key);marketplaceOrders.add(key);});
+      }else{
+        const key=`MARKETPLACE-FALLBACK|${orderChannel}|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);marketplaceFallbackOrders.add(key);
+      }
+    }else if(orderChannel==='Purchase'){
+      const customer=_scOrderNormCustomer(e.customer),generic=!customer||['unknown','na','n a','purchase'].includes(customer);
+      if(generic){
+        const key=`PURCHASE-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);purchaseFallbackOrders.add(key);
+      }else{
+        const key=`PURCHASE|${e.date}|${customer}`;row.orderKeys.add(key);allOrders.add(key);purchaseOrders.add(key);
       }
     }else{
       const customer=_scOrderNormCustomer(e.customer),generic=!customer||['unknown','na','n a'].includes(customer);
-      const key=generic?`LINE|${index}`:`CUSTOMER-DAY|${e.date}|${e.type||''}|${e.channel||''}|${customer}`;
-      row.orderKeys.add(key);allOrders.add(key);
+      if(generic){
+        const key=`OTHER-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);otherFallbackOrders.add(key);
+      }else{
+        const key=`OTHER-CUSTOMER|${e.date}|${e.type||''}|${e.channel||''}|${customer}`;row.orderKeys.add(key);allOrders.add(key);otherIdentityOrders.add(key);
+      }
     }
     skuMap.set(sku,row);
   });
   const rows=Array.from(skuMap.values()).map(r=>({...r,orders:r.orderKeys.size,aov:r.orderKeys.size?r.rev/r.orderKeys.size:0}));
   const qty=rows.reduce((s,r)=>s+r.qty,0),rev=rows.reduce((s,r)=>s+r.rev,0),orders=allOrders.size;
-  return {from,to,rows,qty,rev,orders,aov:orders?rev/orders:0,addressOrders:addressOrders.size,fallbackOrders:fallbackOrders.size};
+  return {from,to,rows,qty,rev,orders,aov:orders?rev/orders:0,addressOrders:addressOrders.size,marketplaceOrders:marketplaceOrders.size,purchaseOrders:purchaseOrders.size,otherIdentityOrders:otherIdentityOrders.size,websiteFallbackOrders:websiteFallbackOrders.size,marketplaceFallbackOrders:marketplaceFallbackOrders.size,purchaseFallbackOrders:purchaseFallbackOrders.size,otherFallbackOrders:otherFallbackOrders.size,fallbackOrders:websiteFallbackOrders.size+marketplaceFallbackOrders.size+purchaseFallbackOrders.size+otherFallbackOrders.size};
 }
 function _scOrderPct(current,base){return base?((current-base)/Math.abs(base)*100):null;}
 function _scOrderDeltaText(current,base,isMoney){
@@ -15965,7 +16241,7 @@ function renderSalesComparisonOrders(){
   const shown=data.drivers.slice(0,50);
   const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${r.reasons.map(x=>`<span class="insight-pill warn" style="display:inline-block;margin:2px">${escHtml(x)}</span>`).join('')}</td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Diagnosis</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No negative product/AOV drivers found for this comparison.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Type: ${data.type==='All'?'All Types':data.type}. Website order count uses the customer+address identity token and collapses multiple SKUs bought by that customer on the same date into one order. ${b.addressOrders.toLocaleString('en-IN')} comparison-period Website orders used exact address identity; ${b.fallbackOrders.toLocaleString('en-IN')} Website lines without an address match were counted separately. Non-Website rows use date + customer identity. Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
+  if(note)note.textContent=`Type: ${data.type==='All'?'All Types':data.type}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
 }
 function resetSalesComparisonOrders(){
   _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';_scOrderInit();renderSalesComparisonOrders();
@@ -15973,7 +16249,7 @@ function resetSalesComparisonOrders(){
 function exportSalesComparisonOrders(){
   const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No product AOV driver rows to export.');return;}
   const r=data.ranges;
-  _dlCsv(['Type Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.type,r.a1,r.a2,r.b1,r.b2,'Website: same date + same customer + same billing address = 1 order',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_shopify_aov_product_drivers');
+  _dlCsv(['Type Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.type,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_shopify_aov_product_drivers');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
@@ -17271,8 +17547,12 @@ def _employee_view(comp, period_kpis):
     safe_comp = []
     for i in comp:
         d = {k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items()
-             if k not in ("sales_entries", "rakhi_sales_entries")}
+             if k not in ("sales_entries", "orderdate_sales_entries", "rakhi_sales_entries")}
         d["sales_entries"] = [{**e, "rev": 0, "sp": 0, "ret_amt": 0} for e in i.get("sales_entries", [])]
+        d["orderdate_sales_entries"] = [
+            {**e, "rev": 0, "sp": 0, "ret_amt": 0}
+            for e in i.get("orderdate_sales_entries", [])
+        ]
         d["rakhi_sales_entries"] = [
             {**e, "rev": 0, "sp": 0, "ret_amt": 0}
             for e in i.get("rakhi_sales_entries", [])
