@@ -6844,6 +6844,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Channel</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
         <div class="fc"><label class="fl">Baseline Date</label><input class="fi" type="date" id="scOrderDateA" onchange="renderSalesComparisonOrders()"></div>
         <div class="fc"><label class="fl">Comparison Date</label><input class="fi" type="date" id="scOrderDateB" onchange="renderSalesComparisonOrders()"></div>
+        <div class="fc"><label class="fl">SKU Search</label><input class="fi" type="search" id="scOrderSkuSearch" placeholder="Search SKU or product" oninput="_scOrderSearchChanged()"></div>
         <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonOrders()">Reset</button>
       </div>
       <div id="scOrderSummary" class="rel-compare-kpis" style="margin-top:12px"></div>
@@ -15953,6 +15954,7 @@ let _scAovInitialized=false;
 let _scAovExportRows=[];
 let _scOrderInitialized=false;
 let _scOrderExportRows=[];
+let _scOrderSearchTimer=null;
 let _scOrderEventCache=null;
 let _scWebsiteSessionIndex=null;
 let _scChannelOrderIndex=null;
@@ -16112,6 +16114,10 @@ function _scOrderApplyPreset(doRender){
   if(doRender)renderSalesComparisonOrders();
 }
 function _scOrderPresetChanged(){_scOrderApplyPreset(true);}
+function _scOrderSearchChanged(){
+  if(_scOrderSearchTimer)clearTimeout(_scOrderSearchTimer);
+  _scOrderSearchTimer=setTimeout(()=>{_scOrderSearchTimer=null;renderSalesComparisonOrders();},120);
+}
 function _scOrderInit(){
   _scPopulateFilters();
   if(_scOrderInitialized)return;
@@ -16218,13 +16224,13 @@ function _scOrderDeltaText(current,base,isMoney){
   return `${sign}${delta<0?'-':''}${amount}${pct===null?'':` (${pct>=0?'+':''}${pct.toFixed(1)}%)`}`;
 }
 function _scBuildOrderComparison(){
-  _scOrderInit();const ranges=_scOrderRanges(),channel=document.getElementById('scOrderType')?.value||'All';
+  _scOrderInit();const ranges=_scOrderRanges(),channel=document.getElementById('scOrderType')?.value||'All',search=String(document.getElementById('scOrderSkuSearch')?.value||'').trim().toLowerCase();
   if(!ranges.a1||!ranges.b1)return {error:'Choose both comparison dates.',ranges,channel,drivers:[]};
   const a=_scOrderPeriod(ranges.a1,ranges.a2,channel),b=_scOrderPeriod(ranges.b1,ranges.b2,channel);
   const am=new Map(a.rows.map(r=>[String(r.sku).toUpperCase(),r])),bm=new Map(b.rows.map(r=>[String(r.sku).toUpperCase(),r]));
-  const keys=new Set([...am.keys(),...bm.keys()]),drivers=[];
+  const keys=new Set(am.keys()),allDrivers=[];
   keys.forEach(key=>{
-    const x=am.get(key)||{sku:key,skuName:'',item:_masterSkuMap[key]||{},qty:0,rev:0,orders:0,aov:0};
+    const x=am.get(key);
     const y=bm.get(key)||{sku:key,skuName:x.skuName,item:x.item,qty:0,rev:0,orders:0,aov:0};
     const qtyDelta=y.qty-x.qty,revDelta=y.rev-x.rev,orderDelta=y.orders-x.orders,aovDelta=y.aov-x.aov;
     const lowAov=y.orders>0&&b.aov>0&&y.aov<b.aov,lowAovMix=lowAov&&(qtyDelta>0||orderDelta>0);
@@ -16233,12 +16239,15 @@ function _scBuildOrderComparison(){
     if(revDelta<0)reasons.push('Revenue down');
     if(x.aov>0&&aovDelta<0)reasons.push('Product AOV down');
     if(lowAovMix)reasons.push('Low-AOV mix increased');else if(lowAov)reasons.push('Low-AOV product selling');
-    if(!reasons.length)return;
     const drag=Math.max(0,-revDelta)+Math.max(0,-aovDelta)*Math.max(1,y.orders)+Math.max(0,b.aov-y.aov)*Math.max(0,orderDelta);
-    drivers.push({sku:y.sku||x.sku,skuName:y.skuName||x.skuName,item:y.item||x.item,a:x,b:y,qtyDelta,revDelta,orderDelta,aovDelta,lowAov,lowAovMix,reasons,drag});
+    allDrivers.push({sku:y.sku||x.sku,skuName:y.skuName||x.skuName,item:y.item||x.item,a:x,b:y,qtyDelta,revDelta,orderDelta,aovDelta,lowAov,lowAovMix,reasons,drag});
   });
-  drivers.sort((x,y)=>y.drag-x.drag||x.revDelta-y.revDelta||y.b.qty-x.b.qty||String(x.sku).localeCompare(String(y.sku)));
-  return {error:'',ranges,channel,a,b,drivers};
+  allDrivers.sort((x,y)=>y.drag-x.drag||x.revDelta-y.revDelta||y.a.qty-x.a.qty||String(x.sku).localeCompare(String(y.sku)));
+  const drivers=search?allDrivers.filter(r=>{
+    const item=r.item||{},hay=[r.sku,r.skuName,item.sku,item.sku_name,item.cn_name,item.af_name,item.product_name,item.name].join(' ').toLowerCase();
+    return hay.includes(search);
+  }):allDrivers;
+  return {error:'',ranges,channel,search,a,b,allDrivers,drivers};
 }
 function renderSalesComparisonOrders(){
   const host=document.getElementById('scOrderContent'),sum=document.getElementById('scOrderSummary'),insight=document.getElementById('scOrderInsight'),note=document.getElementById('scOrderNote');if(!host)return;
@@ -16246,7 +16255,7 @@ function renderSalesComparisonOrders(){
   if(data.error){if(sum)sum.innerHTML='';if(insight)insight.textContent=data.error;host.innerHTML='';if(note)note.textContent='';return;}
   const {a,b,ranges}=data,orderPct=_scOrderPct(b.orders,a.orders),revPct=_scOrderPct(b.rev,a.rev),aovPct=_scOrderPct(b.aov,a.aov);
   if(sum)sum.innerHTML=_opsKpi(`${ranges.labelB} Orders`,b.orders.toLocaleString('en-IN'),`${ranges.labelA}: ${a.orders.toLocaleString('en-IN')} · ${_scOrderDeltaText(b.orders,a.orders,false)}`)+_opsKpi(`${ranges.labelB} Net Revenue`,fmt(b.rev),`${ranges.labelA}: ${fmt(a.rev)} · ${_scOrderDeltaText(b.rev,a.rev,true)}`)+_opsKpi(`${ranges.labelB} AOV`,b.orders?fmt(b.aov):'—',`${ranges.labelA}: ${a.orders?fmt(a.aov):'—'} · ${_scOrderDeltaText(b.aov,a.aov,true)}`)+_opsKpi(`${ranges.labelB} Sold Qty`,Math.round(b.qty).toLocaleString('en-IN'),`${ranges.labelA}: ${Math.round(a.qty).toLocaleString('en-IN')} · ${_scOrderDeltaText(b.qty,a.qty,false)}`);
-  const topLoss=data.drivers.filter(r=>r.revDelta<0).slice(0,3),lowMix=data.drivers.filter(r=>r.lowAovMix).slice(0,3);
+  const analysisRows=data.allDrivers||data.drivers,topLoss=analysisRows.filter(r=>r.revDelta<0).slice(0,3),lowMix=analysisRows.filter(r=>r.lowAovMix).slice(0,3);
   let headline='Revenue and AOV moved in line with order volume.';
   if(b.orders>a.orders&&b.rev<a.rev)headline=`Orders increased ${orderPct===null?'':Math.abs(orderPct).toFixed(1)+'%'} but Net Revenue fell ${revPct===null?'':Math.abs(revPct).toFixed(1)+'%'}. This is a lower-value product-mix / AOV problem, not an order-volume problem.`;
   else if(b.orders>a.orders&&b.aov<a.aov)headline=`Orders increased, but AOV fell ${aovPct===null?'':Math.abs(aovPct).toFixed(1)+'%'}; the extra orders are contributing less revenue per order.`;
@@ -16255,18 +16264,18 @@ function renderSalesComparisonOrders(){
   const lossText=topLoss.length?` Biggest revenue declines: ${topLoss.map(r=>`${r.sku} (${fmt(Math.abs(r.revDelta))} lower)`).join(', ')}.`:'';
   const mixText=lowMix.length?` Low-AOV products gaining volume: ${lowMix.map(r=>r.sku).join(', ')}.`:'';
   if(insight)insight.innerHTML=`<b>AOV analysis:</b> ${escHtml(headline+lossText+mixText)}`;
-  const shown=data.drivers.slice(0,50);
-  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${r.reasons.map(x=>`<span class="insight-pill warn" style="display:inline-block;margin:2px">${escHtml(x)}</span>`).join('')}</td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>Diagnosis</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No negative product/AOV drivers found for this comparison.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing top ${shown.length.toLocaleString('en-IN')} drivers; export includes all ${data.drivers.length.toLocaleString('en-IN')}.`;
+  const shown=data.drivers;
+  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No baseline-date selling SKUs match the selected filters.</td></tr>'}</tbody></table>`;
+  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
 }
 function resetSalesComparisonOrders(){
-  _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';_scOrderInit();renderSalesComparisonOrders();
+  _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB'),s=document.getElementById('scOrderSkuSearch');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';if(s)s.value='';_scOrderInit();renderSalesComparisonOrders();
 }
 function exportSalesComparisonOrders(){
-  const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No product AOV driver rows to export.');return;}
+  const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No baseline-date selling SKU rows to export.');return;}
   const r=data.ranges;
-  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Diagnosis','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),x.reasons.join(' | '),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
+  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
@@ -16303,7 +16312,7 @@ function renderSalesComparison(){
 }
 function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';if(productGroup)productGroup.value='All';renderSalesComparison();}
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
-window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
+window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window._scOrderSearchChanged=_scOrderSearchChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
