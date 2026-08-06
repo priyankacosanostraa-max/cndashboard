@@ -7146,7 +7146,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="ops-sub">Measures how much selected-period business depends on a small number of SKUs, channels, cities and taxons. Single-SKU dependency and Revenue-at-Risk update with every filter.</div>
       </div>
       <div class="ops-actions">
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadConcentrationRisk()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadConcentrationRisk(true)">Refresh</button>
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportConcentrationRisk()">Export CSV</button>
       </div>
     </div>
@@ -12469,7 +12469,8 @@ const _RKH_CITY_SOURCES = ['Website','Myntra','Amazon','Flipkart','Nykaa','Tata'
 async function _rkhLoadCityRows(force){
   if (_rkhCityRows && !force) return _rkhCityRows;
   try {
-    const r = await fetch('/api/rakhi-cities', {headers:{'ngrok-skip-browser-warning':'true'}});
+    const url = '/api/rakhi-cities' + (force ? '?force=1' : '');
+    const r = await fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}});
     const d = await r.json();
     if (d && d.error) { _rkhCityRows = []; _rkhCityDiag = {error: d.error}; }
     else {
@@ -16932,7 +16933,7 @@ function exportConcentrationTop20(){
   const emp=String(LOGIN_ROLE||'').toLowerCase()==='employee';
   _dlCsv(['Rank','Sales Platform','SKU','SKU Name','Sold Qty','Qty Contribution %',...(emp?[]:['Net Revenue','Revenue Contribution %']),'Inv Stock','Inv WIP','Image Link'],rows.map((r,i)=>{const item=r.item||{};return [i+1,Array.from(r.platforms).sort().join(' | '),r.sku,exportSkuName(r.sku,r.skuName),Number(r.qty.toFixed(2)),Number(r.qtyContribution.toFixed(2)),...(emp?[]:[Number(r.rev.toFixed(2)),Number(r.revenueContribution.toFixed(2))]),Math.round(_opsNum(item.inv_stock)),Math.round(_opsNum(item.inv_wip)),item.image_url||''];}),'top_20_selling_skus_by_platform');
 }
-function loadConcentrationRisk(){
+function loadConcentrationRisk(forceCity=false){
   _bizInitFilters('conc');
   const fromEl=document.getElementById('concD1'),toEl=document.getElementById('concD2');
   const datesWereBlank=!(fromEl?.value||toEl?.value);
@@ -16942,7 +16943,7 @@ function loadConcentrationRisk(){
     if(latest&&fromEl&&toEl){toEl.value=latest;fromEl.value=_bizShift(latest,-179);}
   }
   renderConcentrationRisk();
-  _rkhLoadCityRows(false).then(()=>renderConcentrationRisk()).catch(()=>{});
+  _rkhLoadCityRows(!!forceCity).then(()=>renderConcentrationRisk()).catch(()=>{});
 }
 function renderConcentrationRisk(){
   const host=document.getElementById('concContent'),sum=document.getElementById('concSummary'),alertHost=document.getElementById('concAlert'); if(!host)return;
@@ -19008,7 +19009,7 @@ def _normalize_city_for_state(city, state, pin=""):
     return city.title()
 
 
-def _fetch_rkh_sku_city_rows():
+def _fetch_rkh_sku_city_rows(force=False):
     """Build validated multi-channel city rows for Rakhi and concentration.
 
     PIN-derived State is authoritative. Cancelled/failed and explicit
@@ -19016,7 +19017,8 @@ def _fetch_rkh_sku_city_rows():
     row is treated as one sold unit. Diagnostics expose how many source city
     labels were corrected so data quality can be monitored.
     """
-    if _RKH_CITY_CACHE["rows"] is not None and (time.time() - _RKH_CITY_CACHE["ts"] < 600):
+    if (not force and _RKH_CITY_CACHE["rows"] is not None
+            and (time.time() - _RKH_CITY_CACHE["ts"] < 600)):
         return _RKH_CITY_CACHE["rows"], _RKH_CITY_CACHE.get("diag", {})
     out = []
     diag = {
@@ -19143,9 +19145,11 @@ def _fetch_rkh_sku_city_rows():
             "fixed_source": "", "platform_names": ("Channel", "Type", "Marketplace", "Status"),
             "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code"),
             "qty_names": ("Qty.", "Qty", "Net Qty", "Quantity"),
-            "city_names": ("Destination City", "City"),
-            "state_names": ("Destination state", "Destination State", "State"),
-            "pin_names": ("Destination pincode", "Destination Pincode", "Pincode"),
+            "geo_sets": ({
+                "city_names": ("Destination City", "City"),
+                "state_names": ("Destination state", "Destination State", "State"),
+                "pin_names": ("Destination pincode", "Destination Pincode", "Pincode"),
+            },),
             "date_names": ("Order_Date", "Order Date", "Packed On"),
             "revenue_names": ("Selling value", "Seller Price", "Payout to Seller"),
             "status_names": (),
@@ -19155,8 +19159,11 @@ def _fetch_rkh_sku_city_rows():
             "fixed_source": "Nykaa", "platform_names": (),
             "sku_names": ("SKU", "SKUCode", "SKU Code"),
             "qty_names": ("Net Qty", "Order Qty", "Shipped Qty", "Qty"),
-            "city_names": ("city", "City"),
-            "state_names": ("State",), "pin_names": ("Pincode", "PIN Code"),
+            "geo_sets": ({
+                "city_names": ("city", "City"),
+                "state_names": ("State",),
+                "pin_names": ("Pincode", "PIN Code"),
+            },),
             "date_names": ("Order_Date", "Order Date", "OrderDate"),
             "revenue_names": ("Net Amount", "LineItem Total", "SellingPrice"),
             "status_names": (),
@@ -19166,9 +19173,22 @@ def _fetch_rkh_sku_city_rows():
             "fixed_source": "Tata", "platform_names": (),
             "sku_names": ("SKU", "Item Code"),
             "qty_names": ("Net Qty", "Order Qty", "Qty"),
-            "city_names": ("ShippingCity", "Shipping City", "BillingCity", "Billing City"),
-            "state_names": ("ShippingState", "Shipping State", "BillingState", "Billing State"),
-            "pin_names": ("ShippingPincode", "Shipping Pincode", "BillingPincode", "Billing Pincode"),
+            # Tata changed its current-period population: older rows use
+            # Shipping* while recent rows populate BillingCity/BillingPincode.
+            # Materialize and test both row-wise instead of resolving only the
+            # first header and silently dropping all current Tata cities.
+            "geo_sets": (
+                {
+                    "city_names": ("ShippingCity", "Shipping City"),
+                    "state_names": ("ShippingState", "Shipping State"),
+                    "pin_names": ("ShippingPincode", "Shipping Pincode"),
+                },
+                {
+                    "city_names": ("BillingCity", "Billing City"),
+                    "state_names": ("BillingState", "Billing State"),
+                    "pin_names": ("BillingPincode", "Billing Pincode"),
+                },
+            ),
             "date_names": ("Order_Date", "Order Date", "OrderDate"),
             "revenue_names": ("Net Amount", "Final Invoice Amount", "Customer Collected Amount"),
             "status_names": ("OrderStatus", "Order Status"),
@@ -19180,11 +19200,10 @@ def _fetch_rkh_sku_city_rows():
         source_diag = {"rows_total": 0, "rows_used": 0, "columns_found": False, "error": None}
         diag[key] = source_diag
         try:
-            groups = [
-                spec["sku_names"], spec["qty_names"], spec["city_names"],
-                spec["state_names"], spec["pin_names"], spec["date_names"],
-                spec["revenue_names"],
-            ]
+            groups = [spec["sku_names"], spec["qty_names"],
+                      spec["date_names"], spec["revenue_names"]]
+            for geo_set in spec["geo_sets"]:
+                groups.extend((geo_set["city_names"], geo_set["state_names"], geo_set["pin_names"]))
             if spec["platform_names"]:
                 groups.append(spec["platform_names"])
             if spec["status_names"]:
@@ -19195,19 +19214,25 @@ def _fetch_rkh_sku_city_rows():
             source_diag["rows_total"] = len(frame)
             C_SKU = find_col(cols, *spec["sku_names"])
             C_QTY = find_col(cols, *spec["qty_names"])
-            C_CITY = find_col(cols, *spec["city_names"])
-            C_STATE = find_col(cols, *spec["state_names"])
-            C_PIN = find_col(cols, *spec["pin_names"])
             C_DATE = find_col(cols, *spec["date_names"])
             C_REV = find_col(cols, *spec["revenue_names"])
             C_PLATFORM = find_col(cols, *spec["platform_names"]) if spec["platform_names"] else None
             C_STATUS = find_col(cols, *spec["status_names"]) if spec["status_names"] else None
+            GEO_COLS = []
+            for geo_set in spec["geo_sets"]:
+                resolved_geo = {
+                    "city": find_col(cols, *geo_set["city_names"]),
+                    "state": find_col(cols, *geo_set["state_names"]),
+                    "pin": find_col(cols, *geo_set["pin_names"]),
+                }
+                if resolved_geo["city"] or resolved_geo["pin"]:
+                    GEO_COLS.append(resolved_geo)
             source_diag["resolved"] = {
-                "sku": C_SKU, "qty": C_QTY, "city": C_CITY, "state": C_STATE,
-                "pin": C_PIN, "date": C_DATE, "revenue": C_REV,
+                "sku": C_SKU, "qty": C_QTY, "geo_sets": GEO_COLS,
+                "date": C_DATE, "revenue": C_REV,
                 "platform": C_PLATFORM, "status": C_STATUS,
             }
-            if not C_SKU or not C_CITY or not C_PIN:
+            if not C_SKU or not GEO_COLS:
                 raise ValueError("required SKU/city/PIN columns not found")
             source_diag["columns_found"] = True
             for row in _df_chunks(frame):
@@ -19224,13 +19249,26 @@ def _fetch_rkh_sku_city_rows():
                     source = "Amazon" if "amazon" in platform_token else "Flipkart" if "flipkart" in platform_token else ""
                 if not source:
                     continue
-                pin = re.sub(r"\D", "", str(row.get(C_PIN, "") or ""))[:6]
-                raw_state = clean(row.get(C_STATE, "")) if C_STATE else ""
-                state = _pincode_to_state(pin) if len(pin) == 6 else ""
-                if not state and raw_state:
-                    state = _STATE_KEY_TO_NAME.get(_geo_key(raw_state), raw_state.title())
-                raw_city = clean(row.get(C_CITY, ""))
-                if not state or not raw_city:
+                pin = raw_state = raw_city = state = ""
+                for geo in GEO_COLS:
+                    candidate_pin = re.sub(r"\D", "", str(row.get(geo["pin"], "") or ""))[:6] if geo["pin"] else ""
+                    candidate_state = clean(row.get(geo["state"], "")) if geo["state"] else ""
+                    candidate_city = clean(row.get(geo["city"], "")) if geo["city"] else ""
+                    candidate_state = (_pincode_to_state(candidate_pin)
+                                       if len(candidate_pin) == 6 else
+                                       _STATE_KEY_TO_NAME.get(_geo_key(candidate_state), candidate_state.title()))
+                    if not candidate_state:
+                        continue
+                    # A valid PIN is enough to keep the row. If the source's
+                    # city is empty (or contains only a State label), the PIN
+                    # normalizer supplies a conservative city/area label.
+                    if not candidate_city:
+                        candidate_city = candidate_state
+                    pin, raw_state, raw_city, state = (
+                        candidate_pin, candidate_state, candidate_city, candidate_state
+                    )
+                    break
+                if not state:
                     continue
                 city = _normalize_city_for_state(raw_city, state, pin)
                 dt = parse_date_any(row.get(C_DATE, "")) if C_DATE else None
@@ -19259,7 +19297,8 @@ def api_rakhi_cities():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
-        rows, diag = _fetch_rkh_sku_city_rows()
+        force = str(request.args.get("force", "")).strip().lower() in ("1", "true", "yes")
+        rows, diag = _fetch_rkh_sku_city_rows(force=force)
         return jsonify({"rows": rows, "count": len(rows), "diag": diag, "all_states_uts": INDIA_STATES_UTS})
     except Exception as e:
         return jsonify({"error": f"rakhi city rows build failed: {e}"}), 500
