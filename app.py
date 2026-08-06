@@ -6637,7 +6637,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="insights-title">Production (PPC-WIP)</div>
     </div>
     <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadProduction()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadProduction(true)">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportProduction('csv')">Export CSV</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportProduction('xlsx')">Export Excel</button>
     </div>
@@ -6646,10 +6646,10 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="fc"><label class="fl">Channel</label>
       <select class="fs" id="prodChannel" onchange="loadProduction()"><option value="">All Channels</option></select></div>
     <div class="fc"><label class="fl">Balance Qty</label>
-      <select class="fs" id="prodBalance" onchange="loadProduction()">
+      <select class="fs" id="prodBalance" onchange="loadProduction(true)">
         <option value="">All</option>
-        <option value="yes">Yes (pending only)</option>
-        <option value="no">No (completed)</option>
+        <option value="yes">Yes (balance not 0)</option>
+        <option value="no">No (balance 0 / completed)</option>
       </select></div>
     <div class="fc"><label class="fl">Sort By</label>
       <select class="fs" id="prodSort" onchange="loadProduction()">
@@ -13366,19 +13366,21 @@ window.sortProd = sortProd;
 let _prodFilled = false;
 let _prodSearchTimer = null;
 function prodSearchDebounced(){ clearTimeout(_prodSearchTimer); _prodSearchTimer = setTimeout(loadProduction, 300); }
-function _productionQueryString(){
+function _productionQueryString(forceFresh=false){
   const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',sku:'prodSku',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
   const params=new URLSearchParams();
   Object.entries(fields).forEach(([key,id])=>params.set(key,document.getElementById(id)?.value||''));
+  if(forceFresh) params.set('fresh','1');
   return params.toString();
 }
-function loadProduction(){
+function loadProduction(forceFresh=false){
   const host = document.getElementById('prodContent');
   const sumHost = document.getElementById('prodSummary');
   if (!host) return;
+  if (forceFresh === true) _prodFilled = false;
   host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
   if (sumHost) sumHost.innerHTML = '';
-  const url = '/api/production?' + _productionQueryString();
+  const url = '/api/production?' + _productionQueryString(forceFresh === true);
   fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
@@ -13424,7 +13426,7 @@ function renderProduction(){
     sumHost.innerHTML = `
       <div class="yoy-card"><div class="yc-label">Total Order Qty</div><div class="yc-val">${(d.total_order_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.count||0).toLocaleString('en-IN')} rows • ${(d.unique_orders||0).toLocaleString('en-IN')} orders</div></div>
       <div class="yoy-card"><div class="yc-label">Total Received Qty</div><div class="yc-val">${(d.total_recv_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.unique_skus||0).toLocaleString('en-IN')} unique SKUs</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${(d.total_bal_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.pending_rows||0).toLocaleString('en-IN')} rows pending</div></div>`;
+      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${(d.total_bal_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.pending_rows||0).toLocaleString('en-IN')} rows with balance</div></div>`;
   }
   if (!d.rows || !d.rows.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No production rows for this filter.</div>';
@@ -13458,7 +13460,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
     ${empProd ? '' : `<th class="sort-arrow" onclick="sortProd('aov_per_piece')" title="Average selling price per piece sold">AOV/pc ⇅</th>
     <th class="sort-arrow" onclick="sortProd('discount_pct')" title="Discount vs MRP">Disc % ⇅</th>`}
-    <th title="Only orders whose Production sheet column K Balance Qty is greater than 0">Pending Order Nos.</th>
+    <th title="Only orders whose Production sheet column K Balance Qty is not 0">Pending / Balance Order Nos.</th>
     <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Number of distinct orders this SKU appears in">Times Ordered ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('recv_qty')">Recv Qty ⇅</th>
@@ -13473,7 +13475,8 @@ function renderProduction(){
       ? `<img class="prod-img" src="${escHtml(r.image_url)}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="prod-ph">&#128142;</div>`;
     const allOrders = (r.all_orders||[]).length ? (r.all_orders||[]).join(', ') : '—';
-    const balCls = (r.bal_qty||0) > 0 ? 'orange' : 'green';
+    const balVal = Number(r.bal_qty)||0;
+    const balCls = balVal > 0 ? 'orange' : (balVal < 0 ? 'red' : 'green');
     return `<tr>
       <td class="gold">${escHtml(r.date_disp || '—')}</td>
       <td style="font-weight:800">${escHtml(r.order_no || '—')}</td>
@@ -13483,7 +13486,7 @@ function renderProduction(){
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
       ${empProd ? '' : `<td class="prod-num">${fmt(r.aov_per_piece||0)}</td><td class="prod-num">${r.discount_pct||0}%</td>`}
-      <td class="prod-order-list" title="Only order numbers with column K Balance Qty greater than 0">${escHtml(allOrders)}</td>
+      <td class="prod-order-list" title="Only order numbers with column K Balance Qty not equal to 0">${escHtml(allOrders)}</td>
       <td class="prod-num" style="font-weight:800;color:#8a4fce">${(r.repeat_count||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.order_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.recv_qty||0).toLocaleString('en-IN')}</td>
@@ -13500,12 +13503,12 @@ function renderProduction(){
 function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   ['prodChannel','prodType','prodTaxon','prodBalance','prodSort'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
-  loadProduction();
+  loadProduction(true);
 }
 async function exportProduction(format){
   const fileType=String(format||'csv').toLowerCase()==='xlsx'?'xlsx':'csv';
   try{
-    const response=await fetch('/api/production/export.'+fileType+'?'+_productionQueryString(),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const response=await fetch('/api/production/export.'+fileType+'?'+_productionQueryString(true),{headers:{'ngrok-skip-browser-warning':'true'}});
     if(!response.ok){
       let message='Export failed (HTTP '+response.status+')';
       try{const d=await response.json();if(d&&d.error)message=d.error;}catch(_e){}
@@ -17920,6 +17923,18 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
+def _production_has_balance(value):
+    """Column K has a pending/difference value whenever it is not zero.
+
+    Negative values are over-receipt differences, not completed rows.  Keeping
+    them in the Balance=Yes view also makes the filtered K total reconcile with
+    the Production sheet's own K-column total.
+    """
+    try:
+        return abs(float(value or 0)) > 1e-9
+    except (TypeError, ValueError):
+        return False
+
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode="", row_limit=1000):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
     img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
@@ -18014,8 +18029,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     types    = sorted({r["order_type"] for r in rows_all if r["order_type"]})
     taxons   = sorted({r["taxon"] for r in rows_all if r["taxon"]})
 
-    # SKU -> total order history, plus only pending order numbers. Pending is
-    # determined exclusively by Production sheet column K Balance Qty > 0.
+    # SKU -> total order history, plus only order numbers having a non-zero
+    # balance. The Yes filter is based exclusively on physical column K.
     sku_orders = {}
     sku_pending_orders = {}
     for r in rows_all:
@@ -18023,7 +18038,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             sku_orders.setdefault(r["sku"], [])
             if r["order_no"] not in sku_orders[r["sku"]]:
                 sku_orders[r["sku"]].append(r["order_no"])
-            if (r.get("bal_qty") or 0) > 0:
+            if _production_has_balance(r.get("bal_qty")):
                 sku_pending_orders.setdefault(r["sku"], [])
                 if r["order_no"] not in sku_pending_orders[r["sku"]]:
                     sku_pending_orders[r["sku"]].append(r["order_no"])
@@ -18040,7 +18055,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     oq = order_query.strip().lower()
     txf = taxon_filter.strip().lower()
     tyf = type_filter.strip().lower()
-    bo = (balance_only or "").strip().lower()   # "yes" = sirf balance qty waale, "no" = balance 0 waale
+    bo = (balance_only or "").strip().lower()   # "yes" = K != 0, "no" = K == 0
     inv_filter_ctx = (cf or tyf).strip()
     def _prod_inv_stock(sku):
         # Blank channel/type filter = normal overall inventory. SOR/3P channels
@@ -18068,9 +18083,9 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         if txf and r["taxon"].strip().lower() != txf:
             continue
-        if bo == "yes" and (r["bal_qty"] or 0) <= 0:
+        if bo == "yes" and not _production_has_balance(r.get("bal_qty")):
             continue
-        if bo == "no" and (r["bal_qty"] or 0) > 0:
+        if bo == "no" and _production_has_balance(r.get("bal_qty")):
             continue
         if sq and sq not in r["sku"].lower():
             continue
@@ -18154,7 +18169,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 
     # KPIs
     grouped_mode = (sort_mode or "").strip().lower() == "top_repeat"
-    pending = sum(1 for r in rows if (r["bal_qty"] or 0) > 0)
+    pending = sum(1 for r in rows if _production_has_balance(r.get("bal_qty")))
     uniq_skus = len({r["sku"] for r in rows if r["sku"]})
     uniq_orders = uniq_skus if grouped_mode else len({r["order_no"] for r in rows if r["order_no"]})
     if row_limit is None:
@@ -19830,6 +19845,7 @@ def api_production():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
+        _refresh_production_cache_if_requested()
         filters = _production_request_filters()
         resp = jsonify(_build_production(**filters, row_limit=1000))
         resp.headers["Cache-Control"] = "no-store"
@@ -19852,6 +19868,14 @@ def _production_request_filters():
         "sort_mode": request.args.get("sort", "").strip(),
     }
 
+def _refresh_production_cache_if_requested():
+    """Make the Production Refresh button and exports truly fetch live K data."""
+    fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+    if fresh:
+        _PROD_CACHE["rows"] = None
+        _PROD_CACHE["ts"] = 0
+    return fresh
+
 def _production_export_table(report):
     """Full filtered Production rows; never uses the 1,000-row screen cap."""
     show_pricing = session.get("role") == "admin"
@@ -19862,7 +19886,7 @@ def _production_export_table(report):
     if show_pricing:
         headers += ["AOV / Piece", "Discount %"]
     headers += [
-        "Pending Order Nos.", "Times Ordered", "Order Qty", "Received Qty",
+        "Pending / Balance Order Nos.", "Times Ordered", "Order Qty", "Received Qty",
         "Balance Qty", "Total Balance (All Orders)", "Delivery Date",
         "Receiving Date", "Image Link",
     ]
@@ -19900,6 +19924,7 @@ def _production_export_table(report):
     return headers, rows
 
 def _production_export_report():
+    _refresh_production_cache_if_requested()
     filters = _production_request_filters()
     # Screen JSON stays capped for browser performance; exports deliberately
     # rebuild from every row matching the exact same filters.
@@ -19994,7 +20019,7 @@ def api_production_export_xlsx():
             "Order Date": 14, "Order No.": 18, "SKU": 18, "SKU Name": 42,
             "Stock": 12, "WIP": 12, "Stone Color": 18, "Category": 18,
             "Type": 18, "Channel": 18, "AOV / Piece": 14, "Discount %": 13,
-            "Pending Order Nos.": 52, "Times Ordered": 14, "Order Qty": 12,
+            "Pending / Balance Order Nos.": 52, "Times Ordered": 14, "Order Qty": 12,
             "Received Qty": 14, "Balance Qty": 13,
             "Total Balance (All Orders)": 22, "Delivery Date": 15,
             "Receiving Date": 15, "Image Link": 55,
@@ -20005,7 +20030,7 @@ def api_production_export_xlsx():
             for cell in row:
                 cell.alignment = Alignment(vertical="top", wrap_text=cell.column in {
                     header_index.get("SKU Name", -1) + 1,
-                    header_index.get("Pending Order Nos.", -1) + 1,
+                    header_index.get("Pending / Balance Order Nos.", -1) + 1,
                     header_index.get("Image Link", -1) + 1,
                 })
 
@@ -20018,7 +20043,7 @@ def api_production_export_xlsx():
             ("Total Order Qty", report.get("total_order_qty", 0)),
             ("Total Received Qty", report.get("total_recv_qty", 0)),
             ("Total Balance Qty", report.get("total_bal_qty", 0)),
-            ("Pending Rows", report.get("pending_rows", 0)),
+            ("Rows with Balance", report.get("pending_rows", 0)),
             ("Balance Qty Source", "Production sheet column K"),
             ("Exported At", now_ist().strftime("%d-%b-%Y %I:%M %p")),
             ("Channel Filter", filters.get("channel_filter") or "All"),
