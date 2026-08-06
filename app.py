@@ -1402,11 +1402,13 @@ def _refresh_data():
     # SOR WIP — some sheets may have a dedicated SOR WIP column; fallback to None
     I_WIP_SOR = _find_wip_col(["sor"]) or find_col(inv.columns,"WIP (SOR)","wip sor","sor wip")
 
-    # Blocked Qty (column U = index 20). Naam pehle, warna position.
+    # Blocked Qty is authoritative in All Product column U (zero-based 20).
+    # Position is intentionally preferred so a similarly named future column
+    # cannot silently replace the Operations stock input.
     _inv_cols = list(inv.columns)
     def _inv_at(i): return _inv_cols[i] if len(_inv_cols) > i else None
-    I_BLOCKED = (find_col(inv.columns, "Blocked Qty", "blocked qty", "blocked", "block qty")
-                 or _inv_at(20))
+    I_BLOCKED = (_inv_at(20)
+                 or find_col(inv.columns, "Blocked Qty", "blocked qty", "blocked", "block qty"))
 
     # ── COSA columns ────────────────────────────────────────
     cols = list(cosa.columns)
@@ -1437,7 +1439,7 @@ def _refresh_data():
     C_TYPE  = _at(10) or find_col(cosa.columns, "Type","channel","mode")
 
     dbg["resolved"] = {
-        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"cn_name":I_CN_NAME},
+        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"blocked":I_BLOCKED,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"cn_name":I_CN_NAME},
         "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
     }
 
@@ -7154,7 +7156,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
       <div><div class="ops-title">Exhibition Combo Availability</div><div class="ops-sub">Shows CMBs that can be assembled now. Usable child stock is Inventory Stock plus Blocked Qty from All Product. WIP is not used. Shared stock is divided equally, with higher-selling CMBs receiving any final incomplete round first.</div></div>
-      <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
+      <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability(true)">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
       <div class="fc op-paste">
@@ -7169,6 +7171,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Search CMB</label><input class="fi" id="opAvailSearch" placeholder="Enter CMB SKU or name…" oninput="renderOperationsAvailability_d()"></div>
       <div class="fc"><label class="fl">Search Child SKU</label><input class="fi" id="opAvailChildSearch" placeholder="Enter child SKU or name…" oninput="renderOperationsAvailability_d()"></div>
     </div>
+    <div id="opAvailStockInfo" class="small-note" style="margin:0 2px 10px">Loading live All Product stock…</div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
     <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Operations usable stock = Inventory Stock + Blocked Qty from All Product. WIP and existing parent-CMB stock are not added to buildable quantity. Blocked Qty is not added to stock in any other dashboard tab. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
@@ -14617,6 +14620,10 @@ let _opAvailRows=[];
 let _opAvailBuilt=false;
 let _opAvailPastedSet=null; // null = full catalogue; Set (including empty) = pasted-only scope
 let _opAvailPasteStats={pasted:0,matched:0,notFound:[]};
+let _opLiveInventoryMap={};
+let _opLiveInventoryMeta={};
+let _opLiveInventoryAt=0;
+let _opInventoryLoadPromise=null;
 function _opAvailRequiredQtys(parent,children){
   const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
   if(!pack)return req;
@@ -14664,9 +14671,11 @@ function _opAvailChildren(parent){
     const key=_opsSkuKey(raw&&raw.sku||raw);if(!key||key===parentKey||seen.has(key))return;
     const item=_masterSkuMap[key];if(!item&&!raw?.sku)return;
     seen.add(key);const base=item||raw||{};
-    const invStock=Math.max(0,_opsNum(base.inv_stock??raw?.inv_stock));
-    const blockedQty=Math.max(0,_opsNum(base.blocked_qty??raw?.blocked_qty));
-    out.push({sku:key,skuName:String(base.sku_name||raw?.sku_name||''),image:String(base.image_url||raw?.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip:Math.max(0,_opsNum(base.inv_wip??raw?.inv_wip)),source});
+    const live=_opLiveInventoryMap[key]||null;
+    const invStock=Math.max(0,_opsNum(live?live.inv_stock:(base.inv_stock??raw?.inv_stock)));
+    const blockedQty=Math.max(0,_opsNum(live?live.blocked_qty:(base.blocked_qty??raw?.blocked_qty)));
+    const wip=Math.max(0,_opsNum(live?live.inv_wip:(base.inv_wip??raw?.inv_wip)));
+    out.push({sku:key,skuName:String(base.sku_name||raw?.sku_name||''),image:String(base.image_url||raw?.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip,source});
   };
   (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(c=>add(c,'Combo Details'));
   const pack=String(parent&&parent.pack_details||'');
@@ -14679,8 +14688,10 @@ function _buildOperationsAvailability(){
     if(_opAvailPastedSet!==null&&!_opAvailPastedSet.has(sku))return null;
     if(!sku||!/^CMB[-_]/i.test(sku)||!children.length)return null;
     const required=_opAvailRequiredQtys(parent,children);children.forEach(ch=>{ch.requiredQty=required.get(ch.sku)||1;});
-    const invStock=Math.max(0,_opsNum(parent.inv_stock)),blockedQty=Math.max(0,_opsNum(parent.blocked_qty));
-    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),invStock,blockedQty,stock:invStock+blockedQty,wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
+    const live=_opLiveInventoryMap[sku]||null;
+    const invStock=Math.max(0,_opsNum(live?live.inv_stock:parent.inv_stock)),blockedQty=Math.max(0,_opsNum(live?live.blocked_qty:parent.blocked_qty));
+    const wip=Math.max(0,_opsNum(live?live.inv_wip:parent.inv_wip));
+    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),invStock,blockedQty,stock:invStock+blockedQty,wip,totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
   }).filter(Boolean).sort((a,b)=>b.totalSold-a.totalSold||b.stock-a.stock||a.sku.localeCompare(b.sku));
   // Divide every child SKU independently and as evenly as possible across all
   // CMBs that use it. Complete equal rounds are assigned first. If the last
@@ -14771,7 +14782,38 @@ function clearOperationsCmbPaste(){
   const input=document.getElementById('opAvailPaste');if(input)input.value='';
   _opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();
 }
-function loadOperationsAvailability(){_opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();}
+function _opApplyLiveInventory(rows){
+  const next={};
+  (Array.isArray(rows)?rows:[]).forEach(r=>{
+    const sku=_opsSkuKey(r&&r.sku);if(!sku)return;
+    next[sku]={inv_stock:Math.max(0,_opsNum(r.inv_stock)),blocked_qty:Math.max(0,_opsNum(r.blocked_qty)),inv_wip:Math.max(0,_opsNum(r.inv_wip))};
+  });
+  _opLiveInventoryMap=next;_opLiveInventoryAt=Date.now();
+}
+function _opRenderInventoryStatus(errorText){
+  const el=document.getElementById('opAvailStockInfo');if(!el)return;
+  if(errorText){el.textContent=`Live All Product stock failed: ${errorText}. Using the last dashboard stock snapshot.`;el.style.color='#b3261e';return;}
+  const m=_opLiveInventoryMeta||{};
+  const checked=m.checked_at?new Date(m.checked_at).toLocaleString('en-IN'):'just now';
+  el.textContent=`Live All Product stock loaded: ${Number(m.sku_count||Object.keys(_opLiveInventoryMap).length).toLocaleString('en-IN')} SKUs · ${Number(m.blocked_sku_count||0).toLocaleString('en-IN')} SKUs with Blocked Qty · Blocked source: column U · ${checked}`;
+  el.style.color='';
+}
+function _opRebuildAvailability(){
+  _opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();
+}
+function loadOperationsAvailability(force=false){
+  const age=Date.now()-_opLiveInventoryAt;
+  if(!force&&Object.keys(_opLiveInventoryMap).length&&age<60000){_opRebuildAvailability();_opRenderInventoryStatus('');return Promise.resolve();}
+  if(_opInventoryLoadPromise)return _opInventoryLoadPromise;
+  const info=document.getElementById('opAvailStockInfo');if(info){info.textContent='Loading live Inventory Stock and Blocked Qty from All Product column U…';info.style.color='';}
+  const url='/api/operations-inventory?fresh='+(force?'1':'0')+'&_='+Date.now();
+  _opInventoryLoadPromise=fetch(url,{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}})
+    .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+    .then(d=>{if(d.error)throw new Error(d.error);_opApplyLiveInventory(d.rows);_opLiveInventoryMeta=d.meta||{};_opRenderInventoryStatus('');_opRebuildAvailability();})
+    .catch(e=>{_opRenderInventoryStatus(e.message||String(e));_opRebuildAvailability();})
+    .finally(()=>{_opInventoryLoadPromise=null;});
+  return _opInventoryLoadPromise;
+}
 function renderOperationsAvailability(){
   const host=document.getElementById('opAvailContent'),sum=document.getElementById('opAvailSummary');if(!host)return;
   const rows=_operationsAvailabilityFiltered(),childSet=new Set();rows.forEach(r=>r.children.forEach(c=>childSet.add(c.sku)));
@@ -18714,6 +18756,113 @@ def api_target():
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"target build failed: {e}"}), 500
+
+
+_OPS_INVENTORY_CACHE = {"rows": None, "ts": 0.0, "meta": {}}
+_OPS_INVENTORY_TTL = 120
+_OPS_INVENTORY_LOCK = threading.Lock()
+
+def _build_operations_inventory(force=False):
+    """Fresh All Product stock payload used only by Operations.
+
+    Blocked Qty is read from physical column U and remains a separate field in
+    this payload. The browser combines it with Inv Stock only inside the CMB
+    build planner; no shared dashboard inventory value is mutated.
+    """
+    now = time.time()
+    cached = _OPS_INVENTORY_CACHE.get("rows")
+    if (not force and cached is not None
+            and now - float(_OPS_INVENTORY_CACHE.get("ts") or 0) < _OPS_INVENTORY_TTL):
+        return cached, dict(_OPS_INVENTORY_CACHE.get("meta") or {})
+
+    with _OPS_INVENTORY_LOCK:
+        now = time.time()
+        cached = _OPS_INVENTORY_CACHE.get("rows")
+        if (not force and cached is not None
+                and now - float(_OPS_INVENTORY_CACHE.get("ts") or 0) < _OPS_INVENTORY_TTL):
+            return cached, dict(_OPS_INVENTORY_CACHE.get("meta") or {})
+
+        inv = _fetch_csv_fresh(INV_URL)
+        inv.columns = [str(c).strip() for c in inv.columns]
+        cols = list(inv.columns)
+        sku_col = find_col(cols, "SKU") or (cols[0] if cols else None)
+
+        stock_candidates = [
+            c for c in cols
+            if "inv" in c.lower() and "stock" in c.lower()
+            and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()
+        ]
+        stock_col = stock_candidates[0] if stock_candidates else find_col(cols, "Inv. Stock", "Inv Stock", "stock")
+
+        wip_exact = [c for c in cols if re.sub(r"[^a-z0-9]", "", c.lower()) == "invwip"]
+        if wip_exact:
+            wip_col = wip_exact[0]
+        else:
+            wip_candidates = [
+                c for c in cols if "wip" in c.lower()
+                and "website" not in c.lower() and "designer" not in c.lower()
+                and "customer" not in c.lower() and "customize" not in c.lower()
+                and "customise" not in c.lower() and "sor" not in c.lower()
+            ]
+            wip_col = wip_candidates[0] if wip_candidates else find_col(cols, "Inv (WIP)", "wip")
+
+        # User-confirmed source: physical column U, not a fuzzy header match.
+        blocked_col = cols[20] if len(cols) > 20 else find_col(cols, "Blocked Qty", "blocked qty")
+        if not sku_col or not stock_col or not blocked_col:
+            raise ValueError(
+                f"All Product columns missing: SKU={sku_col}, Inv Stock={stock_col}, column U={blocked_col}"
+            )
+
+        by_sku = {}
+        duplicate_skus = set()
+        for row in _df_chunks(inv, 3000):
+            sku = clean(row.get(sku_col, "")).strip().upper()
+            if not sku:
+                continue
+            rec = {
+                "sku": sku,
+                "inv_stock": max(0, to_int(row.get(stock_col, 0))),
+                "blocked_qty": max(0, to_int(row.get(blocked_col, 0))),
+                "inv_wip": max(0, to_int(row.get(wip_col, 0))) if wip_col else 0,
+            }
+            if sku in by_sku:
+                duplicate_skus.add(sku)
+                # Do not sum duplicate master rows. Taking the highest observed
+                # field prevents a later/earlier blank duplicate from erasing
+                # valid column-U stock without double-counting the SKU.
+                old = by_sku[sku]
+                old["inv_stock"] = max(old["inv_stock"], rec["inv_stock"])
+                old["blocked_qty"] = max(old["blocked_qty"], rec["blocked_qty"])
+                old["inv_wip"] = max(old["inv_wip"], rec["inv_wip"])
+            else:
+                by_sku[sku] = rec
+
+        rows = list(by_sku.values())
+        meta = {
+            "source": "All Product",
+            "sku_column": str(sku_col),
+            "stock_column": str(stock_col),
+            "blocked_column": str(blocked_col),
+            "blocked_column_letter": "U",
+            "wip_column": str(wip_col or ""),
+            "sku_count": len(rows),
+            "blocked_sku_count": sum(1 for r in rows if r["blocked_qty"] > 0),
+            "duplicate_sku_count": len(duplicate_skus),
+            "checked_at": datetime.now(TZ).isoformat(),
+        }
+        _OPS_INVENTORY_CACHE.update({"rows": rows, "ts": time.time(), "meta": meta})
+        return rows, meta
+
+@app.route("/api/operations-inventory")
+def api_operations_inventory():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+        rows, meta = _build_operations_inventory(force=fresh)
+        return jsonify({"rows": rows, "meta": meta})
+    except Exception as e:
+        return jsonify({"error": f"Operations inventory load failed: {e}"}), 500
 
 
 @app.route("/api/ops-support")
