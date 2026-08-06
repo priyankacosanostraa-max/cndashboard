@@ -975,6 +975,7 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
             if "<html" in txt[:200].lower():
                 raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
             read_kwargs = {"dtype": str, "on_bad_lines": "skip"}
+            raw_cols = []
             if select_groups or select_positions:
                 header = pd.read_csv(io.StringIO(txt), dtype=str, nrows=0, on_bad_lines="skip")
                 raw_cols = list(header.columns)
@@ -994,7 +995,18 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
                         selected_indexes.add(idx)
                 if selected_indexes:
                     read_kwargs["usecols"] = sorted(selected_indexes)
-            return pd.read_csv(io.StringIO(txt), **read_kwargs)
+            frame = pd.read_csv(io.StringIO(txt), **read_kwargs)
+            if raw_cols:
+                # Preserve original sheet positions even after usecols compacts
+                # the DataFrame. H/D/J positional fallbacks must refer to the
+                # published sheet, not to the compact in-memory column index.
+                frame.attrs["source_columns"] = [str(c).strip() for c in raw_cols]
+                frame.attrs["source_position_columns"] = {
+                    idx: str(raw_cols[idx]).strip()
+                    for idx in (select_positions or [])
+                    if isinstance(idx, int) and 0 <= idx < len(raw_cols)
+                }
+            return frame
         except Exception as e:
             last_err = e
             time.sleep(2)
@@ -1020,6 +1032,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             # J is the Amazon/Flipkart discriminator in this combined source,
             # despite its current sheet header being named Status.
             "status_names": (),
+            "customer_names": (),
         },
         {
             "key": "myntra", "url": MYNTRA_SALES_URL,
@@ -1028,6 +1041,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code", "Seller SKU"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
             "status_names": ("Status", "Order Status"),
+            "customer_names": (),
         },
         {
             "key": "nykaa", "url": NYKAA_SALES_URL,
@@ -1036,6 +1050,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "sku_names": ("SKU", "SKUCode", "SKU Code", "Seller SKU"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "upddate"),
             "status_names": ("Status", "Order Status"),
+            "customer_names": (),
         },
         {
             "key": "tata", "url": TATA_SALES_URL,
@@ -1044,6 +1059,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "sku_names": ("SKU", "Seller SKU", "Item Code"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Order Allocate Date"),
             "status_names": ("OrderStatus", "Order Status", "Status"),
+            "customer_names": ("CustomerId", "Customer ID", "Customer No", "Customer Number"),
         },
         {
             "key": "ajio", "url": AJIO_SALES_URL,
@@ -1052,6 +1068,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "sku_names": ("SKU", "Seller SKU", "Seller Style Code"),
             "date_names": ("Order_Date", "Order Date", "Cust Order Date", "FWD PO Date"),
             "status_names": ("Status", "Order Status"),
+            "customer_names": (),
         },
     ]
 
@@ -1075,6 +1092,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 select_groups.append(spec["status_names"])
             if spec.get("platform_names"):
                 select_groups.append(spec["platform_names"])
+            if spec.get("customer_names"):
+                select_groups.append(spec["customer_names"])
             select_positions = [spec["order_index"]]
             if spec.get("platform_index") is not None:
                 select_positions.append(spec["platform_index"])
@@ -1084,7 +1103,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
             )
             frame.columns = [str(c).strip() for c in frame.columns]
             src_cols = list(frame.columns)
-            src_at = lambda i: src_cols[i] if len(src_cols) > i else None
+            source_positions = frame.attrs.get("source_position_columns", {})
+            src_at = lambda i: source_positions.get(i) or (src_cols[i] if len(src_cols) > i else None)
 
             order_col = find_col(frame.columns, *spec["order_names"]) or src_at(spec["order_index"])
             sku_col = find_col(frame.columns, *spec["sku_names"])
@@ -1096,11 +1116,14 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 # normal published sheets resolve via platform_names above.
                 platform_col = src_at(spec["platform_index"])
             status_col = find_col(frame.columns, *spec["status_names"]) if spec["status_names"] else None
+            customer_col = (find_col(frame.columns, *spec.get("customer_names", ()))
+                            if spec.get("customer_names") else None)
 
             resolved = {
                 "rows": len(frame), "order": order_col, "sku": sku_col,
                 "date": date_col, "platform": platform_col,
-                "status": status_col, "events": 0, "skus": 0,
+                "status": status_col, "customer": customer_col,
+                "events": 0, "customer_events": 0, "skus": 0,
             }
             source_debug[spec["key"]] = resolved
             if not order_col or not sku_col or not date_col:
@@ -1130,10 +1153,20 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 order_token = hashlib.sha1(
                     (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
                 ).hexdigest()[:20]
+                raw_customer = clean(row.get(customer_col, "")) if customer_col else ""
+                customer_token = ""
+                if raw_customer and raw_customer.casefold() not in ("0", "unknown", "na", "n/a"):
+                    customer_token = hashlib.sha1(
+                        (platform.casefold() + "|" + raw_customer.casefold()).encode(
+                            "utf-8", errors="ignore"
+                        )
+                    ).hexdigest()[:20]
                 event_key = (platform, date_iso, order_token)
-                event_sets.setdefault(mapped_sku, {})[event_key] = {
-                    "d": _si(date_iso), "o": _si(order_token), "p": _si(platform)
-                }
+                event = {"d": _si(date_iso), "o": _si(order_token), "p": _si(platform)}
+                if customer_token:
+                    event["c"] = _si(customer_token)
+                    resolved["customer_events"] += 1
+                event_sets.setdefault(mapped_sku, {})[event_key] = event
                 source_skus.add(mapped_sku)
 
             resolved["events"] = sum(
@@ -6194,7 +6227,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi"><div class="kpi-t">STR (Sell-Through Rate)</div><div class="kpi-v" id="sdStrPct" style="color:#b68b00">0%</div><div class="small-note" id="sdStrMeta" style="margin-top:4px;white-space:normal">Filtered Sold Qty ÷ (Filtered Sold Qty + Inv Stock)</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div></div>
-        <div class="kpi" id="sdWebsiteRepeatCard" style="display:none"><div class="kpi-t">Website Repeat Rate</div><div class="kpi-v" id="sdWebsiteRepeatRate" style="color:#b68b00">0%</div><div class="small-note" id="sdWebsiteRepeatMeta" style="margin-top:4px;white-space:normal">0 repeat customers</div></div>
+        <div class="kpi" id="sdWebsiteRepeatCard" style="display:none"><div class="kpi-t">Repeat Customer Rate</div><div class="kpi-v" id="sdWebsiteRepeatRate" style="color:#b68b00">0%</div><div class="small-note" id="sdWebsiteRepeatMeta" style="margin-top:4px;white-space:normal">0 repeat customers</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
         <div class="kpi"><div class="kpi-t">Available (Stock+WIP)</div><div class="kpi-v" id="sdAvail" style="color:#2ecc71">0</div></div>
@@ -6745,7 +6778,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiTopCitiesCSV()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">State/UT is derived from the billing PIN and the city label is validated against that PIN before grouping. Cancelled/failed and non-positive quantity rows are excluded. Matched directly by SKU (curated Rakhi list only); every Indian State &amp; UT is listed independently of the Type filter above.</div>
+  <div class="small-note" style="margin:6px 0 14px">Website, Myntra, Amazon, Flipkart, Nykaa and Tata city feeds are combined. State/UT is validated from PIN wherever available; cancelled/failed and non-positive quantity rows are excluded. Matched directly by SKU (curated Rakhi list only); every Indian State &amp; UT is listed independently of the Type filter above.</div>
   <div id="rakhiTopCityContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -7120,7 +7153,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="concD1" onchange="renderConcentrationRisk()"></div>
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
-      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="renderConcentrationRisk()"><option value="Overall" selected>Overall — All Sales</option><option value="Website">Website</option><option value="Myntra">Myntra</option></select></div>
+      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="renderConcentrationRisk()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
@@ -7137,7 +7170,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="concTop20" class="ops-table-wrap"></div>
     </div>
     <div id="concContent"></div>
-    <div class="ops-note">Top-city contribution is based on Website/D2C billing-city rows. Revenue uses the Website sheet where available; otherwise it is estimated from city quantity × that SKU’s filtered Website average selling price. Revenue-at-Risk is the top SKU’s selected-period revenue when its contribution crosses the chosen dependency threshold, avoiding double-counting across dimensions.</div>
+    <div class="ops-note">Top-city contribution uses every available city feed: Website, Myntra, Amazon, Flipkart, Nykaa and Tata. Purchase and Ajio remain selectable for sales concentration, but their current published rows do not expose a usable city/PIN. City revenue uses source value where available; otherwise it is estimated from city quantity × that SKU’s filtered source average selling price. Revenue-at-Risk is the top SKU’s selected-period revenue when its contribution crosses the chosen dependency threshold, avoiding double-counting across dimensions.</div>
   </div>
 
 
@@ -7145,7 +7178,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">Demand Pattern Intelligence</div>
-        <div class="ops-sub">Finds Monday–Sunday demand, weekend behaviour, month-start versus month-end movement, payday impact, custom festival uplift and the best sale day for every SKU.</div>
+        <div class="ops-sub">Uses Order Date across Website, Purchase, Myntra, Nykaa, Ajio, Tata, Flipkart and Amazon to find Monday–Sunday demand, weekend behaviour, payday impact and the best sale day for every SKU.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDemandPatterns()">Refresh</button>
@@ -8178,33 +8211,57 @@ function _sdSellThroughStats(item, ents){
   return {soldQty, invStock, baseQty, rate};
 }
 
-function _sdWebsiteRepeatStats(item){
-  const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => String(c.value || '').trim().toLowerCase());
-  const show = typesPicked.includes('website');
-  if (!show) return {show:false, distinct:0, repeat:0, repeatOrders:0, rate:0};
-
-  const d1 = document.getElementById('sdD1')?.value || '';
-  const d2 = document.getElementById('sdD2')?.value || '';
-  const customerDates = {};
-  const seenSessions = new Set();
-  (item?.website_customer_events || []).forEach(ev => {
-    const d = String(ev?.d || '');
-    const c = String(ev?.c || '');
-    const session = String(ev?.s || (c + '|' + d));
-    if (!d || !c) return;
-    if (d1 && d < d1) return;
-    if (d2 && d > d2) return;
-    if (seenSessions.has(session)) return;
-    seenSessions.add(session);
-    if (!customerDates[c]) customerDates[c] = new Set();
-    customerDates[c].add(d);
+function _customerRepeatStatsForSkus(rawSkus, options={}){
+  const d1=String(options.d1||''),d2=String(options.d2||'');
+  const types=new Set((options.types||[]).map(v=>String(v||'').trim().toLowerCase()).filter(Boolean));
+  const marketplaces=new Set((options.marketplaces||[]).map(v=>String(v||'').trim().toLowerCase()).filter(Boolean));
+  const exactOrders=new Set(),eligibleOrders=new Set(),platforms=new Set(),identityPlatforms=new Set();
+  const customerOrders=new Map();
+  const allowed=platform=>{
+    const p=String(platform||'').trim(),pl=p.toLowerCase();
+    if(marketplaces.size)return marketplaces.has(pl);
+    if(!types.size)return true;
+    if(pl==='website')return types.has('website')||types.has('online');
+    if(pl==='purchase')return types.has('purchase')||types.has('b2b');
+    return types.has('sor')||types.has(pl);
+  };
+  const add=(platform,date,order,customer)=>{
+    const p=String(platform||'').trim(),d=String(date||''),o=String(order||'').trim(),c=String(customer||'').trim();
+    if(!p||!d||!o||!allowed(p)||(d1&&d<d1)||(d2&&d>d2))return;
+    const orderKey=`${p}|${o}`;exactOrders.add(orderKey);platforms.add(p);
+    if(!c)return;
+    const customerKey=`${p}|${c}`;identityPlatforms.add(p);eligibleOrders.add(orderKey);
+    const orders=customerOrders.get(customerKey)||new Set();orders.add(orderKey);customerOrders.set(customerKey,orders);
+  };
+  (rawSkus||[]).forEach(rawSku=>{
+    const sku=String(rawSku||'').trim().toUpperCase(),item=_masterSkuMap[sku]||{};
+    (item.website_customer_events||[]).forEach(ev=>{
+      const d=String(ev?.d||''),c=String(ev?.c||''),order=String(ev?.s||(c+'|'+d));
+      add('Website',d,order,c);
+    });
+    (item.channel_order_events||[]).forEach(ev=>add(ev?.p||ev?.platform,ev?.d||ev?.date,ev?.o||ev?.order,ev?.c||ev?.customer));
+    (item.orderdate_sales_entries||item.sales_entries||[]).forEach((ev,index)=>{
+      if(_scOrderChannel(ev)!=='Purchase')return;
+      const d=_bizEntryDate(ev),customer=_scOrderNormCustomer(ev?.cust||ev?.customer);
+      if(!d||!customer||['unknown','na','n a','purchase'].includes(customer))return;
+      add('Purchase',d,`PURCHASE|${d}|${customer}`,customer);
+    });
   });
-  const customers = Object.values(customerDates);
-  const distinct = customers.length;
-  const repeat = customers.filter(ds => ds.size >= 2).length;
-  const repeatOrders = customers.reduce((sum, ds) => sum + Math.max(0, ds.size - 1), 0);
-  const rate = distinct ? Math.round((repeat / distinct) * 1000) / 10 : 0;
-  return {show:true, distinct, repeat, repeatOrders, rate};
+  const customers=Array.from(customerOrders.values()),distinct=customers.length;
+  const repeat=customers.filter(orders=>orders.size>=2).length;
+  const repeatOrders=customers.reduce((sum,orders)=>sum+Math.max(0,orders.size-1),0);
+  const rate=distinct?Math.round(repeat/distinct*1000)/10:0;
+  const unsupported=Array.from(platforms).filter(p=>!identityPlatforms.has(p)).sort();
+  return {show:exactOrders.size>0,orders:exactOrders.size,eligibleOrders:eligibleOrders.size,distinct,repeat,repeatOrders,rate,hasIdentity:distinct>0,platforms:Array.from(platforms).sort(),identityPlatforms:Array.from(identityPlatforms).sort(),unsupported};
+}
+
+function _sdWebsiteRepeatStats(item){
+  const types=Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value);
+  const marketplaces=Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value);
+  return _customerRepeatStatsForSkus([item?.sku],{
+    d1:document.getElementById('sdD1')?.value||'',
+    d2:document.getElementById('sdD2')?.value||'',types,marketplaces
+  });
 }
 
 function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
@@ -8275,7 +8332,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
     }
     const websiteRepeat = _sdWebsiteRepeatStats(item);
     if (websiteRepeat.show){
-      rows.push(['Website Repeat Rate', `${websiteRepeat.rate.toFixed(1)}% (${websiteRepeat.repeat} of ${websiteRepeat.distinct} customers)`]);
+      rows.push(['Repeat Customer Rate', websiteRepeat.hasIdentity?`${websiteRepeat.rate.toFixed(1)}% (${websiteRepeat.repeat} of ${websiteRepeat.distinct} identifiable customers)`:'NA — customer identity unavailable']);
     }
     snapBody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   }
@@ -8487,8 +8544,10 @@ function renderSdTable(){
   const websiteRepeatCard = document.getElementById('sdWebsiteRepeatCard');
   if (websiteRepeatCard) websiteRepeatCard.style.display = websiteRepeat.show ? '' : 'none';
   if (websiteRepeat.show){
-    setT('sdWebsiteRepeatRate', websiteRepeat.rate.toFixed(1) + '%');
-    setT('sdWebsiteRepeatMeta', `${websiteRepeat.repeat.toLocaleString('en-IN')} repeat of ${websiteRepeat.distinct.toLocaleString('en-IN')} customers · same-day orders counted once`);
+    setT('sdWebsiteRepeatRate', websiteRepeat.hasIdentity ? websiteRepeat.rate.toFixed(1) + '%' : 'NA');
+    const covered=`${websiteRepeat.eligibleOrders.toLocaleString('en-IN')} of ${websiteRepeat.orders.toLocaleString('en-IN')} exact orders identity-covered`;
+    const unsupported=websiteRepeat.unsupported.length?` · no customer ID: ${websiteRepeat.unsupported.join(', ')}`:'';
+    setT('sdWebsiteRepeatMeta', `${websiteRepeat.repeat.toLocaleString('en-IN')} repeat of ${websiteRepeat.distinct.toLocaleString('en-IN')} identifiable customers · ${covered}${unsupported}`);
   }
 
   _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp);
@@ -11946,30 +12005,7 @@ window.renderRakhiRelComparison=renderRakhiRelComparison;window.resetRakhiRelCom
    hai) — isliye loadRakhi() me renderRakhi() ke turant baad call hota hai. */
 let _rakhiOverallSummaryData = null;
 function _rkhWebsiteRepeatStatsForSkus(rawSkus){
-  const customerDates = {};
-  const seenSessions = new Set();
-  (rawSkus || []).forEach(rawSku => {
-    const sku = String(rawSku || '').trim().toUpperCase();
-    const item = _masterSkuMap[sku] || {};
-    (item.website_customer_events || []).forEach(ev => {
-      const d = String(ev?.d || '');
-      const c = String(ev?.c || '');
-      const session = String(ev?.s || (c + '|' + d));
-      if (!d || !c || d < '2026-04-01' || d > '2027-03-31') return;
-      // Across the whole Rakhi tab, one customer buying several Rakhi SKUs
-      // on the same day is still one Website customer-session.
-      if (seenSessions.has(session)) return;
-      seenSessions.add(session);
-      if (!customerDates[c]) customerDates[c] = new Set();
-      customerDates[c].add(d);
-    });
-  });
-  const customers = Object.values(customerDates);
-  const distinct = customers.length;
-  const repeat = customers.filter(ds => ds.size >= 2).length;
-  const repeatOrders = customers.reduce((sum, ds) => sum + Math.max(0, ds.size - 1), 0);
-  const rate = distinct ? Math.round((repeat / distinct) * 1000) / 10 : 0;
-  return {distinct, repeat, repeatOrders, rate};
+  return _customerRepeatStatsForSkus(rawSkus,{d1:'2026-04-01',d2:'2027-03-31'});
 }
 
 function _rkhWebsitePaymentStatsForSkus(rawSkus){
@@ -12087,8 +12123,8 @@ function _rkhBuildOverallSummary(){
     if (stock <= 0 && wip <= 0 && x.qty > 0) points.push('Out of stock and no WIP — replenish urgently.');
     else if (stock < Math.max(3, skuDrr * 7) && wip <= 0 && x.qty > 0) points.push('Low stock cover — start replenishment.');
     if (wip > 0) points.push(`${Math.round(wip).toLocaleString('en-IN')} units in WIP — track completion.`);
-    if (repeatOrders > 0) points.push(`${repeatOrders} repeat Website order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
-    if (websiteRepeat.rate > 0) points.push(`${websiteRepeat.rate.toFixed(1)}% Website repeat rate.`);
+    if (repeatOrders > 0) points.push(`${repeatOrders} repeat customer order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
+    if (websiteRepeat.rate > 0) points.push(`${websiteRepeat.rate.toFixed(1)}% identifiable-customer repeat rate.`);
     if (!points.length) points.push('Stock and sales are currently balanced.');
     return {
       sku, sku_name:item.sku_name || item.name || '', image_url:item.image_url || '',
@@ -12134,7 +12170,7 @@ function renderRakhiOverallSummary(){
     <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
     <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
     <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">Rakhi units/day since 22 Jul 2026 (${s.daySpan} days)</div></div>
-    <div class="yoy-card"><div class="yc-label">Website Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} customers · same name + address; same-day orders counted once</div></div>
+    <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} identifiable customers · Website, Purchase and customer-ID marketplaces</div></div>
     <div class="yoy-card"><div class="yc-label">Website COD</div><div class="yc-val" style="color:#b56c18">${s.codPct.toFixed(1)}%</div><div class="yc-sub">${s.codOrders.toLocaleString('en-IN')} of ${s.websitePaymentOrders.toLocaleString('en-IN')} Rakhi orders · COD = 1</div></div>
     <div class="yoy-card"><div class="yc-label">Website Prepaid</div><div class="yc-val" style="color:#17895e">${s.prepaidPct.toFixed(1)}%</div><div class="yc-sub">${s.prepaidOrders.toLocaleString('en-IN')} of ${s.websitePaymentOrders.toLocaleString('en-IN')} Rakhi orders · COD = 0</div></div>
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(s.totalRev)}</div></div>`}
@@ -12142,7 +12178,7 @@ function renderRakhiOverallSummary(){
     ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Required Revenue / Day</div><div class="yc-val">${fmt(pace.revenuePerDay)}</div><div class="yc-sub">${revenuePaceSub}</div></div>`}
   `;
   if (actHost){
-    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th><th>Website Repeat Rate</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
+    const head = `<tr><th>Rakhi SKU</th><th>Stock</th><th>WIP</th><th>WH+WIP</th><th>Sales</th><th>Repeat Orders</th><th>Repeat Customer Rate</th>${emp ? '' : '<th>Revenue</th>'}<th>DRR</th><th>Points</th></tr>`;
     const body = (s.skuRows || []).map(r => {
       const label = skuLabel(r.sku, r.sku_name);
       const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -12163,7 +12199,7 @@ function renderRakhiOverallSummary(){
       </tr>`;
     }).join('');
     actHost.innerHTML = `<div class="insights-head" style="margin:6px 0 10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><div class="insights-title" style="font-size:1rem">Rakhi — SKU-wise Performance &amp; Action Points</div></div><button class="go-btn" type="button" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#17120d;flex:0 0 auto" onclick="exportRakhiOverallSummaryCSV()">Export CSV</button></div>
-      <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Website customer = same Billing Address Name + Final Billing Address; multiple orders on the same date count once. Repeat Rate = customers buying the SKU on 2+ different dates ÷ distinct Website customers.</div>
+      <div class="small-note" style="margin:0 0 10px">Every curated Rakhi SKU is shown, including zero-sale SKUs. Exact marketplace Order IDs prevent multi-line orders being double-counted. Repeat Rate uses genuine customer identity where available: Website name+address, Purchase customer name and marketplace Customer ID; sources without customer identity are excluded from the repeat-rate denominator.</div>
       <div class="ro-table-wrap" style="padding:0;overflow:auto"><table class="ro rkh-grid rkh-sku-summary" style="width:100%;min-width:1280px"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
   }
 }
@@ -12171,7 +12207,7 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['SKU','Row Type','Parent CMB','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Website Repeat Customers','Website Distinct Customers','Website Repeat Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['SKU','Row Type','Parent CMB','SKU Name','Stock','WIP','WH+WIP','Sales','Order Lines','Repeat Orders','Repeat Customers','Identifiable Customers','Repeat Customer Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
@@ -12417,18 +12453,19 @@ function exportRakhiPivotCSV(){
 window.renderRakhiPivot = renderRakhiPivot; window.exportRakhiPivotCSV = exportRakhiPivotCSV;
 
 /* ── RAKHI STATE / UT-WISE SOLD QTY ──
-   Server (/api/rakhi-cities) Website order-address sheet se raw order-lines
-   deta hai: [{sku, qty, state}] — state already PIN code se nikaal ke di
-   hui hai (server: _pincode_to_state). Yahan sirf curated Rakhi SKU list
+   Server (/api/rakhi-cities) sab available city feeds se raw order-lines
+   deta hai: [{sku, qty, state, city, source}] — state PIN code se validate
+   ki jaati hai (server: _pincode_to_state). Yahan sirf curated Rakhi SKU list
    (RAKHI_WHITELIST_SKUS) ke rows rakhte hain, state ke hisaab se Qty jod
    dete hain — aur India ke SAARE 28 States + 8 UTs (all_states_uts) ek
    row ke roop me hamesha dikhte hain, chahe unki Qty 0 hi kyun na ho.
-   Yeh apna alag data-source hai (Website sheet), isliye upar wale Type
+   Yeh apna alag multi-channel data-source hai, isliye upar wale Type
    filter se independent hai — us filter ka is section par koi asar nahi. */
 let _rkhCityRows = null;
 let _rkhCityDiag = null;
 let _rkhAllStatesUts = null;
 let _rakhiTopCityRows = [];
+const _RKH_CITY_SOURCES = ['Website','Myntra','Amazon','Flipkart','Nykaa','Tata'];
 async function _rkhLoadCityRows(force){
   if (_rkhCityRows && !force) return _rkhCityRows;
   try {
@@ -12445,9 +12482,10 @@ async function _rkhLoadCityRows(force){
 }
 function _rkhBuildTopCities(cityRows){
   const map = {};
+  const blankSourceQty = () => Object.fromEntries(_RKH_CITY_SOURCES.map(source => [source, 0]));
   // Har State/UT ko 0 se seed karo pehle — taaki jinme sale hi nahi hui
   // wo bhi table me dikhein.
-  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, websiteQty:0, myntraQty:0, orders: 0, cities: []}; });
+  (_rkhAllStatesUts || []).forEach(st => { map[st] = {state: st, qty: 0, sourceQty:blankSourceQty(), orders: 0, cities: []}; });
   (cityRows || []).forEach(r => {
     const sku = String(r.sku || '').trim().toUpperCase();
     if (!sku || !_rkhInWhitelist(sku)) return;   // sirf curated Rakhi SKUs / CMBs
@@ -12462,16 +12500,18 @@ function _rkhBuildTopCities(cityRows){
       const pin = String(r.pin || '').replace(/\D/g, '').slice(0, 3);
       city = pin ? `PIN ${pin} Area` : (state === 'Delhi' ? 'New Delhi' : state);
     }
-    if (!map[state]) map[state] = {state, qty: 0, websiteQty:0, myntraQty:0, orders: 0, cities: []};
+    if (!map[state]) map[state] = {state, qty: 0, sourceQty:blankSourceQty(), orders: 0, cities: []};
     const soldQty = Number(r.qty) || 0;
     const source = String(r.source || 'Website');
     map[state].qty += soldQty;
-    if (source === 'Myntra') map[state].myntraQty += soldQty; else map[state].websiteQty += soldQty;
+    if (!(source in map[state].sourceQty)) map[state].sourceQty[source] = 0;
+    map[state].sourceQty[source] += soldQty;
     map[state].orders += 1;
     let c = map[state].cities.find(x => x.city === city);
-    if (!c){ c = {city, qty: 0, websiteQty:0, myntraQty:0, orders: 0, productMap: {}, products: []}; map[state].cities.push(c); }
+    if (!c){ c = {city, qty: 0, sourceQty:blankSourceQty(), orders: 0, productMap: {}, products: []}; map[state].cities.push(c); }
     c.qty += soldQty;
-    if (source === 'Myntra') c.myntraQty += soldQty; else c.websiteQty += soldQty;
+    if (!(source in c.sourceQty)) c.sourceQty[source] = 0;
+    c.sourceQty[source] += soldQty;
     c.orders += 1;
     if (!c.productMap[sku]) c.productMap[sku] = {sku, qty: 0, orders: 0};
     c.productMap[sku].qty += soldQty;
@@ -12538,9 +12578,9 @@ async function renderRakhiTopCities(){
     if (_rkhCityDiag && _rkhCityDiag.error){
       msg = `Could not load the state sheet: ${escHtml(_rkhCityDiag.error)}`;
     } else if (!cityRows.length){
-      msg = `The Website address sheet loaded but 0 usable (SKU + PIN) rows were found. Columns detected: sku="${escHtml((_rkhCityDiag && _rkhCityDiag.sku_col) || '—')}", address="${escHtml((_rkhCityDiag && _rkhCityDiag.addr_col) || '—')}". Sheet columns seen: ${escHtml(((_rkhCityDiag && _rkhCityDiag.all_columns) || []).join(', '))}`;
+      msg = `The available address/city sheets loaded but 0 usable (SKU + city/state) rows were found. Website columns detected: sku="${escHtml((_rkhCityDiag && _rkhCityDiag.sku_col) || '—')}", address="${escHtml((_rkhCityDiag && _rkhCityDiag.addr_col) || '—')}".`;
     } else {
-      msg = `Loaded ${cityRows.length.toLocaleString('en-IN')} order-lines from the Website sheet, but none matched a curated Rakhi SKU (RKH-* or the CMB gift-set list).`;
+      msg = `Loaded ${cityRows.length.toLocaleString('en-IN')} multi-channel order-lines, but none matched a curated Rakhi SKU (RKH-* or the CMB gift-set list).`;
     }
     host.innerHTML = `<div class="home-empty" style="padding:30px;text-align:left;font-size:.82rem;line-height:1.5">${msg}</div>`;
     return;
@@ -12549,28 +12589,28 @@ async function renderRakhiTopCities(){
   const qualityNote = corrected > 0
     ? `<div class="small-note" style="margin:0 0 8px;color:#7a5a00"><b>Data check:</b> ${corrected.toLocaleString('en-IN')} source city label${corrected===1?' was':'s were'} corrected using the billing PIN before grouping.</div>`
     : '';
-  const head = `<tr><th>#</th><th>State / UT</th><th>Overall Sold Qty</th><th>Website Qty</th><th>Myntra Qty</th><th>Order Lines</th></tr>`;
+  const sourceHead = _RKH_CITY_SOURCES.map(source => `<th>${escHtml(source)} Qty</th>`).join('');
+  const head = `<tr><th>#</th><th>State / UT</th><th>Overall Sold Qty</th>${sourceHead}<th>Order Lines</th></tr>`;
   const body = list.map((r, i) => {
     const hasCities = r.cities && r.cities.length;
     const cityRows = hasCities ? r.cities.map((c, ci) => `<tr>
         <td style="color:#8f7a47;vertical-align:top">${ci + 1}</td>
         <td style="vertical-align:top"><b>${escHtml(c.city)}</b></td>
-        <td style="vertical-align:top"><b>${Math.round(c.qty).toLocaleString('en-IN')}</b></td><td style="vertical-align:top">${Math.round(c.websiteQty||0).toLocaleString('en-IN')}</td><td style="vertical-align:top">${Math.round(c.myntraQty||0).toLocaleString('en-IN')}</td>
+        <td style="vertical-align:top"><b>${Math.round(c.qty).toLocaleString('en-IN')}</b></td>${_RKH_CITY_SOURCES.map(source => `<td style="vertical-align:top">${Math.round(c.sourceQty?.[source]||0).toLocaleString('en-IN')}</td>`).join('')}
         <td style="vertical-align:top">${c.orders.toLocaleString('en-IN')}</td>
         <td style="vertical-align:top">${_rkhCityTopProductsHtml(c)}</td>
-      </tr>`).join('') : `<tr><td colspan="5" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
+      </tr>`).join('') : `<tr><td colspan="${5 + _RKH_CITY_SOURCES.length}" class="home-empty" style="padding:16px">No city sales in this State / UT.</td></tr>`;
     return `<tr ${hasCities ? `onclick="toggleRakhiStateCities(${i})" style="cursor:pointer"` : ''}>
       <td><b>${i + 1}</b></td>
       <td><span id="rkhStateArrow${i}" style="display:inline-block;width:18px;color:#d4af5a">${hasCities ? '▶' : '•'}</span><b>${escHtml(r.state)}</b></td>
       <td><b>${Math.round(r.qty).toLocaleString('en-IN')}</b></td>
-      <td>${Math.round(r.websiteQty||0).toLocaleString('en-IN')}</td>
-      <td>${Math.round(r.myntraQty||0).toLocaleString('en-IN')}</td>
+      ${_RKH_CITY_SOURCES.map(source => `<td>${Math.round(r.sourceQty?.[source]||0).toLocaleString('en-IN')}</td>`).join('')}
       <td>${r.orders.toLocaleString('en-IN')}</td>
     </tr>
     <tr id="rkhCityRow${i}" style="display:none;background:rgba(212,175,90,.035)">
-      <td></td><td colspan="5" style="padding:10px 14px">
-        <table class="ro" style="width:100%;min-width:900px;border-collapse:collapse">
-          <thead><tr><th>#</th><th>City</th><th>Overall Qty</th><th>Website Qty</th><th>Myntra Qty</th><th>Order Lines</th><th>Top 3 Rakhi / CMB Products</th></tr></thead>
+      <td></td><td colspan="${3 + _RKH_CITY_SOURCES.length}" style="padding:10px 14px">
+        <table class="ro" style="width:100%;min-width:1280px;border-collapse:collapse">
+          <thead><tr><th>#</th><th>City</th><th>Overall Qty</th>${sourceHead}<th>Order Lines</th><th>Top 3 Rakhi / CMB Products</th></tr></thead>
           <tbody>${cityRows}</tbody>
         </table>
       </td>
@@ -12581,8 +12621,8 @@ async function renderRakhiTopCities(){
 function exportRakhiTopCitiesCSV(){
   const list = _rakhiTopCityRows || [];
   if (!list.length){ alert('No State/UT data to export.'); return; }
-  const headers = ['Rank', 'State / UT', 'Overall Sold Qty', 'Website Qty', 'Myntra Qty', 'Order Lines'];
-  const data = list.map((r, i) => [i + 1, r.state, Math.round(r.qty), Math.round(r.websiteQty||0), Math.round(r.myntraQty||0), r.orders]);
+  const headers = ['Rank', 'State / UT', 'Overall Sold Qty', ..._RKH_CITY_SOURCES.map(source => `${source} Qty`), 'Order Lines'];
+  const data = list.map((r, i) => [i + 1, r.state, Math.round(r.qty), ..._RKH_CITY_SOURCES.map(source => Math.round(r.sourceQty?.[source]||0)), r.orders]);
   const csv = [headers].concat(data).map(r => r.map(c => {
     const s = String(c == null ? '' : c);
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -12597,8 +12637,8 @@ window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesC
    aur Slow Movers, sab isi filter ke hisaab se turant refresh ho jaate
 
    hain (renderRakhi() sabse pehle chalta hai taaki _rakhiFilteredRows
-   set ho jaaye, baaki teeno usi ko use karte hain). Top 10 Cities apna
-   alag data-source (Website sheet) use karta hai isliye is filter se
+   set ho jaaye, baaki teeno usi ko use karte hain). City analysis apna
+   alag multi-channel geo data-source use karta hai isliye is filter se
    independent hai — yahan dobara call karne ki zaroorat nahi. */
 function rkhOnTypeFilterChange(){
   renderRakhi();
@@ -16617,6 +16657,7 @@ window.smartClear = smartClear;
 let _bizEventCache = null;
 let _concExportRows = [];
 let _dpExportRows = [];
+let _dpOrderEventCache = null;
 let _olsRows = [];
 
 function _bizIso(v){
@@ -16739,11 +16780,7 @@ function _bizRankTable(title,rows,nameLabel='Name',limit=10){
 }
 
 function _concEventSource(e){
-  const type=String(e&&e.type||'').toLowerCase(), channel=String(e&&e.channel||'').toLowerCase();
-  const sub=String(e&&e.subChannel||e&&e.sub_channel||'').toLowerCase();
-  if(sub.includes('myntra'))return 'Myntra';
-  if(type.includes('website')||type.includes('online')||channel.includes('d2c')||channel.includes('website'))return 'Website';
-  return 'Other';
+  return _scOrderChannel(e);
 }
 function _concSourceMatchesEvent(e,source){ return source==='Overall'||_concEventSource(e)===source; }
 
@@ -16974,7 +17011,7 @@ function renderConcentrationRisk(){
     _opsKpi(`Total ${metricLabel}`,revenueMode?_bizMoney(totalRev):_bizNum(totalRev,0),basisText)+
     _opsKpi('Top 5 SKU Contribution',_bizPctText(_bizPct(top5,totalRev)),`${skuRows.length.toLocaleString('en-IN')} active SKUs`)+
     _opsKpi('Top Channel',topChannel?`${escHtml(topChannel.name)} · ${_bizPctText(topChannel.share)}`:'—',topChannel?(revenueMode?_bizMoney(topChannel.rev):_bizNum(topChannel.rev,0)):'No data')+
-    _opsKpi(`Top City (${selectedSource==='Overall'?'Website + Myntra':selectedSource})`,topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% selected-sales coverage`:'No city rows')+
+    _opsKpi(`Top City (${selectedSource==='Overall'?'All Available Sources':selectedSource})`,topCity?`${escHtml(topCity.name)} · ${_bizPctText(topCity.share)}`:'—',topCity?`${revenueMode?_bizMoney(topCity.rev):_bizNum(topCity.rev,0)} · ${cityInfo.coverage.toFixed(1)}% selected-sales coverage`:'No city rows')+
     _opsKpi('Top Taxon',topTaxon?`${escHtml(topTaxon.name)} · ${_bizPctText(topTaxon.share)}`:'—',topTaxon?(revenueMode?_bizMoney(topTaxon.rev):_bizNum(topTaxon.rev,0)):'No data')+
     _opsKpi('Revenue at Risk',revenueMode?_bizMoney(atRisk):_bizNum(atRisk,0),dependent?`Top SKU above ${threshold}% dependency`:`No SKU above ${threshold}%`);
   if(alertHost){
@@ -16983,7 +17020,7 @@ function renderConcentrationRisk(){
     alertHost.innerHTML=basis+dep;
   }
   const skuTableRows=skuRows.slice(0,10).map(r=>({...r,name:r.display}));
-  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable(fallbackUsed?'Channel Concentration — Estimated Mix':'Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable(`City Concentration — ${selectedSource==='Overall'?'Website + Myntra':selectedSource}`,cityInfo.rows,'City',12)}</div>`;
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px">${_bizRankTable('Top 10 SKU Concentration',skuTableRows,'SKU / Product',10)}${_bizRankTable(fallbackUsed?'Channel Concentration — Estimated Mix':'Channel Concentration',channelRows,'Channel',12)}${_bizRankTable('Taxon Concentration',taxonRows,'Taxon',12)}${_bizRankTable(`City Concentration — ${selectedSource==='Overall'?'All Available Sources':selectedSource}`,cityInfo.rows,'City',12)}</div>`;
   _concExportRows=[];
   skuRows.forEach(r=>_concExportRows.push([selectedSource,'SKU',r.name,r.item?.sku_name||'',r.rev,r.qty,r.share]));
   channelRows.forEach(r=>_concExportRows.push([selectedSource,'Channel',r.name,'',r.rev,r.qty,r.share]));
@@ -17009,9 +17046,15 @@ function _dpCalendarCounts(d1,d2){
 }
 function _dpUplift(a,b){return b>0?(a/b-1)*100:null;}
 function _dpUpliftText(v){return v===null||!Number.isFinite(v)?'—':`${v>=0?'+':''}${v.toFixed(1)}%`;}
-function _dpBaseEvents(includeDates=true){return _bizEvents().filter(_bizBaseFilter('dp',includeDates));}
+function _dpOrderEvents(){
+  if(_dpOrderEventCache)return _dpOrderEventCache;
+  _dpOrderEventCache=_scOrderEvents().map(e=>({...e,channel:_scOrderChannel(e),subChannel:_scOrderChannel(e)}));
+  return _dpOrderEventCache;
+}
+function _dpBaseEvents(includeDates=true){return _dpOrderEvents().filter(_bizBaseFilter('dp',includeDates));}
 function loadDemandPatterns(){
   _bizInitFilters('dp');
+  _bizSetSelect('dpChannel',['Website','Purchase','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon'],'All Channels');
   const fromEl=document.getElementById('dpD1'),toEl=document.getElementById('dpD2');
   const datesWereBlank=!(fromEl?.value||toEl?.value);
   _bizInitDateRange('dpD1','dpD2',180);
@@ -17019,7 +17062,7 @@ function loadDemandPatterns(){
   // On first open, anchor the default range to the latest valid sale date.
   // Manual date selections are never overwritten.
   if(datesWereBlank){
-    const allEvents=_bizEvents();
+    const allEvents=_dpOrderEvents();
     const latest=allEvents.reduce((mx,e)=>e.date>mx?e.date:mx,'');
     if(latest&&toEl&&fromEl){
       toEl.value=latest;
@@ -17041,7 +17084,7 @@ function renderDemandPatterns(){
       _opsKpi('Payday Impact','—','No matching transactions')+
       _opsKpi('Festival Uplift','—','Select a valid festival period')+
       _opsKpi('Analysed Demand','0',`${_bizDaysInclusive(d1,d2)} calendar days`);
-    const allDated=_bizEvents();
+    const allDated=_dpOrderEvents();
     const earliest=allDated.reduce((mn,e)=>!mn||e.date<mn?e.date:mn,'');
     const latest=allDated.reduce((mx,e)=>e.date>mx?e.date:mx,'');
     host.innerHTML=`<div class="ops-empty" style="padding:34px 20px"><b>No sales transactions match the selected filters.</b><br><span style="display:inline-block;margin-top:8px">${allDated.length?`Available dated sales run from ${escHtml(earliest)} to ${escHtml(latest)}. Change the date, Type, Channel, Taxon or SKU filter.`:'No valid dated sales rows were found in the loaded data.'}</span></div>`;
@@ -18966,7 +19009,7 @@ def _normalize_city_for_state(city, state, pin=""):
 
 
 def _fetch_rkh_sku_city_rows():
-    """Build validated Website order city rows for the Rakhi State/UT table.
+    """Build validated multi-channel city rows for Rakhi and concentration.
 
     PIN-derived State is authoritative. Cancelled/failed and explicit
     zero/negative-quantity rows are excluded. If no Qty column exists, one
@@ -19090,6 +19133,122 @@ def _fetch_rkh_sku_city_rows():
     except Exception as e:
         diag["myntra_error"] = str(e)[:300]
         print("Myntra SKU-city rows fetch failed:", str(e)[:160])
+
+    # Remaining marketplace city feeds. Published schemas differ, so every
+    # source resolves its own SKU/qty/date/city/state/PIN columns. Ajio is not
+    # included because its published sheet currently has no customer city/PIN.
+    marketplace_city_sources = [
+        {
+            "key": "amazon_flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "fixed_source": "", "platform_names": ("Channel", "Type", "Marketplace", "Status"),
+            "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code"),
+            "qty_names": ("Qty.", "Qty", "Net Qty", "Quantity"),
+            "city_names": ("Destination City", "City"),
+            "state_names": ("Destination state", "Destination State", "State"),
+            "pin_names": ("Destination pincode", "Destination Pincode", "Pincode"),
+            "date_names": ("Order_Date", "Order Date", "Packed On"),
+            "revenue_names": ("Selling value", "Seller Price", "Payout to Seller"),
+            "status_names": (),
+        },
+        {
+            "key": "nykaa", "url": NYKAA_SALES_URL,
+            "fixed_source": "Nykaa", "platform_names": (),
+            "sku_names": ("SKU", "SKUCode", "SKU Code"),
+            "qty_names": ("Net Qty", "Order Qty", "Shipped Qty", "Qty"),
+            "city_names": ("city", "City"),
+            "state_names": ("State",), "pin_names": ("Pincode", "PIN Code"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate"),
+            "revenue_names": ("Net Amount", "LineItem Total", "SellingPrice"),
+            "status_names": (),
+        },
+        {
+            "key": "tata", "url": TATA_SALES_URL,
+            "fixed_source": "Tata", "platform_names": (),
+            "sku_names": ("SKU", "Item Code"),
+            "qty_names": ("Net Qty", "Order Qty", "Qty"),
+            "city_names": ("ShippingCity", "Shipping City", "BillingCity", "Billing City"),
+            "state_names": ("ShippingState", "Shipping State", "BillingState", "Billing State"),
+            "pin_names": ("ShippingPincode", "Shipping Pincode", "BillingPincode", "Billing Pincode"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate"),
+            "revenue_names": ("Net Amount", "Final Invoice Amount", "Customer Collected Amount"),
+            "status_names": ("OrderStatus", "Order Status"),
+        },
+    ]
+    for spec in marketplace_city_sources:
+        frame = None
+        key = spec["key"]
+        source_diag = {"rows_total": 0, "rows_used": 0, "columns_found": False, "error": None}
+        diag[key] = source_diag
+        try:
+            groups = [
+                spec["sku_names"], spec["qty_names"], spec["city_names"],
+                spec["state_names"], spec["pin_names"], spec["date_names"],
+                spec["revenue_names"],
+            ]
+            if spec["platform_names"]:
+                groups.append(spec["platform_names"])
+            if spec["status_names"]:
+                groups.append(spec["status_names"])
+            frame = _fetch_csv_fresh(spec["url"], select_groups=groups)
+            frame.columns = [str(c).strip() for c in frame.columns]
+            cols = list(frame.columns)
+            source_diag["rows_total"] = len(frame)
+            C_SKU = find_col(cols, *spec["sku_names"])
+            C_QTY = find_col(cols, *spec["qty_names"])
+            C_CITY = find_col(cols, *spec["city_names"])
+            C_STATE = find_col(cols, *spec["state_names"])
+            C_PIN = find_col(cols, *spec["pin_names"])
+            C_DATE = find_col(cols, *spec["date_names"])
+            C_REV = find_col(cols, *spec["revenue_names"])
+            C_PLATFORM = find_col(cols, *spec["platform_names"]) if spec["platform_names"] else None
+            C_STATUS = find_col(cols, *spec["status_names"]) if spec["status_names"] else None
+            source_diag["resolved"] = {
+                "sku": C_SKU, "qty": C_QTY, "city": C_CITY, "state": C_STATE,
+                "pin": C_PIN, "date": C_DATE, "revenue": C_REV,
+                "platform": C_PLATFORM, "status": C_STATUS,
+            }
+            if not C_SKU or not C_CITY or not C_PIN:
+                raise ValueError("required SKU/city/PIN columns not found")
+            source_diag["columns_found"] = True
+            for row in _df_chunks(frame):
+                status = str(row.get(C_STATUS, "") or "").strip().casefold() if C_STATUS else ""
+                if status and any(flag in status for flag in ("cancel", "void", "failed")):
+                    continue
+                sku = clean(row.get(C_SKU, ""))
+                qty = to_num(row.get(C_QTY, 0)) if C_QTY else 1.0
+                if not sku or qty <= 0:
+                    continue
+                source = spec["fixed_source"]
+                if not source:
+                    platform_token = re.sub(r"[^a-z0-9]", "", str(row.get(C_PLATFORM, "") or "").casefold())
+                    source = "Amazon" if "amazon" in platform_token else "Flipkart" if "flipkart" in platform_token else ""
+                if not source:
+                    continue
+                pin = re.sub(r"\D", "", str(row.get(C_PIN, "") or ""))[:6]
+                raw_state = clean(row.get(C_STATE, "")) if C_STATE else ""
+                state = _pincode_to_state(pin) if len(pin) == 6 else ""
+                if not state and raw_state:
+                    state = _STATE_KEY_TO_NAME.get(_geo_key(raw_state), raw_state.title())
+                raw_city = clean(row.get(C_CITY, ""))
+                if not state or not raw_city:
+                    continue
+                city = _normalize_city_for_state(raw_city, state, pin)
+                dt = parse_date_any(row.get(C_DATE, "")) if C_DATE else None
+                revenue = to_num(row.get(C_REV, 0)) if C_REV else 0.0
+                out.append({
+                    "sku": sku, "qty": float(qty), "state": state, "city": city,
+                    "pin": pin, "source": source,
+                    "date": dt.strftime("%Y-%m-%d") if dt else "",
+                    "revenue": round(float(revenue), 2) if revenue > 0 else 0.0,
+                })
+                source_diag["rows_used"] += 1
+        except Exception as e:
+            source_diag["error"] = str(e)[:300]
+            print(f"{key} SKU-city rows fetch failed:", str(e)[:160])
+        finally:
+            if frame is not None:
+                del frame
+            _gc.collect()
     _RKH_CITY_CACHE["rows"] = out
     _RKH_CITY_CACHE["diag"] = diag
     _RKH_CITY_CACHE["ts"] = time.time()
