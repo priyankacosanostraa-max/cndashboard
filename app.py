@@ -7153,7 +7153,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
-      <div><div class="ops-title">Exhibition Combo Availability</div><div class="ops-sub">Shows CMBs that can be assembled now from mapped child stock. Child use follows Pack Details; shared child stock is assigned once, with higher-selling CMBs first.</div></div>
+      <div><div class="ops-title">Exhibition Combo Availability</div><div class="ops-sub">Shows CMBs that can be assembled now. Usable child stock is Inventory Stock plus Blocked Qty from All Product. WIP is not used. Shared stock is divided equally, with higher-selling CMBs receiving any final incomplete round first.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
@@ -7171,7 +7171,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Only new CMBs buildable from child Inventory Stock are included; existing parent-CMB stock and WIP are not added to buildable quantity. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
+    <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Operations usable stock = Inventory Stock + Blocked Qty from All Product. WIP and existing parent-CMB stock are not added to buildable quantity. Blocked Qty is not added to stock in any other dashboard tab. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -14664,7 +14664,9 @@ function _opAvailChildren(parent){
     const key=_opsSkuKey(raw&&raw.sku||raw);if(!key||key===parentKey||seen.has(key))return;
     const item=_masterSkuMap[key];if(!item&&!raw?.sku)return;
     seen.add(key);const base=item||raw||{};
-    out.push({sku:key,skuName:String(base.sku_name||raw?.sku_name||''),image:String(base.image_url||raw?.image_url||''),stock:Math.max(0,_opsNum(base.inv_stock??raw?.inv_stock)),wip:Math.max(0,_opsNum(base.inv_wip??raw?.inv_wip)),source});
+    const invStock=Math.max(0,_opsNum(base.inv_stock??raw?.inv_stock));
+    const blockedQty=Math.max(0,_opsNum(base.blocked_qty??raw?.blocked_qty));
+    out.push({sku:key,skuName:String(base.sku_name||raw?.sku_name||''),image:String(base.image_url||raw?.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip:Math.max(0,_opsNum(base.inv_wip??raw?.inv_wip)),source});
   };
   (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(c=>add(c,'Combo Details'));
   const pack=String(parent&&parent.pack_details||'');
@@ -14677,7 +14679,8 @@ function _buildOperationsAvailability(){
     if(_opAvailPastedSet!==null&&!_opAvailPastedSet.has(sku))return null;
     if(!sku||!/^CMB[-_]/i.test(sku)||!children.length)return null;
     const required=_opAvailRequiredQtys(parent,children);children.forEach(ch=>{ch.requiredQty=required.get(ch.sku)||1;});
-    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
+    const invStock=Math.max(0,_opsNum(parent.inv_stock)),blockedQty=Math.max(0,_opsNum(parent.blocked_qty));
+    return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),invStock,blockedQty,stock:invStock+blockedQty,wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
   }).filter(Boolean).sort((a,b)=>b.totalSold-a.totalSold||b.stock-a.stock||a.sku.localeCompare(b.sku));
   // Divide every child SKU independently and as evenly as possible across all
   // CMBs that use it. Complete equal rounds are assigned first. If the last
@@ -14774,13 +14777,13 @@ function renderOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered(),childSet=new Set();rows.forEach(r=>r.children.forEach(c=>childSet.add(c.sku)));
   _operationsPasteInfo();
   const cmbStock=rows.reduce((s,r)=>s+r.stock,0),cmbWip=rows.reduce((s,r)=>s+r.wip,0),buildable=rows.reduce((s,r)=>s+r.buildQty,0);
-  if(sum)sum.innerHTML=_opsKpi('Buildable CMB Designs',rows.length.toLocaleString('en-IN'),'Every required child has usable stock')+_opsKpi('CMBs That Can Be Built',Math.round(buildable).toLocaleString('en-IN'),'Shared child stock counted once')+_opsKpi('Current CMB Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Shown only for reference')+_opsKpi('Current CMB WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Shown only for reference');
+  if(sum)sum.innerHTML=_opsKpi('Buildable CMB Designs',rows.length.toLocaleString('en-IN'),'Every required child has usable stock')+_opsKpi('CMBs That Can Be Built',Math.round(buildable).toLocaleString('en-IN'),'Inventory Stock + Blocked Qty; WIP excluded')+_opsKpi('Current CMB Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Inventory Stock + Blocked Qty; reference only')+_opsKpi('Current CMB WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Reference only — not used');
   const body=rows.map(r=>{
     const span=r.children.length;
     return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td class="ops-num">${Math.round(c.requiredQty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(c.stock).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.allocatedQty||0).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.remainingStock||0).toLocaleString('en-IN')}</td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
   }).join('');
   const emptyText=_opAvailPastedSet===null?'No CMB can currently be assembled from complete child stock.':'None of the pasted, matched CMBs can currently be assembled from complete child stock.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock</th><th>CMB WIP</th><th>Child SKU / Mapping</th><th>Need per CMB</th><th>Child Stock</th><th>Child WIP</th><th>Allocated to This CMB</th><th>Shared Stock Left</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||`<tr><td colspan="13" class="ops-empty">${emptyText}</td></tr>`}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock (Inv + Blocked)</th><th>CMB WIP (Not Used)</th><th>Child SKU / Mapping</th><th>Need per CMB</th><th>Child Stock (Inv + Blocked)</th><th>Child WIP (Not Used)</th><th>Allocated to This CMB</th><th>Shared Stock Left</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||`<tr><td colspan="13" class="ops-empty">${emptyText}</td></tr>`}</tbody></table>`;
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
@@ -14798,7 +14801,7 @@ function exportOperationsAvailability(){
     });
   });
   _dlCsv([
-    'Item Type','Parent CMB','CMB / Child SKU','Product Name','Stock','WIP',
+    'Item Type','Parent CMB','CMB / Child SKU','Product Name','Stock (Inv + Blocked)','WIP (Not Used)',
     'Child Qty Needed for 1 CMB','Child Stock Share for This CMB','CMB Pieces That Can Be Made',
     'CMB Image Link','Pack Details'
   ],data,_opAvailPastedSet===null?'operations_cmb_child_build_plan':'pasted_cmb_child_build_plan');
