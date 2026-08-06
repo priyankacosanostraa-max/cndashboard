@@ -14771,16 +14771,24 @@ function renderOperationsAvailability(){
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
-  const data=[];let displayOrder=0;
+  const data=[];
   rows.forEach(r=>{
-    displayOrder+=1;
-    data.push([displayOrder,'CMB','',r.sku,exportSkuName(r.sku,r.skuName),Math.round(r.stock),Math.round(r.wip),'','','',Math.round(r.buildQty),Math.round(r.totalSold),r.group,r.packDetails,'',r.image]);
+    data.push([
+      'CMB (Main Product)',r.sku,r.sku,exportSkuName(r.sku,r.skuName),
+      Math.round(r.stock),Math.round(r.wip),'','',Math.round(r.buildQty),r.image||'',r.packDetails||''
+    ]);
     r.children.forEach(c=>{
-      displayOrder+=1;
-      data.push([displayOrder,'Child SKU',r.sku,c.sku,exportSkuName(c.sku,c.skuName),Math.round(c.stock),Math.round(c.wip),Math.round(c.requiredQty),Math.round(c.allocatedQty||0),Math.round(c.remainingStock||0),'','',r.group,'',c.source,c.image||'']);
+      data.push([
+        'Child SKU (Part)',r.sku,'↳ '+c.sku,exportSkuName(c.sku,c.skuName),
+        Math.round(c.stock),Math.round(c.wip),Math.round(c.requiredQty),Math.round(c.allocatedQty||0),'',r.image||'',''
+      ]);
     });
   });
-  _dlCsv(['Display Order','Row Type','Parent CMB','SKU','SKU Name','Inv Stock','Inv WIP','Qty Needed per CMB','Child Stock Allocated to This CMB','Shared Child Stock Left After All Allocation','CMBs That Can Be Built','Total CMB Sold Qty','Combo Group','Pack Details','Child Mapping Source','Image Link'],data,_opAvailPastedSet===null?'exhibition_combo_availability':'pasted_cmb_buildable_availability');
+  _dlCsv([
+    'Kya Hai','Group CMB','CMB / Child SKU','Product Name','Stock','WIP',
+    '1 CMB Ke Liye Qty','Is CMB Ko Mila Child Stock','Kitne CMB Ban Sakte Hain',
+    'CMB Image Link','Pack Details'
+  ],data,_opAvailPastedSet===null?'operations_cmb_child_build_plan':'pasted_cmb_child_build_plan');
 }
 const renderOperationsAvailability_d=_debounce(()=>renderOperationsAvailability(),220);
 window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;window.applyOperationsCmbPaste=applyOperationsCmbPaste;window.clearOperationsCmbPaste=clearOperationsCmbPaste;
