@@ -13458,11 +13458,11 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('channel')">Channel ⇅</th>
     ${empProd ? '' : `<th class="sort-arrow" onclick="sortProd('aov_per_piece')" title="Average selling price per piece sold">AOV/pc ⇅</th>
     <th class="sort-arrow" onclick="sortProd('discount_pct')" title="Discount vs MRP">Disc % ⇅</th>`}
-    <th>All Order Nos.</th>
+    <th title="Only orders whose Production sheet column K Balance Qty is greater than 0">Pending Order Nos.</th>
     <th class="sort-arrow" onclick="sortProd('repeat_count')" title="Number of distinct orders this SKU appears in">Times Ordered ⇅</th>
     <th class="sort-arrow" onclick="sortProd('order_qty')">Order Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('recv_qty')">Recv Qty ⇅</th>
-    <th class="sort-arrow" onclick="sortProd('bal_qty')">Balance Qty ⇅</th>
+    <th class="sort-arrow" onclick="sortProd('bal_qty')" title="Directly from Production sheet column K">Balance Qty ⇅</th>
     <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Sum of Balance Qty across all orders for this SKU (total)">Total Balance (All Orders) ⇅</th>
     <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
     <th>Receiving Date</th></tr>`;
@@ -13483,7 +13483,7 @@ function renderProduction(){
       <td>${escHtml(r.order_type || '—')}</td>
       <td>${escHtml(r.channel || '—')}</td>
       ${empProd ? '' : `<td class="prod-num">${fmt(r.aov_per_piece||0)}</td><td class="prod-num">${r.discount_pct||0}%</td>`}
-      <td class="prod-order-list" title="This SKU appears in these order numbers">${escHtml(allOrders)}</td>
+      <td class="prod-order-list" title="Only order numbers with column K Balance Qty greater than 0">${escHtml(allOrders)}</td>
       <td class="prod-num" style="font-weight:800;color:#8a4fce">${(r.repeat_count||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.order_qty||0).toLocaleString('en-IN')}</td>
       <td class="prod-num">${Math.round(r.recv_qty||0).toLocaleString('en-IN')}</td>
@@ -17962,7 +17962,11 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         C_SKU  = _at(7)   # H  SKU No.   (E/Image link nahi)
         C_OQTY = _at(8)   # I  Order Qty
         C_RQTY = _at(9)   # J  Recv Qty
-        C_BQTY = _at(10)  # K  Balance Qty
+        # Balance Qty is authoritative only from physical column K. Do not
+        # derive it from Order Qty - Received Qty or fall back to another header.
+        C_BQTY = _at(10)  # K  Bal. Qty.
+        if C_BQTY is None:
+            raise ValueError("Production sheet column K (Balance Qty) is missing")
         C_DELV = _at(11)  # L  Delivery Date
         C_RECV = _at(12)  # M  Receiving Date
         rows_all = []
@@ -18010,13 +18014,19 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     types    = sorted({r["order_type"] for r in rows_all if r["order_type"]})
     taxons   = sorted({r["taxon"] for r in rows_all if r["taxon"]})
 
-    # SKU -> us SKU ke saare order numbers (jis-jis order me hai)
+    # SKU -> total order history, plus only pending order numbers. Pending is
+    # determined exclusively by Production sheet column K Balance Qty > 0.
     sku_orders = {}
+    sku_pending_orders = {}
     for r in rows_all:
         if r["sku"] and r["order_no"]:
             sku_orders.setdefault(r["sku"], [])
             if r["order_no"] not in sku_orders[r["sku"]]:
                 sku_orders[r["sku"]].append(r["order_no"])
+            if (r.get("bal_qty") or 0) > 0:
+                sku_pending_orders.setdefault(r["sku"], [])
+                if r["order_no"] not in sku_pending_orders[r["sku"]]:
+                    sku_pending_orders[r["sku"]].append(r["order_no"])
 
     # SKU -> uss SKU ki saare orders ki Balance Qty jodke total (sab orders mil ke)
     sku_total_balance = {}
@@ -18078,7 +18088,10 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         rr = dict(r)
         rr["image_url"] = img_map.get(r["sku"], "")
-        rr["all_orders"] = sku_orders.get(r["sku"], [])
+        # Existing frontend/export field name is kept for compatibility, but
+        # its contents are intentionally pending-only order numbers.
+        rr["all_orders"] = sku_pending_orders.get(r["sku"], [])
+        rr["pending_order_count"] = len(sku_pending_orders.get(r["sku"], []))
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
         rr["stone_color"] = stone_map.get(r["sku"], "")
@@ -18118,6 +18131,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                     "inv_wip": r.get("inv_wip", 0) or 0,
                     "order_qty": 0.0, "recv_qty": 0.0, "bal_qty": 0.0,
                     "all_orders": r.get("all_orders", []),
+                    "pending_order_count": r.get("pending_order_count", 0),
                     "sku_total_balance": r.get("sku_total_balance", 0),
                     "repeat_count": r.get("repeat_count", 0),
                     "date": "", "date_disp": "", "order_no": "",
@@ -19848,7 +19862,7 @@ def _production_export_table(report):
     if show_pricing:
         headers += ["AOV / Piece", "Discount %"]
     headers += [
-        "All Order Nos.", "Times Ordered", "Order Qty", "Received Qty",
+        "Pending Order Nos.", "Times Ordered", "Order Qty", "Received Qty",
         "Balance Qty", "Total Balance (All Orders)", "Delivery Date",
         "Receiving Date", "Image Link",
     ]
@@ -19980,7 +19994,7 @@ def api_production_export_xlsx():
             "Order Date": 14, "Order No.": 18, "SKU": 18, "SKU Name": 42,
             "Stock": 12, "WIP": 12, "Stone Color": 18, "Category": 18,
             "Type": 18, "Channel": 18, "AOV / Piece": 14, "Discount %": 13,
-            "All Order Nos.": 52, "Times Ordered": 14, "Order Qty": 12,
+            "Pending Order Nos.": 52, "Times Ordered": 14, "Order Qty": 12,
             "Received Qty": 14, "Balance Qty": 13,
             "Total Balance (All Orders)": 22, "Delivery Date": 15,
             "Receiving Date": 15, "Image Link": 55,
@@ -19991,7 +20005,7 @@ def api_production_export_xlsx():
             for cell in row:
                 cell.alignment = Alignment(vertical="top", wrap_text=cell.column in {
                     header_index.get("SKU Name", -1) + 1,
-                    header_index.get("All Order Nos.", -1) + 1,
+                    header_index.get("Pending Order Nos.", -1) + 1,
                     header_index.get("Image Link", -1) + 1,
                 })
 
@@ -20005,6 +20019,7 @@ def api_production_export_xlsx():
             ("Total Received Qty", report.get("total_recv_qty", 0)),
             ("Total Balance Qty", report.get("total_bal_qty", 0)),
             ("Pending Rows", report.get("pending_rows", 0)),
+            ("Balance Qty Source", "Production sheet column K"),
             ("Exported At", now_ist().strftime("%d-%b-%Y %I:%M %p")),
             ("Channel Filter", filters.get("channel_filter") or "All"),
             ("Type Filter", filters.get("type_filter") or "All"),
