@@ -6869,6 +6869,18 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:26px">
     <div>
+      <div class="insights-title">Rakhi — Pack-wise CMB Sales</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiPackSummary()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiPackSummaryCSV()">Export CSV</button>
+    </div>
+  </div>
+  <div class="small-note" style="margin:6px 0 14px">Pack of 2, Pack of 3 and Pack of 5 Rakhi CMBs are grouped from Inventory Pack Details. Sold Qty is the actual parent-CMB Final Qty and Net Revenue is summed once from FY 2026-27 Order Date sales. The Type filter above applies to this table.</div>
+  <div id="rakhiPackSummaryContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
       <div class="insights-title">Rakhi — Pivot (SKU × Type)</div>
     </div>
     <div class="insight-toolbar-actions">
@@ -12251,7 +12263,7 @@ function loadRakhi(){
   renderRakhi();
   renderRakhiRevenueTrend();
   const tasks=[
-    renderRakhiRelComparison, renderRakhiOverallSummary, renderRakhiPivot, renderRakhiChannel,
+    renderRakhiRelComparison, renderRakhiOverallSummary, renderRakhiPackSummary, renderRakhiPivot, renderRakhiChannel,
     renderRakhiCommonSkus, renderRakhiTopSkus, renderRakhiSlowMovers,
     renderRakhiReturns, renderRakhiTopCities
   ];
@@ -12669,6 +12681,72 @@ function exportRakhi(){
 }
 window.loadRakhi = loadRakhi; window.renderRakhi = renderRakhi; window.exportRakhi = exportRakhi;
 
+/* ── RAKHI PACK-WISE CMB SALES ──
+   One row per explicit Inventory Pack Details group. Parent CMB quantity and
+   revenue are summed once; children are not expanded, so Pack of 2 does not
+   double sales or revenue. The main Rakhi Type filter is honoured. */
+let _rakhiPackSummaryRows=[];
+function _rkhExplicitPackSize(item){
+  const pack=String(item&&item.pack_details||'');
+  const match=pack.match(/\b(?:pack|set)\s*(?:of\s*)?[-:]?\s*(2|3|5|two|three|five)\b/i)
+    ||pack.match(/\b(2|3|5)\s*(?:pcs?|pieces?|units?)?\s*(?:pack|set)\b/i);
+  if(!match)return 0;
+  const value=String(match[1]||'').toLowerCase();
+  return ({two:2,three:3,five:5})[value]||Number(value)||0;
+}
+function _rkhBuildPackSummary(){
+  const typeSel=document.getElementById('rkhTypeFilter')?.value||'All';
+  const groups=new Map([2,3,5].map(size=>[size,{size,label:`Pack of ${size}`,items:[],qty:0,rev:0,images:[]} ]));
+  (master||[]).forEach(item=>{
+    const sku=String(item&&item.sku||'').trim().toUpperCase();
+    if(!_rkhIsComboSku(sku)||!(_rkhInWhitelist(sku)||_rkhMatchItem(item)))return;
+    const size=_rkhExplicitPackSize(item);if(!groups.has(size))return;
+    const g=groups.get(size),entries=Array.isArray(item.rakhi_sales_entries)?item.rakhi_sales_entries:[];
+    let qty=0,rev=0,lines=0;
+    entries.forEach(e=>{
+      if(!_rkhIsFy2627(e))return;
+      if(typeSel!=='All'&&String(e&&e.type||'').trim().toLowerCase()!==String(typeSel).trim().toLowerCase())return;
+      qty+=Number(e&&e.qty)||0;rev+=Number(e&&e.rev)||0;lines+=1;
+    });
+    const image=String(item.image_url||'').trim();
+    const rec={sku,skuName:String(item.sku_name||''),image,packDetails:String(item.pack_details||''),qty,rev,lines};
+    g.items.push(rec);g.qty+=qty;g.rev+=rev;
+    if(image&&image.toLowerCase()!=='nan'&&!g.images.includes(image))g.images.push(image);
+  });
+  return Array.from(groups.values()).filter(g=>g.items.length).map(g=>{
+    g.items.sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));return g;
+  });
+}
+function _rkhPackPhotosHtml(group){
+  const shown=(group.images||[]).slice(0,6);
+  if(!shown.length)return '<span class="rkh-sku-photo-ph" style="display:flex">💎</span>';
+  const imgs=shown.map((url,i)=>`<img src="${escHtml(url)}" alt="${escHtml(group.label)} product ${i+1}" loading="lazy" decoding="async" style="width:48px;height:48px;object-fit:contain;border:1px solid #e5dcc8;border-radius:8px;background:#fff;padding:2px">`).join('');
+  const more=group.images.length>shown.length?`<span class="small-note">+${group.images.length-shown.length} more</span>`:'';
+  return `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:150px">${imgs}${more}</div>`;
+}
+function renderRakhiPackSummary(){
+  const host=document.getElementById('rakhiPackSummaryContent');if(!host)return;
+  if(!master||!master.length){host.innerHTML='<div class="home-empty" style="padding:30px">Data still loading… please wait a moment.</div>';return;}
+  const rows=_rkhBuildPackSummary();_rakhiPackSummaryRows=rows;
+  if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi CMB has explicit Pack of 2, 3 or 5 in Inventory Pack Details.</div>';return;}
+  const emp=LOGIN_ROLE==='employee';
+  const head=`<tr><th>Pack Group</th><th>Photos</th><th>CMB Designs</th><th>CMB SKUs</th><th>Sold Qty</th>${emp?'':'<th>Net Revenue</th>'}<th>Order Lines</th></tr>`;
+  const body=rows.map(g=>{
+    const skuLinks=g.items.map(item=>`<button class="sku-link" onclick="openSkuDetails('${String(item.sku).replace(/'/g,"\\'")}')">${escHtml(item.sku)}</button>`).join('<span class="small-note"> · </span>');
+    return `<tr><td><b>${escHtml(g.label)}</b></td><td>${_rkhPackPhotosHtml(g)}</td><td>${g.items.length.toLocaleString('en-IN')}</td><td><div style="display:flex;gap:5px;flex-wrap:wrap;max-width:520px">${skuLinks}</div></td><td><b>${Math.round(g.qty).toLocaleString('en-IN')}</b></td>${emp?'':`<td><b>${fmt(g.rev)}</b></td>`}<td>${g.items.reduce((s,item)=>s+item.lines,0).toLocaleString('en-IN')}</td></tr>`;
+  }).join('');
+  host.innerHTML=`<table class="ro rkh-grid" style="width:100%;min-width:900px;border-collapse:collapse"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+function exportRakhiPackSummaryCSV(){
+  const rows=_rakhiPackSummaryRows&&_rakhiPackSummaryRows.length?_rakhiPackSummaryRows:_rkhBuildPackSummary();
+  if(!rows.length){alert('No Rakhi pack summary data to export.');return;}
+  const emp=LOGIN_ROLE==='employee';
+  const headers=['Pack Group','CMB Designs','CMB SKUs','Sold Qty',...(emp?[]:['Net Revenue']),'Order Lines','Image Links'];
+  const data=rows.map(g=>[g.label,g.items.length,g.items.map(item=>item.sku).join(' | '),Math.round(g.qty),...(emp?[]:[Math.round(g.rev)]),g.items.reduce((s,item)=>s+item.lines,0),g.images.join(' | ')]);
+  _dlCsv(headers,data,'rakhi_pack_wise_cmb_sales');
+}
+window.renderRakhiPackSummary=renderRakhiPackSummary;window.exportRakhiPackSummaryCSV=exportRakhiPackSummaryCSV;
+
 /* ── RAKHI PIVOT (SKU × Type) ──
    Table 1 (renderRakhi) ke transactions ka hi SKU-wise pivot — rows = SKU,
    columns = jitne bhi distinct Type filtered data me hain (Sold Qty per
@@ -12947,6 +13025,7 @@ window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesC
    independent hai — yahan dobara call karne ki zaroorat nahi. */
 function rkhOnTypeFilterChange(){
   renderRakhi();
+  renderRakhiPackSummary();
   renderRakhiPivot();
   renderRakhiTopSkus();
   renderRakhiSlowMovers();
@@ -14542,17 +14621,21 @@ function _opAvailRequiredQtys(parent,children){
   const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
   if(!pack)return req;
   const aliases={
-    button:['button','btn','bt'],rakhi:['rakhi','rkh'],brooch:['brooch','bh','br'],
+    button:['button','buttons','btn','btns','bt','bts'],rakhi:['rakhi','rkh'],brooch:['brooch','bh','br'],
     cufflink:['cufflink','cf'],lapel:['lapel','lp'],pin:['pin'],tie:['tie','ct'],
     chain:['chain'],bracelet:['bracelet'],ring:['ring'],pendant:['pendant']
   };
   const childText=c=>`${c.sku||''} ${c.skuName||''} ${c.cn_name||''} ${c.taxon||''}`.toLowerCase();
   const matchesKind=(c,kind)=>{
-    const t=childText(c),k=String(kind||'').toLowerCase().replace(/[^a-z]/g,'');
+    const t=childText(c),skuCode=_opsSkuKey(c&&c.sku),k=String(kind||'').toLowerCase().replace(/[^a-z]/g,'');
     if(!k)return false;
     const roots=Object.entries(aliases).find(([root,words])=>root.startsWith(k)||k.startsWith(root)||words.some(w=>w===k||w.startsWith(k)||k.startsWith(w)));
     const words=roots?[roots[0],...roots[1]]:[k];
-    return words.some(w=>w.length>1&&(t.includes(w)||new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(String(c.sku||''))));
+    if(roots&&roots[0]==='button'&&/^BT/i.test(skuCode))return true;
+    return words.some(w=>{
+      if(w.length<=2)return new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(skuCode);
+      return t.includes(w)||new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(skuCode);
+    });
   };
   const parts=[],partKeys=new Set();
   const addPart=(qty,kind)=>{qty=Math.max(1,Math.floor(Number(qty)||1));kind=String(kind||'').trim().split(/\s+/).slice(0,2).join(' ');const key=`${qty}|${kind.toLowerCase()}`;if(!partKeys.has(key)){partKeys.add(key);parts.push({qty,kind});}};
@@ -14560,7 +14643,7 @@ function _opAvailRequiredQtys(parent,children){
   // Measurements such as 32x41mm must never become child requirements.
   const packRe=/(?:pack|set)\s*(?:of\s*)?(\d+)\s*(?:pcs?|pieces?|units?)?\s*([a-z][a-z -]{0,24})?/ig;let m;
   while((m=packRe.exec(pack)))addPart(m[1],String(m[2]||'').replace(/\b(?:and|with|plus|set|pack|of)\b.*$/i,'').trim());
-  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*(buttons?|btns?|rakhis?|brooch(?:es)?|cufflinks?|lapel pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?)/ig;
+  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*(buttons?|btns?|bts?|rakhis?|brooch(?:es)?|cufflinks?|lapel pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?)/ig;
   while((m=typedRe.exec(pack)))addPart(m[1],m[2]);
   parts.forEach(part=>{
     let matched=part.kind?children.filter(c=>matchesKind(c,part.kind)):[];
@@ -14614,6 +14697,10 @@ function _buildOperationsAvailability(){
     eligible.forEach(c=>{if(!canBuild(c))return;c.children.forEach(ch=>remaining.set(ch.sku,(remaining.get(ch.sku)||0)-ch.requiredQty));c.buildQty++;c.selected=1;allocated=true;});
     if(!allocated)break;
   }
+  candidates.forEach(c=>c.children.forEach(ch=>{
+    ch.allocatedQty=Math.max(0,c.buildQty*ch.requiredQty);
+    ch.remainingStock=Math.max(0,remaining.get(ch.sku)||0);
+  }));
   _opAvailRows=candidates.filter(c=>c.buildQty>0);
   _opAvailBuilt=true;
   return _opAvailRows;
@@ -14677,15 +14764,23 @@ function renderOperationsAvailability(){
   if(sum)sum.innerHTML=_opsKpi('Buildable CMB Designs',rows.length.toLocaleString('en-IN'),'Every required child has usable stock')+_opsKpi('CMBs That Can Be Built',Math.round(buildable).toLocaleString('en-IN'),'Shared child stock counted once')+_opsKpi('Current CMB Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Shown only for reference')+_opsKpi('Current CMB WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Shown only for reference');
   const body=rows.map(r=>{
     const span=r.children.length;
-    return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td class="ops-num">${Math.round(c.requiredQty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(c.stock).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.floor(c.stock/Math.max(1,c.requiredQty)).toLocaleString('en-IN')}</td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
+    return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td class="ops-num">${Math.round(c.requiredQty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(c.stock).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.allocatedQty||0).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(c.remainingStock||0).toLocaleString('en-IN')}</td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
   }).join('');
   const emptyText=_opAvailPastedSet===null?'No CMB can currently be assembled from complete child stock.':'None of the pasted, matched CMBs can currently be assembled from complete child stock.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock</th><th>CMB WIP</th><th>Child SKU / Mapping</th><th>Need per CMB</th><th>Child Stock</th><th>Child WIP</th><th>Max from Child</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||`<tr><td colspan="12" class="ops-empty">${emptyText}</td></tr>`}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock</th><th>CMB WIP</th><th>Child SKU / Mapping</th><th>Need per CMB</th><th>Child Stock</th><th>Child WIP</th><th>Allocated to This CMB</th><th>Shared Stock Left</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||`<tr><td colspan="13" class="ops-empty">${emptyText}</td></tr>`}</tbody></table>`;
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
-  const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,c.requiredQty,Math.round(c.stock),Math.round(c.wip),Math.floor(c.stock/Math.max(1,c.requiredQty)),r.group,Math.round(r.stock),Math.round(r.wip),Math.round(r.buildQty),Math.round(r.totalSold),r.packDetails,r.image])));
-  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Child Qty Needed per CMB','Child Stock Used for Check','Child WIP (Reference)','Max CMBs Supported by This Child','Combo Group','CMB Stock (Reference)','CMB WIP (Reference)','CMBs That Can Be Built','Total CMB Sold Qty','Pack Details','CMB Image Link'],data,_opAvailPastedSet===null?'exhibition_combo_availability':'pasted_cmb_buildable_availability');
+  const data=[];let displayOrder=0;
+  rows.forEach(r=>{
+    displayOrder+=1;
+    data.push([displayOrder,'CMB','',r.sku,exportSkuName(r.sku,r.skuName),Math.round(r.stock),Math.round(r.wip),'','','',Math.round(r.buildQty),Math.round(r.totalSold),r.group,r.packDetails,'',r.image]);
+    r.children.forEach(c=>{
+      displayOrder+=1;
+      data.push([displayOrder,'Child SKU',r.sku,c.sku,exportSkuName(c.sku,c.skuName),Math.round(c.stock),Math.round(c.wip),Math.round(c.requiredQty),Math.round(c.allocatedQty||0),Math.round(c.remainingStock||0),'','',r.group,'',c.source,c.image||'']);
+    });
+  });
+  _dlCsv(['Display Order','Row Type','Parent CMB','SKU','SKU Name','Inv Stock','Inv WIP','Qty Needed per CMB','Child Stock Allocated to This CMB','Shared Child Stock Left After All Allocation','CMBs That Can Be Built','Total CMB Sold Qty','Combo Group','Pack Details','Child Mapping Source','Image Link'],data,_opAvailPastedSet===null?'exhibition_combo_availability':'pasted_cmb_buildable_availability');
 }
 const renderOperationsAvailability_d=_debounce(()=>renderOperationsAvailability(),220);
 window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;window.applyOperationsCmbPaste=applyOperationsCmbPaste;window.clearOperationsCmbPaste=clearOperationsCmbPaste;
