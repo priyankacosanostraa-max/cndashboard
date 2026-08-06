@@ -14679,28 +14679,41 @@ function _buildOperationsAvailability(){
     const required=_opAvailRequiredQtys(parent,children);children.forEach(ch=>{ch.requiredQty=required.get(ch.sku)||1;});
     return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
   }).filter(Boolean).sort((a,b)=>b.totalSold-a.totalSold||b.stock-a.stock||a.sku.localeCompare(b.sku));
-  const remaining=new Map();
-  candidates.forEach(c=>c.children.forEach(ch=>{if(!remaining.has(ch.sku))remaining.set(ch.sku,Math.floor(ch.stock));}));
-  const canBuild=c=>c.children.every(ch=>(remaining.get(ch.sku)||0)>=ch.requiredQty);
-  // Allocate in fair priority rounds. This preserves assortment breadth (a
-  // shared child with stock 3 first supports the top three eligible CMBs),
-  // while bulk rounds keep large inventories fast and non-blocking.
-  while(true){
-    const eligible=candidates.filter(canBuild);if(!eligible.length)break;
-    const roundNeed=new Map();eligible.forEach(c=>c.children.forEach(ch=>roundNeed.set(ch.sku,(roundNeed.get(ch.sku)||0)+ch.requiredQty)));
-    let fullRounds=Infinity;roundNeed.forEach((need,sku)=>{fullRounds=Math.min(fullRounds,Math.floor((remaining.get(sku)||0)/need));});
-    if(Number.isFinite(fullRounds)&&fullRounds>=1){
-      eligible.forEach(c=>{c.buildQty+=fullRounds;c.selected=1;c.children.forEach(ch=>remaining.set(ch.sku,(remaining.get(ch.sku)||0)-ch.requiredQty*fullRounds));});
-      continue;
-    }
-    let allocated=false;
-    eligible.forEach(c=>{if(!canBuild(c))return;c.children.forEach(ch=>remaining.set(ch.sku,(remaining.get(ch.sku)||0)-ch.requiredQty));c.buildQty++;c.selected=1;allocated=true;});
-    if(!allocated)break;
-  }
+  // Divide every child SKU independently and as evenly as possible across all
+  // CMBs that use it. Complete equal rounds are assigned first. If the last
+  // round cannot cover every CMB, one complete requirement is assigned in the
+  // existing sales-priority order. Stock is not moved from one CMB's equal
+  // share to another CMB merely because a different child limits that CMB.
+  const childPools=new Map();
   candidates.forEach(c=>c.children.forEach(ch=>{
-    ch.allocatedQty=Math.max(0,c.buildQty*ch.requiredQty);
-    ch.remainingStock=Math.max(0,remaining.get(ch.sku)||0);
+    ch.allocatedQty=0;
+    if(!childPools.has(ch.sku))childPools.set(ch.sku,{stock:Math.floor(ch.stock),remaining:Math.floor(ch.stock),links:[]});
+    childPools.get(ch.sku).links.push({cmb:c,child:ch});
   }));
+  childPools.forEach(pool=>{
+    const roundNeed=pool.links.reduce((sum,link)=>sum+Math.max(1,Math.floor(link.child.requiredQty||1)),0);
+    const fullRounds=roundNeed>0?Math.floor(pool.remaining/roundNeed):0;
+    if(fullRounds>0){
+      pool.links.forEach(link=>{
+        const need=Math.max(1,Math.floor(link.child.requiredQty||1));
+        link.child.allocatedQty+=fullRounds*need;
+        pool.remaining-=fullRounds*need;
+      });
+    }
+    // At most one additional allocation per CMB keeps the remainder fair.
+    pool.links.forEach(link=>{
+      const need=Math.max(1,Math.floor(link.child.requiredQty||1));
+      if(pool.remaining<need)return;
+      link.child.allocatedQty+=need;
+      pool.remaining-=need;
+    });
+  });
+  candidates.forEach(c=>{
+    c.buildQty=c.children.reduce((minimum,ch)=>Math.min(minimum,Math.floor((ch.allocatedQty||0)/Math.max(1,ch.requiredQty||1))),Infinity);
+    if(!Number.isFinite(c.buildQty))c.buildQty=0;
+    c.buildQty=Math.max(0,Math.floor(c.buildQty));c.selected=c.buildQty>0?1:0;
+    c.children.forEach(ch=>{ch.remainingStock=Math.max(0,childPools.get(ch.sku)?.remaining||0);});
+  });
   _opAvailRows=candidates.filter(c=>c.buildQty>0);
   _opAvailBuilt=true;
   return _opAvailRows;
@@ -14785,8 +14798,8 @@ function exportOperationsAvailability(){
     });
   });
   _dlCsv([
-    'Kya Hai','Group CMB','CMB / Child SKU','Product Name','Stock','WIP',
-    '1 CMB Ke Liye Qty','Is CMB Ko Mila Child Stock','Kitne CMB Ban Sakte Hain',
+    'Item Type','Parent CMB','CMB / Child SKU','Product Name','Stock','WIP',
+    'Child Qty Needed for 1 CMB','Child Stock Share for This CMB','CMB Pieces That Can Be Made',
     'CMB Image Link','Pack Details'
   ],data,_opAvailPastedSet===null?'operations_cmb_child_build_plan':'pasted_cmb_child_build_plan');
 }
