@@ -7153,20 +7153,20 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="concD1" onchange="renderConcentrationRisk()"></div>
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
-      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="renderConcentrationRisk()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="_concSourceChanged()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Taxon / Category</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">SKU Dependency Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk_d()"></div>
-      <div class="fc"><label class="fl">Top 20 Sales Platform</label><select class="fs" id="concTopPlatform" onchange="renderConcentrationTop20()"><option value="Overall" selected>Overall — Listed Platforms</option><option value="Website">Website</option><option value="Myntra">Myntra</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+      <div class="fc"><label class="fl">Top 20 Sales Platform</label><select class="fs" id="concTopPlatform" onchange="_concTopPlatformChanged()"><option value="Overall" selected>Overall — Listed Platforms</option><option value="Website">Website</option><option value="Myntra">Myntra</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
       <div class="fc"><label class="fl">Top 20 Rank By</label><select class="fs" id="concTopRank" onchange="renderConcentrationTop20()"><option value="qty" selected>Sold Qty</option><option value="revenue">Net Revenue</option></select></div>
     </div>
     <div id="concSummary" class="ops-kpis"></div>
     <div id="concAlert"></div>
     <div class="ops-section" style="margin:16px 0">
-      <div class="ops-section-head"><div><div class="ops-section-title">Top 20 Selling SKUs by Platform</div><div class="small-note">Current date, product-group, taxon, type, channel and SKU-search filters are applied.</div></div><button class="go-btn" style="width:auto;padding:9px 13px;background:#2f6f3e" onclick="exportConcentrationTop20()">Export Top 20 CSV</button></div>
+      <div class="ops-section-head"><div><div class="ops-section-title">Top 20 Selling SKUs by Platform</div><div class="small-note">All filters above apply to KPIs, city, rankings and this Top 20 table. Sales Source and Top 20 Sales Platform stay synchronized.</div></div><button class="go-btn" style="width:auto;padding:9px 13px;background:#2f6f3e" onclick="exportConcentrationTop20()">Export Top 20 CSV</button></div>
       <div id="concTop20" class="ops-table-wrap"></div>
     </div>
     <div id="concContent"></div>
@@ -16781,9 +16781,25 @@ function _bizRankTable(title,rows,nameLabel='Name',limit=10){
 }
 
 function _concEventSource(e){
-  return _scOrderChannel(e);
+  return _concSalesPlatform(e);
 }
 function _concSourceMatchesEvent(e,source){ return source==='Overall'||_concEventSource(e)===source; }
+
+function _concSyncSource(value){
+  const normalized=String(value||'Overall');
+  const source=document.getElementById('concSource');
+  const top=document.getElementById('concTopPlatform');
+  if(source&&Array.from(source.options).some(o=>o.value===normalized))source.value=normalized;
+  if(top&&Array.from(top.options).some(o=>o.value===normalized))top.value=normalized;
+}
+function _concSourceChanged(){
+  _concSyncSource(document.getElementById('concSource')?.value||'Overall');
+  renderConcentrationRisk();
+}
+function _concTopPlatformChanged(){
+  _concSyncSource(document.getElementById('concTopPlatform')?.value||'Overall');
+  renderConcentrationRisk();
+}
 
 function _concCityRanks(filterMeta,totalRevenue){
   const city=new Map();
@@ -16797,13 +16813,13 @@ function _concCityRanks(filterMeta,totalRevenue){
     const evSource=String(ev.source||'Website');
     if(source!=='Overall'&&evSource!==source)return;
     const date=_bizIso(ev.date||ev.d); if(d1&&(!date||date<d1))return;if(d2&&(!date||date>d2))return;
+    const evType=String(ev.type||((evSource==='Website')?'Website':'SOR'));
+    const evChannel=String(ev.channel||((evSource==='Website')?'D2C':'Ecom'));
+    if(type!=='All'&&evType!==type)return;
+    if(channel!=='All'&&evChannel!==channel)return;
     const skuKey=String(ev.sku||'').trim().toUpperCase();const it=_masterSkuMap[skuKey]||{};
     const meta={group:_opsGroup(it),taxon:String(it.taxon||'General'),sku:skuKey,skuName:String(it.sku_name||'')};
     if(!filterMeta(meta))return;
-    if(type!=='All'||channel!=='All'){
-      const matching=(it.sales_entries||[]).some(e=>_concSourceMatchesEvent(e,evSource)&&(type==='All'||String(e.type||'')===type)&&(channel==='All'||String(e.channel||'')===channel));
-      if(!matching)return;
-    }
     const cityName=String(ev.city||ev.c||'').trim();if(!cityName)return;
     const stateName=String(ev.state||ev.s||'').trim();
     const name=stateName&&!cityName.toLowerCase().includes(stateName.toLowerCase())?`${cityName}, ${stateName}`:cityName;
@@ -16811,7 +16827,13 @@ function _concCityRanks(filterMeta,totalRevenue){
     if(rev<=0){
       const cacheKey=skuKey+'|'+evSource;
       if(!priceCache.has(cacheKey)){
-        const sales=(it.sales_entries||[]).filter(e=>_concSourceMatchesEvent(e,evSource));
+        const sales=(it.orderdate_sales_entries||it.sales_entries||[]).filter(e=>{
+          const saleDate=_bizEntryDate(e);
+          return _concSourceMatchesEvent(e,evSource)&&
+            (type==='All'||String(e.type||'')===type)&&
+            (channel==='All'||String(e.channel||'')===channel)&&
+            (!d1||!saleDate||saleDate>=d1)&&(!d2||!saleDate||saleDate<=d2);
+        });
         const sq=sales.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0),sr=sales.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
         priceCache.set(cacheKey,sq>0&&sr>0?sr/sq:Math.max(0,_opsNum(it.avg_selling_price)||_opsNum(it.website_selling_price)||_opsNum(it.mrp)));
       }
@@ -16899,7 +16921,7 @@ function _concSalesPlatform(e){
 }
 function _concBuildTop20(){
   const predicate=_bizBaseFilter('conc',true);
-  const platform=document.getElementById('concTopPlatform')?.value||'Overall';
+  const platform=document.getElementById('concSource')?.value||'Overall';
   const rankBy=document.getElementById('concTopRank')?.value||'qty';
   const allowed=new Set(['Website','Myntra','Purchase','Bulk','Exhibition','Nykaa','Ajio','Tata','Flipkart','Amazon']);
   const map=new Map();
@@ -16935,6 +16957,7 @@ function exportConcentrationTop20(){
 }
 function loadConcentrationRisk(forceCity=false){
   _bizInitFilters('conc');
+  _concSyncSource(document.getElementById('concSource')?.value||document.getElementById('concTopPlatform')?.value||'Overall');
   const fromEl=document.getElementById('concD1'),toEl=document.getElementById('concD2');
   const datesWereBlank=!(fromEl?.value||toEl?.value);
   _bizInitDateRange('concD1','concD2',180);
@@ -16970,7 +16993,12 @@ function renderConcentrationRisk(){
   // rolling 7/15/30/90/180/365-day quantities are populated. Previously that
   // made the whole tab show zero. Build a recent-window concentration estimate
   // from those SKU summaries whenever the detailed result is empty.
-  if(totalQty<=0){
+  const noDetailedEvents=_bizEvents().length===0;
+  const noNarrowingFilters=selectedType==='All'&&selectedChannel==='All'&&selectedSource==='Overall'&&
+    (document.getElementById('concGroup')?.value||'All')==='All'&&
+    (document.getElementById('concTaxon')?.value||'All')==='All'&&
+    !String(document.getElementById('concSearch')?.value||'').trim();
+  if(totalQty<=0&&noDetailedEvents&&noNarrowingFilters){
     fallbackUsed=true;
     (master||[]).forEach(it=>{
       if(!_concItemFilter(it))return;
@@ -19075,6 +19103,7 @@ def _fetch_rkh_sku_city_rows(force=False):
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state,
                     "city": city, "pin": pin, "source": "Website",
+                    "type": "Website", "channel": "D2C",
                     "date": (parse_date_any(r.get(C_DATE, "")).strftime("%Y-%m-%d")
                              if C_DATE and parse_date_any(r.get(C_DATE, "")) else ""),
                 })
@@ -19127,6 +19156,7 @@ def _fetch_rkh_sku_city_rows(force=False):
                 mrp = to_num(r.get(M_MRP, 0)) if M_MRP else 0.0
                 out.append({"sku": sku, "qty": float(qty), "state": state,
                             "city": city, "pin": pin, "source": "Myntra",
+                            "type": "SOR", "channel": "Ecom",
                             "date": dt.strftime("%Y-%m-%d") if dt else "",
                             "revenue": round(float(mrp) * float(qty), 2) if mrp > 0 else 0.0})
                 diag["myntra_rows_used"] += 1
@@ -19276,6 +19306,7 @@ def _fetch_rkh_sku_city_rows(force=False):
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state, "city": city,
                     "pin": pin, "source": source,
+                    "type": "SOR", "channel": "Ecom",
                     "date": dt.strftime("%Y-%m-%d") if dt else "",
                     "revenue": round(float(revenue), 2) if revenue > 0 else 0.0,
                 })
