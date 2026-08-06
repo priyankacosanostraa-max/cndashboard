@@ -423,11 +423,16 @@ def to_num(v):
     if isinstance(v,(int,float)):
         if isinstance(v,float) and (np.isnan(v) or np.isinf(v)): return 0.0
         return float(v)
-    s = str(v).strip().lower()
+    s = str(v).strip().lower().replace("−", "-").replace("–", "-")
     if s in ("nan","none","","na","n/a","-","nil","null"): return 0.0
-    s = s.replace(",", "")  # Remove comma for parsing thousands correctly
-    m = re.search(r"[-+]?\d*\.?\d+", s)
-    try: return float(m.group()) if m else 0.0
+    negative_parentheses = bool(re.fullmatch(r"\s*\(.*\)\s*", s))
+    s = s.replace(",", "").replace("\u00a0", " ")
+    # Scientific notation and decimal-only values are both valid. Accounting
+    # parentheses, e.g. (₹1,250), mean a negative number.
+    m = re.search(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?", s, re.I)
+    try:
+        num = float(m.group()) if m else 0.0
+        return -abs(num) if negative_parentheses else num
     except: return 0.0
 
 def to_int(v): return int(round(to_num(v)))
@@ -445,7 +450,23 @@ def parse_date_any(v):
         if 30000 <= fv <= 60000:
             dt = pd.to_datetime(fv, unit="D", origin="1899-12-30", errors="coerce")
             if not pd.isna(dt): return dt.to_pydatetime().replace(tzinfo=None)
+        # Unix seconds/milliseconds occasionally arrive from exports as ints.
+        if 1_000_000_000 <= fv <= 4_102_444_800:
+            dt = pd.to_datetime(fv, unit="s", errors="coerce")
+            if not pd.isna(dt): return dt.to_pydatetime().replace(tzinfo=None)
+        if 1_000_000_000_000 <= fv <= 4_102_444_800_000:
+            dt = pd.to_datetime(fv, unit="ms", errors="coerce")
+            if not pd.isna(dt): return dt.to_pydatetime().replace(tzinfo=None)
     except: pass
+
+    if re.fullmatch(r"\d{8}", s):
+        for fmt in ("%Y%m%d", "%d%m%Y"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                if 1900 <= dt.year <= 2100:
+                    return dt
+            except Exception:
+                pass
 
     m_iso = re.match(r"^(\d{4})[-/](\d{1,2})[-/](\d{1,2})", s)
     if m_iso:
@@ -912,9 +933,11 @@ def simple_forecast(entries, days_ahead=30):
         dd = _d(iso)
         if dd is None:
             continue
+        # A future dispatch date is a planned/advance row, not realised demand.
+        # Counting it as age=0 inflated recent velocity and reorder forecasts.
+        if dd > today:
+            continue
         age = (today - dd).days
-        if age < 0:
-            age = 0
         q_all += qty
         if age <= 60:  q60  += qty
         if age <= 180: q180 += qty
@@ -938,7 +961,7 @@ def simple_forecast(entries, days_ahead=30):
     ref_ord = date(2020, 1, 1).toordinal()
     for iso, qty in dated:
         dd = _d(iso)
-        if dd is None:
+        if dd is None or dd > today:
             continue
         weekly[(dd.toordinal() - ref_ord) // 7] += qty
     if len(weekly) >= 3:
@@ -1033,6 +1056,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             # despite its current sheet header being named Status.
             "status_names": (),
             "customer_names": (),
+            "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Qty.", "Qty", "Order Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
         },
         {
             "key": "myntra", "url": MYNTRA_SALES_URL,
@@ -1042,6 +1068,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
             "status_names": ("Status", "Order Status"),
             "customer_names": (),
+            "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Qty.", "Qty", "Order Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
         },
         {
             "key": "nykaa", "url": NYKAA_SALES_URL,
@@ -1051,6 +1080,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "date_names": ("Order_Date", "Order Date", "OrderDate", "upddate"),
             "status_names": ("Status", "Order Status"),
             "customer_names": (),
+            "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Order Qty", "Shipped Qty", "Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
         },
         {
             "key": "tata", "url": TATA_SALES_URL,
@@ -1060,6 +1092,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Order Allocate Date"),
             "status_names": ("OrderStatus", "Order Status", "Status"),
             "customer_names": ("CustomerId", "Customer ID", "Customer No", "Customer Number"),
+            "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Order Qty", "Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
         },
         {
             "key": "ajio", "url": AJIO_SALES_URL,
@@ -1069,6 +1104,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "date_names": ("Order_Date", "Order Date", "Cust Order Date", "FWD PO Date"),
             "status_names": ("Status", "Order Status"),
             "customer_names": (),
+            "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Order Qty", "Shipped QTY", "Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
         },
     ]
 
@@ -1094,6 +1132,12 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 select_groups.append(spec["platform_names"])
             if spec.get("customer_names"):
                 select_groups.append(spec["customer_names"])
+            for quantity_group in (
+                spec.get("net_qty_names"), spec.get("gross_qty_names"),
+                spec.get("return_qty_names"),
+            ):
+                if quantity_group:
+                    select_groups.append(quantity_group)
             select_positions = [spec["order_index"]]
             if spec.get("platform_index") is not None:
                 select_positions.append(spec["platform_index"])
@@ -1118,12 +1162,18 @@ def _load_channel_order_events(inv_skus_map, dbg):
             status_col = find_col(frame.columns, *spec["status_names"]) if spec["status_names"] else None
             customer_col = (find_col(frame.columns, *spec.get("customer_names", ()))
                             if spec.get("customer_names") else None)
+            net_qty_col = find_col(frame.columns, *spec.get("net_qty_names", ()))
+            gross_qty_col = find_col(frame.columns, *spec.get("gross_qty_names", ()))
+            return_qty_col = find_col(frame.columns, *spec.get("return_qty_names", ()))
 
             resolved = {
                 "rows": len(frame), "order": order_col, "sku": sku_col,
                 "date": date_col, "platform": platform_col,
                 "status": status_col, "customer": customer_col,
+                "net_qty": net_qty_col, "gross_qty": gross_qty_col,
+                "return_qty": return_qty_col,
                 "events": 0, "customer_events": 0, "skus": 0,
+                "returned_rows_skipped": 0,
             }
             source_debug[spec["key"]] = resolved
             if not order_col or not sku_col or not date_col:
@@ -1135,6 +1185,20 @@ def _load_channel_order_events(inv_skus_map, dbg):
             for row in _df_chunks(frame):
                 status = str(row.get(status_col, "") or "").strip().casefold() if status_col else ""
                 if status and any(flag in status for flag in ("cancel", "void", "failed")):
+                    continue
+
+                # AOV/repeat/order-count analytics must represent sold orders,
+                # not fully returned marketplace orders. Prefer the source's
+                # Net Qty; otherwise derive it from gross minus Return Qty.
+                sold_qty = None
+                if net_qty_col:
+                    sold_qty = to_num(row.get(net_qty_col, 0))
+                elif gross_qty_col:
+                    sold_qty = to_num(row.get(gross_qty_col, 0))
+                    if return_qty_col:
+                        sold_qty -= to_num(row.get(return_qty_col, 0))
+                if sold_qty is not None and sold_qty <= 0:
+                    resolved["returned_rows_skipped"] += 1
                     continue
 
                 raw_order = clean(row.get(order_col, ""))
@@ -1307,7 +1371,8 @@ def _refresh_data():
     else:
         wip_cands = [c for c in inv.columns if "wip" in c.lower()
                      and "website" not in c.lower() and "designer" not in c.lower()
-                     and "customer" not in c.lower() and "sor" not in c.lower()]
+                     and "customer" not in c.lower() and "customize" not in c.lower()
+                     and "customise" not in c.lower() and "sor" not in c.lower()]
         I_WIP = wip_cands[0] if wip_cands else find_col(inv.columns,"Inv (WIP)","wip")
 
     # Exact WH+WIP value from the All Product inventory sheet (column AB).
@@ -1331,6 +1396,9 @@ def _refresh_data():
     I_WIP_WEBSITE  = _find_wip_col(["website"]) or find_col(inv.columns,"WIP (Website Repeat)","wip website","website wip")
     I_WIP_DESIGNER = _find_wip_col(["designer"]) or find_col(inv.columns,"WIP (Designer)","wip designer","designer wip")
     I_WIP_CUSTOMER = _find_wip_col(["customer"]) or find_col(inv.columns,"WIP (Customer)","wip customer","customer wip")
+    I_WIP_CUSTOMIZE = (_find_wip_col(["customize"]) or _find_wip_col(["customise"])
+                       or find_col(inv.columns, "WIP (Customize)", "WIP (Customise)",
+                                   "wip customize", "wip customise", "customize wip"))
     # SOR WIP — some sheets may have a dedicated SOR WIP column; fallback to None
     I_WIP_SOR = _find_wip_col(["sor"]) or find_col(inv.columns,"WIP (SOR)","wip sor","sor wip")
 
@@ -1403,8 +1471,9 @@ def _refresh_data():
 
         # Customer/address order identity must follow Order Date (order-level
         # order day), not a later dispatch day.
-        W_DATE = (find_col(web_orders.columns, "Display Order Date", "Order Date",
-                           "order date", "Dispatch Date", "date") or _wat(1))
+        W_DATE = (find_col(web_orders.columns, "Order_Date", "Order Date",
+                           "Display Order Date", "order date", "Created",
+                           "Dispatch Date", "date") or _wat(1))
         W_NAME = (find_col(web_orders.columns, "Billing Address Name",
                            "Billing Name", "Customer Name", "customer name") or _wat(3))
         W_ADDR = (find_col(web_orders.columns, "Final Billing Address",
@@ -1421,14 +1490,16 @@ def _refresh_data():
         ), None)
         W_REV = find_col(
             web_orders.columns,
-            "Net Revenue", "Final Revenue", "Order Revenue", "Line Revenue",
-            "Order Value", "Line Amount", "Total Amount", "Amount"
+            "Total Price W/O GST", "Net Revenue", "Final Revenue",
+            "Order Revenue", "Line Revenue", "Total Price", "Order Value",
+            "Line Amount", "Total Amount", "Amount"
         )
         W_SP = find_col(
             web_orders.columns,
             "Selling Price", "Sale Price", "Unit Selling Price", "Unit Price", "SP"
         )
         W_STATUS = find_col(web_orders.columns, "Sale Order Status", "Order Status", "status")
+        W_RTO = find_col(web_orders.columns, "RTO Qty", "Return Qty", "Returned Qty")
         # Website sheet: M column stores payment mode (0=Prepaid, 1=COD).
         # Header match is preferred; fixed M-column fallback protects against
         # harmless header spelling/spacing changes in the source sheet.
@@ -1444,7 +1515,7 @@ def _refresh_data():
             "date": W_DATE, "name": W_NAME, "address": W_ADDR,
             "sku": W_SKU, "qty": W_QTY, "revenue": W_REV,
             "selling_price": W_SP, "status": W_STATUS,
-            "cod": W_COD, "order": W_ORDER,
+            "return_qty": W_RTO, "cod": W_COD, "order": W_ORDER,
         }
 
         # Repeat-rate sessions and Website/D2C city sales are built from the
@@ -1476,11 +1547,12 @@ def _refresh_data():
                 # If an explicit Qty column exists, zero/negative rows are not
                 # sales (often returns/adjustments) and must not affect city or
                 # repeat metrics. Without a Qty column, one order-line = one unit.
-                qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
-                if W_QTY and qty_web <= 0:
-                    continue
+                gross_qty_web = to_num(r.get(W_QTY, 0)) if W_QTY else 1.0
+                return_qty_web = max(0.0, to_num(r.get(W_RTO, 0))) if W_RTO else 0.0
+                qty_web = max(0.0, gross_qty_web - return_qty_web)
                 if not W_QTY:
                     qty_web = 1.0
+                is_sold_web_line = qty_web > 0
 
                 # Payment mix is order-based, not line-based. All Website SKUs
                 # feed the compact Home daily summary; RKH/CMB events are also
@@ -1506,6 +1578,11 @@ def _refresh_data():
                         if re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
                             _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
 
+                # Returns remain visible in the separate payment-mix view, but
+                # must not count as sold units, city revenue or repeat sales.
+                if not is_sold_web_line:
+                    continue
+
                 # PIN is the State source of truth. City is validated against
                 # it, and State is kept in the compact event so same-named
                 # cities in different States never get merged.
@@ -1519,6 +1596,10 @@ def _refresh_data():
                         unit_sp_web = to_num(r.get(W_SP, 0))
                         if unit_sp_web > 0:
                             rev_web = float(unit_sp_web) * float(qty_web)
+                    elif rev_web > 0 and gross_qty_web > 0 and qty_web < gross_qty_web:
+                        # Source line revenue is gross; retain only the sold
+                        # portion when part/all of a multi-qty line is returned.
+                        rev_web *= qty_web / gross_qty_web
                     city_key = (date_iso, state_web, city_web)
                     sku_city_map = _web_city_sums.setdefault(mapped_web_sku, {})
                     city_bucket = sku_city_map.setdefault(city_key, {"q": 0.0, "r": 0.0})
@@ -1637,6 +1718,9 @@ def _refresh_data():
     for _k in inv_skus_map.keys():
         _prefix_buckets.setdefault(_k[:4], []).append(_k)
     _n_rows = len(cosa)
+    _future_dispatch_rows_skipped = 0
+    _future_dispatch_qty_skipped = 0.0
+    _future_dispatch_revenue_skipped = 0.0
     for _ri, r in enumerate(_df_chunks(cosa)):
         if (_ri % 2500) == 0:
             _wstage("processing", "Matching sales records…", _ri, _n_rows)
@@ -1651,10 +1735,20 @@ def _refresh_data():
         if not (-100000 <= qty <= 100000): qty = 0.0
         if not (-100000 <= ret <= 100000): ret = 0.0
 
+        dt = parse_date_any(r.get(C_DATE,"")) if C_DATE else None
+        if dt is not None:
+            d0_candidate = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            if d0_candidate > today_dt:
+                # Dispatch Date is the realised-sale clock for the main COSA
+                # feed. Future dated SOR/advance rows are plans, not sales yet.
+                _future_dispatch_rows_skipped += 1
+                _future_dispatch_qty_skipped += qty
+                _future_dispatch_revenue_skipped += rev
+                continue
+
         grand_final_qty += qty
         grand_net_revenue += rev
 
-        dt = parse_date_any(r.get(C_DATE,"")) if C_DATE else None
         date_iso = dt.strftime("%Y-%m-%d") if dt else "N/A"
         dt_o = parse_date_any(r.get(C_ODATE,"")) if C_ODATE else None
         order_date_iso = dt_o.strftime("%Y-%m-%d") if dt_o else "N/A"
@@ -1932,6 +2026,9 @@ def _refresh_data():
     
     dbg["grand_net_revenue"] = grand_net_revenue
     dbg["grand_final_qty"]   = grand_final_qty
+    dbg["future_dispatch_rows_skipped"] = _future_dispatch_rows_skipped
+    dbg["future_dispatch_qty_skipped"] = round(_future_dispatch_qty_skipped, 4)
+    dbg["future_dispatch_revenue_skipped"] = round(_future_dispatch_revenue_skipped, 2)
 
     # ── Compile inventory items ──────────────────────────────
     compiled  = []
@@ -2050,6 +2147,7 @@ def _refresh_data():
         wip_website  = to_int(r.get(I_WIP_WEBSITE,0))  if I_WIP_WEBSITE  else 0
         wip_designer = to_int(r.get(I_WIP_DESIGNER,0)) if I_WIP_DESIGNER else 0
         wip_customer = to_int(r.get(I_WIP_CUSTOMER,0)) if I_WIP_CUSTOMER else 0
+        wip_customize = to_int(r.get(I_WIP_CUSTOMIZE,0)) if I_WIP_CUSTOMIZE else 0
         wip_sor      = to_int(r.get(I_WIP_SOR,0))      if I_WIP_SOR      else 0
         blocked      = to_int(r.get(I_BLOCKED,0))       if I_BLOCKED      else 0
         mrp   = to_num(r.get(I_MRP,0))                 if I_MRP  else 0.0
@@ -2065,7 +2163,11 @@ def _refresh_data():
 
         # Selling Price = COSA col H ka ACTUAL value (latest dated non-zero).
         _sps = [float(e.get("sp") or 0) for e in ent if float(e.get("sp") or 0) > 0]
-        avg_sp  = round(sum(_sps) / len(_sps), 2) if _sps else 0.0
+        _tot_rev_all = sum(float(e.get("rev") or 0) for e in ent)
+        _tot_qty_all = sum(float(e.get("qty") or 0) for e in ent)
+        # Same AOV/Piece logic as SKU Details: net revenue / sold units.
+        # A simple mean of row-level SP over-weighted low-quantity rows.
+        avg_sp = round(_tot_rev_all / _tot_qty_all, 2) if _tot_qty_all > 0 else 0.0
         last_sp = 0.0
         _dated_nz = sorted(
             [e for e in ent if e.get("date") not in (None, "N/A") and float(e.get("sp") or 0) > 0],
@@ -2084,8 +2186,6 @@ def _refresh_data():
         # UI mein filter (date/channel/type) lagne par isी method se
         # filtered discount % nikala jaata hai — Discount Leakage tab bhi
         # isी method se match karta hai (neeche dekho).
-        _tot_rev_all = sum(float(e.get("rev") or 0) for e in ent)
-        _tot_qty_all = sum(float(e.get("qty") or 0) for e in ent)
         _overall_avg_sp = (_tot_rev_all / _tot_qty_all) if _tot_qty_all > 0 else 0.0
         if mrp > 0 and _overall_avg_sp > 0 and _overall_avg_sp < mrp:
             discount_pct = round((mrp - _overall_avg_sp) / mrp * 100, 1)
@@ -2120,6 +2220,7 @@ def _refresh_data():
             "inv_wip_website":  wip_website,
             "inv_wip_designer": wip_designer,
             "inv_wip_customer": wip_customer,
+            "inv_wip_customize": wip_customize,
             "inv_wip_sor":      wip_sor,
             "blocked_qty":      blocked,
             "total_inv":   stk + wip,
@@ -2208,6 +2309,7 @@ def _refresh_data():
         seen_skus.add(orphan_key)
         sku_list.append(orphan_key)
         A = _agg_entries(ent)
+        _orphan_aov = (float(A["tot_rev"]) / float(A["tot_qty"])) if float(A["tot_qty"]) > 0 else 0.0
         _cn_name_o = cn_display_name(orphan_key) or orphan_key
         _cn_tags_o = cn_classify_tags(_cn_name_o)
         item = {
@@ -2215,10 +2317,12 @@ def _refresh_data():
             "cn_name": "", "religion_class": "Unclassified",
             "is_religious": _cn_tags_o["religious"], "is_seasonal": _cn_tags_o["seasonal"],
             "image_url": "", "inv_stock": 0, "inv_wip": 0, "wh_wip": 0,
-            "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0, "inv_wip_sor": 0,
+            "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0,
+            "inv_wip_customize": 0, "inv_wip_sor": 0,
             "blocked_qty": 0, "total_inv": 0, "mrp": 0.0, "cost": 0.0,
             "website_selling_price": cn_website_selling_price(orphan_key),
-            "avg_selling_price": 0.0, "last_selling_price": 0.0, "aov_per_piece": 0.0,
+            "avg_selling_price": round(_orphan_aov, 2), "last_selling_price": 0.0,
+            "aov_per_piece": round(_orphan_aov, 2),
             "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
             "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
             "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
@@ -2272,6 +2376,7 @@ def _refresh_data():
             "wip_sor":      int(it.get("inv_wip_sor") or 0),
             "wip_designer": int(it.get("inv_wip_designer") or 0),
             "wip_customer": int(it.get("inv_wip_customer") or 0),
+            "wip_customize": int(it.get("inv_wip_customize") or 0),
         }
     _sku_re = re.compile(r"[A-Za-z]{1,5}[-_ ]?\d{2,5}(?:[-_(][A-Za-z0-9)]+)*")
     for it in compiled:
@@ -2308,6 +2413,7 @@ def _refresh_data():
                 "inv_wip_sor":      info["wip_sor"] if info else 0,
                 "inv_wip_designer": info["wip_designer"] if info else 0,
                 "inv_wip_customer": info["wip_customer"] if info else 0,
+                "inv_wip_customize": info["wip_customize"] if info else 0,
                 "blocked_qty": (ci.get("blocked_qty") if ci else 0),
                 # poori details — CMB jaisi (combo SKU khud bhi inventory me hai)
                 "qty_7d":   (ci.get("qty_7d") if ci else 0) or 0,
@@ -7584,7 +7690,8 @@ function roInvContext(typeSel, chanSel, subChanSel){
   if (!words) return {mode:'overall', wipLabel:'WIP'};
   if (/(website|d2c|direct\s*to\s*consumer|online)/i.test(words)) return {mode:'website', wipLabel:'WIP (Website Repeat)'};
   if (/(s\.?\s*o\.?\s*r|sor|3p|ecom|marketplace|myntra|nykaa|amazon|flipkart|ajio|tata|blinkit|instamart)/i.test(words)) return {mode:'sor', wipLabel:'WIP (SOR)'};
-  if (/(customer|customize|customise|customized|customised)/i.test(words)) return {mode:'customer', wipLabel:'WIP (Customer)'};
+  if (/(customize|customise|customized|customised)/i.test(words)) return {mode:'customize', wipLabel:'WIP (Customize)'};
+  if (/(customer)/i.test(words)) return {mode:'customer', wipLabel:'WIP (Customer)'};
   if (/(designer|purchase)/i.test(words)) return {mode:'designer', wipLabel:'WIP (Designer)'};
   return {mode:'overall', wipLabel:'WIP'};
 }
@@ -7597,6 +7704,7 @@ function roInvWip(item, ctx){
   if (mode === 'website') return Number(item.inv_wip_website ?? 0) || 0;
   if (mode === 'sor') return Number(item.inv_wip_sor ?? 0) || 0;
   if (mode === 'customer') return Number(item.inv_wip_customer ?? 0) || 0;
+  if (mode === 'customize') return Number(item.inv_wip_customize ?? 0) || 0;
   if (mode === 'designer') return Number(item.inv_wip_designer ?? 0) || 0;
   return Number(item.inv_wip ?? 0) || 0;
 }
@@ -9733,12 +9841,12 @@ function applyRO(){
     if (roSortKey === 'sku') {
       const sa = String(a.sku || '').toUpperCase();
       const sb = String(b.sku || '').toUpperCase();
-      return roSortDir * (sa < sb ? 1 : sa > sb ? -1 : 0);
+      return roSortDir * (sa < sb ? -1 : sa > sb ? 1 : 0);
     }
     const va = _roSortVal(a, roSortKey);
     const vb = _roSortVal(b, roSortKey);
     if (va === vb) return 0;
-    return roSortDir * (vb - va);
+    return roSortDir * (va - vb);
   });
 
   roFiltered = filtered;
@@ -10372,20 +10480,6 @@ function exportRO(fmtType){
     });
   });
   downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType);
-}
-
-function onImg(inp){
-  if (inp.files && inp.files[0]) {
-    const r = new FileReader();
-    r.onload = e => {
-      const p = document.getElementById('preview');
-      if (p) { p.src = e.target.result; p.style.display='block'; }
-      imgB64 = e.target.result;
-      const g = document.getElementById('goBtn');
-      if (g) g.disabled = false;
-    };
-    r.readAsDataURL(inp.files[0]);
-  }
 }
 
 function setFinderImage(dataUrl){
@@ -13354,11 +13448,11 @@ function sortProd(key){
       if (va === '' && vb === '') return 0;
       if (va === '') return 1;   // khali values hamesha neeche
       if (vb === '') return -1;
-      return _prodSortDir * (va < vb ? 1 : va > vb ? -1 : 0);
+      return _prodSortDir * (va < vb ? -1 : va > vb ? 1 : 0);
     }
     va = Number(va) || 0; vb = Number(vb) || 0;
     if (va === vb) return 0;
-    return _prodSortDir * (vb - va);
+    return _prodSortDir * (va - vb);
   });
   renderProduction();
 }
@@ -13414,10 +13508,10 @@ function renderProduction(){
       if (isStr){
         va = String(va||''); vb = String(vb||'');
         if (va==='' && vb==='') return 0; if (va==='') return 1; if (vb==='') return -1;
-        return _prodSortDir * (va < vb ? 1 : va > vb ? -1 : 0);
+        return _prodSortDir * (va < vb ? -1 : va > vb ? 1 : 0);
       }
       va = Number(va)||0; vb = Number(vb)||0;
-      return va===vb ? 0 : _prodSortDir * (vb - va);
+      return va===vb ? 0 : _prodSortDir * (va - vb);
     });
     d._sorted = true;
   }
@@ -13879,7 +13973,7 @@ function sortTaxon(key){
       const sa = String(a.taxon||'').toUpperCase(), sb = String(b.taxon||'').toUpperCase();
       return _txSortDir * (sa < sb ? -1 : sa > sb ? 1 : 0);
     }
-    return _txSortDir * ((b[key]||0) - (a[key]||0));
+    return _txSortDir * ((a[key]||0) - (b[key]||0));
   });
   renderTaxon();
 }
@@ -14805,11 +14899,11 @@ function _applyPaySort(rows){
     let va = a[key], vb = b[key];
     if (isStr){
       va = String(va || ''); vb = String(vb || '');
-      return dir * (va < vb ? 1 : va > vb ? -1 : 0);
+      return dir * (va < vb ? -1 : va > vb ? 1 : 0);
     }
     va = Number(va) || 0; vb = Number(vb) || 0;
     if (va === vb) return 0;
-    return dir * (vb - va);
+    return dir * (va - vb);
   });
   return rows;
 }
@@ -14912,9 +15006,9 @@ function renderPayments(){
       const isStr = (k === 'customer' || k === 'tag');
       meRows.sort((a,b) => {
         let va = a[k], vb = b[k];
-        if (isStr){ va = String(va||''); vb = String(vb||''); return dir * (va < vb ? 1 : va > vb ? -1 : 0); }
+        if (isStr){ va = String(va||''); vb = String(vb||''); return dir * (va < vb ? -1 : va > vb ? 1 : 0); }
         va = Number(va)||0; vb = Number(vb)||0;
-        return dir * (vb - va);
+        return dir * (va - vb);
       });
     }
     const body = meRows.map(r => `<tr class="pay-row" style="cursor:pointer" data-customer="${escHtml(r.customer)}">
@@ -15021,7 +15115,7 @@ function renderPayments(){
     _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
     if (_payWeekSortKey){
       const k = _payWeekSortKey, dir = _payWeekSortDir;
-      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((b[k]||0) - (a[k]||0)));
+      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((a[k]||0) - (b[k]||0)));
     }
     const body = _weekRowsData.map(r => `<tr>
         <td style="padding:5px 8px">${escHtml(r.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(r.rangeShort)}</span></td>
@@ -17938,7 +18032,7 @@ def _production_has_balance(value):
 def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode="", row_limit=1000):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
     img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
-    stock_map = {}; stock_3p_map = {}; wip_map = {}; wip_website_map = {}; wip_designer_map = {}; wip_customer_map = {}; wip_sor_map = {}
+    stock_map = {}; stock_3p_map = {}; wip_map = {}; wip_website_map = {}; wip_designer_map = {}; wip_customer_map = {}; wip_customize_map = {}; wip_sor_map = {}
     try:
         comp = get_data()[0]
         for it in comp:
@@ -17959,6 +18053,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             wip_website_map[sk] = it.get("inv_wip_website", 0) or 0
             wip_designer_map[sk] = it.get("inv_wip_designer", 0) or 0
             wip_customer_map[sk] = it.get("inv_wip_customer", 0) or 0
+            wip_customize_map[sk] = it.get("inv_wip_customize", 0) or 0
             wip_sor_map[sk] = it.get("inv_wip_sor", 0) or 0
     except Exception:
         pass
@@ -18070,7 +18165,9 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 return wip_website_map.get(sku, 0) or 0
             if "designer" in inv_filter_ctx:
                 return wip_designer_map.get(sku, 0) or 0
-            if "customer" in inv_filter_ctx or "customize" in inv_filter_ctx:
+            if "customize" in inv_filter_ctx or "customise" in inv_filter_ctx:
+                return wip_customize_map.get(sku, 0) or 0
+            if "customer" in inv_filter_ctx:
                 return wip_customer_map.get(sku, 0) or 0
             if "sor" in inv_filter_ctx or "3p" in inv_filter_ctx:
                 return wip_sor_map.get(sku, 0) or 0
@@ -19212,11 +19309,18 @@ def _fetch_rkh_sku_city_rows(force=False):
         C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
                  or (cols[4] if len(cols) > 4 else None)
         C_STATUS = find_col(cols, "Sale Order Status", "Order Status", "status")
-        C_DATE = find_col(cols, "Created", "Created At", "Order Date", "Dispatch Date", "Date")
+        C_DATE = find_col(cols, "Order_Date", "Order Date", "Display Order Date",
+                          "Created", "Created At", "Dispatch Date", "Date")
+        C_RTO = find_col(cols, "RTO Qty", "Return Qty", "Returned Qty")
+        C_REV = find_col(cols, "Total Price W/O GST", "Net Revenue", "Final Revenue",
+                         "Line Revenue", "Total Price", "Order Value", "Total Amount")
+        C_SP = find_col(cols, "Selling Price", "Sale Price", "Unit Selling Price", "Unit Price")
         diag["sku_col"] = C_SKU
         diag["qty_col"] = C_QTY
         diag["addr_col"] = C_ADDR
         diag["status_col"] = C_STATUS
+        diag["return_qty_col"] = C_RTO
+        diag["revenue_col"] = C_REV
         if C_SKU and C_ADDR:
             diag["columns_found"] = True
             for _, r in df.iterrows():
@@ -19236,18 +19340,26 @@ def _fetch_rkh_sku_city_rows(force=False):
                 city = _normalize_city_for_state(raw_city, state, pin)
                 if _geo_key(city) != _geo_key(raw_city):
                     diag["city_labels_corrected"] += 1
-                qty = to_num(r.get(C_QTY, 0)) if C_QTY else 1.0
+                gross_qty = to_num(r.get(C_QTY, 0)) if C_QTY else 1.0
+                return_qty = max(0.0, to_num(r.get(C_RTO, 0))) if C_RTO else 0.0
+                qty = max(0.0, gross_qty - return_qty)
                 if C_QTY and qty <= 0:
                     diag["rows_nonpositive_qty"] += 1
                     continue
                 if not C_QTY:
                     qty = 1.0
+                revenue = to_num(r.get(C_REV, 0)) if C_REV else 0.0
+                if revenue <= 0 and C_SP:
+                    revenue = to_num(r.get(C_SP, 0)) * qty
+                elif revenue > 0 and gross_qty > 0 and qty < gross_qty:
+                    revenue *= qty / gross_qty
+                dt_value = parse_date_any(r.get(C_DATE, "")) if C_DATE else None
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state,
                     "city": city, "pin": pin, "source": "Website",
                     "type": "Website", "channel": "D2C",
-                    "date": (parse_date_any(r.get(C_DATE, "")).strftime("%Y-%m-%d")
-                             if C_DATE and parse_date_any(r.get(C_DATE, "")) else ""),
+                    "date": dt_value.strftime("%Y-%m-%d") if dt_value else "",
+                    "revenue": round(float(revenue), 2) if revenue > 0 else 0.0,
                 })
                 diag["rows_used"] += 1
         else:
@@ -19269,13 +19381,19 @@ def _fetch_rkh_sku_city_rows(force=False):
         diag["myntra_all_columns"] = mcols[:24]
         M_SKU = find_col(mcols, "SKU No.", "SKU No", "Seller_sku", "Seller SKU", "SKU", "Item Code")
         M_QTY = find_col(mcols, "Qty.", "Qty", "Quantity", "Sold Qty")
+        M_NET_QTY = find_col(mcols, "Net Qty", "Final Qty", "Sold Qty")
+        M_RETURN_QTY = find_col(mcols, "Return Qty", "Returned Qty")
         M_PIN = find_col(mcols, "Destination pincode", "Destination Pincode", "Destination PIN", "Pincode")
         M_CITY = find_col(mcols, "Destination City", "City")
-        M_DATE = find_col(mcols, "Packed On", "Order Date", "Created", "Created At", "Date")
+        M_DATE = find_col(mcols, "Order_Date", "Order Date", "OrderDate",
+                          "Created", "Created At", "Packed On", "Date")
         M_STATUS = find_col(mcols, "Status", "Order Status")
-        M_MRP = find_col(mcols, "MRP", "Selling Price", "Net Revenue", "Revenue")
-        diag["myntra_resolved"] = {"sku": M_SKU, "qty": M_QTY, "pin": M_PIN,
-                                   "city": M_CITY, "date": M_DATE, "status": M_STATUS}
+        M_REV = find_col(mcols, "Selling value", "Net Amount", "Net Revenue",
+                         "Seller Price", "Payout to Seller", "Selling Price")
+        diag["myntra_resolved"] = {"sku": M_SKU, "qty": M_QTY,
+                                   "net_qty": M_NET_QTY, "return_qty": M_RETURN_QTY,
+                                   "pin": M_PIN, "city": M_CITY, "date": M_DATE,
+                                   "status": M_STATUS, "revenue": M_REV}
         if M_SKU and M_PIN and M_CITY:
             diag["myntra_columns_found"] = True
             for _, r in mdf.iterrows():
@@ -19291,16 +19409,22 @@ def _fetch_rkh_sku_city_rows(force=False):
                     continue
                 raw_city = clean(r.get(M_CITY, ""))
                 city = _normalize_city_for_state(raw_city, state, pin)
-                qty = to_num(r.get(M_QTY, 0)) if M_QTY else 1.0
+                gross_qty = to_num(r.get(M_QTY, 0)) if M_QTY else 1.0
+                if M_NET_QTY:
+                    qty = to_num(r.get(M_NET_QTY, 0))
+                else:
+                    qty = gross_qty - (to_num(r.get(M_RETURN_QTY, 0)) if M_RETURN_QTY else 0.0)
                 if qty <= 0:
                     continue
                 dt = parse_date_any(r.get(M_DATE, "")) if M_DATE else None
-                mrp = to_num(r.get(M_MRP, 0)) if M_MRP else 0.0
+                revenue = to_num(r.get(M_REV, 0)) if M_REV else 0.0
+                if revenue > 0 and gross_qty > 0 and qty < gross_qty:
+                    revenue *= qty / gross_qty
                 out.append({"sku": sku, "qty": float(qty), "state": state,
                             "city": city, "pin": pin, "source": "Myntra",
                             "type": "SOR", "channel": "Ecom",
                             "date": dt.strftime("%Y-%m-%d") if dt else "",
-                            "revenue": round(float(mrp) * float(qty), 2) if mrp > 0 else 0.0})
+                            "revenue": round(float(revenue), 2) if revenue > 0 else 0.0})
                 diag["myntra_rows_used"] += 1
         else:
             diag["myntra_error"] = "Could not find SKU / Destination pincode / Destination City columns."
@@ -19316,7 +19440,9 @@ def _fetch_rkh_sku_city_rows(force=False):
             "key": "amazon_flipkart", "url": AMAZON_FLIPKART_SALES_URL,
             "fixed_source": "", "platform_names": ("Channel", "Type", "Marketplace", "Status"),
             "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code"),
-            "qty_names": ("Qty.", "Qty", "Net Qty", "Quantity"),
+            "qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Qty.", "Qty", "Order Qty", "Quantity"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
             "geo_sets": ({
                 "city_names": ("Destination City", "City"),
                 "state_names": ("Destination state", "Destination State", "State"),
@@ -19324,13 +19450,16 @@ def _fetch_rkh_sku_city_rows(force=False):
             },),
             "date_names": ("Order_Date", "Order Date", "Packed On"),
             "revenue_names": ("Selling value", "Seller Price", "Payout to Seller"),
+            "revenue_is_net": False,
             "status_names": (),
         },
         {
             "key": "nykaa", "url": NYKAA_SALES_URL,
             "fixed_source": "Nykaa", "platform_names": (),
             "sku_names": ("SKU", "SKUCode", "SKU Code"),
-            "qty_names": ("Net Qty", "Order Qty", "Shipped Qty", "Qty"),
+            "qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Order Qty", "Shipped Qty", "Qty"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
             "geo_sets": ({
                 "city_names": ("city", "City"),
                 "state_names": ("State",),
@@ -19338,13 +19467,16 @@ def _fetch_rkh_sku_city_rows(force=False):
             },),
             "date_names": ("Order_Date", "Order Date", "OrderDate"),
             "revenue_names": ("Net Amount", "LineItem Total", "SellingPrice"),
+            "revenue_is_net": True,
             "status_names": (),
         },
         {
             "key": "tata", "url": TATA_SALES_URL,
             "fixed_source": "Tata", "platform_names": (),
             "sku_names": ("SKU", "Item Code"),
-            "qty_names": ("Net Qty", "Order Qty", "Qty"),
+            "qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
+            "gross_qty_names": ("Order Qty", "Qty"),
+            "return_qty_names": ("Return Qty", "Returned Qty"),
             # Tata changed its current-period population: older rows use
             # Shipping* while recent rows populate BillingCity/BillingPincode.
             # Materialize and test both row-wise instead of resolving only the
@@ -19363,6 +19495,7 @@ def _fetch_rkh_sku_city_rows(force=False):
             ),
             "date_names": ("Order_Date", "Order Date", "OrderDate"),
             "revenue_names": ("Net Amount", "Final Invoice Amount", "Customer Collected Amount"),
+            "revenue_is_net": True,
             "status_names": ("OrderStatus", "Order Status"),
         },
     ]
@@ -19373,6 +19506,7 @@ def _fetch_rkh_sku_city_rows(force=False):
         diag[key] = source_diag
         try:
             groups = [spec["sku_names"], spec["qty_names"],
+                      spec["gross_qty_names"], spec["return_qty_names"],
                       spec["date_names"], spec["revenue_names"]]
             for geo_set in spec["geo_sets"]:
                 groups.extend((geo_set["city_names"], geo_set["state_names"], geo_set["pin_names"]))
@@ -19386,6 +19520,8 @@ def _fetch_rkh_sku_city_rows(force=False):
             source_diag["rows_total"] = len(frame)
             C_SKU = find_col(cols, *spec["sku_names"])
             C_QTY = find_col(cols, *spec["qty_names"])
+            C_GROSS_QTY = find_col(cols, *spec["gross_qty_names"])
+            C_RETURN_QTY = find_col(cols, *spec["return_qty_names"])
             C_DATE = find_col(cols, *spec["date_names"])
             C_REV = find_col(cols, *spec["revenue_names"])
             C_PLATFORM = find_col(cols, *spec["platform_names"]) if spec["platform_names"] else None
@@ -19400,7 +19536,8 @@ def _fetch_rkh_sku_city_rows(force=False):
                 if resolved_geo["city"] or resolved_geo["pin"]:
                     GEO_COLS.append(resolved_geo)
             source_diag["resolved"] = {
-                "sku": C_SKU, "qty": C_QTY, "geo_sets": GEO_COLS,
+                "sku": C_SKU, "qty": C_QTY, "gross_qty": C_GROSS_QTY,
+                "return_qty": C_RETURN_QTY, "geo_sets": GEO_COLS,
                 "date": C_DATE, "revenue": C_REV,
                 "platform": C_PLATFORM, "status": C_STATUS,
             }
@@ -19412,7 +19549,13 @@ def _fetch_rkh_sku_city_rows(force=False):
                 if status and any(flag in status for flag in ("cancel", "void", "failed")):
                     continue
                 sku = clean(row.get(C_SKU, ""))
-                qty = to_num(row.get(C_QTY, 0)) if C_QTY else 1.0
+                gross_qty = to_num(row.get(C_GROSS_QTY, 0)) if C_GROSS_QTY else None
+                if C_QTY:
+                    qty = to_num(row.get(C_QTY, 0))
+                elif gross_qty is not None:
+                    qty = gross_qty - (to_num(row.get(C_RETURN_QTY, 0)) if C_RETURN_QTY else 0.0)
+                else:
+                    qty = 1.0
                 if not sku or qty <= 0:
                     continue
                 source = spec["fixed_source"]
@@ -19445,6 +19588,9 @@ def _fetch_rkh_sku_city_rows(force=False):
                 city = _normalize_city_for_state(raw_city, state, pin)
                 dt = parse_date_any(row.get(C_DATE, "")) if C_DATE else None
                 revenue = to_num(row.get(C_REV, 0)) if C_REV else 0.0
+                if (revenue > 0 and not spec.get("revenue_is_net")
+                        and gross_qty is not None and gross_qty > 0 and qty < gross_qty):
+                    revenue *= qty / gross_qty
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state, "city": city,
                     "pin": pin, "source": source,
