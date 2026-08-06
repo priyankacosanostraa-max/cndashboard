@@ -5392,6 +5392,9 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page .ops-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ops-page .ops-filters{display:grid;grid-template-columns:repeat(6,minmax(145px,1fr));gap:12px;background:#fff;border:1px solid var(--cn-line);border-radius:17px;padding:15px;margin:10px 0 16px;box-shadow:0 8px 24px rgba(15,23,42,.04)}
 .ops-page .ops-filters .fc{min-width:0}
+.ops-page .ops-filters .op-paste{grid-column:span 4}
+.ops-page .op-paste-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px}
+.ops-page .op-paste textarea{min-height:78px;resize:vertical;line-height:1.45}
 .ops-page .ops-kpis{display:grid;grid-template-columns:repeat(4,minmax(155px,1fr));gap:12px;margin:0 0 16px}
 .ops-page .ops-kpi{background:#fff;border:1px solid var(--cn-line);border-radius:16px;padding:17px 18px;box-shadow:0 8px 24px rgba(15,23,42,.05);min-height:92px}
 .ops-page .ops-kpi-label{font-size:9px;letter-spacing:1.9px;text-transform:uppercase;color:#8c7a42;font-weight:850;margin-bottom:8px}
@@ -5420,9 +5423,9 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page .ops-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .ops-page .ops-empty{padding:36px 20px;text-align:center;color:#8c7a42;font-size:12px;font-weight:750}
 .ops-page .ops-divider{height:1px;background:linear-gradient(90deg,transparent,#d8c998,transparent);margin:24px 0}
-@media(max-width:1150px){.ops-page .ops-filters{grid-template-columns:repeat(3,minmax(145px,1fr))}}
-@media(max-width:820px){.ops-page .ops-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.ops-page .ops-filters{grid-template-columns:repeat(2,minmax(135px,1fr))}.ops-page .ops-photo,.ops-page .ops-photo-ph{width:68px;height:68px;min-width:68px}}
-@media(max-width:520px){.ops-page .ops-kpis,.ops-page .ops-filters{grid-template-columns:1fr}}
+@media(max-width:1150px){.ops-page .ops-filters{grid-template-columns:repeat(3,minmax(145px,1fr))}.ops-page .ops-filters .op-paste{grid-column:span 3}}
+@media(max-width:820px){.ops-page .ops-kpis{grid-template-columns:repeat(2,minmax(140px,1fr))}.ops-page .ops-filters{grid-template-columns:repeat(2,minmax(135px,1fr))}.ops-page .ops-filters .op-paste{grid-column:span 2}.ops-page .ops-photo,.ops-page .ops-photo-ph{width:68px;height:68px;min-width:68px}}
+@media(max-width:520px){.ops-page .ops-kpis,.ops-page .ops-filters{grid-template-columns:1fr}.ops-page .ops-filters .op-paste{grid-column:span 1}}
 
 .ops-page .opp-score{display:inline-flex;align-items:center;justify-content:center;min-width:58px;padding:7px 11px;border-radius:999px;font-size:12px;font-weight:950;letter-spacing:.3px;border:1px solid transparent}
 .ops-page .opp-score-high{background:#dcfce7;color:#166534;border-color:#bbf7d0}
@@ -6326,8 +6329,8 @@ select.lg-in option{background:#fff;color:#1a1610}
         </div>
       </div>
       <div class="kpis" style="justify-content:flex-start">
-        <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div></div>
-        <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div></div>
+        <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div><div class="small-note" id="sdOrdersMeta" style="margin-top:4px;white-space:normal">Unique Order IDs / customer-date sessions</div></div>
+        <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div><div class="small-note" id="sdQtyMeta" style="margin-top:4px;white-space:normal">Final Qty by Order Date</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">STR (Sell-Through Rate)</div><div class="kpi-v" id="sdStrPct" style="color:#b68b00">0%</div><div class="small-note" id="sdStrMeta" style="margin-top:4px;white-space:normal">Filtered Sold Qty ÷ (Filtered Sold Qty + Inv Stock)</div></div>
@@ -7142,12 +7145,21 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
+      <div class="fc op-paste">
+        <label class="fl">Paste Multiple CMB SKUs</label>
+        <textarea class="fi" id="opAvailPaste" rows="3" placeholder="Paste up to any number of CMBs — one per line, comma, space or Excel column&#10;Example: CMB-0801, CMB-0802, CMB-0817"></textarea>
+        <div class="op-paste-actions">
+          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="applyOperationsCmbPaste()">Show Buildable CMBs</button>
+          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px;background:#eceff4;color:#111" onclick="clearOperationsCmbPaste()">Clear Pasted List</button>
+          <span id="opAvailPasteInfo" class="small-note"></span>
+        </div>
+      </div>
       <div class="fc"><label class="fl">Search CMB</label><input class="fi" id="opAvailSearch" placeholder="Enter CMB SKU or name…" oninput="renderOperationsAvailability_d()"></div>
       <div class="fc"><label class="fl">Search Child SKU</label><input class="fi" id="opAvailChildSearch" placeholder="Enter child SKU or name…" oninput="renderOperationsAvailability_d()"></div>
     </div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Only new CMBs buildable from child Inventory Stock are included; existing parent-CMB stock and WIP are not added to buildable quantity. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
+    <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Only new CMBs buildable from child Inventory Stock are included; existing parent-CMB stock and WIP are not added to buildable quantity. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -8399,6 +8411,100 @@ function _sdSellThroughStats(item, ents){
   return {soldQty, invStock, baseQty, rate};
 }
 
+/* SKU Details inventory demand follows the same child-SKU rule as Repeat
+   Orders: a child consumes one unit when sold directly and one unit whenever
+   a parent CMB containing it is sold. Parent revenue is deliberately not
+   attributed to the child; this context is only for order/quantity/STR/status. */
+let _sdComboParentMasterRef = null;
+let _sdComboParentIndexCache = new Map();
+function _sdComboParentIndex(){
+  if (_sdComboParentMasterRef === master) return _sdComboParentIndexCache;
+  const index = new Map();
+  (master || []).forEach(parent => {
+    const parentKey = _opsSkuKey(parent?.sku);
+    if (!parentKey) return;
+    (Array.isArray(parent?.combo_details) ? parent.combo_details : []).forEach(child => {
+      const childKey = _opsSkuKey(child?.sku);
+      if (!childKey || childKey === parentKey) return;
+      const parents = index.get(childKey) || [];
+      if (!parents.some(p => _opsSkuKey(p?.sku) === parentKey)) parents.push(parent);
+      index.set(childKey, parents);
+    });
+  });
+  _sdComboParentMasterRef = master;
+  _sdComboParentIndexCache = index;
+  return index;
+}
+function _sdUsageContext(item){
+  const directKey = _opsSkuKey(item?.sku);
+  const parents = (_sdComboParentIndex().get(directKey) || [])
+    .filter(parent => _opsSkuKey(parent?.sku) !== directKey);
+  const sources = [item].concat(parents);
+  const rows = [];
+  sources.forEach((sourceItem, sourceNo) => {
+    _sdFilteredOrderEntries(sourceItem).forEach((entry, lineIndex) => {
+      rows.push({
+        entry,
+        sourceItem,
+        sourceSku:_opsSkuKey(sourceItem?.sku),
+        isDirect:sourceNo === 0,
+        lineIndex,
+      });
+    });
+  });
+  const positiveQty = row => Math.max(0, _opsNum(row?.entry?.qty));
+  const directQty = rows.filter(row => row.isDirect).reduce((sum,row) => sum + positiveQty(row), 0);
+  const comboQty = rows.filter(row => !row.isDirect).reduce((sum,row) => sum + positiveQty(row), 0);
+  return {
+    rows,
+    entries:rows.map(row => row.entry),
+    directQty,
+    comboQty,
+    totalQty:directQty + comboQty,
+    parents,
+    skus:sources.map(sourceItem => _opsSkuKey(sourceItem?.sku)).filter(Boolean),
+  };
+}
+
+/* Count the selected SKU's real orders, not its transaction lines. Website
+   uses the customer+address session feed; marketplaces use source Order IDs;
+   Purchase uses Order Date + Customer Name. A deterministic row fallback is
+   retained only where the source does not provide usable order identity. */
+function _sdOrderStats(usage){
+  const websiteIndex = _scOrderSessionIndex();
+  const marketplaceIndex = _scChannelOrderSessionIndex();
+  const marketplaceNames = new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
+  const orderKeys = new Set(), fallbackKeys = new Set();
+  (usage?.rows || []).forEach((row, rowNo) => {
+    const e = row.entry || {};
+    const qty = Math.max(0, _opsNum(e.qty)), rev = Math.max(0, _opsNum(e.rev));
+    if (qty <= 0 && rev <= 0) return;
+    const sku = row.sourceSku, date = _bizEntryDate(e);
+    if (!sku || !date) return;
+    const channel = _scOrderChannel(e);
+    if (channel === 'Website') {
+      const sessions = websiteIndex.get(`${sku}|${date}`);
+      if (sessions?.size) sessions.forEach(token => orderKeys.add(`WEB|${token}`));
+      else fallbackKeys.add(`WEB-FALLBACK|${sku}|${date}|${row.lineIndex}|${rowNo}`);
+    } else if (marketplaceNames.has(channel)) {
+      const sourceOrders = marketplaceIndex.get(`${sku}|${date}|${channel}`);
+      if (sourceOrders?.size) sourceOrders.forEach(token => orderKeys.add(`MARKETPLACE|${channel}|${token}`));
+      else fallbackKeys.add(`MARKETPLACE-FALLBACK|${channel}|${sku}|${date}|${row.lineIndex}|${rowNo}`);
+    } else if (channel === 'Purchase') {
+      const customer = _scOrderNormCustomer(e.cust || e.customer);
+      const generic = !customer || ['unknown','na','n a','purchase'].includes(customer);
+      if (generic) fallbackKeys.add(`PURCHASE-FALLBACK|${sku}|${date}|${row.lineIndex}|${rowNo}`);
+      else orderKeys.add(`PURCHASE|${date}|${customer}`);
+    } else {
+      const customer = _scOrderNormCustomer(e.cust || e.customer);
+      const generic = !customer || ['unknown','na','n a'].includes(customer);
+      if (generic) fallbackKeys.add(`OTHER-FALLBACK|${sku}|${date}|${row.lineIndex}|${rowNo}`);
+      else orderKeys.add(`OTHER-CUSTOMER|${date}|${e.type||''}|${e.channel||''}|${customer}`);
+    }
+  });
+  return {total:orderKeys.size + fallbackKeys.size, exact:orderKeys.size, fallback:fallbackKeys.size};
+}
+
 function _customerRepeatStatsForSkus(rawSkus, options={}){
   const d1=String(options.d1||''),d2=String(options.d2||'');
   const types=new Set((options.types||[]).map(v=>String(v||'').trim().toLowerCase()).filter(Boolean));
@@ -8430,6 +8536,7 @@ function _customerRepeatStatsForSkus(rawSkus, options={}){
     (item.channel_order_events||[]).forEach(ev=>add(ev?.p||ev?.platform,ev?.d||ev?.date,ev?.o||ev?.order,ev?.c||ev?.customer));
     (item.orderdate_sales_entries||item.sales_entries||[]).forEach((ev,index)=>{
       if(_scOrderChannel(ev)!=='Purchase')return;
+      if(Math.max(0,_opsNum(ev?.qty))<=0&&Math.max(0,_opsNum(ev?.rev))<=0)return;
       const d=_bizEntryDate(ev),customer=_scOrderNormCustomer(ev?.cust||ev?.customer);
       if(!d||!customer||['unknown','na','n a','purchase'].includes(customer))return;
       add('Purchase',d,`PURCHASE|${d}|${customer}`,customer);
@@ -8443,31 +8550,33 @@ function _customerRepeatStatsForSkus(rawSkus, options={}){
   return {show:exactOrders.size>0,orders:exactOrders.size,eligibleOrders:eligibleOrders.size,distinct,repeat,repeatOrders,rate,hasIdentity:distinct>0,platforms:Array.from(platforms).sort(),identityPlatforms:Array.from(identityPlatforms).sort(),unsupported};
 }
 
-function _sdWebsiteRepeatStats(item){
+function _sdWebsiteRepeatStats(item, rawSkus){
   const types=Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value);
   const marketplaces=Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value);
-  return _customerRepeatStatsForSkus([item?.sku],{
+  const targetSkus = Array.isArray(rawSkus) && rawSkus.length ? rawSkus : [item?.sku];
+  return _customerRepeatStatsForSkus(targetSkus,{
     d1:document.getElementById('sdD1')?.value||'',
     d2:document.getElementById('sdD2')?.value||'',types,marketplaces
   });
 }
 
-function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
+function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usageContext){
   const emp0 = (LOGIN_ROLE === 'employee');
   const stock = parseFloat(item.inv_stock) || 0;
   const wip = parseFloat(item.inv_wip) || 0;
   const avail = stock + wip;
-  const totalOrders = ents.length;
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-  const sellThrough = _sdSellThroughStats(item, ents);
+  const usage = usageContext || _sdUsageContext(item);
+  const usageEntries = usage.entries || ents;
+  const sellThrough = _sdSellThroughStats(item, usageEntries);
   // AOV is intentionally calculated per piece for every Type/filter.
   // This keeps Purchase/B2B orders with multiple pieces mathematically correct.
   const aovPerPiece = totalQty ? (totalRev / totalQty) : 0;
 
-  const dated = ents.map(e => e.date).filter(d => d && d !== 'N/A').sort();
+  const dated = usageEntries.map(e => e.date).filter(d => d && d !== 'N/A').sort();
   const lastSoldDate = dated.length ? dated[dated.length - 1] : '';
-  const filteredStatus = _sdFilteredStatus(item, ents);
+  const filteredStatus = _sdFilteredStatus(item, usageEntries);
   const metaStatusEl = document.getElementById('sdMetaStatus');
   if (metaStatusEl) metaStatusEl.textContent = filteredStatus;
 
@@ -8518,7 +8627,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       rows.splice(1, 0, ['AOV / Piece (Filtered)', fmt(aovPerPiece)]);
       rows.splice(2, 0, ['Discount % (vs MRP)', (overallDiscPct||0) + '%']);
     }
-    const websiteRepeat = _sdWebsiteRepeatStats(item);
+    const websiteRepeat = _sdWebsiteRepeatStats(item, usage.skus);
     if (websiteRepeat.show){
       rows.push(['Repeat Customer Rate', websiteRepeat.hasIdentity?`${websiteRepeat.rate.toFixed(1)}% (${websiteRepeat.repeat} of ${websiteRepeat.distinct} identifiable customers)`:'NA — customer identity unavailable']);
     }
@@ -8546,8 +8655,8 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
   const byType = {};
   ents.forEach(e => {
     const t = e.type || 'Regular';
-    if (!byType[t]) byType[t] = {orders:0, qty:0, rev:0};
-    byType[t].orders += 1;
+    if (!byType[t]) byType[t] = {lines:0, qty:0, rev:0};
+    byType[t].lines += 1;
     byType[t].qty += parseFloat(e.qty) || 0;
     byType[t].rev += parseFloat(e.rev) || 0;
   });
@@ -8561,7 +8670,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp){
       const dPct = (mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0;
       return `<div class="td-card">
         <div class="td-type">${escHtml(t)}</div>
-        <div class="td-row"><span>Orders</span><b>${v.orders}</b></div>
+        <div class="td-row"><span>Sales Lines</span><b>${v.lines}</b></div>
         <div class="td-row"><span>Qty</span><b>${v.qty}</b></div>
         <div class="td-row rev-only"><span>Net Rev</span><b class="green">${fmt(v.rev)}</b></div>
         <div class="td-row rev-only"><span>Discount %</span><b>${dPct}%</b></div>
@@ -8648,8 +8757,8 @@ function renderSkuDetails(sku){
   const byType = {};
   ents.forEach(e => {
     const t = e.type || 'Regular';
-    if (!byType[t]) byType[t] = {orders:0, qty:0, rev:0};
-    byType[t].orders += 1;
+    if (!byType[t]) byType[t] = {lines:0, qty:0, rev:0};
+    byType[t].lines += 1;
     byType[t].qty += parseFloat(e.qty) || 0;
     byType[t].rev += parseFloat(e.rev) || 0;
   });
@@ -8664,7 +8773,7 @@ function renderSkuDetails(sku){
       return `
       <div class="td-card">
         <div class="td-type">${t}</div>
-        <div class="td-row"><span>Orders</span><b>${v.orders}</b></div>
+        <div class="td-row"><span>Sales Lines</span><b>${v.lines}</b></div>
         <div class="td-row"><span>Qty</span><b>${v.qty}</b></div>
         <div class="td-row rev-only"><span>Net Rev</span><b class="green">${fmt(v.rev)}</b></div>
         <div class="td-row rev-only"><span>Discount %</span><b>${dPct0}%</b></div>
@@ -8693,15 +8802,21 @@ function renderSdTable(){
   let ents = _sdFilteredEntries(item).slice();
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
-  const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
+  const directQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
+  const usage = _sdUsageContext(item);
+  const orderStats = _sdOrderStats(usage);
+  const totalQty = usage.totalQty;
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
   const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
-  const sellThrough = _sdSellThroughStats(item, ents);
+  const sellThrough = _sdSellThroughStats(item, usage.entries);
   // Return % = returned units divided by the original dispatched units.
   // COSA Final Qty is the net sold quantity, so original dispatched qty is
   // Final Qty + Return Qty. This stays fully filter-aware because both totals
   // are calculated from the currently filtered transaction rows.
-  const returnBaseQty = totalQty + totalRet;
+  // Returns and return amount below belong to the selected SKU's direct COSA
+  // rows, so their denominator must stay direct too (combo-parent demand is a
+  // separate inventory-consumption quantity and must not dilute Return %).
+  const returnBaseQty = directQty + totalRet;
   const totalRetPct = returnBaseQty > 0 ? (totalRet / returnBaseQty) * 100 : 0;
   const totalRetAmt = ents.reduce((s,e) => {
     const r = parseFloat(e.ret) || 0;
@@ -8713,13 +8828,20 @@ function renderSdTable(){
   // entries (ents) par based hai: MRP vs weighted-avg selling price. Koi filter
   // na ho to ye poore SKU ka overall discount % hota hai (jaisa maanga gaya).
   const mrp = parseFloat(item.mrp) || 0;
-  const overallAvgSp = totalQty ? (totalRev / totalQty) : 0;
+  const overallAvgSp = directQty ? (totalRev / directQty) : 0;
   const overallDiscPct = (mrp > 0 && overallAvgSp > 0 && overallAvgSp < mrp)
     ? Math.round((mrp - overallAvgSp) / mrp * 100 * 10) / 10 : 0;
 
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
-  setT('sdOrders', ents.length);
-  setT('sdQty', totalQty);
+  setT('sdOrders', orderStats.total.toLocaleString('en-IN'));
+  setT('sdOrdersMeta', orderStats.fallback
+    ? `${orderStats.exact.toLocaleString('en-IN')} exact + ${orderStats.fallback.toLocaleString('en-IN')} source rows without Order ID`
+    : 'Unique Order IDs / customer-date sessions');
+  setT('sdQty', Math.round(totalQty).toLocaleString('en-IN'));
+  const parentCodes = usage.parents.map(parent => _opsSkuKey(parent?.sku)).filter(Boolean);
+  setT('sdQtyMeta', usage.comboQty > 0
+    ? `${Math.round(usage.directQty).toLocaleString('en-IN')} direct + ${Math.round(usage.comboQty).toLocaleString('en-IN')} via ${parentCodes.join(', ')}`
+    : 'Final Qty by Order Date');
   setT('sdRev', fmt(totalRev));
   setT('sdDiscPct', overallDiscPct + '%');
   setT('sdStrPct', sellThrough.rate.toFixed(1) + '%');
@@ -8728,7 +8850,7 @@ function renderSdTable(){
   setT('sdRetPct', totalRetPct.toFixed(1) + '%');
   setT('sdRetAmt', fmt(totalRetAmt));
 
-  const websiteRepeat = _sdWebsiteRepeatStats(item);
+  const websiteRepeat = _sdWebsiteRepeatStats(item, usage.skus);
   const websiteRepeatCard = document.getElementById('sdWebsiteRepeatCard');
   if (websiteRepeatCard) websiteRepeatCard.style.display = websiteRepeat.show ? '' : 'none';
   if (websiteRepeat.show){
@@ -8738,7 +8860,7 @@ function renderSdTable(){
     setT('sdWebsiteRepeatMeta', `${websiteRepeat.repeat.toLocaleString('en-IN')} repeat of ${websiteRepeat.distinct.toLocaleString('en-IN')} identifiable customers · ${covered}${unsupported}`);
   }
 
-  _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp);
+  _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage);
 
   renderSdTrend();
   renderSdChannel();
@@ -8765,12 +8887,12 @@ function renderSdTable(){
 }
 
 /* ── Shared: date + type + marketplace filtered entries ── */
-function _sdFilteredEntries(item){
+function _sdFilterEntries(rows){
   const d1 = document.getElementById('sdD1')?.value || '';
   const d2 = document.getElementById('sdD2')?.value || '';
   const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
   const marketplacesPicked = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c => c.value);
-  let ents = (item.sales_entries || []);
+  let ents = Array.isArray(rows) ? rows : [];
   if (typesPicked.length) ents = ents.filter(e => typesPicked.includes(e.type || 'Regular'));
   if (marketplacesPicked.length) ents = ents.filter(e => marketplacesPicked.includes(_sdSorMarketplace(e)));
   if (d1 || d2) {
@@ -8782,6 +8904,14 @@ function _sdFilteredEntries(item){
     });
   }
   return ents;
+}
+function _sdFilteredEntries(item){
+  return _sdFilterEntries(item?.sales_entries || []);
+}
+function _sdFilteredOrderEntries(item){
+  const orderRows = Array.isArray(item?.orderdate_sales_entries) && item.orderdate_sales_entries.length
+    ? item.orderdate_sales_entries : (item?.sales_entries || []);
+  return _sdFilterEntries(orderRows);
 }
 function renderSdAll(){
   renderSdTable();
@@ -14405,6 +14535,9 @@ function exportComboRisk(){
    is allocated once across parent CMBs; it is never independently reused for
    every combo that references the same child. */
 let _opAvailRows=[];
+let _opAvailBuilt=false;
+let _opAvailPastedSet=null; // null = full catalogue; Set (including empty) = pasted-only scope
+let _opAvailPasteStats={pasted:0,matched:0,notFound:[]};
 function _opAvailRequiredQtys(parent,children){
   const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
   if(!pack)return req;
@@ -14458,6 +14591,7 @@ function _opAvailChildren(parent){
 function _buildOperationsAvailability(){
   const candidates=(master||[]).map(parent=>{
     const sku=_opsSkuKey(parent&&parent.sku),children=_opAvailChildren(parent);
+    if(_opAvailPastedSet!==null&&!_opAvailPastedSet.has(sku))return null;
     if(!sku||!/^CMB[-_]/i.test(sku)||!children.length)return null;
     const required=_opAvailRequiredQtys(parent,children);children.forEach(ch=>{ch.requiredQty=required.get(ch.sku)||1;});
     return {parent,sku,skuName:String(parent.sku_name||''),image:String(parent.image_url||''),packDetails:String(parent.pack_details||''),group:_opsGroup(parent),stock:Math.max(0,_opsNum(parent.inv_stock)),wip:Math.max(0,_opsNum(parent.inv_wip)),totalSold:Math.max(0,_opsNum(parent.final_qty)),children,selected:0,buildQty:0};
@@ -14481,33 +14615,80 @@ function _buildOperationsAvailability(){
     if(!allocated)break;
   }
   _opAvailRows=candidates.filter(c=>c.buildQty>0);
+  _opAvailBuilt=true;
   return _opAvailRows;
 }
 function _operationsAvailabilityFiltered(){
-  const rows=_opAvailRows.length?_opAvailRows:_buildOperationsAvailability();
+  const rows=_opAvailBuilt?_opAvailRows:_buildOperationsAvailability();
   const q=String(document.getElementById('opAvailSearch')?.value||'').trim().toLowerCase();
   const childQ=String(document.getElementById('opAvailChildSearch')?.value||'').trim().toLowerCase();
   return rows.filter(r=>(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(!childQ||r.children.some(c=>`${c.sku} ${c.skuName}`.toLowerCase().includes(childQ))));
 }
-function loadOperationsAvailability(){_opAvailRows=[];_buildOperationsAvailability();renderOperationsAvailability();}
+function _parseOperationsCmbPaste(raw){
+  const lookup=new Map();
+  (master||[]).forEach(item=>{
+    const sku=_opsSkuKey(item&&item.sku);if(!/^CMB[-_]/i.test(sku))return;
+    lookup.set(sku,sku);lookup.set(sku.replace(/[^A-Z0-9]/g,''),sku);
+  });
+  const prepared=String(raw||'').toUpperCase()
+    .replace(/\bCMB\s+([A-Z0-9][A-Z0-9_-]*)/g,'CMB-$1');
+  const rawTokens=prepared.split(/[\s,;|]+/).map(token=>token.replace(/^[^A-Z0-9]+|[^A-Z0-9_-]+$/g,'')).filter(Boolean);
+  const pasted=[],seen=new Set();
+  rawTokens.forEach(token=>{
+    if(!/^CMB(?:[-_]|[0-9])/i.test(token))return;
+    let key=_opsSkuKey(token);
+    if(/^CMB\d/i.test(key))key='CMB-'+key.slice(3);
+    if(seen.has(key))return;seen.add(key);pasted.push(key);
+  });
+  const matched=new Set(),notFound=[];
+  pasted.forEach(key=>{
+    const canonical=lookup.get(key)||lookup.get(key.replace(/[^A-Z0-9]/g,''));
+    if(canonical)matched.add(canonical);else notFound.push(key);
+  });
+  return {pasted,matched,notFound};
+}
+function _operationsPasteInfo(){
+  const el=document.getElementById('opAvailPasteInfo');if(!el)return;
+  if(_opAvailPastedSet===null){el.textContent='No pasted list — checking all mapped CMBs.';return;}
+  const buildable=_opAvailRows.length,matched=_opAvailPasteStats.matched||0;
+  const notBuildable=Math.max(0,matched-buildable),missing=_opAvailPasteStats.notFound||[];
+  const missingText=missing.length?` · Not found: ${missing.slice(0,8).join(', ')}${missing.length>8?` +${missing.length-8} more`:''}`:'';
+  el.textContent=`${(_opAvailPasteStats.pasted||0).toLocaleString('en-IN')} pasted · ${matched.toLocaleString('en-IN')} matched · ${buildable.toLocaleString('en-IN')} buildable · ${notBuildable.toLocaleString('en-IN')} cannot build${missingText}`;
+}
+function applyOperationsCmbPaste(){
+  const raw=document.getElementById('opAvailPaste')?.value||'';
+  if(!raw.trim()){clearOperationsCmbPaste();return;}
+  const parsed=_parseOperationsCmbPaste(raw);
+  _opAvailPastedSet=parsed.matched;
+  _opAvailPasteStats={pasted:parsed.pasted.length,matched:parsed.matched.size,notFound:parsed.notFound};
+  _opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();
+}
+function clearOperationsCmbPaste(){
+  _opAvailPastedSet=null;_opAvailPasteStats={pasted:0,matched:0,notFound:[]};
+  const input=document.getElementById('opAvailPaste');if(input)input.value='';
+  _opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();
+}
+function loadOperationsAvailability(){_opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();}
 function renderOperationsAvailability(){
   const host=document.getElementById('opAvailContent'),sum=document.getElementById('opAvailSummary');if(!host)return;
   const rows=_operationsAvailabilityFiltered(),childSet=new Set();rows.forEach(r=>r.children.forEach(c=>childSet.add(c.sku)));
+  _operationsPasteInfo();
   const cmbStock=rows.reduce((s,r)=>s+r.stock,0),cmbWip=rows.reduce((s,r)=>s+r.wip,0),buildable=rows.reduce((s,r)=>s+r.buildQty,0);
   if(sum)sum.innerHTML=_opsKpi('Buildable CMB Designs',rows.length.toLocaleString('en-IN'),'Every required child has usable stock')+_opsKpi('CMBs That Can Be Built',Math.round(buildable).toLocaleString('en-IN'),'Shared child stock counted once')+_opsKpi('Current CMB Stock',Math.round(cmbStock).toLocaleString('en-IN'),'Shown only for reference')+_opsKpi('Current CMB WIP',Math.round(cmbWip).toLocaleString('en-IN'),'Shown only for reference');
   const body=rows.map(r=>{
     const span=r.children.length;
-    return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">Need ${c.requiredQty.toLocaleString('en-IN')} per CMB · Child stock ${Math.round(c.stock).toLocaleString('en-IN')} · ${escHtml(c.source)}</div></td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
+    return r.children.map((c,ci)=>`<tr>${ci===0?`<td rowspan="${span}"><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td rowspan="${span}">${_opsPhoto(r.image)}</td><td rowspan="${span}" class="ops-num"><b>${Math.round(r.stock).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>`:''}<td><button class="sku-link" onclick="openSkuDetails('${String(c.sku).replace(/'/g,"\\'")}')">↳ ${escHtml(skuLabel(c.sku,c.skuName))}</button><div class="small-note">${escHtml(c.source)}</div></td><td class="ops-num">${Math.round(c.requiredQty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(c.stock).toLocaleString('en-IN')}</b></td><td class="ops-num">${Math.round(c.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.floor(c.stock/Math.max(1,c.requiredQty)).toLocaleString('en-IN')}</td>${ci===0?`<td rowspan="${span}" class="ops-num"><b>${Math.round(r.buildQty).toLocaleString('en-IN')}</b></td><td rowspan="${span}" class="ops-num">${Math.round(r.totalSold).toLocaleString('en-IN')}</td><td rowspan="${span}" class="ops-list">${escHtml(r.packDetails||'—')}</td>`:''}</tr>`).join('');
   }).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock</th><th>CMB WIP</th><th>Child SKUs and Stock Check</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="ops-empty">No CMB can currently be assembled from complete child stock.</td></tr>'}</tbody></table>`;
+  const emptyText=_opAvailPastedSet===null?'No CMB can currently be assembled from complete child stock.':'None of the pasted, matched CMBs can currently be assembled from complete child stock.';
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>CMB</th><th>Photo</th><th>CMB Stock</th><th>CMB WIP</th><th>Child SKU / Mapping</th><th>Need per CMB</th><th>Child Stock</th><th>Child WIP</th><th>Max from Child</th><th>CMBs That Can Be Built</th><th>Total CMB Sold Qty</th><th>Pack Details</th></tr></thead><tbody>${body||`<tr><td colspan="12" class="ops-empty">${emptyText}</td></tr>`}</tbody></table>`;
 }
 function exportOperationsAvailability(){
   const rows=_operationsAvailabilityFiltered();if(!rows.length){alert('No available CMB rows to export.');return;}
-  const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,c.requiredQty,Math.round(c.stock),r.group,Math.round(r.stock),Math.round(r.wip),Math.round(r.buildQty),Math.round(r.totalSold),r.packDetails,r.image])));
-  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Child Qty Needed per CMB','Child Stock Used for Check','Combo Group','CMB Stock (Reference)','CMB WIP (Reference)','CMBs That Can Be Built','Total CMB Sold Qty','Pack Details','CMB Image Link'],data,'exhibition_combo_availability');
+  const data=[];rows.forEach(r=>r.children.forEach(c=>data.push([r.sku,exportSkuName(r.sku,r.skuName),c.sku,exportSkuName(c.sku,c.skuName),c.source,c.requiredQty,Math.round(c.stock),Math.round(c.wip),Math.floor(c.stock/Math.max(1,c.requiredQty)),r.group,Math.round(r.stock),Math.round(r.wip),Math.round(r.buildQty),Math.round(r.totalSold),r.packDetails,r.image])));
+  _dlCsv(['CMB','CMB Name','Child SKU','Child SKU Name','Child Mapping Source','Child Qty Needed per CMB','Child Stock Used for Check','Child WIP (Reference)','Max CMBs Supported by This Child','Combo Group','CMB Stock (Reference)','CMB WIP (Reference)','CMBs That Can Be Built','Total CMB Sold Qty','Pack Details','CMB Image Link'],data,_opAvailPastedSet===null?'exhibition_combo_availability':'pasted_cmb_buildable_availability');
 }
 const renderOperationsAvailability_d=_debounce(()=>renderOperationsAvailability(),220);
-window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;
+window.loadOperationsAvailability=loadOperationsAvailability;window.renderOperationsAvailability=renderOperationsAvailability;window.exportOperationsAvailability=exportOperationsAvailability;window.renderOperationsAvailability_d=renderOperationsAvailability_d;window.applyOperationsCmbPaste=applyOperationsCmbPaste;window.clearOperationsCmbPaste=clearOperationsCmbPaste;
 
 function _loadOpsSupport(fresh){
   if(_opsSupportPromise&&!fresh)return _opsSupportPromise;
