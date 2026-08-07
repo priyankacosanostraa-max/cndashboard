@@ -1,4 +1,12 @@
 # ============================================================
+# Cosa Nostraa — V23.8 (OPERATIONS COMBO CHILD-SKU FIX)
+# V23.8:
+#   • Operations CMB planner now preserves suffix child SKUs such as
+#     BT-0630_(P), BT-0630_(S), BT-0630_(13).
+#   • Similar child-SKU variants are resolved inside Operations to the
+#     variant with the highest usable Inv Stock + Blocked Qty (WIP excluded).
+#   • Fix covers pasted CMB buildability, including CMB-0381-style sets where
+#     one child is supported by Blocked Qty and another by Inventory Stock.
 # Cosa Nostraa — V23.7 (SIMPLE SEARCHABLE MENU)
 # V23.7:
 #   • Menu tab names are simpler; every item explains what the tab contains.
@@ -2380,7 +2388,10 @@ def _refresh_data():
             "wip_customer": int(it.get("inv_wip_customer") or 0),
             "wip_customize": int(it.get("inv_wip_customize") or 0),
         }
-    _sku_re = re.compile(r"[A-Za-z]{1,5}[-_ ]?\d{2,5}(?:[-_(][A-Za-z0-9)]+)*")
+    # Preserve suffix variants such as BT-0630_(P), BT-0630_(S), BT-0630_(13).
+    # The older regex stopped at BT-0630 because it could not consume the
+    # two-character "_(" suffix opener, which made valid child stock look 0.
+    _sku_re = re.compile(r"[A-Za-z]{1,10}[-_ ]?\d{2,6}(?:(?:[-_]\([A-Za-z0-9]+\))|(?:\([A-Za-z0-9]+\))|(?:[-_][A-Za-z0-9]+))*")
     for it in compiled:
         combo = it.get("combo_skus") or ""
         it["combo_details"] = []
@@ -7155,7 +7166,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vOperations" class="ops-page" style="display:none">
     <div class="ops-head">
-      <div><div class="ops-title">Exhibition Combo Availability</div><div class="ops-sub">Shows CMBs that can be assembled now. Usable child stock is Inventory Stock plus Blocked Qty from All Product. WIP is not used. Shared stock is divided equally, with higher-selling CMBs receiving any final incomplete round first.</div></div>
+      <div><div class="ops-title">Exhibition Combo Availability</div><div class="ops-sub">Shows CMBs that can be assembled now. Usable child stock is Inventory Stock plus Blocked Qty from All Product. WIP is not used. Similar suffix variants (for example BT-0630_(P)/(S)) use the variant with the highest Inv Stock + Blocked Qty. Shared stock is divided equally, with higher-selling CMBs receiving any final incomplete round first.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="loadOperationsAvailability(true)">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportOperationsAvailability()">Export CSV</button></div>
     </div>
     <div class="ops-filters">
@@ -7174,7 +7185,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="opAvailStockInfo" class="small-note" style="margin:0 2px 10px">Loading live All Product stock…</div>
     <div id="opAvailSummary" class="ops-kpis"></div>
     <div id="opAvailContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Operations usable stock = Inventory Stock + Blocked Qty from All Product. WIP and existing parent-CMB stock are not added to buildable quantity. Blocked Qty is not added to stock in any other dashboard tab. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
+    <div class="ops-note">Paste a CMB list to allocate shared child stock only across those pasted CMBs; clear the list to check the full catalogue. Operations usable stock = Inventory Stock + Blocked Qty from All Product. WIP and existing parent-CMB stock are not added to buildable quantity. For child SKU families with suffix variants, Operations selects the variant with the highest usable Inv Stock + Blocked Qty and shows the resolved SKU in the child mapping. Blocked Qty is not added to stock in any other dashboard tab. Pack Details apply to every product type. One mapped child with Pack of 7 consumes 7 units; five distinct mapped children in a Set of 5 consume 1 each. Shared child inventory is never double-counted.</div>
   </div>
 
   <div id="vSmartOps" class="ops-page" style="display:none">
@@ -14621,9 +14632,68 @@ let _opAvailBuilt=false;
 let _opAvailPastedSet=null; // null = full catalogue; Set (including empty) = pasted-only scope
 let _opAvailPasteStats={pasted:0,matched:0,notFound:[]};
 let _opLiveInventoryMap={};
+let _opLiveInventoryCompactMap={};
+let _opLiveInventoryFamilyBest={};
+let _opMasterInventoryFamilyBest={};
+let _opMasterInventoryFamilyRef=null;
 let _opLiveInventoryMeta={};
 let _opLiveInventoryAt=0;
 let _opInventoryLoadPromise=null;
+function _opSkuCompact(v){return _opsSkuKey(v).replace(/[^A-Z0-9]/g,'');}
+function _opSkuFamilyBase(v){
+  const s=_opsSkuKey(v);
+  const m=s.match(/^([A-Z]{1,10})\s*[-_ ]?\s*(\d{2,6})(?=$|[^0-9])/i);
+  return m?`${m[1].toUpperCase()}-${m[2]}`:'';
+}
+function _opUsableInventory(rec){return Math.max(0,_opsNum(rec&&rec.inv_stock))+Math.max(0,_opsNum(rec&&rec.blocked_qty));}
+function _opBetterInventoryCandidate(a,b){
+  if(!a)return false;if(!b)return true;
+  const au=_opUsableInventory(a),bu=_opUsableInventory(b);if(au!==bu)return au>bu;
+  const as=Math.max(0,_opsNum(a.inv_stock)),bs=Math.max(0,_opsNum(b.inv_stock));if(as!==bs)return as>bs;
+  const ab=Math.max(0,_opsNum(a.blocked_qty)),bb=Math.max(0,_opsNum(b.blocked_qty));if(ab!==bb)return ab>bb;
+  return _opsSkuKey(a.sku).localeCompare(_opsSkuKey(b.sku))<0;
+}
+function _opEnsureMasterInventoryFamilies(){
+  if(_opMasterInventoryFamilyRef===master)return;
+  const fam={};
+  (master||[]).forEach(it=>{
+    const sku=_opsSkuKey(it&&it.sku),base=_opSkuFamilyBase(sku);if(!sku||!base)return;
+    if(_opBetterInventoryCandidate(it,fam[base]))fam[base]=it;
+  });
+  _opMasterInventoryFamilyBest=fam;_opMasterInventoryFamilyRef=master;
+}
+function _opExtractSkuTokens(text){
+  const s=String(text||'').toUpperCase();
+  const re=/[A-Z]{1,10}\s*[-_ ]?\s*\d{2,6}(?=$|[^0-9])(?:(?:\s*[-_]\s*\([A-Z0-9]+\))|(?:\s*\([A-Z0-9]+\))|(?:\s*[-_]\s*[A-Z0-9]+))*/g;
+  return (s.match(re)||[]).map(x=>x.replace(/\s+/g,''));
+}
+function _opResolveInventoryChild(raw){
+  const rawObj=(raw&&typeof raw==='object')?raw:{};
+  const requested=_opsSkuKey(rawObj.sku||raw);if(!requested)return null;
+  const compact=_opSkuCompact(requested);
+  _opEnsureMasterInventoryFamilies();
+  const exactMaster=_masterSkuMap[requested]||_roExactSkuLookup[compact]||null;
+  const exactMasterKey=_opsSkuKey(exactMaster&&exactMaster.sku||requested);
+  const exactLive=_opLiveInventoryMap[exactMasterKey]||_opLiveInventoryCompactMap[compact]||null;
+  const family=_opSkuFamilyBase(exactMasterKey||requested);
+  const familyLive=family?_opLiveInventoryFamilyBest[family]||null:null;
+  const familyMaster=family?_opMasterInventoryFamilyBest[family]||null:null;
+
+  // Live All Product is authoritative once loaded. Within the same prefix+number
+  // family, use the variant with the highest Inv Stock + Blocked Qty. Exact wins
+  // a tie so a specifically named child is not changed unnecessarily.
+  if(exactLive||familyLive){
+    let chosen=exactLive||familyLive;
+    if(exactLive&&familyLive&&_opUsableInventory(familyLive)>_opUsableInventory(exactLive))chosen=familyLive;
+    const sku=_opsSkuKey(chosen&&chosen.sku||exactMasterKey||requested);
+    return {requested,sku,live:chosen,item:_masterSkuMap[sku]||_roExactSkuLookup[_opSkuCompact(sku)]||exactMaster||rawObj,familyMatched:sku!==requested};
+  }
+
+  let chosenItem=exactMaster||rawObj;
+  if(familyMaster&&(!exactMaster||_opUsableInventory(familyMaster)>_opUsableInventory(exactMaster)))chosenItem=familyMaster;
+  const sku=_opsSkuKey(chosenItem&&chosenItem.sku||requested);
+  return {requested,sku,live:null,item:chosenItem||rawObj,familyMatched:sku!==requested};
+}
 function _opAvailRequiredQtys(parent,children){
   const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
   if(!pack)return req;
@@ -14668,18 +14738,24 @@ function _opAvailRequiredQtys(parent,children){
 function _opAvailChildren(parent){
   const out=[],seen=new Set(),parentKey=_opsSkuKey(parent&&parent.sku);
   const add=(raw,source)=>{
-    const key=_opsSkuKey(raw&&raw.sku||raw);if(!key||key===parentKey||seen.has(key))return;
-    const item=_masterSkuMap[key];if(!item&&!raw?.sku)return;
-    seen.add(key);const base=item||raw||{};
-    const live=_opLiveInventoryMap[key]||null;
-    const invStock=Math.max(0,_opsNum(live?live.inv_stock:(base.inv_stock??raw?.inv_stock)));
-    const blockedQty=Math.max(0,_opsNum(live?live.blocked_qty:(base.blocked_qty??raw?.blocked_qty)));
-    const wip=Math.max(0,_opsNum(live?live.inv_wip:(base.inv_wip??raw?.inv_wip)));
-    out.push({sku:key,skuName:String(base.sku_name||raw?.sku_name||''),image:String(base.image_url||raw?.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip,source});
+    const resolved=_opResolveInventoryChild(raw);if(!resolved)return;
+    const key=_opsSkuKey(resolved.sku);if(!key||key===parentKey||seen.has(key))return;
+    const rawObj=(raw&&typeof raw==='object')?raw:{};
+    const base=resolved.item||rawObj||{};
+    if(!base.sku&&!resolved.live&&!_masterSkuMap[key])return;
+    seen.add(key);
+    const live=resolved.live||_opLiveInventoryMap[key]||null;
+    const invStock=Math.max(0,_opsNum(live?live.inv_stock:(base.inv_stock??rawObj.inv_stock)));
+    const blockedQty=Math.max(0,_opsNum(live?live.blocked_qty:(base.blocked_qty??rawObj.blocked_qty)));
+    const wip=Math.max(0,_opsNum(live?live.inv_wip:(base.inv_wip??rawObj.inv_wip)));
+    const resolvedNote=resolved.familyMatched?` · ${resolved.requested} → ${key} (highest Inv+Blocked)`:'';
+    out.push({sku:key,requestedSku:resolved.requested,skuName:String(base.sku_name||rawObj.sku_name||''),image:String(base.image_url||rawObj.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip,source:source+resolvedNote});
   };
+  // Read the original Stone/Combo Details text first. This preserves variants like
+  // BT-0630_(P) even if an older cached combo_details snapshot was truncated.
+  _opExtractSkuTokens(parent&&parent.combo_skus).forEach(s=>add(s,'Stone/Combo Details'));
   (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(c=>add(c,'Combo Details'));
-  const pack=String(parent&&parent.pack_details||'');
-  (pack.toUpperCase().match(/\b[A-Z]{1,10}[-_][A-Z0-9][A-Z0-9_-]{1,24}\b/g)||[]).forEach(s=>add(s,'Pack Details'));
+  _opExtractSkuTokens(parent&&parent.pack_details).forEach(s=>add(s,'Pack Details'));
   return out;
 }
 function _buildOperationsAvailability(){
@@ -14783,12 +14859,15 @@ function clearOperationsCmbPaste(){
   _opAvailRows=[];_opAvailBuilt=false;_buildOperationsAvailability();renderOperationsAvailability();
 }
 function _opApplyLiveInventory(rows){
-  const next={};
+  const next={},compactMap={},familyBest={};
   (Array.isArray(rows)?rows:[]).forEach(r=>{
     const sku=_opsSkuKey(r&&r.sku);if(!sku)return;
-    next[sku]={inv_stock:Math.max(0,_opsNum(r.inv_stock)),blocked_qty:Math.max(0,_opsNum(r.blocked_qty)),inv_wip:Math.max(0,_opsNum(r.inv_wip))};
+    const rec={sku,inv_stock:Math.max(0,_opsNum(r.inv_stock)),blocked_qty:Math.max(0,_opsNum(r.blocked_qty)),inv_wip:Math.max(0,_opsNum(r.inv_wip))};
+    next[sku]=rec;
+    const compact=_opSkuCompact(sku);if(compact&&_opBetterInventoryCandidate(rec,compactMap[compact]))compactMap[compact]=rec;
+    const family=_opSkuFamilyBase(sku);if(family&&_opBetterInventoryCandidate(rec,familyBest[family]))familyBest[family]=rec;
   });
-  _opLiveInventoryMap=next;_opLiveInventoryAt=Date.now();
+  _opLiveInventoryMap=next;_opLiveInventoryCompactMap=compactMap;_opLiveInventoryFamilyBest=familyBest;_opLiveInventoryAt=Date.now();
 }
 function _opRenderInventoryStatus(errorText){
   const el=document.getElementById('opAvailStockInfo');if(!el)return;
