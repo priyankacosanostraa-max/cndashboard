@@ -14505,8 +14505,25 @@ let _opsSupportPromise = null;
 let _smartAlertRows = [];
 let _inventoryAgeRows = [];
 
-function _opsNum(v){ const n = Number(typeof v==='string'?v.replace(/,/g,'').trim():v); return Number.isFinite(n) ? n : 0; }
-function _opsSkuKey(v){ return String(v == null ? '' : v).trim().toUpperCase(); }
+function _opNormText(v){
+  let s=(v===null||v===undefined)?'':String(v);
+  try{s=s.normalize('NFKC');}catch(_e){}
+  return s
+    .replace(/\u00a0/g,' ')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g,'-')
+    .replace(/[\uFF3F]/g,'_')
+    .replace(/[\u2018\u2019\u201A\u201B]/g,"'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g,'"')
+    .trim();
+}
+function _opFold(v){return _opNormText(v).toLocaleLowerCase('en-US').replace(/\s+/g,' ').trim();}
+function _opsNum(v){
+  const raw=_opNormText(v).replace(/,/g,'').trim();
+  if(!raw)return 0;
+  const n=Number(raw);
+  return Number.isFinite(n)?n:0;
+}
+function _opsSkuKey(v){ return _opNormText(v).toUpperCase(); }
 function _opsDateDays(iso){
   const s = String(iso || '').slice(0,10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -14689,7 +14706,7 @@ function _opEnsureMasterInventoryIndex(){
   _opMasterInventoryFamilyRef=master;
 }
 function _opExtractSkuTokens(text){
-  const s=String(text||'').toUpperCase();
+  const s=_opNormText(text).toUpperCase();
   const re=/[A-Z]{1,10}\s*[-_ ]?\s*\d{2,6}(?=$|[^0-9])(?:(?:\s*[-_]\s*\([A-Z0-9]+\))|(?:\s*\([A-Z0-9]+\))|(?:\s*[-_]\s*[A-Z0-9]+))*/g;
   return (s.match(re)||[]).map(x=>x.replace(/\s+/g,''));
 }
@@ -14710,7 +14727,7 @@ function _opResolveInventoryChild(raw){
 }
 function _opAvailRequiredQtys(parent,children){
   const req=new Map(children.map(c=>[c.sku,1]));
-  const pack=String(parent&&parent.pack_details||'').trim();
+  const pack=_opNormText(parent&&parent.pack_details).trim();
   if(!pack)return req;
 
   const aliases={
@@ -14718,9 +14735,9 @@ function _opAvailRequiredQtys(parent,children){
     cufflink:['cufflink','cufflinks','cf'],lapel:['lapel','lp'],pin:['pin','pins'],tie:['tie','ties','ct'],
     chain:['chain','chains'],bracelet:['bracelet','bracelets'],ring:['ring','rings'],pendant:['pendant','pendants']
   };
-  const childText=c=>`${c.sku||''} ${c.skuName||''} ${c.cn_name||''} ${c.taxon||''}`.toLowerCase();
+  const childText=c=>_opFold(`${c.sku||''} ${c.skuName||''} ${c.cn_name||''} ${c.taxon||''}`);
   const rootForKind=kind=>{
-    const k=String(kind||'').toLowerCase().replace(/\b(big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/g,' ').replace(/[^a-z]+/g,' ').trim();
+    const k=_opFold(kind).replace(/\b(big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/g,' ').replace(/[^a-z]+/g,' ').trim();
     if(!k)return '';
     const words=k.split(/\s+/).filter(Boolean);
     for(const [root,list] of Object.entries(aliases)){
@@ -14755,10 +14772,10 @@ function _opAvailRequiredQtys(parent,children){
     return '';
   };
   const requestedSize=kind=>{
-    const k=String(kind||'');
-    if(/\b(smallest|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/i.test(k)||/\bX\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'smallest';
-    if(/\b(small|mini|little)\b/i.test(k)||/\bS\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'small';
-    if(/\b(big|large)\b/i.test(k)||/\bP\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'big';
+    const k=_opFold(kind);
+    if(/\b(smallest|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/i.test(k)||/\bx\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'smallest';
+    if(/\b(small|mini|little)\b/i.test(k)||/\bs\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'small';
+    if(/\b(big|large)\b/i.test(k)||/\bp\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'big';
     return '';
   };
   const matchPart=part=>{
@@ -14779,10 +14796,10 @@ function _opAvailRequiredQtys(parent,children){
 
   const parts=[],partKeys=new Set();
   const addPart=(qty,kind)=>{
-    qty=Math.max(1,Math.floor(Number(qty)||1));
-    kind=String(kind||'').trim().replace(/^[\s,:;-]+|[\s,:;-]+$/g,'').replace(/\s+/g,' ');
+    qty=Math.max(1,Math.floor(_opsNum(qty)||1));
+    kind=_opNormText(kind).replace(/^[\s,:;-]+|[\s,:;-]+$/g,'').replace(/\s+/g,' ');
     if(!kind)return;
-    const key=`${qty}|${kind.toLowerCase()}`;
+    const key=`${qty}|${_opFold(kind)}`;
     if(!partKeys.has(key)){partKeys.add(key);parts.push({qty,kind});}
   };
 
@@ -14792,13 +14809,13 @@ function _opAvailRequiredQtys(parent,children){
   // Examples:
   // "1 brooch, Set of 13 Big BUTTONS"
   // "1 brooch, Set of 7 Small Button, Set of 6 Xtra Small buttons"
-  const packText=pack.replace(/\s+/g,' ').trim();
+  const packText=_opNormText(pack).replace(/\s+/g,' ').trim();
   const segments=packText.replace(/\s+(?:and|plus|with)\s+/ig,'|').split(/[|,;]+/).map(x=>x.trim()).filter(Boolean);
   segments.forEach(seg=>{
-    const m=seg.match(/^\s*(?:(?:pack|set)\s*(?:of\s*)?)?(\d+)\s*(?:pcs?|pieces?|units?)?\s*(.*?)\s*$/i);
+    const m=seg.match(/^\s*(?:(?:pack|set)\s*(?:of\s*)?)?(\d+(?:\.0+)?)\s*(?:pcs?|pieces?|units?)?\s*(.*?)\s*$/i);
     if(m&&m[2])addPart(m[1],m[2]);
   });
-  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*((?:(?:big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\s+)?(?:button(?:s)?|btn(?:s)?|bt(?:s)?|rakhis?|brooch(?:es)?|cufflinks?|lapel\s*pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?))/ig;
+  const typedRe=/(\d+(?:\.0+)?)\s*(?:pcs?|pieces?|units?)?\s*((?:(?:big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\s+)?(?:button(?:s)?|btn(?:s)?|bt(?:s)?|rakhis?|brooch(?:es)?|cufflinks?|lapel\s*pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?))/ig;
   let m;while((m=typedRe.exec(packText)))addPart(m[1],m[2]);
 
   parts.forEach(part=>{
@@ -14894,31 +14911,86 @@ function _buildOperationsAvailability(){
   _opAvailBuilt=true;
   return _opAvailRows;
 }
+function _opSkuLooseKey(v){
+  const s=_opsSkuKey(v).replace(/\s+/g,'');
+  const m=s.match(/^([A-Z]{1,10})[-_]?0*(\d+)(.*)$/i);
+  if(!m)return s.replace(/[^A-Z0-9]/g,'');
+  const digits=String(m[2]||'0').replace(/^0+(?=\d)/,'')||'0';
+  const tail=String(m[3]||'').replace(/[^A-Z0-9]/g,'');
+  return `${String(m[1]||'').toUpperCase()}#${digits}${tail?`#${tail}`:''}`;
+}
+function _opSkuNumber(v){
+  const m=_opsSkuKey(v).match(/^[A-Z]{0,10}[-_ ]*0*(\d+)(?=$|[^0-9])/i);
+  return m?(String(m[1]||'0').replace(/^0+(?=\d)/,'')||'0'):'';
+}
+function _opCmbLooseKey(v){
+  let s=_opsSkuKey(v).replace(/\s+/g,'');
+  if(/^\d+(?:\.0+)?$/.test(s))s='CMB-'+s.replace(/\.0+$/,'');
+  const m=s.match(/^CMB[-_]?0*(\d+)(.*)$/i);
+  if(!m)return s.replace(/[^A-Z0-9]/g,'');
+  const digits=String(m[1]||'0').replace(/^0+(?=\d)/,'')||'0';
+  const tail=String(m[2]||'').replace(/[^A-Z0-9]/g,'');
+  return `CMB#${digits}${tail?`#${tail}`:''}`;
+}
+function _opSmartSearchMatch(query,text,skus,mode){
+  const q=_opNormText(query);if(!q)return true;
+  const hay=_opNormText(text);
+  if(_opFold(hay).includes(_opFold(q)))return true;
+  const qc=_opSkuCompact(q),hc=_opSkuCompact(hay);
+  if(qc&&hc.includes(qc))return true;
+  const list=(Array.isArray(skus)?skus:[skus]).filter(v=>v!==null&&v!==undefined&&_opNormText(v)!=='');
+  if(mode==='cmb'){
+    const qLoose=_opCmbLooseKey(q);
+    if(qLoose&&list.some(v=>_opCmbLooseKey(v)===qLoose))return true;
+  }else{
+    const qLoose=_opSkuLooseKey(q);
+    if(qLoose&&list.some(v=>_opSkuLooseKey(v)===qLoose))return true;
+    const bare=_opNormText(q).replace(/\.0+$/,'');
+    if(/^0*\d+$/.test(bare)){
+      const qNum=(bare.replace(/^0+(?=\d)/,'')||'0');
+      if(list.some(v=>_opSkuNumber(v)===qNum))return true;
+    }
+  }
+  return false;
+}
 function _operationsAvailabilityFiltered(){
   const rows=_opAvailBuilt?_opAvailRows:_buildOperationsAvailability();
-  const q=String(document.getElementById('opAvailSearch')?.value||'').trim().toLowerCase();
-  const childQ=String(document.getElementById('opAvailChildSearch')?.value||'').trim().toLowerCase();
-  return rows.filter(r=>(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(!childQ||r.children.some(c=>`${c.sku} ${c.skuName}`.toLowerCase().includes(childQ))));
+  const q=_opNormText(document.getElementById('opAvailSearch')?.value);
+  const childQ=_opNormText(document.getElementById('opAvailChildSearch')?.value);
+  return rows.filter(r=>_opSmartSearchMatch(q,`${r.sku} ${r.skuName}`,[r.sku],'cmb')&&(!childQ||r.children.some(c=>_opSmartSearchMatch(childQ,`${c.sku} ${c.skuName}`,[c.sku,c.requestedSku],'sku'))));
 }
 function _parseOperationsCmbPaste(raw){
-  const lookup=new Map();
+  const lookup=new Map(),looseLookup=new Map(),ambiguousLoose=new Set();
   (master||[]).forEach(item=>{
     const sku=_opsSkuKey(item&&item.sku);if(!/^CMB[-_]/i.test(sku))return;
     lookup.set(sku,sku);lookup.set(sku.replace(/[^A-Z0-9]/g,''),sku);
+    // Paste convenience only: CMB-381 should match canonical CMB-0381 when
+    // that numeric CMB is unique. This never changes the stored/master SKU.
+    const loose=_opCmbLooseKey(sku);
+    if(loose){
+      if(looseLookup.has(loose)&&looseLookup.get(loose)!==sku)ambiguousLoose.add(loose);
+      else looseLookup.set(loose,sku);
+    }
   });
-  const prepared=String(raw||'').toUpperCase()
+  const prepared=_opNormText(raw).toUpperCase()
     .replace(/\bCMB\s+([A-Z0-9][A-Z0-9_-]*)/g,'CMB-$1');
-  const rawTokens=prepared.split(/[\s,;|]+/).map(token=>token.replace(/^[^A-Z0-9]+|[^A-Z0-9_-]+$/g,'')).filter(Boolean);
+  const rawTokens=prepared.split(/[\s,;|]+/).map(token=>_opNormText(token).replace(/^[^A-Z0-9]+|[^A-Z0-9_.-]+$/g,'')).filter(Boolean);
   const pasted=[],seen=new Set();
   rawTokens.forEach(token=>{
-    if(!/^CMB(?:[-_]|[0-9])/i.test(token))return;
     let key=_opsSkuKey(token);
+    // In the CMB paste box, bare integer/string numeric values are treated as
+    // CMB numbers too: 381 / "381" / 0381 / 381.0 can all resolve CMB-0381.
+    if(/^\d+(?:\.0+)?$/.test(key))key='CMB-'+key.replace(/\.0+$/,'');
+    if(!/^CMB(?:[-_]|[0-9])/i.test(key))return;
     if(/^CMB\d/i.test(key))key='CMB-'+key.slice(3);
     if(seen.has(key))return;seen.add(key);pasted.push(key);
   });
   const matched=new Set(),notFound=[];
   pasted.forEach(key=>{
-    const canonical=lookup.get(key)||lookup.get(key.replace(/[^A-Z0-9]/g,''));
+    const loose=_opCmbLooseKey(key);
+    const canonical=lookup.get(key)
+      ||lookup.get(key.replace(/[^A-Z0-9]/g,''))
+      ||(!ambiguousLoose.has(loose)?looseLookup.get(loose):null);
     if(canonical)matched.add(canonical);else notFound.push(key);
   });
   return {pasted,matched,notFound};
@@ -14932,8 +15004,8 @@ function _operationsPasteInfo(){
   el.textContent=`${(_opAvailPasteStats.pasted||0).toLocaleString('en-IN')} pasted · ${matched.toLocaleString('en-IN')} matched · ${buildable.toLocaleString('en-IN')} buildable · ${notBuildable.toLocaleString('en-IN')} cannot build${missingText}`;
 }
 function applyOperationsCmbPaste(){
-  const raw=document.getElementById('opAvailPaste')?.value||'';
-  if(!raw.trim()){clearOperationsCmbPaste();return;}
+  const raw=_opNormText(document.getElementById('opAvailPaste')?.value);
+  if(!raw){clearOperationsCmbPaste();return;}
   const parsed=_parseOperationsCmbPaste(raw);
   _opAvailPastedSet=parsed.matched;
   _opAvailPasteStats={pasted:parsed.pasted.length,matched:parsed.matched.size,notFound:parsed.notFound};
