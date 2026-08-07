@@ -6018,8 +6018,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="applyF_d()">
           <datalist id="custList"></datalist></div>
-        <div class="fc"><label class="fl">Channel (tick one or more)</label>
-          <div id="fChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
           <div id="fSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
@@ -9554,6 +9552,15 @@ function applyF(){
   const d1 = document.getElementById('fD1')?.value || '';
   const d2 = document.getElementById('fD2')?.value || '';
   const hasSelectedSkus = selectedSkuSet.size > 0;
+  // Rolling sales shown on Overall cards must follow the same active
+  // transaction filters (channel/sub-channel/FY/customer/date) as Sold Qty.
+  const _overallDaysAgoIso = days => {
+    const base = /^\d{4}-\d{2}-\d{2}$/.test(String(todayISO||''))
+      ? new Date(String(todayISO) + 'T00:00:00Z') : new Date();
+    base.setUTCDate(base.getUTCDate() - days);
+    return base.toISOString().slice(0,10);
+  };
+  const _overallQtyCut = {m1:_overallDaysAgoIso(30),m3:_overallDaysAgoIso(90),m6:_overallDaysAgoIso(180),y1:_overallDaysAgoIso(365)};
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const overallChannelKey = e => {
     const typ = String(e?.type || '').trim().toLowerCase();
@@ -9598,10 +9605,13 @@ function applyF(){
     let pfRev = Number(item.rev_prev_fy)||0;
     let feRev = Number(item.total_net_revenue)||0;
     let feQty = Number(item.final_qty)||0;
+    let q1m = Number(item.qty_1m)||0, q3m = Number(item.qty_3m)||0;
+    let q6m = Number(item.qty_6m)||0, q1y = Number(item.qty_1y)||0;
     let filteredCustomerCount = Number(item.customer_count)||0;
     if (anyEntryFilter) {
       fe = [];
       yRev = mRev = fRev = pfRev = feRev = feQty = 0;
+      q1m = q3m = q6m = q1y = 0;
       const customerSet = new Set();
       for (const e of (item.sales_entries || [])) {
         if (custQ && !String(e.cust||'').toLowerCase().includes(custQ)) continue;
@@ -9616,7 +9626,14 @@ function applyF(){
         const rev = Number(e.rev)||0, qty = Number(e.qty)||0;
         feRev += rev; feQty += qty;
         if (e.date === yesterdayISO) yRev += rev;
-        if (e.date !== 'N/A' && String(e.date).startsWith(currentMonthKey)) mRev += rev;
+        if (e.date !== 'N/A') {
+          const ed = String(e.date);
+          if (ed.startsWith(currentMonthKey)) mRev += rev;
+          if (ed >= _overallQtyCut.m1) q1m += qty;
+          if (ed >= _overallQtyCut.m3) q3m += qty;
+          if (ed >= _overallQtyCut.m6) q6m += qty;
+          if (ed >= _overallQtyCut.y1) q1y += qty;
+        }
         if (e.fy === currentFY) fRev += rev;
         if (e.fy === previousFY) pfRev += rev;
         if (e.cust) customerSet.add(e.cust);
@@ -9635,6 +9652,10 @@ function applyF(){
         ...item,
         final_qty: anyEntryFilter ? feQty : item.final_qty,
         customer_count: filteredCustomerCount,
+        qty_1m: anyEntryFilter ? Math.round(q1m) : item.qty_1m,
+        qty_3m: anyEntryFilter ? Math.round(q3m) : item.qty_3m,
+        qty_6m: anyEntryFilter ? Math.round(q6m) : item.qty_6m,
+        qty_1y: anyEntryFilter ? Math.round(q1y) : item.qty_1y,
         rev_yesterday: yRev,
         rev_month: mRev,
         rev_fy: fRev,
@@ -9734,8 +9755,9 @@ function applyF(){
   }
   const setTxt = (id, val) => { const el=document.getElementById(id); if (el) el.textContent = fmt(val); };
 
-  const noFilter = !(txt || (selected.length>0) || taxonQ!=='All' || statusQ!=='All' ||
-                     fyQ!=='All FYs' || plat!=='All' || mrpRange || custQ || d1 || d2 || typeSel.length>0);
+  const noFilter = !(txt || hasSelectedSkus || taxonQ!=='All' || cnTagQ!=='All' || statusQ!=='All' ||
+                     fyQ!=='All FYs' || plat!=='All' || mrpRange || launchQ!=='All' || custQ || d1 || d2 ||
+                     typeSel.length>0 || chanSel.length>0 || subChanSel.length>0);
   if (noFilter) {
     setTxt('kY', periodKpis.yesterday || 0);
     setTxt('kM', periodKpis.this_month || 0);
@@ -9851,7 +9873,7 @@ window.exportMatrixPDF = exportMatrixPDF;
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
   ['fTaxon','fStatus','fFY','fPlat','fLaunch','fCnTag'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
-  document.querySelectorAll('#fTypeChecks input:checked').forEach(c => c.checked = false);
+  document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fSubChanChecks input:checked').forEach(c => c.checked = false);
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
   selectedSkuSet.clear();
   refreshChecklists();
