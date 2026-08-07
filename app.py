@@ -14699,66 +14699,125 @@ function _opResolveInventoryChild(raw){
   const compact=_opSkuCompact(requested);
   _opEnsureMasterInventoryIndex();
 
+  // Operations must use the EXACT child variant from the CMB mapping.
+  // All BT size variants (including P/S/X suffixes) keep their own Inv Stock + Blocked Qty;
+  // one variant is never substituted with another same-family variant.
   const exactMaster=_masterSkuMap[requested]||_opMasterInventoryCompactMap[compact]||null;
   const exactMasterSku=_opsSkuKey(exactMaster&&exactMaster.sku||requested);
   const exactLive=_opLiveInventoryMap[exactMasterSku]||_opLiveInventoryCompactMap[compact]||null;
-  const family=_opSkuFamilyBase(requested);
-  const familyLive=family?_opLiveInventoryFamilyBest[family]||null:null;
-  const familyMaster=family?_opMasterInventoryFamilyBest[family]||null:null;
-
-  // Operations-only rule: among same prefix+number variants, use the variant
-  // with the highest usable Inv Stock + Blocked Qty. Exact variant wins ties.
-  if(exactLive||familyLive){
-    let chosen=exactLive||familyLive;
-    if(exactLive&&familyLive&&_opUsableInventory(familyLive)>_opUsableInventory(exactLive))chosen=familyLive;
-    const sku=_opsSkuKey(chosen&&chosen.sku||exactMasterSku||requested);
-    const item=_masterSkuMap[sku]||_opMasterInventoryCompactMap[_opSkuCompact(sku)]||exactMaster||rawObj;
-    return {requested,sku,live:chosen,item,familyMatched:sku!==requested};
-  }
-
-  let chosenItem=exactMaster||rawObj;
-  if(familyMaster&&(!exactMaster||_opUsableInventory(familyMaster)>_opUsableInventory(exactMaster)))chosenItem=familyMaster;
-  const sku=_opsSkuKey(chosenItem&&chosenItem.sku||requested);
-  return {requested,sku,live:null,item:chosenItem||rawObj,familyMatched:sku!==requested};
+  const item=exactMaster||rawObj||{};
+  return {requested,sku:exactMasterSku||requested,live:exactLive,item,familyMatched:false};
 }
 function _opAvailRequiredQtys(parent,children){
-  const req=new Map(children.map(c=>[c.sku,1])),pack=String(parent&&parent.pack_details||'').trim();
+  const req=new Map(children.map(c=>[c.sku,1]));
+  const pack=String(parent&&parent.pack_details||'').trim();
   if(!pack)return req;
+
   const aliases={
-    button:['button','buttons','btn','btns','bt','bts'],rakhi:['rakhi','rkh'],brooch:['brooch','bh','br'],
-    cufflink:['cufflink','cf'],lapel:['lapel','lp'],pin:['pin'],tie:['tie','ct'],
-    chain:['chain'],bracelet:['bracelet'],ring:['ring'],pendant:['pendant']
+    button:['button','buttons','btn','btns','bt','bts'],rakhi:['rakhi','rkh'],brooch:['brooch','brooches','bh','br'],
+    cufflink:['cufflink','cufflinks','cf'],lapel:['lapel','lp'],pin:['pin','pins'],tie:['tie','ties','ct'],
+    chain:['chain','chains'],bracelet:['bracelet','bracelets'],ring:['ring','rings'],pendant:['pendant','pendants']
   };
   const childText=c=>`${c.sku||''} ${c.skuName||''} ${c.cn_name||''} ${c.taxon||''}`.toLowerCase();
-  const matchesKind=(c,kind)=>{
-    const t=childText(c),skuCode=_opsSkuKey(c&&c.sku),k=String(kind||'').toLowerCase().replace(/[^a-z]/g,'');
-    if(!k)return false;
-    const roots=Object.entries(aliases).find(([root,words])=>root.startsWith(k)||k.startsWith(root)||words.some(w=>w===k||w.startsWith(k)||k.startsWith(w)));
-    const words=roots?[roots[0],...roots[1]]:[k];
-    if(roots&&roots[0]==='button'&&/^BT/i.test(skuCode))return true;
-    return words.some(w=>{
-      if(w.length<=2)return new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(skuCode);
-      return t.includes(w)||new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(skuCode);
-    });
+  const rootForKind=kind=>{
+    const k=String(kind||'').toLowerCase().replace(/\b(big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/g,' ').replace(/[^a-z]+/g,' ').trim();
+    if(!k)return '';
+    const words=k.split(/\s+/).filter(Boolean);
+    for(const [root,list] of Object.entries(aliases)){
+      if(words.some(w=>root===w||root.startsWith(w)||w.startsWith(root)||list.some(a=>a===w||a.startsWith(w)||w.startsWith(a))))return root;
+    }
+    return words[words.length-1]||'';
   };
+  const matchesRoot=(c,root)=>{
+    const t=childText(c),skuCode=_opsSkuKey(c&&c.sku);
+    if(root==='button')return /^BT(?:[-_]|\d)/i.test(skuCode)||/\bbuttons?\b/i.test(t);
+    if(root==='brooch')return /^BH(?:[-_]|\d)/i.test(skuCode)||/\bbrooch(?:es)?\b/i.test(t);
+    const words=aliases[root]||[root];
+    return words.some(w=>w.length<=2?new RegExp(`^${w}(?:[-_]|\\d)`,'i').test(skuCode):t.includes(w));
+  };
+  const buttonSize=c=>{
+    const sku=_opsSkuKey(c&&c.sku),t=childText(c);
+    // Operations convention for EVERY BT SKU, case-insensitive after normalization:
+    // ...(P) / _P / -P = Big button, ...(S) / _S / -S = Small button,
+    // ...(X) / _X / -X = Smallest button. Each variant keeps its own stock.
+    if(/^BT(?:[-_]|\d)/i.test(sku)){
+      const suffix=sku.match(/(?:[_-]|\()([PSX])\)?$/i);
+      if(suffix){
+        const code=suffix[1].toUpperCase();
+        if(code==='P')return 'big';
+        if(code==='S')return 'small';
+        if(code==='X')return 'smallest';
+      }
+    }
+    if(/\b(smallest|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/i.test(t))return 'smallest';
+    if(/\b(small|mini|little)\b/i.test(t)||/[_-]\(?(?:SM|SMALL)\)?$/i.test(sku))return 'small';
+    if(/\b(big|large)\b/i.test(t)||/[_-]\(?(?:B|L|BIG|LARGE)\)?$/i.test(sku))return 'big';
+    return '';
+  };
+  const requestedSize=kind=>{
+    const k=String(kind||'');
+    if(/\b(smallest|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\b/i.test(k)||/\bX\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'smallest';
+    if(/\b(small|mini|little)\b/i.test(k)||/\bS\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'small';
+    if(/\b(big|large)\b/i.test(k)||/\bP\s*(?:buttons?|btns?|bts?)\b/i.test(k))return 'big';
+    return '';
+  };
+  const matchPart=part=>{
+    const root=rootForKind(part.kind);
+    if(!root)return [];
+    let matched=children.filter(c=>matchesRoot(c,root));
+    const size=requestedSize(part.kind);
+    if(root==='button'&&size&&matched.length){
+      const exact=matched.filter(c=>buttonSize(c)===size);
+      if(exact.length)return exact;
+      // Do not borrow stock from another BT size variant. Only an unsuffixed,
+      // unclassified single button child may be used when no size-coded variant exists.
+      if(matched.length===1&&!buttonSize(matched[0]))return matched;
+      return [];
+    }
+    return matched;
+  };
+
   const parts=[],partKeys=new Set();
-  const addPart=(qty,kind)=>{qty=Math.max(1,Math.floor(Number(qty)||1));kind=String(kind||'').trim().split(/\s+/).slice(0,2).join(' ');const key=`${qty}|${kind.toLowerCase()}`;if(!partKeys.has(key)){partKeys.add(key);parts.push({qty,kind});}};
-  // Parse explicit Pack/Set counts and recognised product quantities only.
-  // Measurements such as 32x41mm must never become child requirements.
-  const packRe=/(?:pack|set)\s*(?:of\s*)?(\d+)\s*(?:pcs?|pieces?|units?)?\s*([a-z][a-z -]{0,24})?/ig;let m;
-  while((m=packRe.exec(pack)))addPart(m[1],String(m[2]||'').replace(/\b(?:and|with|plus|set|pack|of)\b.*$/i,'').trim());
-  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*(buttons?|btns?|bts?|rakhis?|brooch(?:es)?|cufflinks?|lapel pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?)/ig;
-  while((m=typedRe.exec(pack)))addPart(m[1],m[2]);
+  const addPart=(qty,kind)=>{
+    qty=Math.max(1,Math.floor(Number(qty)||1));
+    kind=String(kind||'').trim().replace(/^[\s,:;-]+|[\s,:;-]+$/g,'').replace(/\s+/g,' ');
+    if(!kind)return;
+    const key=`${qty}|${kind.toLowerCase()}`;
+    if(!partKeys.has(key)){partKeys.add(key);parts.push({qty,kind});}
+  };
+
+  // Pack Details parser is intentionally case-insensitive and quantity-agnostic:
+  // Button / Buttons / BUTTON / BUTTONS (and Btn/BT aliases) all work, with any
+  // positive integer quantity, e.g. 5, 7, 13, etc. Extra whitespace is harmless.
+  // Examples:
+  // "1 brooch, Set of 13 Big BUTTONS"
+  // "1 brooch, Set of 7 Small Button, Set of 6 Xtra Small buttons"
+  const packText=pack.replace(/\s+/g,' ').trim();
+  const segments=packText.replace(/\s+(?:and|plus|with)\s+/ig,'|').split(/[|,;]+/).map(x=>x.trim()).filter(Boolean);
+  segments.forEach(seg=>{
+    const m=seg.match(/^\s*(?:(?:pack|set)\s*(?:of\s*)?)?(\d+)\s*(?:pcs?|pieces?|units?)?\s*(.*?)\s*$/i);
+    if(m&&m[2])addPart(m[1],m[2]);
+  });
+  const typedRe=/(\d+)\s*(?:pcs?|pieces?|units?)?\s*((?:(?:big|large|smallest|small|mini|little|tiny|xtra[ -]?small|x[ -]?small|extra[ -]?small|very[ -]?small)\s+)?(?:button(?:s)?|btn(?:s)?|bt(?:s)?|rakhis?|brooch(?:es)?|cufflinks?|lapel\s*pins?|pins?|ties?|chains?|bracelets?|rings?|pendants?))/ig;
+  let m;while((m=typedRe.exec(packText)))addPart(m[1],m[2]);
+
   parts.forEach(part=>{
-    let matched=part.kind?children.filter(c=>matchesKind(c,part.kind)):[];
-    if(!matched.length&&!part.kind&&children.length===1)matched=children.slice();
-    if(!matched.length&&children.length===1&&/(?:pack|set)\s*(?:of\s*)?\d+/i.test(pack))matched=children.slice();
-    if(!matched.length&&part.qty===children.length)matched=children.slice();
+    let matched=matchPart(part);
+    if(!matched.length&&children.length===1&&!requestedSize(part.kind))matched=children.slice();
     if(!matched.length)return;
-    // Multiple distinct mapped child rows represent distinct pieces. Repeated
-    // pack quantity is applied only when one child SKU represents the pack.
-    const each=matched.length===1?part.qty:1;
-    matched.forEach(c=>req.set(c.sku,Math.max(req.get(c.sku)||1,each)));
+
+    if(matched.length===1){
+      // Exact mapped child: Pack Details quantity is the quantity needed for
+      // ONE CMB. Buildable count therefore requires stock >= this quantity.
+      req.set(matched[0].sku,Math.max(req.get(matched[0].sku)||1,part.qty));
+      return;
+    }
+
+    // If a Set/Pack count exactly equals the number of distinct mapped children,
+    // each mapped child represents one piece. Otherwise do not invent a split.
+    if(part.qty===matched.length){
+      matched.forEach(c=>req.set(c.sku,Math.max(req.get(c.sku)||1,1)));
+    }
   });
   return req;
 }
@@ -14946,8 +15005,8 @@ function exportOperationsAvailability(){
     ]);
     r.children.forEach(c=>{
       data.push([
-        'Child SKU (Part)',r.sku,'↳ '+c.sku,exportSkuName(c.sku,c.skuName),
-        Math.round(c.stock),Math.round(c.wip),Math.round(c.requiredQty),Math.round(c.allocatedQty||0),'',r.image||'',''
+        'Child SKU (Part)',r.sku,c.sku,exportSkuName(c.sku,c.skuName),
+        Math.round(c.stock),Math.round(c.wip),Math.round(c.requiredQty),Math.round(c.allocatedQty||0),'',r.image||'',r.packDetails||''
       ]);
     });
   });
