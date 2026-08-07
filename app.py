@@ -5634,6 +5634,12 @@ body{background:radial-gradient(circle at 12% 7%,rgba(218,177,88,.22),transparen
 .menu-btn{display:none!important}
 .app-chip{background:#fffefb!important;color:#8f2626!important;border:1px solid rgba(170,54,54,.2)!important;border-radius:13px!important;box-shadow:0 8px 22px rgba(86,64,24,.08)!important}
 .app-chip:hover{background:#fff3f1!important;color:#b42318!important}
+.cn-global-search{display:flex;align-items:center;gap:7px;min-width:310px;max-width:430px;padding:6px 7px 6px 11px;border:1px solid rgba(123,91,33,.18);border-radius:13px;background:#fffefb;box-shadow:0 7px 18px rgba(86,64,24,.07)}
+.cn-global-search span{font-size:8px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:#8b6b2b;white-space:nowrap}
+.cn-global-search input{width:190px;min-width:0;border:0!important;outline:0!important;box-shadow:none!important;background:transparent!important;padding:6px 4px!important;font-size:11px!important}
+.cn-global-search button{width:25px;height:25px;border:0;border-radius:8px;background:#f3ead7;color:#6f5524;font-size:16px;line-height:1;cursor:pointer}
+body[data-tab="home"] .cn-global-search{display:flex}
+@media(max-width:760px){.cn-global-search{min-width:0;max-width:190px}.cn-global-search span{display:none}.cn-global-search input{width:125px}.app-bar-actions{gap:5px!important}}
 
 /* Shared 3D surfaces across every existing module */
 .kpi,.filter-box,.card,.ro-table-wrap,.upload-area,.sd-head,.home-card,.insight-summary-card,.ops-page .ops-kpi,.ops-page .ops-filters,.ops-page .ops-table-wrap{
@@ -5932,6 +5938,11 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="app-bar-sub" id="appBarSub">HOME</div>
   </div>
   <div class="app-bar-actions">
+    <div class="cn-global-search" title="Search All Product CN Name across SKU/product tabs">
+      <span>CN Name</span>
+      <input id="cnGlobalSearch" type="search" autocomplete="off" placeholder="e.g. lion" oninput="cnxGlobalCnSearchChanged(this.value)">
+      <button type="button" onclick="cnxClearGlobalCnSearch()" title="Clear CN Name filter">×</button>
+    </div>
     <button class="app-chip" onclick="doLogout()" style="border-color:rgba(220,38,38,.4);color:#dc2626">Sign Out</button>
   </div>
 </div>
@@ -6001,11 +6012,11 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="filter-box">
       <div class="fg">
-        <div class="fc"><label class="fl">Search (SKU / Category)</label>
+        <div class="fc"><label class="fl">Search (SKU / CN Name / Category)</label>
           <input class="fi" id="fSearch" placeholder='SKU, category, tag…' oninput="applyF_d()"></div>
         <div class="fc" style="grid-column:span 2">
-          <label class="fl">SKU Search + Tick</label>
-          <input class="fi" id="fSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderSkuChecklist_d()">
+          <label class="fl">SKU / CN Name Search + Tick</label>
+          <input class="fi" id="fSkuSearch" placeholder="search SKU or CN Name… tick the boxes below" oninput="renderSkuChecklist_d()">
           <div class="small-note" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;gap:10px;flex-wrap:wrap">
             <span id="skuSelInfo">0 selected</span>
             <span style="display:flex;gap:8px">
@@ -6018,6 +6029,8 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="applyF_d()">
           <datalist id="custList"></datalist></div>
+        <div class="fc"><label class="fl">Sheet Type (tick one or more)</label>
+          <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
           <div id="fSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category</label>
@@ -6082,11 +6095,11 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="filter-box">
       <div class="fg">
-        <div class="fc"><label class="fl">Search SKU</label>
-          <input class="fi" id="rSearch" placeholder='SKU name…' oninput="applyRO_d()"></div>
+        <div class="fc"><label class="fl">Search SKU / CN Name</label>
+          <input class="fi" id="rSearch" placeholder='SKU or CN Name…' oninput="applyRO_d()"></div>
         <div class="fc" style="grid-column:span 2">
-          <label class="fl">SKU Search + Tick</label>
-          <input class="fi" id="rSkuSearch" placeholder="search SKU… tick the boxes below" oninput="renderRoSkuChecklist_d()">
+          <label class="fl">SKU / CN Name Search + Tick</label>
+          <input class="fi" id="rSkuSearch" placeholder="search SKU or CN Name… tick the boxes below" oninput="renderRoSkuChecklist_d()">
           <div class="small-note" style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 8px;gap:10px;flex-wrap:wrap">
             <span id="rSkuSelInfo">0 selected</span>
             <span style="display:flex;gap:8px">
@@ -7892,6 +7905,76 @@ function roThumb(url){
     : `<div class="sku-thumb" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:18px">💎</div>`;
 }
 
+let _cnxGlobalCnQuery = '';
+function cnxNormSearch(v){
+  let s=(v===null||v===undefined)?'':String(v);
+  try{s=s.normalize('NFKC');}catch(_e){}
+  return s.toLocaleLowerCase('en-US').replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim();
+}
+function cnxGlobalCnQuery(){
+  const el=document.getElementById('cnGlobalSearch');
+  const q=cnxNormSearch(el?el.value:_cnxGlobalCnQuery);
+  _cnxGlobalCnQuery=q;
+  return q;
+}
+function cnxItemMatchesGlobalCn(item){
+  const q=cnxGlobalCnQuery();
+  if(!q)return true;
+  return cnxNormSearch(item&&item.cn_name).includes(q);
+}
+function cnxFindMasterItemBySku(rawSku){
+  const raw=String(rawSku||'').trim(); if(!raw)return null;
+  const upper=raw.toUpperCase();
+  if(_masterSkuMap&&_masterSkuMap[upper])return _masterSkuMap[upper];
+  const compact=upper.replace(/[^A-Z0-9]/g,'');
+  if(typeof _roExactSkuLookup==='object'&&_roExactSkuLookup&&_roExactSkuLookup[compact])return _roExactSkuLookup[compact];
+  if(typeof _bulkSkuLookup==='object'&&_bulkSkuLookup&&_bulkSkuLookup[compact])return _bulkSkuLookup[compact];
+  return (master||[]).find(it=>String(it&&it.sku||'').toUpperCase()===upper)||null;
+}
+function cnxSkuMatchesGlobalCn(sku){
+  const q=cnxGlobalCnQuery(); if(!q)return true;
+  const it=cnxFindMasterItemBySku(sku);
+  return !!it&&cnxItemMatchesGlobalCn(it);
+}
+function cnxCnSearchMatchesText(item, extra){
+  const q=cnxGlobalCnQuery(); if(!q)return true;
+  if(cnxItemMatchesGlobalCn(item))return true;
+  return false;
+}
+const cnxGlobalCnSearchChanged=_debounce(function(v){
+  _cnxGlobalCnQuery=cnxNormSearch(v);
+  cnxRerenderCurrentTabForCn();
+},220);
+function cnxClearGlobalCnSearch(){
+  const el=document.getElementById('cnGlobalSearch');if(el)el.value='';
+  _cnxGlobalCnQuery='';cnxRerenderCurrentTabForCn();
+}
+function cnxRerenderCurrentTabForCn(){
+  try{
+    if(currentTab==='matrix'){renderSkuChecklist();return applyF();}
+    if(currentTab==='repeat'){renderRoSkuChecklist();return applyRO();}
+    if(currentTab==='home')return cnxQueueHomeRender(false);
+    if(currentTab==='discount')return loadDiscount();
+    if(currentTab==='production')return loadProduction();
+    if(currentTab==='rakhi')return renderRakhi();
+    if(currentTab==='oos')return renderOOS();
+    if(currentTab==='repeatplanner')return renderRepeatPlanner();
+    if(currentTab==='comborisk')return renderComboRisk();
+    if(currentTab==='operations')return renderOperationsAvailability();
+    if(currentTab==='smartops'){renderSmartAlerts();renderInventoryAgeing();return;}
+    if(currentTab==='opportunity')return renderOpportunityScore();
+    if(currentTab==='salesanomaly')return renderSalesAnomalies();
+    if(currentTab==='stockstatus')return renderStockStatus();
+    if(currentTab==='bulk')return bulkRenderCombo();
+    if(currentTab==='demandpatterns')return renderDemandPatterns();
+    if(currentTab==='ooslost')return renderOosLostSales();
+    if(currentTab==='taxon'){ if(_txDrillTaxon)return showTaxonTop50(_txDrillTaxon); return renderTaxon(); }
+    if(currentTab==='skudetails')return _sdRenderSearchResults();
+  }catch(e){console.error('CN Name filter render failed:',e);}
+}
+window.cnxGlobalCnSearchChanged=cnxGlobalCnSearchChanged;
+window.cnxClearGlobalCnSearch=cnxClearGlobalCnSearch;
+
 function getSelectedTypes(id){
   const containerId = id === 'fType' ? 'fTypeChecks' : id === 'rType' ? 'rTypeChecks' : id === 'iType' ? 'iTypeChecks' : id;
   const box = document.getElementById(containerId);
@@ -8027,7 +8110,7 @@ function renderSkuChecklist(){
   const box = document.getElementById('skuChecklist');
   if (!box) return;
   const q = (document.getElementById('fSkuSearch')?.value || '').trim().toLowerCase();
-  const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
+  const list = (master || []).filter(it => cnxItemMatchesGlobalCn(it) && (!q || `${it.sku||''} ${it.cn_name||''}`.toLowerCase().includes(q))).map(it=>it.sku);
   const limit = q ? 180 : 100;
   const shown = list.slice(0, limit);
   box.innerHTML = shown.map(s => {
@@ -8042,7 +8125,7 @@ function renderRoSkuChecklist(){
   const box = document.getElementById('rSkuChecklist');
   if (!box) return;
   const q = (document.getElementById('rSkuSearch')?.value || '').trim().toLowerCase();
-  const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
+  const list = (master || []).filter(it => cnxItemMatchesGlobalCn(it) && (!q || `${it.sku||''} ${it.cn_name||''}`.toLowerCase().includes(q))).map(it=>it.sku);
   const limit = q ? 180 : 100;
   const shown = list.slice(0, limit);
   box.innerHTML = shown.map(s => {
@@ -8132,6 +8215,7 @@ function _sdMatchingItems(){
   const q=(document.getElementById('sdSearchBox')?.value||'').trim().toLowerCase();
   const cls=document.getElementById('sdCnClassFilter')?.value||'All';
   return (master||[]).filter(item=>{
+    if(!cnxItemMatchesGlobalCn(item)) return false;
     if(cls!=='All'&&cnClassOf(item)!==cls) return false;
     if(!q) return cls!=='All';
     return String(item.sku||'').toLowerCase().includes(q)
@@ -9263,7 +9347,7 @@ function downloadTable(headers, data, baseName, fmtType){
 
 function selectVisibleSkus(visibleOnly){
   const q = (document.getElementById('fSkuSearch')?.value || '').trim().toLowerCase();
-  const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
+  const list = (master || []).filter(it => cnxItemMatchesGlobalCn(it) && (!q || `${it.sku||''} ${it.cn_name||''}`.toLowerCase().includes(q))).map(it=>it.sku);
   list.forEach(s => selectedSkuSet.add(s));
   refreshChecklists();
   applyF();
@@ -9271,7 +9355,7 @@ function selectVisibleSkus(visibleOnly){
 
 function selectVisibleRoSkus(){
   const q = (document.getElementById('rSkuSearch')?.value || '').trim().toLowerCase();
-  const list = (allSkus || []).filter(s => !q || String(s).toLowerCase().includes(q));
+  const list = (master || []).filter(it => cnxItemMatchesGlobalCn(it) && (!q || `${it.sku||''} ${it.cn_name||''}`.toLowerCase().includes(q))).map(it=>it.sku);
   list.forEach(s => selectedSkuSet.add(s));
   refreshChecklists();
   applyRO();
@@ -9532,6 +9616,7 @@ let _matrixTxns = [];   // Overall Details drill-down (customer/date filtered) r
 let _matrixPivot = [];  // Overall Details pivot (customer + SKU wise totals) — export ke liye
 function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
+  const cnQ = cnxGlobalCnQuery();
   const custQ = (document.getElementById('fCust')?.value || '').trim().toLowerCase();
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
@@ -9585,8 +9670,9 @@ function applyF(){
   const txns = [];
 
   master.forEach(item => {
-    const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
+    const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.cn_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
     if (txt && !hay.includes(txt)) return;
+    if (cnQ && !cnxItemMatchesGlobalCn(item)) return;
     if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
     if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
     if (cnTagQ === 'Religious' && !item.is_religious) return;
@@ -9904,6 +9990,7 @@ function smSrch(q){
 
 function applyRO(){
   const txt = (document.getElementById('rSearch')?.value || '').trim().toLowerCase();
+  const cnQ = cnxGlobalCnQuery();
   const typeSelRaw = getSelectedTypes('rType');
   const roAnuMode = typeSelRaw.includes(ANU_MAAM_TYPE_VALUE);
   // "Anu Ma'am" koi real Type nahi hai — normal type-filtering se hata do,
@@ -9942,8 +10029,9 @@ function applyRO(){
   };
 
   const skuOk = item => {
-    if (pastedSkuSet) return pastedSkuSet.has(String(item.sku).toUpperCase());
-    if (txt && !(item._skuLower || String(item.sku||'').toLowerCase()).includes(txt)) return false;
+    if (pastedSkuSet && !pastedSkuSet.has(String(item.sku).toUpperCase())) return false;
+    if (txt && !`${item.sku||''} ${item.sku_name||''} ${item.cn_name||''}`.toLowerCase().includes(txt)) return false;
+    if (cnQ && !cnxItemMatchesGlobalCn(item)) return false;
     if (taxQ !== 'All' && item.taxon !== taxQ) return false;
     if (cnTagQ === 'Religious' && !item.is_religious) return false;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
@@ -9993,7 +10081,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
@@ -10029,7 +10117,7 @@ function applyRO(){
 
   roFiltered = filtered;
 
-  const roNoFilter = !(txt || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -11362,7 +11450,7 @@ function cnxBindHomeMotion(){
 
 function cnxRefreshExecutiveHome(){
   const host=document.getElementById('homeContent');
-  const data=master||[];
+  const data=(master||[]).filter(cnxItemMatchesGlobalCn);
   if(!host || !data.length){ renderHome(); return; }
   const legacy=host.querySelector('.cnx-legacy');
   if(!legacy){ renderHome(); return; }
@@ -11385,8 +11473,8 @@ window.cnxQueueHomeRender=cnxQueueHomeRender;
 function renderHome(){
   const host = document.getElementById('homeContent');
   if (!host) return;
-  const data = master || [];
-  if (!data.length){ host.innerHTML = '<div class="home-empty">Loading…</div>'; return; }
+  const data = (master || []).filter(cnxItemMatchesGlobalCn);
+  if (!data.length){ host.innerHTML = '<div class="home-empty">No products match the CN Name filter.</div>'; return; }
 
   const isEmp = (LOGIN_ROLE === 'employee');
   const today = new Date();
@@ -11865,7 +11953,7 @@ function loadDiscount(){
   if (sumHost) sumHost.innerHTML = '';
   const md = document.getElementById('discMin')?.value || '0';
   const sk = document.getElementById('discSort')?.value || 'leakage';
-  fetch('/api/discount-leakage?min=' + encodeURIComponent(md) + '&sort=' + encodeURIComponent(sk),
+  fetch('/api/discount-leakage?min=' + encodeURIComponent(md) + '&sort=' + encodeURIComponent(sk) + '&cn_name=' + encodeURIComponent(document.getElementById('cnGlobalSearch')?.value||''),
         {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
@@ -11880,20 +11968,22 @@ function renderDiscount(){
   const sumHost = document.getElementById('discSummary');
   const d = _discData;
   if (!host || !d) return;
+  const rows=(d.rows||[]).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   if (sumHost){
+    const leakage=rows.reduce((s,r)=>s+(Number(r.leakage)||0),0), units=rows.reduce((s,r)=>s+(Number(r.qty)||0),0);
     sumHost.innerHTML = `
       <div class="yoy-card">
         <div class="yc-label">Total Discount Leakage</div>
-        <div class="yc-val">${fmt(d.total_leakage||0)}</div>
-        <div class="yc-sub">Value lost vs MRP across ${ (d.count||0).toLocaleString('en-IN') } SKUs</div>
+        <div class="yc-val">${fmt(leakage)}</div>
+        <div class="yc-sub">Value lost vs MRP across ${ rows.length.toLocaleString('en-IN') } SKUs</div>
       </div>
       <div class="yoy-card">
         <div class="yc-label">Units Sold (discounted)</div>
-        <div class="yc-val">${(d.total_units||0).toLocaleString('en-IN')}</div>
+        <div class="yc-val">${Math.round(units).toLocaleString('en-IN')}</div>
         <div class="yc-sub">SKUs selling below MRP</div>
       </div>`;
   }
-  if (!d.rows || !d.rows.length){
+  if (!rows.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No discounted SKUs for this filter.</div>';
     return;
   }
@@ -11901,7 +11991,7 @@ function renderDiscount(){
     <th>SKU</th><th>Stone Color</th><th>Category</th><th>MRP</th><th>Avg SP</th><th>Last SP</th>
     <th>Discount %</th><th>Gap / unit</th><th>Qty Sold</th><th>Leakage</th></tr>`;
   const DISCOUNT_RENDER_CAP = 150;
-  const visibleRows = d.rows.slice(0, DISCOUNT_RENDER_CAP);
+  const visibleRows = rows.slice(0, DISCOUNT_RENDER_CAP);
   const body = visibleRows.map(r => {
     const dCls = r.disc_pct >= 40 ? 'red' : r.disc_pct >= 20 ? 'orange' : 'gold';
     const img = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan')
@@ -11919,13 +12009,14 @@ function renderDiscount(){
       <td class="red" style="font-weight:900">${fmt(r.leakage)}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > DISCOUNT_RENDER_CAP ? `<div class="ops-note">Showing first ${DISCOUNT_RENDER_CAP} of ${d.rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:900px"><thead>${head}</thead><tbody>${body}</tbody></table>${rows.length > DISCOUNT_RENDER_CAP ? `<div class="ops-note">Showing first ${DISCOUNT_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Export CSV includes all rows.</div>` : ''}`;
 }
 function exportDiscount(){
   const d = _discData;
-  if (!d || !d.rows || !d.rows.length){ alert('No discount data to export.'); return; }
+  const filteredRows=(d&&d.rows?d.rows:[]).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
+  if (!filteredRows.length){ alert('No discount data to export.'); return; }
   const headers = ['SKU','SKU Name','Stone Color','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Qty Sold','Leakage','Net Revenue'];
-  const rows = d.rows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
+  const rows = filteredRows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
     Math.round(r.last_sp), r.disc_pct, Math.round(r.per_unit_gap), r.qty, Math.round(r.leakage), Math.round(r.net_revenue)]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -12636,7 +12727,7 @@ function renderRakhi(){
   const rkhTypeSel = document.getElementById('rkhTypeFilter')?.value || 'All';
   // Type filter ke hisaab se rows narrow — table, summary aur export
   // (exportRakhi) teeno isi filtered list ko follow karte hain.
-  const fRows = (rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows;
+  const fRows = ((rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   _rakhiFilteredRows = fRows;
   const emp = LOGIN_ROLE === 'employee';
   if (sumHost){
@@ -13709,6 +13800,7 @@ function _productionQueryString(forceFresh=false){
   const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',sku:'prodSku',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
   const params=new URLSearchParams();
   Object.entries(fields).forEach(([key,id])=>params.set(key,document.getElementById(id)?.value||''));
+  params.set('cn_name',document.getElementById('cnGlobalSearch')?.value||'');
   if(forceFresh) params.set('fresh','1');
   return params.toString();
 }
@@ -13760,14 +13852,17 @@ function renderProduction(){
     });
     d._sorted = true;
   }
+  const rows=(d.rows||[]).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   if (sumHost){
+    const orderQty=rows.reduce((s,r)=>s+(Number(r.order_qty)||0),0), recvQty=rows.reduce((s,r)=>s+(Number(r.recv_qty)||0),0), balQty=rows.reduce((s,r)=>s+(Number(r.bal_qty)||0),0);
+    const orders=new Set(rows.map(r=>String(r.order_no||'')).filter(Boolean)), skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
     sumHost.style.gridTemplateColumns = 'repeat(3,1fr)';
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Total Order Qty</div><div class="yc-val">${(d.total_order_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.count||0).toLocaleString('en-IN')} rows • ${(d.unique_orders||0).toLocaleString('en-IN')} orders</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Received Qty</div><div class="yc-val">${(d.total_recv_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.unique_skus||0).toLocaleString('en-IN')} unique SKUs</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${(d.total_bal_qty||0).toLocaleString('en-IN')}</div><div class="yc-sub">${(d.pending_rows||0).toLocaleString('en-IN')} rows with balance</div></div>`;
+      <div class="yoy-card"><div class="yc-label">Total Order Qty</div><div class="yc-val">${Math.round(orderQty).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} rows • ${orders.size.toLocaleString('en-IN')} orders</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Received Qty</div><div class="yc-val">${Math.round(recvQty).toLocaleString('en-IN')}</div><div class="yc-sub">${skus.size.toLocaleString('en-IN')} unique SKUs</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${Math.round(balQty).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.filter(r=>(Number(r.bal_qty)||0)!==0).length.toLocaleString('en-IN')} rows with balance</div></div>`;
   }
-  if (!d.rows || !d.rows.length){
+  if (!rows.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No production rows for this filter.</div>';
     return;
   }
@@ -13807,7 +13902,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('sku_total_balance')" title="Sum of Balance Qty across all orders for this SKU (total)">Total Balance (All Orders) ⇅</th>
     <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
     <th>Receiving Date</th></tr>`;
-  const visibleProdRows = d.rows.slice(0, 150);
+  const visibleProdRows = rows.slice(0, 150);
   const body = visibleProdRows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
     const img = hasImg
@@ -13834,8 +13929,8 @@ function renderProduction(){
       <td>${escHtml(r.delivery_date || '—')}</td>
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
-  }).join('') + (d.count > visibleProdRows.length
-    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${visibleProdRows.length} of ${d.count.toLocaleString('en-IN')} — narrow with filters. CSV and Excel include all ${d.count.toLocaleString('en-IN')} filtered rows.</td></tr>`
+  }).join('') + (rows.length > visibleProdRows.length
+    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${visibleProdRows.length} of ${rows.length.toLocaleString('en-IN')} — narrow with filters. CSV and Excel include all filtered rows.</td></tr>`
     : '');
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
@@ -14118,7 +14213,7 @@ function renderAtRisk(){
       <td style="text-align:center">${(r.total_qty||0).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td style="font-weight:700">${fmt(r.total_rev)}</td>`}
     </tr>`).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > AT_RISK_RENDER_CAP ? `<div class="ops-note">Showing first ${AT_RISK_RENDER_CAP} of ${d.rows.length.toLocaleString('en-IN')} customers. Export includes all rows.</div>` : ''}`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > AT_RISK_RENDER_CAP ? `<div class="ops-note">Showing first ${AT_RISK_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} customers. Export includes all rows.</div>` : ''}`;
 }
 function exportAtRisk(){
   const d = _arData; if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
@@ -14235,7 +14330,7 @@ window.loadTaxon = loadTaxon; window.renderTaxon = renderTaxon; window.exportTax
 let _txDrillTaxon = null, _txDrillRows = [];
 function showTaxonTop50(taxonName){
   _txDrillTaxon = taxonName;
-  _txDrillRows = (master || []).filter(i => String(i.taxon||'') === taxonName);
+  _txDrillRows = (master || []).filter(i => String(i.taxon||'') === taxonName && cnxItemMatchesGlobalCn(i));
   const listWrap = document.getElementById('txListWrap');
   const drill = document.getElementById('txDrilldown');
   if (listWrap) listWrap.style.display = 'none';
@@ -14386,6 +14481,7 @@ function _oosFilteredRows(){
   const taxon = document.getElementById('oosTaxon')?.value || 'All';
   const rows = _oosRows.length ? _oosRows : _oosBuildRows();
   return rows.filter(r => {
+    if (!cnxSkuMatchesGlobalCn(r.sku)) return false;
     if (group !== 'All' && r.group !== group) return false;
     if (taxon !== 'All' && r.taxon !== taxon) return false;
     return true;
@@ -14586,7 +14682,7 @@ function _repeatPlannerFiltered(){
   const taxon=document.getElementById('rpTaxon')?.value||'All';
   const need=document.getElementById('rpNeedOnly')?.value||'yes';
   const minDrr=Math.max(0,_opsNum(document.getElementById('rpMinDrr')?.value||0));
-  return rows.filter(r=>(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
 }
 function loadRepeatPlanner(){ _rpRows=[]; _buildRepeatPlannerRows(); renderRepeatPlanner(); }
 function renderRepeatPlanner(){
@@ -14647,7 +14743,7 @@ function _comboRiskFiltered(){
   const g=document.getElementById('crGroup')?.value||'All',tx=document.getElementById('crTaxon')?.value||'All';
   const cmb=document.getElementById('crCmb')?.value||'All',relation=document.getElementById('crRelation')?.value||'all';
   const only=document.getElementById('crRiskOnly')?.value||'all';
-  return rows.filter(r=>(!q||`${r.sku} ${r.skuName} ${r.cmb} ${r.cmbName}`.toLowerCase().includes(q))&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(cmb==='All'||r.cmb===cmb)&&(relation==='all'||(relation==='shared'?r.parentCount>1:r.parentCount===1))&&(only!=='yes'||r.blocked>0));
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.cmb)&&(!q||`${r.sku} ${r.skuName} ${r.cmb} ${r.cmbName}`.toLowerCase().includes(q))&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(cmb==='All'||r.cmb===cmb)&&(relation==='all'||(relation==='shared'?r.parentCount>1:r.parentCount===1))&&(only!=='yes'||r.blocked>0));
 }
 function loadComboRisk(){_crRows=[];_buildComboRiskRows();renderComboRisk();}
 function renderComboRisk(){
@@ -14976,7 +15072,7 @@ function _operationsAvailabilityFiltered(){
   const rows=_opAvailBuilt?_opAvailRows:_buildOperationsAvailability();
   const q=_opNormText(document.getElementById('opAvailSearch')?.value);
   const childQ=_opNormText(document.getElementById('opAvailChildSearch')?.value);
-  return rows.filter(r=>_opSmartSearchMatch(q,`${r.sku} ${r.skuName}`,[r.sku],'cmb')&&(!childQ||r.children.some(c=>_opSmartSearchMatch(childQ,`${c.sku} ${c.skuName}`,[c.sku,c.requestedSku],'sku'))));
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&_opSmartSearchMatch(q,`${r.sku} ${r.skuName}`,[r.sku],'cmb')&&(!childQ||r.children.some(c=>_opSmartSearchMatch(childQ,`${c.sku} ${c.skuName}`,[c.sku,c.requestedSku],'sku'))));
 }
 function _parseOperationsCmbPaste(raw){
   const lookup=new Map(),looseLookup=new Map(),ambiguousLoose=new Set();
@@ -15136,7 +15232,7 @@ function _buildSmartAlertRows(){
 }
 function _smartAlertsFiltered(){
   _smartAlertRows=[];_buildSmartAlertRows(); const type=document.getElementById('saType')?.value||'All'; const group=document.getElementById('saGroup')?.value||'All'; const tax=document.getElementById('saTaxon')?.value||'All'; const q=String(document.getElementById('saSearch')?.value||'').trim().toLowerCase();
-  return _smartAlertRows.filter(r=>(type==='All'||r.type===type)&&(group==='All'||r.group===group||r.entityType==='Channel')&&(tax==='All'||r.taxon===tax||r.entityType==='Channel')&&(!q||`${r.entity} ${r.name} ${r.typeLabel} ${r.detail}`.toLowerCase().includes(q)));
+  return _smartAlertRows.filter(r=>(r.entityType!=='SKU'||cnxSkuMatchesGlobalCn(r.entity))&&(type==='All'||r.type===type)&&(group==='All'||r.group===group||r.entityType==='Channel')&&(tax==='All'||r.taxon===tax||r.entityType==='Channel')&&(!q||`${r.entity} ${r.name} ${r.typeLabel} ${r.detail}`.toLowerCase().includes(q)));
 }
 function renderSmartAlerts(){
   const rows=_smartAlertsFiltered();const sum=document.getElementById('saSummary');const host=document.getElementById('saContent');if(!host)return;
@@ -15165,7 +15261,7 @@ function _buildInventoryAgeRows(){
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
-  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const b=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const tx=document.getElementById('iaTaxon')?.value||'All';const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const saleActivity=document.getElementById('iaSaleActivity')?.value||'all';const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';return _inventoryAgeRows.filter(r=>(b==='All'||r.bucket===b)&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(saleActivity==='all'||(saleActivity==='not60'&&(r.daysSinceSale===null||r.daysSinceSale>=60))||(saleActivity==='sold60'&&r.daysSinceSale!==null&&r.daysSinceSale<60))&&(stockOnly!=='yes'||r.stock>0));
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const b=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const tx=document.getElementById('iaTaxon')?.value||'All';const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const saleActivity=document.getElementById('iaSaleActivity')?.value||'all';const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(b==='All'||r.bucket===b)&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(saleActivity==='all'||(saleActivity==='not60'&&(r.daysSinceSale===null||r.daysSinceSale>=60))||(saleActivity==='sold60'&&r.daysSinceSale!==null&&r.daysSinceSale<60))&&(stockOnly!=='yes'||r.stock>0));
 }
 function renderInventoryAgeing(){
   _inventoryAgeRows=[];_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
@@ -15253,7 +15349,7 @@ function _opportunityFiltered(){
   const action=document.getElementById('oppAction')?.value||'All';
   const minScore=_oppClamp(document.getElementById('oppMinScore')?.value||0,0,100);
   const rowMode=document.getElementById('oppRows')?.value||'selling';
-  return _oppRows.filter(r=>(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentSale>0||r.previousSale>0));
+  return _oppRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentSale>0||r.previousSale>0));
 }
 function loadOpportunityScore(){ _oppRows=[]; _buildOpportunityRows(); renderOpportunityScore(); }
 function renderOpportunityScore(){
@@ -15371,7 +15467,7 @@ function _salesAnomalyFiltered(){
   const taxon=document.getElementById('anomTaxon')?.value||'All';
   const severity=document.getElementById('anomSeverity')?.value||'All';
   const q=String(document.getElementById('anomSearch')?.value||'').trim().toLowerCase();
-  return _anomRows.filter(r=>(type==='All'||r.type===type)&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(severity==='All'||r.severity===severity)&&(!q||`${r.sku} ${r.skuName} ${r.typeLabel}`.toLowerCase().includes(q)));
+  return _anomRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(type==='All'||r.type===type)&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(severity==='All'||r.severity===severity)&&(!q||`${r.sku} ${r.skuName} ${r.typeLabel}`.toLowerCase().includes(q)));
 }
 function loadSalesAnomalies(fresh){
   const host=document.getElementById('anomContent'); if(host) host.innerHTML='<div class="ops-empty">Analysing sales, returns, revenue and recent stock receipts...</div>';
@@ -15410,6 +15506,7 @@ function _ssFiltered(){
   const taxonF = document.getElementById('ssTaxon')?.value || 'All';
   const stockF = document.getElementById('ssStock')?.value || '';
   return (master || []).filter(it => {
+    if (!cnxItemMatchesGlobalCn(it)) return false;
     if (q && !String(it.sku||'').toLowerCase().includes(q) && !String(it.taxon||'').toLowerCase().includes(q)) return false;
     if (statusF && it.status !== statusF) return false;
     if (taxonF !== 'All' && (it.taxon||'') !== taxonF) return false;
@@ -16654,7 +16751,7 @@ function bulkRenderCombo(forcedMessage){
     const price = bulkPriceOf(item);
     const stock = Math.max(0, _opsNum(item && item.inv_stock));
     return {item, sku:r.sku, qty, stock, price, line:price*qty};
-  }).filter(r => r.item);
+  }).filter(r => r.item && cnxItemMatchesGlobalCn(r.item));
 
   const pieces = rows.reduce((s,r) => s + r.qty, 0);
   const original = rows.reduce((s,r) => s + r.line, 0);
@@ -17948,7 +18045,7 @@ function renderDemandPatterns(){
   const skuRows=Array.from(skuMap.entries()).map(([sku,s])=>{
     const idx=s.days.indexOf(Math.max(...s.days));const weekendDaily=s.weekend/Math.max(1,cal.weekend),weekdayDaily=s.weekday/Math.max(1,cal.weekday),payDaily=s.pay/Math.max(1,cal.pay),nonpayDaily=s.nonpay/Math.max(1,cal.nonpay);
     return {sku,item:s.item,bestDay:_DP_DAYS[idx]||'—',bestQty:s.days[idx]||0,totalQty:s.totalQty,totalRev:s.totalRev,weekendShare:_bizPct(s.weekend,s.totalQty),weekendUplift:_dpUplift(weekendDaily,weekdayDaily),payUplift:_dpUplift(payDaily,nonpayDaily)};
-  }).filter(r=>r.totalQty>0).sort((a,b)=>b.totalQty-a.totalQty||a.sku.localeCompare(b.sku));
+  }).filter(r=>r.totalQty>0&&cnxSkuMatchesGlobalCn(r.sku)).sort((a,b)=>b.totalQty-a.totalQty||a.sku.localeCompare(b.sku));
   const DEMAND_RENDER_CAP=150;
   const skuBody=skuRows.slice(0,DEMAND_RENDER_CAP).map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.item?.sku_name))}</button></td><td style="font-weight:850">${r.bestDay}</td><td class="ops-num">${_bizNum(r.bestQty,0)}</td><td class="ops-num">${_bizNum(r.totalQty,0)}</td><td class="ops-num">${_bizMoney(r.totalRev)}</td><td class="ops-num">${_bizPctText(r.weekendShare)}</td><td class="ops-num">${_dpUpliftText(r.payUplift)}</td></tr>`).join('');
   const periodRows=[['Weekend vs Weekday',weekendAvg,weekdayAvg,weekendUplift],['Month-End vs Month-Start',endAvg,startAvg,endUplift],['Payday Window vs Other Days',payAvg,nonpayAvg,payUplift],['Festival vs Previous Equal Period',festAvg,prevFestAvg,festUplift]].map(r=>`<tr><td style="font-weight:800">${r[0]}</td><td class="ops-num">${fmtMetric(r[1])}</td><td class="ops-num">${fmtMetric(r[2])}</td><td class="ops-num" style="font-weight:900;color:${r[3]===null?'#777':r[3]>=0?'#15803d':'#b3261e'}">${_dpUpliftText(r[3])}</td></tr>`).join('');
@@ -17961,6 +18058,7 @@ function exportDemandPatterns(){
 }
 
 function _olsMatchesMeta(it){
+  if(!cnxItemMatchesGlobalCn(it))return false;
   const group=document.getElementById('olsGroup')?.value||'All',taxon=document.getElementById('olsTaxon')?.value||'All',q=String(document.getElementById('olsSearch')?.value||'').trim().toLowerCase();
   if(group!=='All'&&_opsGroup(it)!==group)return false;
   if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;
@@ -18630,9 +18728,9 @@ def _production_has_balance(value):
     except (TypeError, ValueError):
         return False
 
-def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode="", row_limit=1000):
+def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", dd2="", taxon_filter="", type_filter="", balance_only="", order_query="", sort_mode="", cn_query="", row_limit=1000):
     # SKU -> image + taxon + AOV/discount map (compiled data se)
-    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}
+    img_map = {}; tax_map = {}; aov_map = {}; disc_map = {}; stone_map = {}; cn_map = {}
     stock_map = {}; stock_3p_map = {}; wip_map = {}; wip_website_map = {}; wip_designer_map = {}; wip_customer_map = {}; wip_customize_map = {}; wip_sor_map = {}
     try:
         comp = get_data()[0]
@@ -18647,6 +18745,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             aov_map[sk] = it.get("aov_per_piece", 0) or 0
             disc_map[sk] = it.get("discount_pct", 0) or 0
             stone_map[sk] = it.get("stone_color", "") or ""
+            cn_map[sk] = it.get("cn_name", "") or ""
             stock_map[sk] = it.get("inv_stock", 0) or 0
             if it.get("inv_stock_3p") is not None:
                 stock_3p_map[sk] = it.get("inv_stock_3p", 0) or 0
@@ -18749,6 +18848,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     cf = channel_filter.strip().lower()
     sq = sku_query.strip().lower()
     oq = order_query.strip().lower()
+    cnq = cn_query.strip().lower()
     txf = taxon_filter.strip().lower()
     tyf = type_filter.strip().lower()
     bo = (balance_only or "").strip().lower()   # "yes" = K != 0, "no" = K == 0
@@ -18788,6 +18888,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         if sq and sq not in r["sku"].lower():
             continue
         if oq and oq not in r["order_no"].lower():
+            continue
+        if cnq and cnq not in str(cn_map.get(r["sku"], "")).lower():
             continue
         # Order date range
         if od1 and (not r["date"] or r["date"] < od1):
@@ -20637,13 +20739,16 @@ def api_overall_export_pdf():
 #  MRP vs actual Selling Price ka gap. Jaha qty zyada × discount zyada,
 #  wahan sabse zyada "leakage" (lost value).
 # ════════════════════════════════════════════════════════════════
-def _build_discount_leakage(min_disc=0.0, sort_key="leakage"):
+def _build_discount_leakage(min_disc=0.0, sort_key="leakage", cn_query=""):
     data = get_data()
     comp = data[0]
     rows = []
     tot_leak = 0.0
     tot_units = 0.0
+    cnq = str(cn_query or '').strip().lower()
     for it in comp:
+        if cnq and cnq not in str(it.get('cn_name') or '').lower():
+            continue
         mrp = float(it.get("mrp") or 0)
         qty = float(it.get("final_qty") or 0)
         # Overall qty-weighted average SP (total_net_revenue/qty) — same method
@@ -20689,8 +20794,9 @@ def api_discount_leakage():
     except Exception:
         md = 0.0
     sk = request.args.get("sort", "leakage").strip()
+    cnq = request.args.get("cn_name", "").strip()
     try:
-        return jsonify(_build_discount_leakage(md, sk))
+        return jsonify(_build_discount_leakage(md, sk, cnq))
     except Exception as e:
         return jsonify({"error": f"discount leakage build failed: {e}"}), 500
 
@@ -20720,6 +20826,7 @@ def _production_request_filters():
         "balance_only": request.args.get("balance", "").strip(),
         "order_query": request.args.get("order_no", "").strip(),
         "sort_mode": request.args.get("sort", "").strip(),
+        "cn_query": request.args.get("cn_name", "").strip(),
     }
 
 def _refresh_production_cache_if_requested():
