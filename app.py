@@ -6018,8 +6018,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="applyF_d()">
           <datalist id="custList"></datalist></div>
-        <div class="fc"><label class="fl">Type (tick one or more)</label>
-          <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Channel (tick one or more)</label>
           <div id="fChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
@@ -7917,7 +7915,8 @@ function renderChannelChecks(){
     const onChange = cid === 'fChanChecks' ? 'applyF()' : 'applyRO()';
     box.innerHTML = (allChannels || []).map(t => {
       const safe = String(t).replace(/"/g, '&quot;');
-      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
+      const label = (cid === 'fChanChecks' && String(t).trim().toUpperCase() === 'SOR') ? 'Other MP' : t;
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${label}</span></label>`;
     }).join('') || '<span class="small-note">No channels</span>';
   });
 }
@@ -9556,7 +9555,19 @@ function applyF(){
   const d2 = document.getElementById('fD2')?.value || '';
   const hasSelectedSkus = selectedSkuSet.size > 0;
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
-  const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
+  const overallChannelKey = e => {
+    const typ = String(e?.type || '').trim().toLowerCase();
+    const cust = String(e?.cust || '').trim().toLowerCase();
+    if (typ === 'website') return 'D2C';
+    if (typ === 'purchase') return 'B2B';
+    if (typ === 'bulk') return 'Bulk';
+    if (typ === 'exhibition') return 'Exhibition';
+    if (typ === 'sor') {
+      return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'SOR';
+    }
+    return String(e?.channel || '').trim();
+  };
+  const chanOk = e => chanSel.length === 0 || chanSel.includes(overallChannelKey(e));
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
   let ky=0, km=0, kf=0, kpf=0, kt=0;
@@ -9594,7 +9605,7 @@ function applyF(){
       const customerSet = new Set();
       for (const e of (item.sales_entries || [])) {
         if (custQ && !String(e.cust||'').toLowerCase().includes(custQ)) continue;
-        if (!typeOk(e.type) || !chanOk(e.channel) || !subChanOk(e.sub_channel)) continue;
+        if (!typeOk(e.type) || !chanOk(e) || !subChanOk(e.sub_channel)) continue;
         if (fyQ !== 'All FYs' && e.fy !== fyQ) continue;
         if (d1 || d2) {
           if (e.date === 'N/A') continue;
