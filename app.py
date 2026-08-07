@@ -14854,10 +14854,29 @@ function _opAvailChildren(parent){
     const resolvedNote=resolved.familyMatched?` · ${resolved.requested} → ${key} (highest Inv+Blocked)`:'';
     out.push({sku:key,requestedSku:resolved.requested,skuName:String(base.sku_name||rawObj.sku_name||''),image:String(base.image_url||rawObj.image_url||''),invStock,blockedQty,stock:invStock+blockedQty,wip,source:source+resolvedNote});
   };
-  // Read the raw combo text only inside Operations so suffixes like BT-0630_(P)
-  // are preserved without changing combo parsing anywhere else in the dashboard.
-  _opExtractSkuTokens(parent&&parent.combo_skus).forEach(s=>add(s,'Combo Details'));
-  (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(c=>add(c,'Combo Details'));
+
+  // IMPORTANT: Operations trusts the RAW combo text first. The shared dashboard
+  // combo_details parser intentionally strips suffix forms such as BT-0630_(P)
+  // down to BT-0630. If both were added, that artificial BT-0630 became a fourth
+  // child with zero stock and incorrectly made otherwise-buildable CMBs fail.
+  // Example CMB-0381 raw children: BT-0630_(P), BH-1285, BT-0630_(S).
+  const rawComboTokens=_opExtractSkuTokens(parent&&parent.combo_skus);
+  const rawExactCompacts=new Set(rawComboTokens.map(_opSkuCompact).filter(Boolean));
+  const rawFamilies=new Set(rawComboTokens.map(_opSkuFamilyBase).filter(Boolean));
+  rawComboTokens.forEach(s=>add(s,'Combo Details'));
+
+  // Keep combo_details only as a fallback for families that were NOT already
+  // found in the raw text. This preserves mappings when raw text is absent while
+  // preventing a suffix-stripped fallback (BT-0630) from being added beside
+  // exact P/S/X variants from the same family.
+  (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(c=>{
+    const fallbackSku=_opsSkuKey(c&&c.sku||c);if(!fallbackSku)return;
+    const compact=_opSkuCompact(fallbackSku),family=_opSkuFamilyBase(fallbackSku);
+    if(compact&&rawExactCompacts.has(compact))return;
+    if(family&&rawFamilies.has(family))return;
+    add(c,'Combo Details');
+  });
+
   _opExtractSkuTokens(parent&&parent.pack_details).forEach(s=>add(s,'Pack Details'));
   return out;
 }
