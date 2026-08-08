@@ -15255,9 +15255,37 @@ function _iaLatestSaleDate(it){
   if(fallback&&fallback<=end&&(!latest||fallback>latest))latest=fallback;
   return latest;
 }
+function _iaFirstSoldDate(it){
+  const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
+  let first='';
+  for(const e of ((it&&it.sales_entries)||[])){
+    if(_opsNum(e&&e.qty)<=0) continue;
+    const d=_bizEntryDate(e);
+    if(d&&d<=end&&(!first||d<first)) first=d;
+  }
+  const fallback=_bizIso(it&&it.first_dispatch_date);
+  if(fallback&&fallback<=end&&(!first||fallback<first)) first=fallback;
+  return first;
+}
+function _iaTotalSoldQty(it){
+  // sales_entries.qty is already Final Qty (gross sold qty less returns).
+  // Use the compiled SKU final_qty so this matches the dashboard's sold-quantity definition.
+  return Math.max(0,Math.round(_opsNum(it&&it.final_qty)));
+}
+function _iaMaxSoldChannel(it){
+  const byQty={};
+  for(const e of ((it&&it.sales_entries)||[])){
+    const q=_opsNum(e&&e.qty);
+    if(q<=0) continue;
+    const ch=String(e&&e.channel||'Other').trim()||'Other';
+    byQty[ch]=(byQty[ch]||0)+q;
+  }
+  const ranked=Object.entries(byQty).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+  return ranked.length?ranked[0][0]:'—';
+}
 function _buildInventoryAgeRows(){
   const receipts={};(_opsSupport.latest_receipts||[]).forEach(x=>{receipts[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||'');});
-  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Sale Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,sale30:Math.max(0,_opsNum(it.qty_1m)),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
+  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;const firstSoldDate=_iaFirstSoldDate(it);const totalSoldQty=_iaTotalSoldQty(it);const maxSoldChannel=_iaMaxSoldChannel(it);let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Sale Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,totalSoldQty,firstSoldDate,maxSoldChannel,sale30:Math.max(0,_opsNum(it.qty_1m)),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
@@ -15265,29 +15293,10 @@ function _inventoryAgeFiltered(){
 }
 function renderInventoryAgeing(){
   _inventoryAgeRows=[];_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${fmt(r.unitValue)}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td class="ops-num">${Math.round(r.sale30).toLocaleString('en-IN')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td class="ops-num">${r.daysSinceSale===null?'Never':r.daysSinceSale.toLocaleString('en-IN')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Value per Unit</th><th>Stock Value</th><th>Sales in Last 30 Days</th><th>Last Sale</th><th>Days Since Last Sale</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${Math.round(r.totalSoldQty).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td>${escHtml(r.firstSoldDate||'Never Sold')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td>${escHtml(r.maxSoldChannel||'—')}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Total Sold Qty</th><th>Stock Value</th><th>First Sold Date</th><th>Last Sale</th><th>Max Sold Channel</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
 }
-function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Value per Unit (Cost/MRP)','Stock Value','Sales in Last 30 Days','Last Sale','Days Since Last Sale'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.unitValue),Math.round(r.value),Math.round(r.sale30),r.lastSale||'Never Sold',r.daysSinceSale===null?'Never':r.daysSinceSale]),'stock_age');}
-
-window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
-window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
-window.loadSmartOps=loadSmartOps;window.renderSmartAlerts=renderSmartAlerts;window.exportSmartAlerts=exportSmartAlerts;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
-
-
-/* ── SKU OPPORTUNITY SCORE ─────────────────────────────── */
-let _oppRows = [];
-function _oppClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, Number(v)||0)); }
-function _oppEntryAgeDays(dateValue){
-  const s=String(dateValue||'').slice(0,10);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
-  const t=String(todayISO||new Date().toISOString().slice(0,10)).slice(0,10);
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
-  const a=Date.parse(s+'T00:00:00Z'), b=Date.parse(t+'T00:00:00Z');
-  if(!Number.isFinite(a)||!Number.isFinite(b)) return null;
-  const d=Math.floor((b-a)/86400000);
-  return d<0?null:d;
-}
+function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Total Sold Qty','Stock Value','First Sold Date','Last Sale','Max Sold Channel'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.totalSoldQty),Math.round(r.value),r.firstSoldDate||'Never Sold',r.lastSale||'Never Sold',r.maxSoldChannel||'—']),'stock_age');}
 function _oppWindowStats(it, win){
   let currentQty=0, previousQty=0, currentRet=0, previousRet=0;
   for(const e of (it.sales_entries||[])){
