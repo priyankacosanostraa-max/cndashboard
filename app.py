@@ -1344,6 +1344,10 @@ def _refresh_data():
     I_SKU = find_col(inv.columns, "SKU") or inv.columns[0]
     I_IMG = find_col(inv.columns, "Image Link","imagelink") or find_col(inv.columns,"image","img")
     I_MRP  = find_col(inv.columns, "MRP", "mrp", "m.r.p")
+    # Bulk tab has an explicit source-of-truth requirement: physical column N
+    # (zero-based index 13) from All Product, regardless of header spelling or
+    # any other MRP-looking column. Keep global I_MRP unchanged for other tabs.
+    I_BULK_MRP_N = inv.columns[13] if len(inv.columns) > 13 else None
     I_COST = find_col(inv.columns, "Cost", "cost", "product cost", "hi cost", "item cost") \
              or (inv.columns[12] if len(inv.columns) > 12 else None)   # fallback → M column
     I_TAX = find_col(inv.columns, "Taxon","category","collection")
@@ -2153,6 +2157,7 @@ def _refresh_data():
         wip_sor      = to_int(r.get(I_WIP_SOR,0))      if I_WIP_SOR      else 0
         blocked      = to_int(r.get(I_BLOCKED,0))       if I_BLOCKED      else 0
         mrp   = to_num(r.get(I_MRP,0))                 if I_MRP  else 0.0
+        bulk_mrp_n = to_num(r.get(I_BULK_MRP_N,0))     if I_BULK_MRP_N else 0.0
         cost  = to_num(r.get(I_COST,0))                if I_COST else 0.0
         cn_name = clean(r.get(I_CN_NAME,""))           if I_CN_NAME else ""
 
@@ -2227,6 +2232,8 @@ def _refresh_data():
             "blocked_qty":      blocked,
             "total_inv":   stk + wip,
             "mrp":         mrp,
+            # Bulk-only MRP: exact physical N column from All Product.
+            "bulk_mrp_n":  bulk_mrp_n,
             "cost":        cost,
             "website_selling_price": cn_website_selling_price(raw),
             "avg_selling_price":  avg_sp,
@@ -7223,7 +7230,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="insights-head">
       <div>
         <div class="insights-title">Bulk — Make Combo</div>
-        <div class="insights-sub">Add one or multiple SKUs to instantly build a combo using each SKU's current cosanostraa.com selling price and product photo.</div>
+        <div class="insights-sub">Add one or multiple SKUs to instantly build a combo using each SKU's MRP from the All Product (Inventory) sheet and product photo.</div>
       </div>
     </div>
 
@@ -7264,7 +7271,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="bulkSummary" class="bulk-summary">
       <div class="bulk-sum-card"><div class="bulk-sum-label">Combo Pieces</div><div class="bulk-sum-value" id="bulkPieces">0</div><div class="bulk-sum-sub" id="bulkSkuCount">0 unique SKUs</div></div>
-      <div class="bulk-sum-card"><div class="bulk-sum-label">Original Total</div><div class="bulk-sum-value" id="bulkOriginal">₹0.00</div><div class="bulk-sum-sub">Website price; All Product MRP fallback</div></div>
+      <div class="bulk-sum-card"><div class="bulk-sum-label">Original Total</div><div class="bulk-sum-value" id="bulkOriginal">₹0.00</div><div class="bulk-sum-sub">All Product (Inventory) MRP</div></div>
       <div class="bulk-sum-card"><div class="bulk-sum-label">Discount Amount</div><div class="bulk-sum-value" id="bulkDiscountAmount">₹0.00</div><div class="bulk-sum-sub" id="bulkDiscountLabel">0% discount</div></div>
       <div class="bulk-sum-card bulk-final-card"><div class="bulk-sum-label">Final Combo Price</div><div class="bulk-sum-value" id="bulkFinal">₹0.00</div><div class="bulk-sum-sub">Total after discount</div></div>
     </div>
@@ -17194,12 +17201,10 @@ function bulkFmtMoney(n){
 
 function bulkPriceOf(item){
   if (!item) return 0;
-  // First priority: current cosanostraa.com storefront selling price.
-  // If the website price is unavailable, use MRP from the All Product
-  // inventory sheet. Historical COSA order selling prices are never used.
-  const websitePrice = Number(item.website_selling_price) || 0;
-  if (websitePrice > 0) return websitePrice;
-  return Number(item.mrp) || 0;
+  // Bulk pricing source of truth = exact physical column N in All Product.
+  // Do not fall back to website/storefront price, selling history, or even the
+  // globally detected MRP field, because another MRP-like column may exist.
+  return Number(item.bulk_mrp_n) || 0;
 }
 
 function bulkFindItem(rawSku){
@@ -17433,16 +17438,10 @@ function bulkRenderCombo(forcedMessage){
     const image = hasImg
       ? `<img class="bulk-photo" src="${escHtml(imageUrl)}" alt="${escHtml(it.sku)}" loading="lazy" decoding="async" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="bulk-photo-ph" style="display:none">💎</span>`
       : '<span class="bulk-photo-ph">💎</span>';
-    const websitePrice = Number(it.website_selling_price) || 0;
-    const inventoryMrp = Number(it.mrp) || 0;
-    let priceSource = '';
-    if (websitePrice > 0) {
-      priceSource = '<div class="bulk-product-meta" style="color:#15803d">Price source: cosanostraa.com</div>';
-    } else if (inventoryMrp > 0) {
-      priceSource = '<div class="bulk-product-meta" style="color:#b45309">Website price unavailable · using All Product MRP</div>';
-    } else {
-      priceSource = '<div class="bulk-product-meta" style="color:#b91c1c">Website price and All Product MRP not found</div>';
-    }
+    const inventoryMrp = Number(it.bulk_mrp_n) || 0;
+    const priceSource = inventoryMrp > 0
+      ? '<div class="bulk-product-meta" style="color:#15803d">Price source: All Product column N (MRP)</div>'
+      : '<div class="bulk-product-meta" style="color:#b91c1c">All Product column N (MRP) not found</div>';
     return `<tr>
       <td style="width:104px">${image}</td>
       <td><div class="bulk-product-name">${escHtml(skuLabel(it.sku, it.sku_name))}</div><div class="bulk-product-meta">SKU: ${escHtml(skuCodeWithFlag(it.sku))}${it.taxon ? ' · '+escHtml(it.taxon) : ''}</div>${priceSource}</td>
@@ -17455,7 +17454,7 @@ function bulkRenderCombo(forcedMessage){
   }).join('');
 
   host.innerHTML = `<table class="bulk-table">
-    <thead><tr><th style="width:104px">Photo</th><th>SKU / Product</th><th style="width:115px">Qty</th><th style="width:115px;text-align:right">Inv Stock</th><th style="width:145px;text-align:right">Selling Price</th><th style="width:155px;text-align:right">Line Total</th><th style="width:105px;text-align:center">Action</th></tr></thead>
+    <thead><tr><th style="width:104px">Photo</th><th>SKU / Product</th><th style="width:115px">Qty</th><th style="width:115px;text-align:right">Inv Stock</th><th style="width:145px;text-align:right">MRP</th><th style="width:155px;text-align:right">Line Total</th><th style="width:105px;text-align:center">Action</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot>
       <tr><td colspan="5" style="text-align:right">Original Total</td><td class="bulk-money">${bulkFmtMoney(original)}</td><td></td></tr>
