@@ -6849,10 +6849,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="insights-head" style="margin-top:14px;margin-bottom:8px">
     <div><div class="insights-title" style="font-size:.98rem;color:#9a5b00">Priority: Estimated Stock-Out in 15 Days or Less</div></div>
+    <div class="insight-toolbar-actions"><button class="go-btn" style="width:auto;padding:8px 12px;background:#2f6f3e" onclick="exportRakhiProductionStockout15()">Export CSV</button></div>
   </div>
   <div id="rpRakhiOos15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   <div class="insights-head" style="margin-top:22px;margin-bottom:8px">
     <div><div class="insights-title" style="font-size:.98rem;color:#2f6f3e">Estimated Stock-Out Above 15 Days / No Recent Demand</div></div>
+    <div class="insight-toolbar-actions"><button class="go-btn" style="width:auto;padding:8px 12px;background:#2f6f3e" onclick="exportRakhiProductionStockoutOver15()">Export CSV</button></div>
   </div>
   <div id="rpRakhiOosOver15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
@@ -14242,7 +14244,7 @@ function _rakhiProdStockoutTableHtml(rows,emptyText){
     <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
     <td>${escHtml(r.receivingDate||'—')}</td>
   </tr>`).join('');
-  return `<table class="ops-table" style="min-width:1120px"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty (Direct + CMB)</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="ops-table" style="min-width:1120px"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 function renderRakhiProductionStockoutTables(){
   const near=document.getElementById('rpRakhiOos15Content'),far=document.getElementById('rpRakhiOosOver15Content');
@@ -14254,6 +14256,25 @@ function renderRakhiProductionStockoutTables(){
   const above=rows.filter(r=>r.estOosDays===null||r.estOosDays>15);
   near.innerHTML=_rakhiProdStockoutTableHtml(within,'No Rakhi SKU is estimated to stock out within 15 days.');
   far.innerHTML=_rakhiProdStockoutTableHtml(above,'No Rakhi SKU is above 15 days of stock cover.');
+}
+function _exportRakhiProductionStockoutRows(rows,fileName){
+  if(!rows.length){alert('No Rakhi stock-out rows to export for the current filters.');return;}
+  _dlCsv([
+    'SKU','SKU Name','Sold Qty','Direct Sold Qty','CMB Child Sold Qty','DRR','Estimated Stock-Out Days',
+    'Inv Stock','Inv WIP','Received Qty','Receiving Date','Used In CMB Count','Image Link'
+  ],rows.map(r=>[
+    r.sku,exportSkuName(r.sku,r.skuName),Number(r.totalSold.toFixed(2)),Number(r.directSold.toFixed(2)),Number(r.comboSold.toFixed(2)),
+    Number(r.drr.toFixed(4)),r.estOosDays===null?'No recent demand':Number(r.estOosDays.toFixed(2)),
+    Math.round(r.stock),Math.round(r.wip),Math.round(r.receivedQty),r.receivingDate||'',Math.round(r.cmbParents||0),r.image||''
+  ]),fileName);
+}
+function exportRakhiProductionStockout15(){
+  const rows=_rakhiProdStockoutRows().filter(r=>r.estOosDays!==null&&r.estOosDays<=15);
+  _exportRakhiProductionStockoutRows(rows,'rakhi_sku_stockout_15_days_or_less');
+}
+function exportRakhiProductionStockoutOver15(){
+  const rows=_rakhiProdStockoutRows().filter(r=>r.estOosDays===null||r.estOosDays>15);
+  _exportRakhiProductionStockoutRows(rows,'rakhi_sku_stockout_above_15_days');
 }
 
 function loadRakhiProduction(forceFresh=false){
@@ -14314,7 +14335,7 @@ function resetRakhiProduction(){
   const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
   if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';renderRakhiProduction();
 }
-window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
+window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.exportRakhiProductionStockout15=exportRakhiProductionStockout15;window.exportRakhiProductionStockoutOver15=exportRakhiProductionStockoutOver15;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
 
 /* ── PROFIT MARGIN (admin) ── */
 let PM_MODE = 'old';
