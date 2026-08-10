@@ -5962,6 +5962,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
+  <button class="menu-item" id="m33" onclick="showTab('rakhiproduction')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9h10M7 13h6M7 17h4"/><path d="M16 14l2 2 3-4"/></svg></span><span>Rakhi Production</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
@@ -6796,6 +6797,31 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="prodSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div id="prodContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  </div>
+
+
+  <div id="vRakhiProduction" style="display:none">
+  <div class="insights-head">
+    <div>
+      <div class="insights-title">Rakhi Production Tracker</div>
+      <div class="small-note">Need By text from the supplied plan is treated as August 2026. Live quantities come from the Production (PPC-WIP) sheet.</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhiProduction(true)">Refresh</button>
+    </div>
+  </div>
+  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Search SKU</label>
+      <input class="fi" id="rpSku" placeholder="type SKU…" oninput="rakhiProdSearchDebounced()"></div>
+    <div class="fc"><label class="fl">Need By date from</label>
+      <input class="fi" id="rpD1" type="date" onchange="renderRakhiProduction()"></div>
+    <div class="fc"><label class="fl">Need By date to</label>
+      <input class="fi" id="rpD2" type="date" onchange="renderRakhiProduction()"></div>
+    <button class="go-btn" style="width:auto;padding:10px 18px;background:#f3f6fb;color:#111" onclick="resetRakhiProduction()">Reset</button>
+  </div>
+  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
+  <div id="rpContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div class="small-note" style="margin-top:10px">Arrived Qty is tracked from the reduction in live Production Balance Qty versus the supplied 06-Aug-2026 file balance, allocated to the earliest Need By tranche first. Still Coming is the remaining quantity for that Need By row.</div>
   </div>
 
   <div id="vDiscount" style="display:none">
@@ -8268,6 +8294,7 @@ const MENU_TAB_META = {
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
+  m33: {name:"Rakhi Production", desc:"August need-by production tracker for the supplied Rakhi plan."},
   m14: {name:"Profit",           desc:"SKU revenue, cost, margin and profit."},
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
@@ -13960,6 +13987,86 @@ async function exportProduction(format){
 window.loadProduction = loadProduction; window.exportProduction = exportProduction; window._productionQueryString = _productionQueryString;
 window.resetProduction = resetProduction; window.prodSearchDebounced = prodSearchDebounced;
 
+
+/* ── RAKHI PRODUCTION TRACKER — supplied Aug-2026 plan + live Production ── */
+let _rakhiProdData = null;
+let _rakhiProdSearchTimer = null;
+function rakhiProdSearchDebounced(){ clearTimeout(_rakhiProdSearchTimer); _rakhiProdSearchTimer=setTimeout(renderRakhiProduction,220); }
+function _rakhiProdSkuNorm(v){
+  let s=(v===null||v===undefined)?'':String(v);
+  try{s=s.normalize('NFKC');}catch(_e){}
+  return s.toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function _rakhiProdRows(){
+  const rows=(_rakhiProdData&&_rakhiProdData.rows)||[];
+  const q=_rakhiProdSkuNorm(document.getElementById('rpSku')?.value||'');
+  const d1=document.getElementById('rpD1')?.value||'';
+  const d2=document.getElementById('rpD2')?.value||'';
+  return rows.filter(r=>{
+    if(!cnxSkuMatchesGlobalCn(r.sku))return false;
+    if(q&&!_rakhiProdSkuNorm(r.sku).includes(q))return false;
+    if(d1&&(!r.need_by_iso||r.need_by_iso<d1))return false;
+    if(d2&&(!r.need_by_iso||r.need_by_iso>d2))return false;
+    return true;
+  });
+}
+function loadRakhiProduction(forceFresh=false){
+  const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
+  if(!host)return;
+  host.innerHTML='<div class="home-empty" style="padding:30px">Loading live Production data…</div>';
+  if(sum)sum.innerHTML='';
+  const url='/api/rakhi-production'+(forceFresh?'?fresh=1':'');
+  fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+    .then(d=>{
+      if(d.error){host.innerHTML='<div class="home-empty" style="padding:30px">'+escHtml(d.error)+'</div>';return;}
+      _rakhiProdData=d;renderRakhiProduction();
+    })
+    .catch(err=>{host.innerHTML='<div class="home-empty" style="padding:30px">Failed: '+escHtml(err.message||err)+'</div>';});
+}
+function renderRakhiProduction(){
+  const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
+  if(!host)return;
+  if(!_rakhiProdData){loadRakhiProduction(false);return;}
+  const rows=_rakhiProdRows();
+  const planned=rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0);
+  const arrived=rows.reduce((s,r)=>s+(Number(r.arrived_qty)||0),0);
+  const coming=rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0);
+  const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
+  if(sum)sum.innerHTML=`
+    <div class="yoy-card"><div class="yc-label">Planned Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} need-by rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Since 06-Aug-2026 baseline</div></div>
+    <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
+    <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
+  if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
+  const status=(r)=>{
+    const k=String(r.status_key||'');
+    const styles={arrived:'background:#e6f4ea;color:#176b35',partial:'background:#fff3cd;color:#7a5a00',overdue:'background:#fde8e8;color:#a4262c',missing:'background:#eef1f5;color:#59636e',coming:'background:#e8f0fe;color:#2455a4'};
+    return `<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:10px;${styles[k]||styles.coming}">${escHtml(r.status||'Coming')}</span>`;
+  };
+  const body=rows.map(r=>`<tr>
+    <td><b>${escHtml(r.need_by_display||r.need_by_text||'—')}</b></td>
+    <td>${escHtml(r.order_date_display||r.order_date||'—')}</td>
+    <td>${escHtml(r.order_no||'—')}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku||'').replace(/'/g,"\'")}')">${escHtml(r.sku||'')}</button></td>
+    <td>${escHtml(r.cn_name||'—')}</td>
+    <td class="ops-num"><b>${Math.round(Number(r.qty_required)||0).toLocaleString('en-IN')}</b></td>
+    <td class="ops-num">${Math.round(Number(r.arrived_qty)||0).toLocaleString('en-IN')}</td>
+    <td class="ops-num"><b>${Math.round(Number(r.coming_qty)||0).toLocaleString('en-IN')}</b></td>
+    <td class="ops-num">${r.source_found?Math.round(Number(r.live_balance_qty)||0).toLocaleString('en-IN'):'—'}</td>
+    <td>${escHtml(r.receiving_dates||'—')}</td>
+    <td>${status(r)}</td>
+  </tr>`).join('');
+  host.innerHTML=`<table class="ro" style="width:100%;min-width:1180px;border-collapse:collapse"><thead><tr>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Arrived Qty</th><th>Still Coming</th><th>Live Balance Qty</th><th>Receiving Date</th><th>Status</th>
+  </tr></thead><tbody>${body}</tbody></table>`;
+}
+function resetRakhiProduction(){
+  const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2');
+  if(a)a.value='';if(b)b.value='';if(c)c.value='';renderRakhiProduction();
+}
+window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
+
 /* ── PROFIT MARGIN (admin) ── */
 let PM_MODE = 'old';
 let PM_CATALOG = [];
@@ -15255,37 +15362,9 @@ function _iaLatestSaleDate(it){
   if(fallback&&fallback<=end&&(!latest||fallback>latest))latest=fallback;
   return latest;
 }
-function _iaFirstSoldDate(it){
-  const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
-  let first='';
-  for(const e of ((it&&it.sales_entries)||[])){
-    if(_opsNum(e&&e.qty)<=0) continue;
-    const d=_bizEntryDate(e);
-    if(d&&d<=end&&(!first||d<first)) first=d;
-  }
-  const fallback=_bizIso(it&&it.first_dispatch_date);
-  if(fallback&&fallback<=end&&(!first||fallback<first)) first=fallback;
-  return first;
-}
-function _iaTotalSoldQty(it){
-  // sales_entries.qty is already Final Qty (gross sold qty less returns).
-  // Use the compiled SKU final_qty so this matches the dashboard's sold-quantity definition.
-  return Math.max(0,Math.round(_opsNum(it&&it.final_qty)));
-}
-function _iaMaxSoldChannel(it){
-  const byQty={};
-  for(const e of ((it&&it.sales_entries)||[])){
-    const q=_opsNum(e&&e.qty);
-    if(q<=0) continue;
-    const ch=String(e&&e.channel||'Other').trim()||'Other';
-    byQty[ch]=(byQty[ch]||0)+q;
-  }
-  const ranked=Object.entries(byQty).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-  return ranked.length?ranked[0][0]:'—';
-}
 function _buildInventoryAgeRows(){
   const receipts={};(_opsSupport.latest_receipts||[]).forEach(x=>{receipts[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||'');});
-  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;const firstSoldDate=_iaFirstSoldDate(it);const totalSoldQty=_iaTotalSoldQty(it);const maxSoldChannel=_iaMaxSoldChannel(it);let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Sale Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,totalSoldQty,firstSoldDate,maxSoldChannel,sale30:Math.max(0,_opsNum(it.qty_1m)),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
+  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Sale Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,sale30:Math.max(0,_opsNum(it.qty_1m)),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
@@ -15293,10 +15372,29 @@ function _inventoryAgeFiltered(){
 }
 function renderInventoryAgeing(){
   _inventoryAgeRows=[];_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${Math.round(r.totalSoldQty).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td>${escHtml(r.firstSoldDate||'Never Sold')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td>${escHtml(r.maxSoldChannel||'—')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Total Sold Qty</th><th>Stock Value</th><th>First Sold Date</th><th>Last Sale</th><th>Max Sold Channel</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${fmt(r.unitValue)}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td class="ops-num">${Math.round(r.sale30).toLocaleString('en-IN')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td class="ops-num">${r.daysSinceSale===null?'Never':r.daysSinceSale.toLocaleString('en-IN')}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Value per Unit</th><th>Stock Value</th><th>Sales in Last 30 Days</th><th>Last Sale</th><th>Days Since Last Sale</th></tr></thead><tbody>${body||'<tr><td colspan="15" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
 }
-function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Total Sold Qty','Stock Value','First Sold Date','Last Sale','Max Sold Channel'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.totalSoldQty),Math.round(r.value),r.firstSoldDate||'Never Sold',r.lastSale||'Never Sold',r.maxSoldChannel||'—']),'stock_age');}
+function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Value per Unit (Cost/MRP)','Stock Value','Sales in Last 30 Days','Last Sale','Days Since Last Sale'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.unitValue),Math.round(r.value),Math.round(r.sale30),r.lastSale||'Never Sold',r.daysSinceSale===null?'Never':r.daysSinceSale]),'stock_age');}
+
+window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
+window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
+window.loadSmartOps=loadSmartOps;window.renderSmartAlerts=renderSmartAlerts;window.exportSmartAlerts=exportSmartAlerts;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
+
+
+/* ── SKU OPPORTUNITY SCORE ─────────────────────────────── */
+let _oppRows = [];
+function _oppClamp(v, lo, hi){ return Math.max(lo, Math.min(hi, Number(v)||0)); }
+function _oppEntryAgeDays(dateValue){
+  const s=String(dateValue||'').slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t=String(todayISO||new Date().toISOString().slice(0,10)).slice(0,10);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(t)) return null;
+  const a=Date.parse(s+'T00:00:00Z'), b=Date.parse(t+'T00:00:00Z');
+  if(!Number.isFinite(a)||!Number.isFinite(b)) return null;
+  const d=Math.floor((b-a)/86400000);
+  return d<0?null:d;
+}
 function _oppWindowStats(it, win){
   let currentQty=0, previousQty=0, currentRet=0, previousRet=0;
   for(const e of (it.sales_entries||[])){
@@ -17283,6 +17381,7 @@ showTab = function(t){
     target: {id: 'vTarget', btn: 'm10'},
     discount: {id: 'vDiscount', btn: 'm12'},
     production: {id: 'vProduction', btn: 'm13'},
+    rakhiproduction: {id: 'vRakhiProduction', btn: 'm33'},
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
@@ -17337,6 +17436,7 @@ showTab = function(t){
       target: 'TARGET',
       discount: 'DISCOUNTS',
       production: 'PRODUCTION',
+      rakhiproduction: 'RAKHI PRODUCTION',
       profit: 'PROFIT',
       atrisk: 'CUSTOMER RISK',
       taxon: 'CATEGORIES',
@@ -17374,6 +17474,7 @@ showTab = function(t){
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
+  if (t === 'rakhiproduction') setTimeout(()=>{ try{ loadRakhiProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
@@ -18725,6 +18826,217 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
+# Rakhi Production plan snapshot supplied by user (Production Data sheet).
+# Delivery text such as "Need By 12th" is interpreted as August 2026.
+_RAKHI_PRODUCTION_BASELINE_DATE = "2026-08-06"
+_RAKHI_PRODUCTION_PLAN = [
+    ('2026-07-04', '1398', 'LP-0294', 333, 1000, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'BH-2237', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'BH-2237', 100, 100, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'LP-0127', 350, 350, 'Priority 1', 'Need By 12th'),
+    ('2026-06-26', '1391', 'LP-0224', 40, 40, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'LP-0224', 366, 1099, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'BH-1611', 15, 15, 'Priority 1', 'Need By 12th'),
+    ('2026-06-26', '1391', 'LP-0225', 30, 30, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'BH-1611', 100, 100, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'LP-0225', 500, 500, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0019', 25, 25, 'Priority 1', 'Need By 12th'),
+    ('2026-06-26', '1391', 'CF-0019', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'CF-0019', 100, 100, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'BH-1226', 328, 985, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'BTC-0007', 1000, 3000, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1398', 'BTC-0005', 996, 2988, 'Priority 1', 'Need By 12th'),
+    ('2026-05-16', '1339', 'CF-0332', 4, 4, 'Priority 1', 'Need By 12th'),
+    ('2026-05-16', '1339', 'BH-1671', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-05-22', '1349', 'M-0155', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-04', '1363', 'BH-0140', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-04', '1363', 'LP-0095', 5, 5, 'Priority 1', 'Need By 12th'),
+    ('2026-06-04', '1363', 'LP-0285', 15, 15, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'BH-0042', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0139', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0268', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0271', 9, 9, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0273', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0331', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CF-0332', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'CT-0038', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'LP-0051', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'LP-0095', 5, 5, 'Priority 1', 'Need By 12th'),
+    ('2026-06-24', '1387', 'LP-0285', 10, 10, 'Priority 1', 'Need By 12th'),
+    ('2026-06-26', '1391', 'CF-0332', 25, 25, 'Priority 1', 'Need By 12th'),
+    ('2026-06-26', '1391', 'LP-0315', 5, 5, 'Priority 1', 'Need By 12th'),
+    ('2026-07-04', '1397', 'BH-1818', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-07-10', '1405', 'CF-0306', 5, 5, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'BH-1694', 25, 25, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0061', 25, 25, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0271', 15, 15, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0273', 25, 25, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0306', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0331', 15, 15, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'CF-0332', 30, 30, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'LP-0114', 30, 30, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'LP-0123', 30, 30, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'LP-0222', 30, 30, 'Priority 1', 'Need By 12th'),
+    ('2026-07-27', '1423', 'LP-0315', 20, 20, 'Priority 1', 'Need By 12th'),
+    ('2026-06-08', '1365', 'BTC-0017', 10, 10, 'Priority 2', 'Need By 14th'),
+    ('2026-07-27', '1423', 'BTC-0017', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-06-24', '1387', 'CF-0048', 17, 17, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'CF-0048', 199, 199, 'Priority 2', 'Need By 14th'),
+    ('2026-06-26', '1391', 'BH-1226', 20, 20, 'Priority 2', 'Need By 14th'),
+    ('2026-07-27', '1423', 'BTC-0022', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'BH-2244', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'CF-0114', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'LP-0366', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'LP-0364', 100, 100, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'LP-0294', 333, 1000, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'LP-0224', 366, 1099, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'BH-1226', 328, 985, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'BTC-0007', 1000, 3000, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'BTC-0005', 996, 2988, 'Priority 2', 'Need By 14th'),
+    ('2026-07-04', '1398', 'BH-1382', 836, 836, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'LP-0294', 333, 1000, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'LP-0224', 366, 1099, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'BH-1226', 328, 985, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'BTC-0007', 1000, 3000, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'BTC-0005', 996, 2988, 'Priority 3', 'Need By 16th'),
+    ('2026-07-04', '1398', 'BH-2239', 250, 250, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1390', 500, 500, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1600', 500, 500, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'CF-0278', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'LP-0316', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1349', 250, 250, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-2235', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1225', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1255', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'CF-0282', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1240', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1279', 100, 100, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1599', 500, 500, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1606', 500, 500, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1624', 99, 99, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'CF-0279', 94, 94, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'LP-0034', 50, 50, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'LP-0121', 250, 250, 'Priority 4', 'Need By 18th'),
+    ('2026-07-04', '1398', 'BH-1612', 300, 300, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1347', 247, 247, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1597', 250, 250, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'CF-0253', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0287', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1320', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1744', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-2251', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BT-0651_(P)', 430, 430, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0288', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0304', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1841', 96, 96, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-2246', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BT-0560_(P)', 28, 28, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'CT-0028', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BT-0581_(P)', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0368', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1325', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'CF-0274', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1311', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1595', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BT-0599_(P)', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0280', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0365', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1786', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'LP-0317', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1242', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1428', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1601', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1604', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1618', 100, 100, 'Priority 5', 'Need By 20th'),
+    ('2026-07-04', '1398', 'BH-1179', 158, 158, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-2248', 250, 250, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'LP-0292', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-1439', 419, 419, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-1350', 500, 500, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'LP-0290', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-1334', 500, 500, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'CF-0261', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-1295', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-2242', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-2241', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-1258', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BH-2240', 248, 248, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-04', '1363', 'BH-1609', 5, 5, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-04', '1363', 'CF-0018', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'BH-1907', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'CF-0024', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'CF-0308', 20, 20, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'RLP-0005', 20, 20, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'RLP-0010', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'RLP-0018', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-06-24', '1387', 'RLP-0020', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1397', 'BH-1609', 10, 10, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-16', '1410', 'BH-1605', 20, 20, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-27', '1423', 'BH-2252', 25, 25, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-27', '1423', 'BTC-0012', 100, 100, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-27', '1423', 'BTC-0019', 83, 83, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-27', '1423', 'RLP-0005', 50, 50, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-27', '1423', 'RLP-0020', 25, 25, 'Priority 6', 'Need By 22nd'),
+    ('2026-08-06', '1435', 'BTC-0023', 150, 150, 'Priority 6', 'Need By 22nd'),
+    ('2026-08-06', '1435', 'BTC-0010', 150, 150, 'Priority 6', 'Need By 22nd'),
+    ('2026-08-06', '1435', 'BTC-0016', 150, 150, 'Priority 6', 'Need By 22nd'),
+    ('2026-08-06', '1435', 'BTC-0013', 150, 150, 'Priority 6', 'Need By 22nd'),
+    ('2026-08-06', '1435', 'RLP-0025', 60, 60, 'Priority 6', 'Need By 22nd'),
+    ('2026-07-04', '1398', 'BTC-0021', 2963, 2963, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-2236', 100, 100, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-1181', 368, 368, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-1180', 407, 407, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-1927', 50, 50, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-1222', 40, 40, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-0150', 271, 271, 'Priority 7', 'Need By 24th'),
+    ('2026-07-04', '1398', 'BH-1598', 41, 41, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'BH-1250', 422, 422, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'RKH-0020', 921, 921, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'RKH-0043', 870, 870, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'RKH-0088', 944, 944, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'RKH-0091', 708, 708, 'Priority 8', 'Need By 26th'),
+    ('2026-07-04', '1398', 'RKH-0012', 1000, 1000, 'Priority 9', 'Need By 27th'),
+    ('2026-07-04', '1398', 'RKH-0017', 731, 731, 'Priority 9', 'Need By 27th'),
+    ('2026-07-04', '1398', 'RKH-0052', 1000, 1000, 'Priority 9', 'Need By 27th'),
+]
+
+def _rakhi_prod_need_by_iso(value):
+    """Normalize plan delivery text to an August-2026 ISO date.
+
+    Handles text variants such as Need By 12th / need by 12 / 12th / Aug 12.
+    The uploaded plan is explicitly for August 2026.
+    """
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    s = clean(value)
+    if not s:
+        return ""
+    # Need-by text is authoritative: any ordinal/day number belongs to Aug-2026.
+    m = re.search(r"(?<!\d)(3[01]|[12]?\d)(?:st|nd|rd|th)?(?!\d)", s, re.I)
+    if m:
+        try:
+            return date(2026, 8, int(m.group(1))).isoformat()
+        except ValueError:
+            return ""
+    dt = parse_date_any(s)
+    if dt:
+        try:
+            return date(2026, 8, dt.day).isoformat()
+        except ValueError:
+            return ""
+    return ""
+
+def _rakhi_prod_order_key(value):
+    s = clean(value).strip()
+    if re.fullmatch(r"\d+\.0+", s):
+        s = s.split(".", 1)[0]
+    return s.casefold()
+
+def _rakhi_prod_sku_key(value):
+    return re.sub(r"[^A-Z0-9]", "", clean(value).upper())
+
 def _production_has_balance(value):
     """Column K has a pending/difference value whenever it is not zero.
 
@@ -19001,6 +19313,127 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         "pending_rows": pending,
         "unique_orders": uniq_orders,
         "unique_skus": uniq_skus,
+    }
+
+
+def _build_rakhi_production_tracker():
+    """Join the supplied Aug-2026 need-by plan to the live Production sheet.
+
+    The file's Balance Qty is the 06-Aug-2026 baseline.  A fall in the live
+    Production Balance Qty is treated as quantity received since that snapshot
+    and is allocated to the earliest Need By tranche first.
+    """
+    report = _build_production(row_limit=None)
+    live_rows = list(report.get("rows") or [])
+
+    # All Product CN Name is used for display; the plan remains SKU-driven.
+    cn_map = {}
+    try:
+        for it in get_data()[0]:
+            sk = _rakhi_prod_sku_key(it.get("sku", ""))
+            if sk:
+                cn_map[sk] = clean(it.get("cn_name", ""))
+    except Exception:
+        pass
+
+    live = {}
+    for r in live_rows:
+        key = (_rakhi_prod_order_key(r.get("order_no", "")), _rakhi_prod_sku_key(r.get("sku", "")))
+        if not key[0] or not key[1]:
+            continue
+        g = live.setdefault(key, {
+            "balance": 0.0, "recv": 0.0, "order_qty": 0.0,
+            "receiving_dates": set(), "delivery_dates": set(), "rows": 0,
+        })
+        g["balance"] += float(r.get("bal_qty") or 0)
+        g["recv"] += float(r.get("recv_qty") or 0)
+        g["order_qty"] += float(r.get("order_qty") or 0)
+        g["rows"] += 1
+        if r.get("receiving_date"):
+            g["receiving_dates"].add(str(r.get("receiving_date")))
+        if r.get("delivery_date"):
+            g["delivery_dates"].add(str(r.get("delivery_date")))
+
+    groups = {}
+    for seq, raw in enumerate(_RAKHI_PRODUCTION_PLAN):
+        order_date, order_no, sku, qty_required, baseline_balance, priority, need_by_text = raw
+        need_iso = _rakhi_prod_need_by_iso(need_by_text)
+        key = (_rakhi_prod_order_key(order_no), _rakhi_prod_sku_key(sku))
+        if not key[0] or not key[1] or not need_iso:
+            continue
+        g = groups.setdefault(key, {
+            "order_no": str(order_no), "sku": str(sku).upper(),
+            "baseline_balance": 0.0, "plan_total": 0.0, "parts": [],
+        })
+        g["baseline_balance"] = max(g["baseline_balance"], float(baseline_balance or 0))
+        g["plan_total"] += max(0.0, float(qty_required or 0))
+        g["parts"].append({
+            "seq": seq, "order_date": str(order_date or ""),
+            "qty_required": max(0.0, float(qty_required or 0)),
+            "priority": str(priority or ""), "need_by_text": str(need_by_text or ""),
+            "need_by_iso": need_iso,
+        })
+
+    out = []
+    today_iso = now_ist().date().isoformat()
+    for key, g in groups.items():
+        lv = live.get(key)
+        source_found = lv is not None
+        live_balance = float(lv.get("balance") or 0) if lv else 0.0
+        # Negative K is an over-receipt difference: for plan completion it means
+        # no positive balance remains.  Keep the raw live number for display.
+        outstanding_for_calc = max(0.0, live_balance) if source_found else g["baseline_balance"]
+        received_since_baseline = max(0.0, g["baseline_balance"] - outstanding_for_calc) if source_found else 0.0
+        received_since_baseline = min(received_since_baseline, g["plan_total"])
+        remaining_received = received_since_baseline
+        parts = sorted(g["parts"], key=lambda p: (p["need_by_iso"], p["seq"]))
+        recv_dates = ", ".join(sorted(lv.get("receiving_dates") or [])) if lv else ""
+        prod_delivery_dates = ", ".join(sorted(lv.get("delivery_dates") or [])) if lv else ""
+        cn_name = cn_map.get(key[1], "")
+        for p in parts:
+            qty = p["qty_required"]
+            arrived = min(qty, remaining_received)
+            remaining_received = max(0.0, remaining_received - arrived)
+            coming = max(0.0, qty - arrived)
+            if not source_found:
+                status_key, status = "missing", "Not found in Production"
+            elif coming <= 1e-9:
+                status_key, status = "arrived", "Arrived"
+            elif p["need_by_iso"] < today_iso:
+                status_key, status = "overdue", "Overdue / Coming"
+            elif arrived > 1e-9:
+                status_key, status = "partial", "Partly Arrived"
+            else:
+                status_key, status = "coming", "Coming"
+            try:
+                nd = datetime.strptime(p["need_by_iso"], "%Y-%m-%d")
+                need_disp = nd.strftime("%d-%b-%Y")
+            except Exception:
+                need_disp = p["need_by_text"]
+            try:
+                od = datetime.strptime(p["order_date"], "%Y-%m-%d")
+                order_disp = od.strftime("%d-%b-%Y")
+            except Exception:
+                order_disp = p["order_date"]
+            out.append({
+                "need_by_iso": p["need_by_iso"], "need_by_display": need_disp, "need_by_text": p["need_by_text"],
+                "order_date": p["order_date"], "order_date_display": order_disp,
+                "order_no": g["order_no"], "sku": g["sku"], "cn_name": cn_name, "priority": p["priority"],
+                "qty_required": int(round(qty)), "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
+                "baseline_balance_qty": int(round(g["baseline_balance"])),
+                "live_balance_qty": int(round(live_balance)) if source_found else None,
+                "receiving_dates": recv_dates, "production_delivery_dates": prod_delivery_dates,
+                "source_found": source_found, "status_key": status_key, "status": status,
+            })
+
+    out.sort(key=lambda r: (r.get("need_by_iso", "9999-99-99"), r.get("sku", ""), r.get("order_no", "")))
+    return {
+        "rows": out, "baseline_date": _RAKHI_PRODUCTION_BASELINE_DATE,
+        "count": len(out), "unique_skus": len({r["sku"] for r in out}),
+        "planned_qty": int(round(sum(r["qty_required"] for r in out))),
+        "arrived_qty": int(round(sum(r["arrived_qty"] for r in out))),
+        "coming_qty": int(round(sum(r["coming_qty"] for r in out))),
+        "missing_rows": sum(1 for r in out if not r["source_found"]),
     }
 
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
@@ -20821,6 +21254,19 @@ def api_production():
         return resp
     except Exception as e:
         return jsonify({"error": f"production build failed: {e}"}), 500
+
+
+@app.route("/api/rakhi-production")
+def api_rakhi_production():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        _refresh_production_cache_if_requested()
+        resp = jsonify(_build_rakhi_production_tracker())
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"rakhi production tracker failed: {e}"}), 500
 
 def _production_request_filters():
     return {
