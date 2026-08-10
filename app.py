@@ -6965,7 +6965,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
+  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0 + completed receipt-only Order No./SKU rows needed to reconcile the Rakhi receiving sheet. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -14521,7 +14521,7 @@ function renderRakhiProduction(){
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
   if(sum)sum.innerHTML=`
-    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} plan + live pending Production rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows (plan + live Production + completed receipts)</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
@@ -14563,7 +14563,7 @@ function renderRakhiProduction(){
   </tr>`).join('');
   const sourceNote=meta.source_ok===false
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
-    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
+    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Full-sheet receipt sync: ${meta.receipt_reconciled===false?'check required':'matched'}${meta.source_received_yesterday!==undefined?` · Sheet Yesterday ${Math.round(Number(meta.source_received_yesterday)||0).toLocaleString('en-IN')}`:''}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
     <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody><tfoot><tr style="background:#fffdf7;border-top:2px solid #b8860b;font-weight:900">
@@ -19833,6 +19833,10 @@ def _build_rakhi_receipts_after_aug6(force=False):
         "source_ok": False,
         "source_rows": 0,
         "counted_rows": 0,
+        "source_received_since_aug6": 0,
+        "source_received_today": 0,
+        "source_received_yesterday": 0,
+        "source_received_day_before": 0,
         "error": "",
     }
 
@@ -19922,6 +19926,14 @@ def _build_rakhi_receipts_after_aug6(force=False):
 
         payload["by_sku"] = {sku: _serialize(g) for sku, g in work_sku.items()}
         payload["by_order_sku"] = {key: _serialize(g) for key, g in work_order_sku.items()}
+        # Reconciliation totals from the source itself. Each CSV row belongs to
+        # exactly one normalized Order No. + SKU bucket, so summing this view
+        # reproduces the published Rakhi sheet total without clipping to plan or
+        # current Production balance quantities.
+        payload["source_received_since_aug6"] = int(round(sum(g["received_since_aug6"] for g in work_order_sku.values())))
+        payload["source_received_today"] = int(round(sum(g["received_today"] for g in work_order_sku.values())))
+        payload["source_received_yesterday"] = int(round(sum(g["received_yesterday"] for g in work_order_sku.values())))
+        payload["source_received_day_before"] = int(round(sum(g["received_day_before"] for g in work_order_sku.values())))
         payload["source_ok"] = True
     except Exception as exc:
         payload["error"] = str(exc)
@@ -20309,12 +20321,14 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
     # All Product is only a fallback when the Excel image is unavailable.
     cn_map = {}
     master_image_map = {}
+    master_sku_display_map = {}
     try:
         for it in get_data()[0]:
             sk = _rakhi_prod_sku_key(it.get("sku", ""))
             if sk:
                 cn_map[sk] = clean(it.get("cn_name", ""))
                 master_image_map[sk] = clean(it.get("image_url", ""))
+                master_sku_display_map[sk] = clean(it.get("sku", "")).upper() or sk
     except Exception:
         pass
 
@@ -20536,6 +20550,53 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         else:
             live_other_added += 1
 
+    # A receiving row can belong to an order/SKU that is no longer pending in
+    # PPC-WIP (Balance Qty has already reached 0) and may also be absent from the
+    # supplied planning Excel. Those receipts were previously dropped from the
+    # first table, which made daily totals smaller than the authoritative Rakhi
+    # receiving sheet. Add a zero-requirement receipt-only tracker row for every
+    # such exact normalized Order No. + SKU so Today/Yesterday/Day Before always
+    # reconcile to the source. Existing plan/live rows are never duplicated.
+    exact_receipts = rakhi_receipts.get("by_order_sku") or {}
+    receipt_only_rows_added = 0
+    for _receipt_key, _rc in exact_receipts.items():
+        _receipt_key = clean(_receipt_key)
+        if "||" not in _receipt_key:
+            continue
+        _order_key, _sku_key = _receipt_key.split("||", 1)
+        _order_key = _rakhi_prod_order_key(_order_key)
+        _sku_key = _rakhi_prod_sku_key(_sku_key)
+        _key = (_order_key, _sku_key)
+        if not _order_key or not _sku_key or _key in groups:
+            continue
+        if float((_rc or {}).get("received_since_aug6") or 0) <= 0:
+            continue
+        _lv = live.get(_key)
+        _order_pairs = sorted(
+            (_lv.get("order_dates") or set()) if _lv else set(),
+            key=lambda x: (x[0] or "9999-99-99", x[1]),
+        )
+        _order_date_iso = _order_pairs[0][0] if _order_pairs else ""
+        _need_iso, _need_text = _rakhi_prod_live_need_by(_sku_key, _order_key)
+        _order_display = (clean(_lv.get("order_no_display", "")) if _lv else "") or _order_key
+        _sku_display = (clean(_lv.get("sku_display", "")).upper() if _lv else "") or master_sku_display_map.get(_sku_key, _sku_key)
+        groups[_key] = {
+            "order_no": _order_display,
+            "sku": _sku_display,
+            "baseline_balance": 0.0,
+            "plan_total": 0.0,
+            "parts": [{
+                "seq": 2000000 + receipt_only_rows_added,
+                "order_date": _order_date_iso,
+                "qty_required": 0.0,
+                "priority": "Received / Completed",
+                "need_by_text": _need_text,
+                "need_by_iso": _need_iso,
+                "source": "receipt_only",
+            }],
+        }
+        receipt_only_rows_added += 1
+
     out = []
     today_iso = now_ist().date().isoformat()
     receipt_meta = {k: v for k, v in rakhi_receipts.items() if k not in ("by_sku", "by_order_sku")}
@@ -20588,6 +20649,22 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                     remaining_day_qty -= take
                     if remaining_day_qty <= 1e-9:
                         break
+                # Never discard valid source receipts just because the current
+                # plan/balance capacity is smaller (or zero after completion).
+                # Put any over-receipt / already-completed remainder on the last
+                # tranche so the sum of displayed receipt columns equals the
+                # published Rakhi receiving sheet exactly.
+                if remaining_day_qty > 1e-9 and part_stats:
+                    _idx = len(part_stats) - 1
+                    part_stats[_idx]["arrived"] += remaining_day_qty
+                    if receipt_iso == today_receipt_iso:
+                        part_stats[_idx]["today"] += remaining_day_qty
+                    elif receipt_iso == yesterday_receipt_iso:
+                        part_stats[_idx]["yesterday"] += remaining_day_qty
+                    elif receipt_iso == day_before_receipt_iso:
+                        part_stats[_idx]["day_before"] += remaining_day_qty
+                    if receipt_iso > part_stats[_idx]["latest_iso"]:
+                        part_stats[_idx]["latest_iso"] = receipt_iso
         else:
             # Source outage fallback only: preserve the old baseline Balance-drop
             # logic so the tracker remains usable, but daily buckets stay blank/0.
@@ -20642,7 +20719,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 "production_order_qty": int(round(float(lv.get("order_qty") or 0))) if lv else 0,
                 "production_balance_qty": 0,
                 "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
-                "received_since_aug6": int(round(arrived)),
+                "received_since_aug6": int(round(max(0.0, ps["arrived"]))),
                 "received_today": int(round(ps["today"])),
                 "received_yesterday": int(round(ps["yesterday"])),
                 "received_day_before": int(round(ps["day_before"])),
@@ -20692,6 +20769,28 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         else:
             _row["status_key"], _row["status"] = "coming", "Coming"
 
+    # Backend reconciliation guard: the unfiltered first table must reproduce
+    # the authoritative post-06-Aug Rakhi receiving totals exactly. These fields
+    # are diagnostics for the UI/API and make future source-shape issues visible
+    # instead of silently under-counting receipts.
+    _tracker_received_since = int(round(sum(float(r.get("received_since_aug6") or 0) for r in out)))
+    _tracker_today = int(round(sum(float(r.get("received_today") or 0) for r in out)))
+    _tracker_yesterday = int(round(sum(float(r.get("received_yesterday") or 0) for r in out)))
+    _tracker_day_before = int(round(sum(float(r.get("received_day_before") or 0) for r in out)))
+    rakhi_receipts["tracker_received_since_aug6"] = _tracker_received_since
+    rakhi_receipts["tracker_received_today"] = _tracker_today
+    rakhi_receipts["tracker_received_yesterday"] = _tracker_yesterday
+    rakhi_receipts["tracker_received_day_before"] = _tracker_day_before
+    rakhi_receipts["receipt_only_rows_added"] = int(receipt_only_rows_added)
+    rakhi_receipts["receipt_reconciled"] = bool(
+        not receipt_source_ok or (
+            _tracker_received_since == int(rakhi_receipts.get("source_received_since_aug6") or 0) and
+            _tracker_today == int(rakhi_receipts.get("source_received_today") or 0) and
+            _tracker_yesterday == int(rakhi_receipts.get("source_received_yesterday") or 0) and
+            _tracker_day_before == int(rakhi_receipts.get("source_received_day_before") or 0)
+        )
+    )
+
     # Newly discovered live RKH orders are placed first so fresh order numbers
     # (1422/1423/1427/1428/future) are visible immediately; plan rows retain
     # their existing need-by ordering after that.
@@ -20712,6 +20811,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         "live_rakhi_rows_added": int(live_rakhi_added),
         "live_other_rows_added": int(live_other_added),
         "live_pending_rows_added": int(live_rakhi_added + live_other_added),
+        "receipt_only_rows_added": int(receipt_only_rows_added),
         "production_by_sku": production_by_sku,
         "rakhi_receipts_by_sku": rakhi_receipts.get("by_sku") or {},
         "rakhi_receipts_by_order_sku": rakhi_receipts.get("by_order_sku") or {},
