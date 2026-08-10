@@ -6965,7 +6965,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
+  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -20501,10 +20501,10 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
             live_positive_balance = max(0.0, float(lv.get("max_positive_balance") or 0.0))
         except (TypeError, ValueError):
             live_positive_balance = 0.0
-        # Order Qty remains the requested source for Qty Required. If a malformed
-        # live row has blank/zero Order Qty but a positive Balance Qty, keep the
-        # running order visible using its positive balance as a safe fallback.
-        live_required_qty = live_order_qty if live_order_qty > 1e-9 else live_positive_balance
+        # For rows that are NOT in the supplied Production Data Excel, Qty Required
+        # must represent the CURRENT outstanding production requirement. Therefore
+        # use physical PPC-WIP Balance Qty (column K), not the original Order Qty.
+        live_required_qty = live_positive_balance
         if live_required_qty <= 1e-9:
             continue
 
@@ -20673,6 +20673,24 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         _base, _rem = divmod(_pool, _n)
         for _pos, _idx in enumerate(_indices):
             out[_idx]["production_balance_qty"] = _base + (1 if _pos < _rem else 0)
+
+    # Rows discovered only from LIVE PPC-WIP were not present in the supplied
+    # Production Data Excel. For these rows, Qty Required must always equal the
+    # displayed Production Balance Qty. Since Balance Qty is already the current
+    # remaining quantity after production receipts, do not subtract received qty
+    # from it again when calculating Still Coming.
+    for _row in out:
+        if _row.get("row_source") != "live_production":
+            continue
+        _bal_req = max(0, int(round(float(_row.get("production_balance_qty") or 0))))
+        _row["qty_required"] = _bal_req
+        _row["coming_qty"] = _bal_req
+        if _bal_req <= 0:
+            _row["status_key"], _row["status"] = "arrived", "Arrived"
+        elif int(_row.get("arrived_qty") or 0) > 0:
+            _row["status_key"], _row["status"] = "partial", "Partly Arrived"
+        else:
+            _row["status_key"], _row["status"] = "coming", "Coming"
 
     # Newly discovered live RKH orders are placed first so fresh order numbers
     # (1422/1423/1427/1428/future) are visible immediately; plan rows retain
