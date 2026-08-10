@@ -5755,7 +5755,7 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 
-/* One-day Sawan Somvaar login greeting — active only on 03 August 2026 (IST). */
+/* One-day second Sawan Somvaar login greeting — active on 10 August 2026 (IST). */
 .cnx-sawan-wish{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:22px;background:rgba(27,20,10,.48);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
 .cnx-sawan-wish.is-open{opacity:1;visibility:visible;pointer-events:auto}
 .cnx-sawan-card{position:relative;width:min(500px,94vw);overflow:hidden;padding:46px 42px 38px;border:1px solid rgba(168,121,32,.28);border-radius:30px;text-align:center;background:radial-gradient(circle at 50% -8%,rgba(232,204,132,.4),transparent 38%),linear-gradient(145deg,#fffefb 0%,#fbf3e4 66%,#ead8b8 100%);box-shadow:0 45px 110px rgba(39,28,10,.32),0 2px 0 rgba(255,255,255,.9) inset;transform:perspective(900px) translateY(30px) rotateX(8deg) scale(.94);transition:transform .5s cubic-bezier(.18,.85,.24,1.12)}
@@ -5920,10 +5920,10 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="cnx-sawan-card">
     <button class="cnx-sawan-close" type="button" aria-label="Close greeting" onclick="closeSawanSomvaarWish()">&times;</button>
     <div class="cnx-sawan-icon" aria-hidden="true">ॐ</div>
-    <div class="cnx-sawan-kicker">First Sawan Somvaar</div>
+    <div class="cnx-sawan-kicker">सावन का दूसरा सोमवार</div>
     <div class="cnx-sawan-title" id="cnxSawanTitle">हर हर महादेव</div>
-    <p class="cnx-sawan-copy">Wishing you a blessed first Sawan Somvaar. May Lord Shiva fill your day with peace, strength and prosperity.</p>
-    <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">Begin the day</button>
+    <p class="cnx-sawan-copy">सावन के दूसरे सोमवार की हार्दिक शुभकामनाएँ। महादेव की कृपा से आपके कार्यों में सफलता, मन में शांति और जीवन में समृद्धि बनी रहे।</p>
+    <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">हर हर महादेव</button>
   </div>
 </div>
 
@@ -6944,7 +6944,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + live Production RKH orders (including new order numbers). Order Qty comes from PPC-WIP; received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU, for dates after 06-Aug-2026. Today, Yesterday and Day Before update automatically in IST.</div>
+  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + live Production RKH orders. Direct RKH SKUs are Need By 13-Aug-2026. Production Balance Qty comes from live PPC-WIP column K; repeated same-date SKU rows share only the highest balance for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -11167,7 +11167,7 @@ function playLoginSuccessSound(){
   } catch(e){}
 }
 
-const CNX_SAWAN_WISH_DATE = '2026-08-03';
+const CNX_SAWAN_WISH_DATE = '2026-08-10';
 
 function cnxIstDateKey(at){
   const moment = at instanceof Date ? at : new Date();
@@ -14488,6 +14488,16 @@ function renderRakhiProduction(){
     return `<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:10px;${styles[k]||styles.coming}">${escHtml(r.status||'Coming')}</span>`;
   };
   const receiptCell=(r,v)=>r.receipt_source_ok===false?'—':Math.round(Number(v)||0).toLocaleString('en-IN');
+  const totals={
+    qty:rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0),
+    prodBal:rows.reduce((s,r)=>s+(Number(r.production_balance_qty)||0),0),
+    received:rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0),
+    today:rows.reduce((s,r)=>s+(Number(r.received_today)||0),0),
+    yesterday:rows.reduce((s,r)=>s+(Number(r.received_yesterday)||0),0),
+    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0),
+    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0),
+    liveBal:rows.reduce((s,r)=>s+(Number(r.live_balance_qty)||0),0)
+  };
   const body=rows.map(r=>`<tr>
     <td><b>${escHtml(r.need_by_display||r.need_by_text||'—')}</b></td>
     <td>${escHtml(r.order_date_display||r.order_date||'—')}</td>
@@ -14496,7 +14506,7 @@ function renderRakhiProduction(){
     <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku||'').replace(/'/g,"\\'")}')">${escHtml(r.sku||'')}</button></td>
     <td>${escHtml(r.cn_name||'—')}</td>
     <td class="ops-num"><b>${Math.round(Number(r.qty_required)||0).toLocaleString('en-IN')}</b></td>
-    <td class="ops-num"><b>${Math.round(Number(r.production_order_qty)||0).toLocaleString('en-IN')}</b></td>
+    <td class="ops-num"><b>${Math.round(Number(r.production_balance_qty)||0).toLocaleString('en-IN')}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_since_aug6??r.arrived_qty)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_today)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_yesterday)}</b></td>
@@ -14511,8 +14521,19 @@ function renderRakhiProduction(){
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
     :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Order Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
-  </tr></thead><tbody>${body}</tbody></table>`;
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
+  </tr></thead><tbody>${body}</tbody><tfoot><tr style="background:#fffdf7;border-top:2px solid #b8860b;font-weight:900">
+    <td colspan="6" style="text-align:right">GRAND TOTAL</td>
+    <td class="ops-num">${Math.round(totals.qty).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.prodBal).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.received).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.today).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.yesterday).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.dayBefore).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.coming).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(totals.liveBal).toLocaleString('en-IN')}</td>
+    <td colspan="3"></td>
+  </tr></tfoot></table>`;
 }
 function resetRakhiProduction(){
   const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
@@ -19870,8 +19891,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     except Exception:
         pass
 
-    # Production sheet fetch (10 min cache)
-    if _PROD_CACHE["rows"] is not None and (time.time() - _PROD_CACHE["ts"] < 600):
+    # Production sheet fetch (60 sec live-sync cache; manual Refresh still forces a fresh fetch)
+    if _PROD_CACHE["rows"] is not None and (time.time() - _PROD_CACHE["ts"] < 60):
         rows_all = _PROD_CACHE["rows"]
     else:
         df = _fetch_csv_fresh(PRODUCTION_URL)
@@ -20248,6 +20269,26 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         if r.get("channel"):
             g["channels"].add(str(r.get("channel")))
 
+    # Production Balance Qty for the first tracker is based on physical PPC-WIP
+    # column K. If the same SKU appears more than once on the same Order Date,
+    # take only that date/SKU's highest positive balance and later divide that
+    # single pool across the matching tracker rows. This prevents repeated live
+    # quantities (for example 1000 / 1000 / 1000) from being triple-counted.
+    production_balance_max_by_date_sku = {}
+    for _pr in live_rows:
+        _sk = _rakhi_prod_sku_key(_pr.get("sku", ""))
+        _dt = clean(_pr.get("date", ""))
+        if not _sk or not _dt:
+            continue
+        try:
+            _bal = max(0.0, float(_pr.get("bal_qty") or 0.0))
+        except (TypeError, ValueError):
+            _bal = 0.0
+        _pb_key = (_dt, _sk)
+        production_balance_max_by_date_sku[_pb_key] = max(
+            production_balance_max_by_date_sku.get(_pb_key, 0.0), _bal
+        )
+
     # Replace historical cumulative Rec. Qty with only post-baseline receipts.
     # Existing baseline orders: new received = baseline Balance - current Balance.
     # Orders absent from the baseline: count live J only when the order number is
@@ -20326,6 +20367,10 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         order_date, order_no, sku, qty_required, baseline_balance, priority, need_by_text = raw
         need_iso = _rakhi_prod_need_by_iso(need_by_text)
         key = (_rakhi_prod_order_key(order_no), _rakhi_prod_sku_key(sku))
+        # First Rakhi Production tracker: every direct RKH SKU is due on 13-Aug-2026.
+        if key[1].startswith("RKH"):
+            need_iso = "2026-08-13"
+            need_by_text = "Need By 13th"
         if not key[0] or not key[1] or not need_iso:
             continue
         g = groups.setdefault(key, {
@@ -20371,8 +20416,8 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
             lv.get("delivery_pairs") or set(),
             key=lambda x: (x[0] or "9999-99-99", x[1]),
         )
-        delivery_iso = delivery_pairs[0][0] if delivery_pairs else ""
-        delivery_text = delivery_pairs[0][1] if delivery_pairs else ""
+        delivery_iso = "2026-08-13"
+        delivery_text = "Need By 13th"
         groups[key] = {
             "order_no": clean(lv.get("order_no_display", "")) or order_key,
             "sku": clean(lv.get("sku_display", "")).upper() or sku_key,
@@ -20494,6 +20539,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 "image_url": _RAKHI_PRODUCTION_IMAGE_BY_KEY.get(key, "") or master_image_map.get(key[1], ""),
                 "qty_required": int(round(qty)),
                 "production_order_qty": int(round(float(lv.get("order_qty") or 0))) if lv else 0,
+                "production_balance_qty": 0,
                 "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
                 "received_since_aug6": int(round(arrived)),
                 "received_today": int(round(ps["today"])),
@@ -20508,6 +20554,24 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 "production_delivery_dates": prod_delivery_dates,
                 "source_found": source_found, "status_key": status_key, "status": status,
             })
+
+    # Divide the highest live Production Balance Qty (column K) once across all
+    # tracker rows sharing the same Order Date + SKU. Integer remainder is given
+    # to the earliest rows, so 1000 across 3 rows becomes 334, 333, 333 and the
+    # displayed sum remains exactly 1000.
+    _out_balance_groups = {}
+    for _idx, _row in enumerate(out):
+        _bkey = (clean(_row.get("order_date", "")), _rakhi_prod_sku_key(_row.get("sku", "")))
+        if _bkey[0] and _bkey[1]:
+            _out_balance_groups.setdefault(_bkey, []).append(_idx)
+    for _bkey, _indices in _out_balance_groups.items():
+        _pool = int(round(max(0.0, production_balance_max_by_date_sku.get(_bkey, 0.0))))
+        _n = len(_indices)
+        if _n <= 0:
+            continue
+        _base, _rem = divmod(_pool, _n)
+        for _pos, _idx in enumerate(_indices):
+            out[_idx]["production_balance_qty"] = _base + (1 if _pos < _rem else 0)
 
     # Newly discovered live RKH orders are placed first so fresh order numbers
     # (1422/1423/1427/1428/future) are visible immediately; plan rows retain
