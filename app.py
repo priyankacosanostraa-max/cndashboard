@@ -6814,7 +6814,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     table-layout:auto!important;
   }
   #vRakhiProduction table.rp-perf-table{min-width:1030px!important;}
-  #vRakhiProduction table.rp-stock-table{min-width:920px!important;}
+  #vRakhiProduction table.rp-stock-table{min-width:1180px!important;}
   #vRakhiProduction table.rp-stock-table thead th{
     background:#fff!important;
     color:#111827!important;
@@ -6893,7 +6893,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     overflow:auto!important;
   }
   #vRakhiProduction table.rp-main-table{
-    min-width:1160px!important;
+    min-width:1540px!important;
   }
   #vRakhiProduction table.rp-main-table th{
     position:sticky;
@@ -6926,8 +6926,16 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
   <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">SKU Group</label>
+      <select class="fs" id="rpMainSkuType" onchange="renderRakhiProduction()">
+        <option value="all">All SKUs</option>
+        <option value="rakhi">Rakhi SKUs (RKH)</option>
+        <option value="other">Other SKUs</option>
+      </select></div>
     <div class="fc"><label class="fl">Search SKU</label>
       <input class="fi" id="rpSku" placeholder="type SKU…" oninput="rakhiProdSearchDebounced()"></div>
+    <div class="fc"><label class="fl">Search Order No.</label>
+      <input class="fi" id="rpOrder" placeholder="e.g. 1398 / 1427" oninput="rakhiProdSearchDebounced()"></div>
     <div class="fc"><label class="fl">Need By date from</label>
       <input class="fi" id="rpD1" type="date" onchange="renderRakhiProduction()"></div>
     <div class="fc"><label class="fl">Need By date to</label>
@@ -6936,7 +6944,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">Arrived Qty counts only receipts after the 06-Aug-2026 baseline. Baseline order rows use the drop from the file's Balance Qty to the live Balance Qty; newer Rakhi production orders are tracked separately from live Rec. Qty. Production Delivery Date comes from column L.</div>
+  <div class="small-note" style="margin-top:10px">Received quantities in this first table come from the live Rakhi receiving sheet by exact Order No. + SKU. Only dates after 06-Aug-2026 are counted. Today, Yesterday and Day Before update automatically in IST; Production Delivery Date still comes from PPC-WIP column L.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -6959,7 +6967,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:30px;margin-bottom:10px">
     <div>
       <div class="insights-title" style="font-size:1.05rem">Rakhi SKU Stock-Out Tracker</div>
-      <div class="small-note">CMB parent SKUs are excluded. Standalone Rakhi SKUs plus child SKUs used inside Rakhi CMBs are included. Child Sold Qty and DRR include direct sales plus usage inside every CMB that uses that child, including when the same child is used in multiple CMBs. Received Qty counts only production received after the 06-Aug baseline (including newer Rakhi order numbers such as 1427/1428). Estimated stock-out days use current Inv Stock / 30D DRR.</div>
+      <div class="small-note">CMB parent SKUs are excluded. Standalone Rakhi SKUs plus child SKUs used inside Rakhi CMBs are included. Child Sold Qty and DRR include direct sales plus usage inside every CMB that uses that child, including when the same child is used in multiple CMBs. Received Qty here keeps the Production/PPC-WIP post-06-Aug baseline logic; the separate live Rakhi daily receiving sheet is shown only in the first tracker table. Estimated stock-out days use current Inv Stock / 30D DRR.</div>
     </div>
   </div>
   <div class="insights-head" style="margin-top:14px;margin-bottom:8px">
@@ -14147,16 +14155,21 @@ function _rakhiProdSkuNorm(v){
   try{s=s.normalize('NFKC');}catch(_e){}
   return s.toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
-function _rakhiProdRows(){
+function _rakhiProdRows(applyMainOnlyFilters=true){
   const rows=(_rakhiProdData&&_rakhiProdData.rows)||[];
   const q=_rakhiProdSkuNorm(document.getElementById('rpSku')?.value||'');
   const d1=document.getElementById('rpD1')?.value||'';
   const d2=document.getElementById('rpD2')?.value||'';
+  const group=applyMainOnlyFilters?(document.getElementById('rpMainSkuType')?.value||'all'):'all';
+  const orderQ=applyMainOnlyFilters?String(document.getElementById('rpOrder')?.value||'').trim().toLocaleLowerCase('en-US'):'';
   return rows.filter(r=>{
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(q&&!_rakhiProdSkuNorm(r.sku).includes(q))return false;
     if(d1&&(!r.need_by_iso||r.need_by_iso<d1))return false;
     if(d2&&(!r.need_by_iso||r.need_by_iso>d2))return false;
+    if(group==='rakhi'&&!/^RKH(?:[-_]|\d)/i.test(String(r.sku||'')))return false;
+    if(group==='other'&&/^RKH(?:[-_]|\d)/i.test(String(r.sku||'')))return false;
+    if(orderQ&&!String(r.order_no||'').toLocaleLowerCase('en-US').includes(orderQ))return false;
     return true;
   });
 }
@@ -14260,7 +14273,7 @@ function _rakhiProdSkuGroup(item,sku){
   return 'other';
 }
 function _rakhiProdSkuPerformanceRows(){
-  const filteredPlanRows=_rakhiProdRows();
+  const filteredPlanRows=_rakhiProdRows(false);
   const wanted=document.getElementById('rpSkuType')?.value||'rakhi';
   const usage=_rakhiProdComboUsageMap();
   const prod=(_rakhiProdData&&_rakhiProdData.production_by_sku)||{};
@@ -14453,14 +14466,17 @@ function renderRakhiProduction(){
   const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
   if(!host)return;
   if(!_rakhiProdData){loadRakhiProduction(false);return;}
-  const rows=_rakhiProdRows();
+  const rows=_rakhiProdRows(true);
   const planned=rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0);
-  const arrived=rows.reduce((s,r)=>s+(Number(r.arrived_qty)||0),0);
+  const arrived=rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0);
   const coming=rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0);
   const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
+  const meta=(_rakhiProdData&&_rakhiProdData.rakhi_receipts_meta)||{};
+  const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
+  const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Planned Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} need-by rows</div></div>
-    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Received after 06-Aug baseline</div></div>
+    <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
   renderRakhiProductionSkuTable();
@@ -14471,27 +14487,36 @@ function renderRakhiProduction(){
     const styles={arrived:'background:#e6f4ea;color:#176b35',partial:'background:#fff3cd;color:#7a5a00',overdue:'background:#fde8e8;color:#a4262c',missing:'background:#eef1f5;color:#59636e',coming:'background:#e8f0fe;color:#2455a4'};
     return `<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:10px;${styles[k]||styles.coming}">${escHtml(r.status||'Coming')}</span>`;
   };
+  const receiptCell=(r,v)=>r.receipt_source_ok===false?'—':Math.round(Number(v)||0).toLocaleString('en-IN');
   const body=rows.map(r=>`<tr>
     <td><b>${escHtml(r.need_by_display||r.need_by_text||'—')}</b></td>
     <td>${escHtml(r.order_date_display||r.order_date||'—')}</td>
-    <td>${escHtml(r.order_no||'—')}</td>
-    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku||'').replace(/'/g,"\'")}')">${escHtml(r.sku||'')}</button></td>
+    <td><b>${escHtml(r.order_no||'—')}</b></td>
+    <td>${_opsPhoto(_rakhiProdImageUrlForBrowser(r.image_url||''))}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku||'').replace(/'/g,"\\'")}')">${escHtml(r.sku||'')}</button></td>
     <td>${escHtml(r.cn_name||'—')}</td>
     <td class="ops-num"><b>${Math.round(Number(r.qty_required)||0).toLocaleString('en-IN')}</b></td>
-    <td class="ops-num">${Math.round(Number(r.arrived_qty)||0).toLocaleString('en-IN')}</td>
+    <td class="ops-num"><b>${receiptCell(r,r.received_since_aug6??r.arrived_qty)}</b></td>
+    <td class="ops-num"><b>${receiptCell(r,r.received_today)}</b></td>
+    <td class="ops-num"><b>${receiptCell(r,r.received_yesterday)}</b></td>
+    <td class="ops-num"><b>${receiptCell(r,r.received_day_before)}</b></td>
     <td class="ops-num"><b>${Math.round(Number(r.coming_qty)||0).toLocaleString('en-IN')}</b></td>
     <td class="ops-num">${r.source_found?Math.round(Number(r.live_balance_qty)||0).toLocaleString('en-IN'):'—'}</td>
     <td>${escHtml(r.production_delivery_dates||'—')}</td>
-    <td>${escHtml(r.receiving_dates||'—')}</td>
+    <td>${r.receipt_source_ok===false?'—':escHtml(r.latest_receiving_date_display||'—')}</td>
     <td>${status(r)}</td>
   </tr>`).join('');
-  host.innerHTML=`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Arrived Qty</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Receiving Date</th><th>Status</th>
+  const sourceNote=meta.source_ok===false
+    ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
+    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
+  host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody></table>`;
 }
 function resetRakhiProduction(){
   const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
-  if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';renderRakhiProduction();
+  const mg=document.getElementById('rpMainSkuType'),oq=document.getElementById('rpOrder');
+  if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';if(mg)mg.value='all';if(oq)oq.value='';renderRakhiProduction();
 }
 window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.exportRakhiProductionStockout15=exportRakhiProductionStockout15;window.exportRakhiProductionStockoutOver15=exportRakhiProductionStockoutOver15;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
 
@@ -19257,6 +19282,11 @@ _PROD_CACHE = {"rows": None, "ts": 0}
 # Rakhi Production plan snapshot supplied by user (Production Data sheet).
 # Delivery text such as "Need By 12th" is interpreted as August 2026.
 _RAKHI_PRODUCTION_BASELINE_DATE = "2026-08-06"
+# Live Rakhi receiving sheet supplied by user.  This sheet is the source of
+# post-06-Aug SKU receipts shown in the two Rakhi stock-out tables.
+_RAKHI_RECEIPTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1708754136&single=true&output=csv"
+_RAKHI_RECEIPTS_CACHE = {"payload": None, "ts": 0.0}
+_RAKHI_RECEIPTS_CACHE_TTL = 60
 _RAKHI_PRODUCTION_PLAN = [
     ('2026-07-04', '1398', 'LP-0294', 333, 1000, 'Priority 1', 'Need By 12th'),
     ('2026-06-24', '1387', 'BH-2237', 10, 10, 'Priority 1', 'Need By 12th'),
@@ -19428,6 +19458,167 @@ _RAKHI_PRODUCTION_PLAN = [
     ('2026-07-04', '1398', 'RKH-0052', 1000, 1000, 'Priority 9', 'Need By 27th'),
 ]
 
+# Exact Image Link from the uploaded Production Data sheet, keyed by Excel Order No. + SKU.
+# The main Rakhi Production tracker uses this first, then falls back to All Product only if needed.
+_RAKHI_PRODUCTION_IMAGE_BY_KEY = {('1339', 'BH-1671'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1671.jpg',
+ ('1339', 'CF-0332'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0332.jpg',
+ ('1349', 'M-0155'): 'https://i.ibb.co/mbGBJ8B/M-0155-A.jpg',
+ ('1363', 'BH-0140'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-0140.png',
+ ('1363', 'BH-1609'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1609.jpg',
+ ('1363', 'CF-0018'): 'https://i.ibb.co/1Y7z3CXq/CF-0018.png',
+ ('1363', 'LP-0095'): 'https://i.ibb.co/n806Ghvt/LP-0095.png',
+ ('1363', 'LP-0285'): 'https://i.ibb.co/h1XHwg0m/LP-0285.jpg',
+ ('1365', 'BTC-0017'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0017.jpg',
+ ('1387', 'BH-0042'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-0042.png',
+ ('1387', 'BH-1611'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1611.jpg',
+ ('1387', 'BH-1907'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/06/BH-1907-1.jpg',
+ ('1387', 'BH-2237'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2237.jpeg',
+ ('1387', 'CF-0019'): 'https://i.ibb.co/YBsH7ynF/CF-0019.png',
+ ('1387', 'CF-0024'): 'https://i.ibb.co/LhrPdZMh/CF-0024.png',
+ ('1387', 'CF-0048'): 'https://i.ibb.co/4RqDBrXD/CF-0048.png',
+ ('1387', 'CF-0139'): 'https://i.ibb.co/5WdSFqVT/CF-0139.png',
+ ('1387', 'CF-0268'): 'https://i.ibb.co/wZL4DD7B/CF-0268.png',
+ ('1387', 'CF-0271'): 'https://i.ibb.co/cXVwt8DS/CF-0271.jpg',
+ ('1387', 'CF-0273'): 'https://i.ibb.co/gL351yjT/CF-0273.png',
+ ('1387', 'CF-0308'): 'https://i.ibb.co/39XtRHFJ/CF-0308.jpg',
+ ('1387', 'CF-0331'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0348.jpeg',
+ ('1387', 'CF-0332'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0332.jpg',
+ ('1387', 'CT-0038'): 'https://i.ibb.co/r6YDdSn/CT-0038-1.jpg',
+ ('1387', 'LP-0051'): 'https://i.ibb.co/S777SHcz/LP-0051-2.jpg',
+ ('1387', 'LP-0095'): 'https://i.ibb.co/n806Ghvt/LP-0095.png',
+ ('1387', 'LP-0285'): 'https://i.ibb.co/h1XHwg0m/LP-0285.jpg',
+ ('1387', 'RLP-0005'): 'https://i.ibb.co/j9gf7fph/RLP-0005-1.png',
+ ('1387', 'RLP-0010'): 'https://i.ibb.co/7dYwpcNV/RLP-0010-1.png',
+ ('1387', 'RLP-0018'): 'https://i.ibb.co/vx4BVJYj/RLP-0018.png',
+ ('1387', 'RLP-0020'): 'https://i.ibb.co/7J6FWCq5/RLP-0020.png',
+ ('1391', 'BH-1226'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1226.png',
+ ('1391', 'CF-0019'): 'https://i.ibb.co/YBsH7ynF/CF-0019.png',
+ ('1391', 'CF-0332'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0332.jpg',
+ ('1391', 'LP-0224'): 'https://i.ibb.co/Pyz7V4Z/LP-0224.png',
+ ('1391', 'LP-0225'): 'https://i.ibb.co/tpLVMHbp/LP-0225.png',
+ ('1391', 'LP-0315'): 'https://i.ibb.co/ynXsS0g1/LP-0315.jpg',
+ ('1397', 'BH-1609'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1609.jpg',
+ ('1397', 'BH-1818'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1818.jpg',
+ ('1398', 'BH-0150'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-0150.png',
+ ('1398', 'BH-1179'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1179-1.png',
+ ('1398', 'BH-1180'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1180-1.png',
+ ('1398', 'BH-1181'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1181-1.png',
+ ('1398', 'BH-1222'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1222.png',
+ ('1398', 'BH-1225'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1225.png',
+ ('1398', 'BH-1226'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1226.png',
+ ('1398', 'BH-1240'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1240.jpg',
+ ('1398', 'BH-1242'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1242.jpg',
+ ('1398', 'BH-1250'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1250-2.jpg',
+ ('1398', 'BH-1255'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1255-2.jpg',
+ ('1398', 'BH-1258'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1258-2.jpg',
+ ('1398', 'BH-1279'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1279-scaled.jpg',
+ ('1398', 'BH-1295'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1295.png',
+ ('1398', 'BH-1311'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1311-scaled.jpg',
+ ('1398', 'BH-1320'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1320-scaled.jpg',
+ ('1398', 'BH-1325'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1325-scaled.jpg',
+ ('1398', 'BH-1334'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1334-scaled.jpg',
+ ('1398', 'BH-1347'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1347.png',
+ ('1398', 'BH-1349'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1349.png',
+ ('1398', 'BH-1350'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1350.png',
+ ('1398', 'BH-1382'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1382-scaled.jpg',
+ ('1398', 'BH-1390'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1390-scaled.jpg',
+ ('1398', 'BH-1428'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1428.jpg',
+ ('1398', 'BH-1439'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1439.jpg',
+ ('1398', 'BH-1595'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1595.jpg',
+ ('1398', 'BH-1597'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/07/BH-1597.jpeg',
+ ('1398', 'BH-1598'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1598.jpg',
+ ('1398', 'BH-1599'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1599.jpg',
+ ('1398', 'BH-1600'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1600-scaled.jpg',
+ ('1398', 'BH-1601'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1601.jpg',
+ ('1398', 'BH-1604'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1604.jpg',
+ ('1398', 'BH-1606'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1606.jpg',
+ ('1398', 'BH-1611'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1611.jpg',
+ ('1398', 'BH-1612'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1612.jpg',
+ ('1398', 'BH-1618'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1618.jpg',
+ ('1398', 'BH-1624'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1624.jpg',
+ ('1398', 'BH-1744'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1744-scaled.jpg',
+ ('1398', 'BH-1786'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1786-1-scaled.jpeg',
+ ('1398', 'BH-1841'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/BH-1841.jpg',
+ ('1398', 'BH-1927'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/07/BH-1927.jpg',
+ ('1398', 'BH-2235'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2235.jpeg',
+ ('1398', 'BH-2236'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2236.jpeg',
+ ('1398', 'BH-2237'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2237.jpeg',
+ ('1398', 'BH-2239'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2239.jpeg',
+ ('1398', 'BH-2240'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2240.jpeg',
+ ('1398', 'BH-2241'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2241.jpeg',
+ ('1398', 'BH-2242'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2242.jpeg',
+ ('1398', 'BH-2244'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2244.jpeg',
+ ('1398', 'BH-2246'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2246.jpeg',
+ ('1398', 'BH-2248'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2248.jpeg',
+ ('1398', 'BH-2251'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2251.jpg',
+ ('1398', 'BT-0560_(P)'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BT-0560_S-1.jpg',
+ ('1398', 'BT-0581_(P)'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BT-0581_P-1.jpg',
+ ('1398', 'BT-0599_(P)'): 'https://i.ibb.co/DHs8H4VK/bt-0599-p.jpg',
+ ('1398', 'BT-0651_(P)'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BT-0651_P.jpg',
+ ('1398', 'BTC-0005'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/02/BT-0989_S-1.jpeg',
+ ('1398', 'BTC-0007'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0007.jpg',
+ ('1398', 'BTC-0021'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0021.jpg',
+ ('1398', 'CF-0019'): 'https://i.ibb.co/YBsH7ynF/CF-0019.png',
+ ('1398', 'CF-0048'): 'https://i.ibb.co/4RqDBrXD/CF-0048.png',
+ ('1398', 'CF-0114'): 'https://i.ibb.co/ZRk31f08/CF-0114.png',
+ ('1398', 'CF-0253'): 'https://i.ibb.co/pjkj8Wjj/CF-0253-2.png',
+ ('1398', 'CF-0261'): 'https://i.ibb.co/d470kp2k/CF-0261.png',
+ ('1398', 'CF-0274'): 'https://i.ibb.co/b5rn7gGp/CF-0274.jpg',
+ ('1398', 'CF-0278'): 'https://i.ibb.co/r2DLsx4q/CF-0278.png',
+ ('1398', 'CF-0279'): 'https://i.ibb.co/rGRshc7h/CF-0279.png',
+ ('1398', 'CF-0282'): 'https://i.ibb.co/XkDGc32L/CF-0282.jpg',
+ ('1398', 'CT-0028'): 'https://i.ibb.co/tLsx7Sr/CT-0028-1-2.jpg',
+ ('1398', 'LP-0034'): 'https://i.ibb.co/s9j2PWFb/LP-0034-2.jpg',
+ ('1398', 'LP-0121'): 'https://i.ibb.co/hFSqh9cj/LP-0121-2.jpg',
+ ('1398', 'LP-0127'): 'https://i.ibb.co/dsvsJcwM/LP-0127-2.jpg',
+ ('1398', 'LP-0224'): 'https://i.ibb.co/Pyz7V4Z/LP-0224.png',
+ ('1398', 'LP-0225'): 'https://i.ibb.co/tpLVMHbp/LP-0225.png',
+ ('1398', 'LP-0280'): 'https://i.ibb.co/Rk4zh2zD/LP-0280.jpg',
+ ('1398', 'LP-0287'): 'https://i.ibb.co/Y4YN1nSk/LP-0287.jpg',
+ ('1398', 'LP-0288'): 'https://i.ibb.co/0phcf9pY/LP-0288.jpg',
+ ('1398', 'LP-0290'): 'https://i.ibb.co/Y7RG8bt6/LP-0290.jpg',
+ ('1398', 'LP-0292'): 'https://i.ibb.co/p8FGyWH/LP-0292.jpg',
+ ('1398', 'LP-0294'): 'https://i.ibb.co/KpnydFwN/LP-0294.jpg',
+ ('1398', 'LP-0304'): 'https://i.ibb.co/7xsKkJyc/LP-0304.jpg',
+ ('1398', 'LP-0316'): 'https://i.ibb.co/BVPX9kgS/LP-0316.jpg',
+ ('1398', 'LP-0317'): 'https://i.ibb.co/YTWf2Bpm/LP-0317.jpg',
+ ('1398', 'LP-0364'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/LP-0364.jpeg',
+ ('1398', 'LP-0365'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/LP-0365.jpeg',
+ ('1398', 'LP-0366'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/LP-0366.jpeg',
+ ('1398', 'LP-0368'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/LP-0368.jpeg',
+ ('1398', 'RKH-0012'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0012.jpeg',
+ ('1398', 'RKH-0017'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0017.jpeg',
+ ('1398', 'RKH-0020'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/06/RKH-0020.jpg',
+ ('1398', 'RKH-0043'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0043.jpeg',
+ ('1398', 'RKH-0052'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0052.jpeg',
+ ('1398', 'RKH-0088'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0088.jpeg',
+ ('1398', 'RKH-0091'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/05/RKH-0091.jpg',
+ ('1405', 'CF-0306'): 'https://i.ibb.co/RGRBMQ29/CF-0306-1.jpg',
+ ('1410', 'BH-1605'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1605.jpg',
+ ('1423', 'BH-1694'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/04/BH-1694.jpg',
+ ('1423', 'BH-2252'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/12/BH-2252.jpg',
+ ('1423', 'BTC-0012'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0012.jpg',
+ ('1423', 'BTC-0017'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0017.jpg',
+ ('1423', 'BTC-0019'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0019.jpg',
+ ('1423', 'BTC-0022'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0022.jpg',
+ ('1423', 'CF-0061'): 'https://i.ibb.co/6cj9KzDr/CF-0061.png',
+ ('1423', 'CF-0271'): 'https://i.ibb.co/cXVwt8DS/CF-0271.jpg',
+ ('1423', 'CF-0273'): 'https://i.ibb.co/gL351yjT/CF-0273.png',
+ ('1423', 'CF-0306'): 'https://i.ibb.co/RGRBMQ29/CF-0306-1.jpg',
+ ('1423', 'CF-0331'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0348.jpeg',
+ ('1423', 'CF-0332'): 'https://stock.cosanostraa.com/wp-content/uploads/2025/05/CF-0332.jpg',
+ ('1423', 'LP-0114'): 'https://i.ibb.co/0R3hcfQ5/LP-0114-2.jpg',
+ ('1423', 'LP-0123'): 'https://i.ibb.co/GfXfL25k/LP-0123-2.jpg',
+ ('1423', 'LP-0222'): 'https://i.ibb.co/kg60Zxst/LP-0222.png',
+ ('1423', 'LP-0315'): 'https://i.ibb.co/ynXsS0g1/LP-0315.jpg',
+ ('1423', 'RLP-0005'): 'https://i.ibb.co/j9gf7fph/RLP-0005-1.png',
+ ('1423', 'RLP-0020'): 'https://i.ibb.co/7J6FWCq5/RLP-0020.png',
+ ('1435', 'BTC-0010'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0010.jpg',
+ ('1435', 'BTC-0013'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0013.jpg',
+ ('1435', 'BTC-0016'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0016.jpg',
+ ('1435', 'BTC-0023'): 'https://stock.cosanostraa.com/wp-content/uploads/2026/03/BTC-0023.jpg',
+ ('1435', 'RLP-0025'): 'https://i.ibb.co/27N9FMht/RLP-0025.png'}
+
 def _rakhi_prod_need_by_iso(value):
     """Normalize plan delivery text to an August-2026 ISO date.
 
@@ -19470,6 +19661,137 @@ def _rakhi_prod_order_rank(value):
 
 def _rakhi_prod_sku_key(value):
     return re.sub(r"[^A-Z0-9]", "", clean(value).upper())
+
+def _build_rakhi_receipts_after_aug6(force=False):
+    """Aggregate the user's published Rakhi receiving sheet after 06-Aug-2026.
+
+    Two views are returned:
+      * by_sku: retained for diagnostics/other views.
+      * by_order_sku: authoritative for the first Rakhi Production tracker.
+
+    Matching is header-based and normalizes text/numeric Order No. and SKU values.
+    Only receipt dates strictly after the 06-Aug-2026 baseline and not later than
+    today (IST) are counted. The cache is deliberately short so the table keeps
+    updating through the day; Refresh forces an immediate source fetch.
+    """
+    now_ts = time.time()
+    cached = _RAKHI_RECEIPTS_CACHE.get("payload")
+    if (
+        not force and cached is not None and
+        now_ts - float(_RAKHI_RECEIPTS_CACHE.get("ts") or 0) < _RAKHI_RECEIPTS_CACHE_TTL
+    ):
+        return cached
+
+    today_date = now_ist().date()
+    yesterday_date = today_date - timedelta(days=1)
+    day_before_date = today_date - timedelta(days=2)
+    baseline_date = datetime.strptime(_RAKHI_PRODUCTION_BASELINE_DATE, "%Y-%m-%d").date()
+    payload = {
+        "by_sku": {},
+        "by_order_sku": {},
+        "baseline_date": baseline_date.isoformat(),
+        "today_iso": today_date.isoformat(),
+        "yesterday_iso": yesterday_date.isoformat(),
+        "day_before_iso": day_before_date.isoformat(),
+        "today_display": today_date.strftime("%d-%b-%Y"),
+        "yesterday_display": yesterday_date.strftime("%d-%b-%Y"),
+        "day_before_display": day_before_date.strftime("%d-%b-%Y"),
+        "source_ok": False,
+        "source_rows": 0,
+        "counted_rows": 0,
+        "error": "",
+    }
+
+    def _new_bucket():
+        return {
+            "received_since_aug6": 0.0,
+            "received_today": 0.0,
+            "received_yesterday": 0.0,
+            "received_day_before": 0.0,
+            "latest_date": None,
+            "order_nos": set(),
+            "daily": {},
+            "rows": 0,
+        }
+
+    def _accumulate(bucket, receipt_date, qty, order_no):
+        bucket["received_since_aug6"] += qty
+        day_key = receipt_date.isoformat()
+        bucket["daily"][day_key] = bucket["daily"].get(day_key, 0.0) + qty
+        if receipt_date == today_date:
+            bucket["received_today"] += qty
+        elif receipt_date == yesterday_date:
+            bucket["received_yesterday"] += qty
+        elif receipt_date == day_before_date:
+            bucket["received_day_before"] += qty
+        if bucket["latest_date"] is None or receipt_date > bucket["latest_date"]:
+            bucket["latest_date"] = receipt_date
+        if order_no:
+            bucket["order_nos"].add(order_no)
+        bucket["rows"] += 1
+
+    def _serialize(bucket):
+        latest = bucket["latest_date"]
+        order_nos = sorted(
+            bucket["order_nos"],
+            key=lambda x: (_rakhi_prod_order_rank(x) if _rakhi_prod_order_rank(x) is not None else -1, x),
+        )
+        return {
+            "received_since_aug6": int(round(bucket["received_since_aug6"])),
+            "received_today": int(round(bucket["received_today"])),
+            "received_yesterday": int(round(bucket["received_yesterday"])),
+            "received_day_before": int(round(bucket["received_day_before"])),
+            "latest_receiving_date": latest.isoformat() if latest else "",
+            "latest_receiving_date_display": latest.strftime("%d-%b-%Y") if latest else "",
+            "order_nos": order_nos,
+            "daily": {k: int(round(v)) for k, v in sorted(bucket["daily"].items())},
+            "rows": int(bucket["rows"]),
+        }
+
+    try:
+        df = _fetch_csv_fresh(_RAKHI_RECEIPTS_CSV_URL)
+        cols = [str(c).strip() for c in df.columns]
+        date_col = find_col(cols, "Date")
+        order_col = find_col(cols, "Order No.", "Order No", "Order")
+        sku_col = find_col(cols, "SKU No.", "SKU No", "SKU")
+        qty_col = find_col(cols, "SUM of Qty.", "SUM of Qty", "Sum Qty", "Qty")
+        missing = [
+            label for label, col in (("Date", date_col), ("Order No.", order_col), ("SKU No.", sku_col), ("SUM of Qty.", qty_col))
+            if not col
+        ]
+        if missing:
+            raise ValueError("Rakhi receiving sheet missing column(s): " + ", ".join(missing))
+
+        payload["source_rows"] = int(len(df))
+        work_sku = {}
+        work_order_sku = {}
+        for _, r in df.iterrows():
+            dt = parse_date_any(r.get(date_col))
+            if dt is None:
+                continue
+            receipt_date = dt.date()
+            if receipt_date <= baseline_date or receipt_date > today_date:
+                continue
+            sku = _rakhi_prod_sku_key(r.get(sku_col))
+            order_no = _rakhi_prod_order_key(r.get(order_col))
+            qty = max(0.0, to_num(r.get(qty_col)))
+            if not sku or not order_no or qty <= 0:
+                continue
+
+            _accumulate(work_sku.setdefault(sku, _new_bucket()), receipt_date, qty, order_no)
+            exact_key = f"{order_no}||{sku}"
+            _accumulate(work_order_sku.setdefault(exact_key, _new_bucket()), receipt_date, qty, order_no)
+            payload["counted_rows"] += 1
+
+        payload["by_sku"] = {sku: _serialize(g) for sku, g in work_sku.items()}
+        payload["by_order_sku"] = {key: _serialize(g) for key, g in work_order_sku.items()}
+        payload["source_ok"] = True
+    except Exception as exc:
+        payload["error"] = str(exc)
+
+    _RAKHI_RECEIPTS_CACHE["payload"] = payload
+    _RAKHI_RECEIPTS_CACHE["ts"] = now_ts
+    return payload
 
 def _production_has_balance(value):
     """Column K has a pending/difference value whenever it is not zero.
@@ -19750,7 +20072,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     }
 
 
-def _build_rakhi_production_tracker():
+def _build_rakhi_production_tracker(force_rakhi_receipts=False):
     """Join the supplied Aug-2026 need-by plan to the live Production sheet.
 
     The supplied file provides the August need-by plan and the 06-Aug Balance
@@ -19760,6 +20082,7 @@ def _build_rakhi_production_tracker():
     """
     report = _build_production(row_limit=None)
     live_rows = list(report.get("rows") or [])
+    rakhi_receipts = _build_rakhi_receipts_after_aug6(force=force_rakhi_receipts)
 
     # Snapshot lookup: the uploaded 06-Aug file is the baseline.  For order+SKU
     # rows that already existed in that file, only the Balance Qty drop after
@@ -19845,12 +20168,16 @@ def _build_rakhi_production_tracker():
         g["receiving_date_display"] = receiving_pairs[-1][1] if receiving_pairs else ""
 
     # All Product CN Name is used for display; the plan remains SKU-driven.
+    # Image shown in the tracker comes from the uploaded Excel Image Link first;
+    # All Product is only a fallback when the Excel image is unavailable.
     cn_map = {}
+    master_image_map = {}
     try:
         for it in get_data()[0]:
             sk = _rakhi_prod_sku_key(it.get("sku", ""))
             if sk:
                 cn_map[sk] = clean(it.get("cn_name", ""))
+                master_image_map[sk] = clean(it.get("image_url", ""))
     except Exception:
         pass
 
@@ -19974,26 +20301,75 @@ def _build_rakhi_production_tracker():
 
     out = []
     today_iso = now_ist().date().isoformat()
+    receipt_meta = {k: v for k, v in rakhi_receipts.items() if k not in ("by_sku", "by_order_sku")}
+    exact_receipts = rakhi_receipts.get("by_order_sku") or {}
+    receipt_source_ok = bool(rakhi_receipts.get("source_ok"))
+    today_receipt_iso = clean(rakhi_receipts.get("today_iso", ""))
+    yesterday_receipt_iso = clean(rakhi_receipts.get("yesterday_iso", ""))
+    day_before_receipt_iso = clean(rakhi_receipts.get("day_before_iso", ""))
+
     for key, g in groups.items():
         lv = live.get(key)
         source_found = lv is not None
         live_balance = float(lv.get("balance") or 0) if lv else 0.0
-        # The uploaded file is the 06-Aug baseline. Do not re-count quantity
-        # received before that snapshot. For this exact baseline order+SKU, only
-        # the drop in Balance Qty since the snapshot is newly arrived.
-        received_for_plan = max(0.0, g["baseline_balance"] - live_balance) if source_found else 0.0
-        received_for_plan = min(received_for_plan, g["plan_total"])
-        remaining_received = received_for_plan
         parts = sorted(g["parts"], key=lambda p: (p["need_by_iso"], p["seq"]))
-        recv_dates = ", ".join(sorted(lv.get("receiving_dates") or [])) if lv else ""
+
+        # The live Rakhi receiving sheet is authoritative for arrivals in this
+        # first table. Match by exact normalized Order No. + SKU, then allocate
+        # each receipt day to the earliest still-open need-by tranche. This keeps
+        # repeated order/SKU plan rows from displaying the same receipt twice.
+        receipt_key = f"{key[0]}||{key[1]}"
+        rc = exact_receipts.get(receipt_key) or {}
+        part_stats = [
+            {"arrived": 0.0, "today": 0.0, "yesterday": 0.0, "day_before": 0.0, "latest_iso": ""}
+            for _ in parts
+        ]
+        if receipt_source_ok:
+            for receipt_iso, raw_qty in sorted((rc.get("daily") or {}).items()):
+                try:
+                    remaining_day_qty = max(0.0, float(raw_qty or 0))
+                except (TypeError, ValueError):
+                    remaining_day_qty = 0.0
+                if remaining_day_qty <= 0:
+                    continue
+                for idx, p in enumerate(parts):
+                    capacity = max(0.0, float(p["qty_required"] or 0) - part_stats[idx]["arrived"])
+                    if capacity <= 1e-9:
+                        continue
+                    take = min(capacity, remaining_day_qty)
+                    if take <= 0:
+                        continue
+                    part_stats[idx]["arrived"] += take
+                    if receipt_iso == today_receipt_iso:
+                        part_stats[idx]["today"] += take
+                    elif receipt_iso == yesterday_receipt_iso:
+                        part_stats[idx]["yesterday"] += take
+                    elif receipt_iso == day_before_receipt_iso:
+                        part_stats[idx]["day_before"] += take
+                    if receipt_iso > part_stats[idx]["latest_iso"]:
+                        part_stats[idx]["latest_iso"] = receipt_iso
+                    remaining_day_qty -= take
+                    if remaining_day_qty <= 1e-9:
+                        break
+        else:
+            # Source outage fallback only: preserve the old baseline Balance-drop
+            # logic so the tracker remains usable, but daily buckets stay blank/0.
+            fallback_received = max(0.0, g["baseline_balance"] - live_balance) if source_found else 0.0
+            fallback_received = min(fallback_received, g["plan_total"])
+            remaining_fallback = fallback_received
+            for idx, p in enumerate(parts):
+                take = min(float(p["qty_required"] or 0), remaining_fallback)
+                part_stats[idx]["arrived"] = max(0.0, take)
+                remaining_fallback = max(0.0, remaining_fallback - take)
+
         prod_delivery_dates = ", ".join(sorted(lv.get("delivery_dates") or [])) if lv else ""
         cn_name = cn_map.get(key[1], "")
-        for p in parts:
+        for idx, p in enumerate(parts):
             qty = p["qty_required"]
-            arrived = min(qty, remaining_received)
-            remaining_received = max(0.0, remaining_received - arrived)
+            ps = part_stats[idx]
+            arrived = min(qty, max(0.0, ps["arrived"]))
             coming = max(0.0, qty - arrived)
-            if not source_found:
+            if not source_found and not receipt_source_ok:
                 status_key, status = "missing", "Not found in Production"
             elif coming <= 1e-9:
                 status_key, status = "arrived", "Arrived"
@@ -20013,14 +20389,29 @@ def _build_rakhi_production_tracker():
                 order_disp = od.strftime("%d-%b-%Y")
             except Exception:
                 order_disp = p["order_date"]
+            latest_receiving_display = ""
+            if ps["latest_iso"]:
+                try:
+                    latest_receiving_display = datetime.strptime(ps["latest_iso"], "%Y-%m-%d").strftime("%d-%b-%Y")
+                except Exception:
+                    latest_receiving_display = ps["latest_iso"]
             out.append({
                 "need_by_iso": p["need_by_iso"], "need_by_display": need_disp, "need_by_text": p["need_by_text"],
                 "order_date": p["order_date"], "order_date_display": order_disp,
                 "order_no": g["order_no"], "sku": g["sku"], "cn_name": cn_name, "priority": p["priority"],
+                "image_url": _RAKHI_PRODUCTION_IMAGE_BY_KEY.get(key, "") or master_image_map.get(key[1], ""),
                 "qty_required": int(round(qty)), "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
+                "received_since_aug6": int(round(arrived)),
+                "received_today": int(round(ps["today"])),
+                "received_yesterday": int(round(ps["yesterday"])),
+                "received_day_before": int(round(ps["day_before"])),
+                "latest_receiving_date": ps["latest_iso"],
+                "latest_receiving_date_display": latest_receiving_display,
+                "receipt_source_ok": receipt_source_ok,
                 "baseline_balance_qty": int(round(g["baseline_balance"])),
                 "live_balance_qty": int(round(live_balance)) if source_found else None,
-                "receiving_dates": recv_dates, "production_delivery_dates": prod_delivery_dates,
+                "receiving_dates": latest_receiving_display,
+                "production_delivery_dates": prod_delivery_dates,
                 "source_found": source_found, "status_key": status_key, "status": status,
             })
 
@@ -20033,6 +20424,9 @@ def _build_rakhi_production_tracker():
         "coming_qty": int(round(sum(r["coming_qty"] for r in out))),
         "missing_rows": sum(1 for r in out if not r["source_found"]),
         "production_by_sku": production_by_sku,
+        "rakhi_receipts_by_sku": rakhi_receipts.get("by_sku") or {},
+        "rakhi_receipts_by_order_sku": rakhi_receipts.get("by_order_sku") or {},
+        "rakhi_receipts_meta": {k: v for k, v in rakhi_receipts.items() if k not in ("by_sku", "by_order_sku")},
     }
 
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
@@ -21860,8 +22254,9 @@ def api_rakhi_production():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
+        fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
         _refresh_production_cache_if_requested()
-        resp = jsonify(_build_rakhi_production_tracker())
+        resp = jsonify(_build_rakhi_production_tracker(force_rakhi_receipts=fresh))
         resp.headers["Cache-Control"] = "no-store"
         return resp
     except Exception as e:
