@@ -14167,6 +14167,49 @@ function _rakhiProdMasterItem(rawSku){
   }catch(_e){}
   return {};
 }
+let _rakhiProdPhotoCacheMaster = null;
+let _rakhiProdPhotoByCompact = new Map();
+let _rakhiProdPhotoByFamily = new Map();
+function _rakhiProdImageUrlForBrowser(raw){
+  const u=String(raw||'').trim();
+  if(!u||u.toLowerCase()==='nan')return '';
+  const driveHost=/drive\.google\.com|docs\.google\.com/i.test(u);
+  const m=u.match(/\/d\/([A-Za-z0-9_-]{20,})/i)||u.match(/[?&]id=([A-Za-z0-9_-]{20,})/i);
+  if(driveHost&&m&&m[1])return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w400`;
+  return u;
+}
+function _rakhiProdEnsurePhotoIndex(){
+  if(_rakhiProdPhotoCacheMaster===master)return;
+  const byCompact=new Map(),byFamily=new Map();
+  const add=(rawSku,rawUrl)=>{
+    const compact=_rakhiProdSkuNorm(rawSku);
+    const url=_rakhiProdImageUrlForBrowser(rawUrl);
+    if(!compact||!url)return;
+    if(!byCompact.has(compact))byCompact.set(compact,url);
+    const family=_opSkuFamilyBase(rawSku);
+    if(family&&!byFamily.has(family))byFamily.set(family,url);
+  };
+  (master||[]).forEach(it=>{
+    add(it&&it.sku,it&&it.image_url);
+    (Array.isArray(it&&it.combo_details)?it.combo_details:[]).forEach(ch=>add(ch&&ch.sku,ch&&(ch.image_url||ch.image)));
+    if(_rkhIsComboSku(_opsSkuKey(it&&it.sku))){
+      try{(_opAvailChildren(it)||[]).forEach(ch=>add(ch&&ch.sku,ch&&(ch.image_url||ch.image)));}catch(_e){}
+    }
+  });
+  _rakhiProdPhotoByCompact=byCompact;
+  _rakhiProdPhotoByFamily=byFamily;
+  _rakhiProdPhotoCacheMaster=master;
+}
+function _rakhiProdSkuPhoto(rawSku,item){
+  const own=_rakhiProdImageUrlForBrowser(item&&item.image_url);
+  if(own)return own;
+  _rakhiProdEnsurePhotoIndex();
+  const compact=_rakhiProdSkuNorm(rawSku);
+  if(compact&&_rakhiProdPhotoByCompact.has(compact))return _rakhiProdPhotoByCompact.get(compact);
+  const family=_opSkuFamilyBase(rawSku);
+  if(family&&_rakhiProdPhotoByFamily.has(family))return _rakhiProdPhotoByFamily.get(family);
+  return '';
+}
 function _rakhiProdComboUsageMap(){
   if(_rakhiProdUsageCacheMaster===master)return _rakhiProdUsageCache;
   const usage=new Map();
@@ -14322,7 +14365,7 @@ function _rakhiProdStockoutRows(){
     const estOosDays=drr>0?(stock<=0?0:stock/drr):null;
     const p=prod[compact]||{};
     rows.push({
-      sku,skuName:String(item&&item.sku_name||''),image:String(item&&item.image_url||''),
+      sku,skuName:String(item&&item.sku_name||''),image:_rakhiProdSkuPhoto(displaySku,item),
       directSold,comboSold,totalSold:directSold+comboSold,drr,estOosDays,stock,wip,
       receivedQty:Math.max(0,_opsNum(p.received_total)),
       receivingDate:String(p.receiving_date_display||''),
@@ -14344,7 +14387,7 @@ function _rakhiProdOosDaysCell(r){
 function _rakhiProdStockoutTableHtml(rows,emptyText){
   if(!rows.length)return `<div class="home-empty" style="padding:24px">${escHtml(emptyText)}</div>`;
   const body=rows.map(r=>`<tr>
-    <td>${_opsPhoto(r.image)}</td>
+    <td title="${r.image?'SKU photo':'Photo not available in product master'}">${_opsPhoto(r.image)}</td>
     <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button>${r.cmbParents>0?`<div class="small-note">Used in ${Math.round(r.cmbParents).toLocaleString('en-IN')} CMB${Math.round(r.cmbParents)===1?'':'s'}</div>`:''}</td>
     <td class="ops-num"><b>${Math.round(r.totalSold).toLocaleString('en-IN')}</b><div class="small-note" style="white-space:nowrap">Direct ${Math.round(r.directSold).toLocaleString('en-IN')} + CMB ${Math.round(r.comboSold).toLocaleString('en-IN')}</div></td>
     <td class="ops-num"><b>${r.drr.toFixed(2)}</b><div class="small-note">30D / 30</div></td>
