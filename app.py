@@ -6821,12 +6821,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
-  <div class="small-note" style="margin-top:10px">Arrived Qty is tracked from the reduction in live Production Balance Qty versus the supplied 06-Aug-2026 file balance, allocated to the earliest Need By tranche first. Still Coming is the remaining quantity for that Need By row.</div>
+  <div class="small-note" style="margin-top:10px">Arrived Qty uses the live Production Rec. Qty. column J and is allocated to the earliest Need By tranche first. Production Delivery Date comes from column L. Still Coming is the remaining quantity for that Need By row.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
       <div class="insights-title" style="font-size:1.05rem">SKU Sales + Production View</div>
-      <div class="small-note">Plan SKUs only. Sold Qty includes direct sales plus child usage inside CMBs. DRR uses the last 30 days. Production / Day is the average received from live Production over the last 7 days.</div>
+      <div class="small-note">Plan SKUs only. Sold Qty includes direct sales plus child usage inside CMBs. DRR uses the last 30 days. Delivery Date comes from Production column L. Received Qty and Production / Day use Production Rec. Qty. column J; the daily average is dated by Rec. Date column M.</div>
     </div>
   </div>
   <div class="filter-box" style="margin:0 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
@@ -6840,6 +6840,21 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="small-note" style="align-self:center;margin-top:18px">Search SKU and Need By date filters above also narrow this table.</div>
   </div>
   <div id="rpSkuPerfContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:30px;margin-bottom:10px">
+    <div>
+      <div class="insights-title" style="font-size:1.05rem">Rakhi SKU Stock-Out Tracker</div>
+      <div class="small-note">CMB parent SKUs are excluded. Standalone Rakhi SKUs plus child SKUs used inside Rakhi CMBs are included. Child Sold Qty and DRR include direct sales plus usage inside every CMB that uses that child, including when the same child is used in multiple CMBs. Estimated stock-out days use current Inv Stock / 30D DRR; WIP and received quantity are shown separately and are not double-counted into stock cover.</div>
+    </div>
+  </div>
+  <div class="insights-head" style="margin-top:14px;margin-bottom:8px">
+    <div><div class="insights-title" style="font-size:.98rem;color:#9a5b00">Priority: Estimated Stock-Out in 15 Days or Less</div></div>
+  </div>
+  <div id="rpRakhiOos15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div class="insights-head" style="margin-top:22px;margin-bottom:8px">
+    <div><div class="insights-title" style="font-size:.98rem;color:#2f6f3e">Estimated Stock-Out Above 15 Days / No Recent Demand</div></div>
+  </div>
+  <div id="rpRakhiOosOver15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
   <div id="vDiscount" style="display:none">
@@ -14114,6 +14129,8 @@ function _rakhiProdSkuPerformanceRows(){
       drr:(direct30+combo30)/30,
       stock:Math.max(0,_opsNum(item&&item.inv_stock)),
       wip:Math.max(0,_opsNum(item&&item.inv_wip)),
+      receivedQty:Math.max(0,_opsNum(p.received_total)),
+      deliveryDate:String(p.delivery_date_display||''),
       prodPerDay:Math.max(0,_opsNum(p.avg_received_per_day_7d)),
       prod7:Math.max(0,_opsNum(p.received_7d)),
       prodToday:Math.max(0,_opsNum(p.received_today)),
@@ -14138,10 +14155,107 @@ function renderRakhiProductionSkuTable(){
     <td class="ops-num"><b>${r.drr.toFixed(2)}</b><div class="small-note">30D usage / 30</div></td>
     <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
-    <td class="ops-num"><b>${r.prodPerDay.toFixed(2)}</b><div class="small-note" style="white-space:nowrap">7D received ${Math.round(r.prod7).toLocaleString('en-IN')} | Today ${Math.round(r.prodToday).toLocaleString('en-IN')}</div></td>
+    <td>${escHtml(r.deliveryDate||'—')}</td>
+    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
+    <td class="ops-num"><b>${r.prodPerDay.toFixed(2)}</b><div class="small-note" style="white-space:nowrap">7D Rec. Qty. ${Math.round(r.prod7).toLocaleString('en-IN')} | Today ${Math.round(r.prodToday).toLocaleString('en-IN')}</div></td>
   </tr>`).join('');
-  host.innerHTML=`<table class="ops-table" style="min-width:980px"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table" style="min-width:1240px"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Delivery Date</th><th>Received Qty</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
 }
+function _rakhiProdAllRakhiComponentSkus(){
+  const unique=new Map();
+  const add=(rawSku)=>{
+    const sku=_opsSkuKey(rawSku);
+    const compact=_rakhiProdSkuNorm(sku);
+    if(!sku||!compact||_rkhIsComboSku(sku)||unique.has(compact))return;
+    unique.set(compact,sku);
+  };
+  // Every standalone Rakhi SKU in All Product, never a CMB parent.
+  (master||[]).forEach(item=>{
+    const sku=_opsSkuKey(item&&item.sku);
+    if(!sku||_rkhIsComboSku(sku))return;
+    if(_rkhIsRakhiSku(sku)||/rakhi/i.test(String(item&&item.taxon||''))||_rkhInWhitelist(sku))add(sku);
+  });
+  // Also include every child component used inside a Rakhi CMB. This intentionally
+  // includes non-RKH components (button/brooch/etc.) because they are required to
+  // make the Rakhi combo. CMB parents themselves are never added.
+  (master||[]).forEach(parent=>{
+    const parentSku=_opsSkuKey(parent&&parent.sku);
+    if(!parentSku||!_rkhIsComboSku(parentSku))return;
+    const isRakhiCmb=_rkhInWhitelist(parentSku)||_rkhComboHasRakhi(parent);
+    if(!isRakhiCmb)return;
+    let children=[];
+    try{children=_opAvailChildren(parent)||[];}catch(_e){children=Array.isArray(parent&&parent.combo_details)?parent.combo_details:[];}
+    children.forEach(ch=>add(ch&&ch.sku));
+  });
+  return unique;
+}
+function _rakhiProdStockoutRows(){
+  const usage=_rakhiProdComboUsageMap();
+  const prod=(_rakhiProdData&&_rakhiProdData.production_by_sku)||{};
+  const q=_rakhiProdSkuNorm(document.getElementById('rpSku')?.value||'');
+  const rows=[];
+  _rakhiProdAllRakhiComponentSkus().forEach((displaySku,compact)=>{
+    if(q&&!compact.includes(q))return;
+    const item=_rakhiProdMasterItem(displaySku);
+    const sku=_opsSkuKey(item&&item.sku||displaySku);
+    if(!sku||_rkhIsComboSku(sku)||!cnxSkuMatchesGlobalCn(sku))return;
+    const combo=usage.get(compact)||{all:0,d30:0,parents:0};
+    const directSold=Math.max(0,_opsNum(item&&item.final_qty));
+    const direct30=Math.max(0,_opsNum(item&&item.qty_1m));
+    const comboSold=Math.max(0,_opsNum(combo.all));
+    const combo30=Math.max(0,_opsNum(combo.d30));
+    const drr=(direct30+combo30)/30;
+    const stock=Math.max(0,_opsNum(item&&item.inv_stock));
+    const wip=Math.max(0,_opsNum(item&&item.inv_wip));
+    const estOosDays=drr>0?(stock<=0?0:stock/drr):null;
+    const p=prod[compact]||{};
+    rows.push({
+      sku,skuName:String(item&&item.sku_name||''),image:String(item&&item.image_url||''),
+      directSold,comboSold,totalSold:directSold+comboSold,drr,estOosDays,stock,wip,
+      receivedQty:Math.max(0,_opsNum(p.received_total)),
+      receivingDate:String(p.receiving_date_display||''),
+      cmbParents:Math.max(0,_opsNum(combo.parents))
+    });
+  });
+  rows.sort((a,b)=>{
+    const ad=a.estOosDays===null?Number.POSITIVE_INFINITY:a.estOosDays;
+    const bd=b.estOosDays===null?Number.POSITIVE_INFINITY:b.estOosDays;
+    return ad-bd||b.drr-a.drr||b.totalSold-a.totalSold||a.sku.localeCompare(b.sku);
+  });
+  return rows;
+}
+function _rakhiProdOosDaysCell(r){
+  if(r.estOosDays===null)return '<span class="small-note">No recent demand</span>';
+  if(r.estOosDays<=0)return '<b style="color:#b3261e">0.0</b>';
+  return `<b>${r.estOosDays.toFixed(1)}</b>`;
+}
+function _rakhiProdStockoutTableHtml(rows,emptyText){
+  if(!rows.length)return `<div class="home-empty" style="padding:24px">${escHtml(emptyText)}</div>`;
+  const body=rows.map(r=>`<tr>
+    <td>${_opsPhoto(r.image)}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button>${r.cmbParents>0?`<div class="small-note">Used in ${Math.round(r.cmbParents).toLocaleString('en-IN')} CMB${Math.round(r.cmbParents)===1?'':'s'}</div>`:''}</td>
+    <td class="ops-num"><b>${Math.round(r.totalSold).toLocaleString('en-IN')}</b><div class="small-note" style="white-space:nowrap">Direct ${Math.round(r.directSold).toLocaleString('en-IN')} + CMB ${Math.round(r.comboSold).toLocaleString('en-IN')}</div></td>
+    <td class="ops-num"><b>${r.drr.toFixed(2)}</b><div class="small-note">30D / 30</div></td>
+    <td class="ops-num">${_rakhiProdOosDaysCell(r)}</td>
+    <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
+    <td>${escHtml(r.receivingDate||'—')}</td>
+  </tr>`).join('');
+  return `<table class="ops-table" style="min-width:1120px"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty (Direct + CMB)</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function renderRakhiProductionStockoutTables(){
+  const near=document.getElementById('rpRakhiOos15Content'),far=document.getElementById('rpRakhiOosOver15Content');
+  if(!near||!far)return;
+  if(!_rakhiProdData){near.innerHTML=far.innerHTML='<div class="home-empty" style="padding:24px">Loading Production data...</div>';return;}
+  if(!master||!master.length){near.innerHTML=far.innerHTML='<div class="home-empty" style="padding:24px">Product data is still loading...</div>';return;}
+  const rows=_rakhiProdStockoutRows();
+  const within=rows.filter(r=>r.estOosDays!==null&&r.estOosDays<=15);
+  const above=rows.filter(r=>r.estOosDays===null||r.estOosDays>15);
+  near.innerHTML=_rakhiProdStockoutTableHtml(within,'No Rakhi SKU is estimated to stock out within 15 days.');
+  far.innerHTML=_rakhiProdStockoutTableHtml(above,'No Rakhi SKU is above 15 days of stock cover.');
+}
+
 function loadRakhiProduction(forceFresh=false){
   const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
   if(!host)return;
@@ -14167,10 +14281,11 @@ function renderRakhiProduction(){
   const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Planned Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} need-by rows</div></div>
-    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Since 06-Aug-2026 baseline</div></div>
+    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Production Rec. Qty. (column J)</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
   renderRakhiProductionSkuTable();
+  renderRakhiProductionStockoutTables();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
   const status=(r)=>{
     const k=String(r.status_key||'');
@@ -14187,18 +14302,19 @@ function renderRakhiProduction(){
     <td class="ops-num">${Math.round(Number(r.arrived_qty)||0).toLocaleString('en-IN')}</td>
     <td class="ops-num"><b>${Math.round(Number(r.coming_qty)||0).toLocaleString('en-IN')}</b></td>
     <td class="ops-num">${r.source_found?Math.round(Number(r.live_balance_qty)||0).toLocaleString('en-IN'):'—'}</td>
+    <td>${escHtml(r.production_delivery_dates||'—')}</td>
     <td>${escHtml(r.receiving_dates||'—')}</td>
     <td>${status(r)}</td>
   </tr>`).join('');
-  host.innerHTML=`<table class="ro" style="width:100%;min-width:1180px;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Arrived Qty</th><th>Still Coming</th><th>Live Balance Qty</th><th>Receiving Date</th><th>Status</th>
+  host.innerHTML=`<table class="ro" style="width:100%;min-width:1320px;border-collapse:collapse"><thead><tr>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Arrived Qty</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody></table>`;
 }
 function resetRakhiProduction(){
   const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
   if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';renderRakhiProduction();
 }
-window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
+window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
 
 /* ── PROFIT MARGIN (admin) ── */
 let PM_MODE = 'old';
@@ -19452,9 +19568,9 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 def _build_rakhi_production_tracker():
     """Join the supplied Aug-2026 need-by plan to the live Production sheet.
 
-    The file's Balance Qty is the 06-Aug-2026 baseline.  A fall in the live
-    Production Balance Qty is treated as quantity received since that snapshot
-    and is allocated to the earliest Need By tranche first.
+    The supplied file provides the August need-by plan.  Live received quantity
+    is taken from Production column J (Rec. Qty.) and allocated to the earliest
+    Need By tranche first. Production delivery date is taken from column L.
     """
     report = _build_production(row_limit=None)
     live_rows = list(report.get("rows") or [])
@@ -19470,18 +19586,28 @@ def _build_rakhi_production_tracker():
         if not sk:
             continue
         g = production_by_sku.setdefault(sk, {
-            "received_7d": 0.0, "received_today": 0.0,
+            "received_total": 0.0, "received_7d": 0.0, "received_today": 0.0,
             "pending_balance": 0.0, "avg_received_per_day_7d": 0.0,
+            "delivery_dates": set(), "receiving_dates": set(),
         })
         try:
             recv_qty = max(0.0, float(r.get("recv_qty") or 0))
         except (TypeError, ValueError):
             recv_qty = 0.0
+        # User-confirmed source for received quantity: physical Production column J (Rec. Qty.).
+        g["received_total"] += recv_qty
         try:
             g["pending_balance"] += max(0.0, float(r.get("bal_qty") or 0))
         except (TypeError, ValueError):
             pass
+        delivery_iso = clean(r.get("delivery_iso", ""))
+        delivery_disp = clean(r.get("delivery_date", ""))
+        if delivery_iso or delivery_disp:
+            g["delivery_dates"].add((delivery_iso, delivery_disp or delivery_iso))
         recv_iso = clean(r.get("receiving_iso", ""))
+        recv_disp = clean(r.get("receiving_date", ""))
+        if recv_iso or recv_disp:
+            g["receiving_dates"].add((recv_iso, recv_disp or recv_iso))
         recv_date = None
         if recv_iso:
             try:
@@ -19493,10 +19619,17 @@ def _build_rakhi_production_tracker():
         if recv_date == today_date:
             g["received_today"] += recv_qty
     for g in production_by_sku.values():
+        g["received_total"] = int(round(g["received_total"]))
         g["received_7d"] = int(round(g["received_7d"]))
         g["received_today"] = int(round(g["received_today"]))
         g["pending_balance"] = int(round(g["pending_balance"]))
         g["avg_received_per_day_7d"] = round(g["received_7d"] / 7.0, 2)
+        delivery_pairs = sorted(g.pop("delivery_dates", set()), key=lambda x: (x[0] or "9999-99-99", x[1]))
+        g["delivery_dates"] = [d[1] for d in delivery_pairs]
+        g["delivery_date_display"] = ", ".join(g["delivery_dates"])
+        receiving_pairs = sorted(g.pop("receiving_dates", set()), key=lambda x: (x[0] or "0000-00-00", x[1]))
+        g["receiving_dates"] = [d[1] for d in receiving_pairs]
+        g["receiving_date_display"] = receiving_pairs[-1][1] if receiving_pairs else ""
 
     # All Product CN Name is used for display; the plan remains SKU-driven.
     cn_map = {}
@@ -19552,12 +19685,11 @@ def _build_rakhi_production_tracker():
         lv = live.get(key)
         source_found = lv is not None
         live_balance = float(lv.get("balance") or 0) if lv else 0.0
-        # Negative K is an over-receipt difference: for plan completion it means
-        # no positive balance remains.  Keep the raw live number for display.
-        outstanding_for_calc = max(0.0, live_balance) if source_found else g["baseline_balance"]
-        received_since_baseline = max(0.0, g["baseline_balance"] - outstanding_for_calc) if source_found else 0.0
-        received_since_baseline = min(received_since_baseline, g["plan_total"])
-        remaining_received = received_since_baseline
+        # User-confirmed received source is Production column J (Rec. Qty.).
+        # Allocate that received quantity to the earliest Need By tranche first.
+        received_for_plan = max(0.0, float(lv.get("recv") or 0)) if source_found else 0.0
+        received_for_plan = min(received_for_plan, g["plan_total"])
+        remaining_received = received_for_plan
         parts = sorted(g["parts"], key=lambda p: (p["need_by_iso"], p["seq"]))
         recv_dates = ", ".join(sorted(lv.get("receiving_dates") or [])) if lv else ""
         prod_delivery_dates = ", ".join(sorted(lv.get("delivery_dates") or [])) if lv else ""
