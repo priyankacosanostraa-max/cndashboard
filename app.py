@@ -6822,6 +6822,24 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   <div class="small-note" style="margin-top:10px">Arrived Qty is tracked from the reduction in live Production Balance Qty versus the supplied 06-Aug-2026 file balance, allocated to the earliest Need By tranche first. Still Coming is the remaining quantity for that Need By row.</div>
+
+  <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
+    <div>
+      <div class="insights-title" style="font-size:1.05rem">SKU Sales + Production View</div>
+      <div class="small-note">Plan SKUs only. Sold Qty includes direct sales plus child usage inside CMBs. DRR uses the last 30 days. Production / Day is the average received from live Production over the last 7 days.</div>
+    </div>
+  </div>
+  <div class="filter-box" style="margin:0 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">SKU Group</label>
+      <select class="fs" id="rpSkuType" onchange="renderRakhiProductionSkuTable()">
+        <option value="rakhi">Rakhi SKUs</option>
+        <option value="other">Other SKUs</option>
+        <option value="all">All Plan SKUs</option>
+      </select>
+    </div>
+    <div class="small-note" style="align-self:center;margin-top:18px">Search SKU and Need By date filters above also narrow this table.</div>
+  </div>
+  <div id="rpSkuPerfContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
   <div id="vDiscount" style="display:none">
@@ -14010,6 +14028,120 @@ function _rakhiProdRows(){
     return true;
   });
 }
+let _rakhiProdUsageCacheMaster = null;
+let _rakhiProdUsageCache = new Map();
+function _rakhiProdMasterItem(rawSku){
+  const exact=_opsSkuKey(rawSku);
+  if(exact&&_masterSkuMap[exact])return _masterSkuMap[exact];
+  try{
+    _opEnsureMasterInventoryIndex();
+    const compact=_rakhiProdSkuNorm(rawSku);
+    if(compact&&_opMasterInventoryCompactMap[compact])return _opMasterInventoryCompactMap[compact];
+  }catch(_e){}
+  return {};
+}
+function _rakhiProdComboUsageMap(){
+  if(_rakhiProdUsageCacheMaster===master)return _rakhiProdUsageCache;
+  const usage=new Map();
+  (master||[]).forEach(parent=>{
+    const parentSku=_opsSkuKey(parent&&parent.sku);
+    if(!parentSku||!/^CMB(?:[-_]|\d)/i.test(parentSku))return;
+    const parentSold=Math.max(0,_opsNum(parent&&parent.final_qty));
+    const parent30=Math.max(0,_opsNum(parent&&parent.qty_1m));
+    if(parentSold<=0&&parent30<=0)return;
+    let children=[];
+    try{children=_opAvailChildren(parent)||[];}catch(_e){
+      const seen=new Set();
+      children=(Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).map(c=>({
+        sku:_opsSkuKey(c&&c.sku),skuName:String(c&&c.sku_name||''),cn_name:String(c&&c.cn_name||''),taxon:String(c&&c.taxon||'')
+      })).filter(c=>c.sku&&!seen.has(c.sku)&&(seen.add(c.sku),true));
+    }
+    if(!children.length)return;
+    let req=new Map(children.map(c=>[c.sku,1]));
+    try{req=_opAvailRequiredQtys(parent,children)||req;}catch(_e){}
+    const seen=new Set();
+    children.forEach(ch=>{
+      const childSku=_opsSkuKey(ch&&ch.sku);
+      const compact=_rakhiProdSkuNorm(childSku);
+      if(!childSku||!compact||seen.has(compact))return;
+      seen.add(compact);
+      const need=Math.max(1,Math.floor(_opsNum(req.get(childSku)||1)));
+      const slot=usage.get(compact)||{all:0,d30:0,parents:0};
+      slot.all+=parentSold*need;
+      slot.d30+=parent30*need;
+      slot.parents+=1;
+      usage.set(compact,slot);
+    });
+  });
+  _rakhiProdUsageCacheMaster=master;
+  _rakhiProdUsageCache=usage;
+  return usage;
+}
+function _rakhiProdSkuGroup(item,sku){
+  const s=_opsSkuKey(sku);
+  if(/^RKH(?:[-_]|\d)/i.test(s))return 'rakhi';
+  if(/rakhi/i.test(String(item&&item.taxon||'')))return 'rakhi';
+  try{if(typeof _rkhInWhitelist==='function'&&_rkhInWhitelist(s))return 'rakhi';}catch(_e){}
+  return 'other';
+}
+function _rakhiProdSkuPerformanceRows(){
+  const filteredPlanRows=_rakhiProdRows();
+  const wanted=document.getElementById('rpSkuType')?.value||'rakhi';
+  const usage=_rakhiProdComboUsageMap();
+  const prod=(_rakhiProdData&&_rakhiProdData.production_by_sku)||{};
+  const unique=new Map();
+  filteredPlanRows.forEach(r=>{
+    const compact=_rakhiProdSkuNorm(r&&r.sku);
+    if(compact&&!unique.has(compact))unique.set(compact,String(r.sku||'').trim().toUpperCase());
+  });
+  const rows=[];
+  unique.forEach((displaySku,compact)=>{
+    const item=_rakhiProdMasterItem(displaySku);
+    const group=_rakhiProdSkuGroup(item,displaySku);
+    if(wanted!=='all'&&group!==wanted)return;
+    const combo=usage.get(compact)||{all:0,d30:0,parents:0};
+    const directSold=Math.max(0,_opsNum(item&&item.final_qty));
+    const direct30=Math.max(0,_opsNum(item&&item.qty_1m));
+    const comboSold=Math.max(0,_opsNum(combo.all));
+    const combo30=Math.max(0,_opsNum(combo.d30));
+    const p=prod[compact]||{};
+    rows.push({
+      sku:_opsSkuKey(item&&item.sku||displaySku),
+      skuName:String(item&&item.sku_name||''),
+      image:String(item&&item.image_url||''),
+      group,
+      directSold,comboSold,totalSold:directSold+comboSold,
+      drr:(direct30+combo30)/30,
+      stock:Math.max(0,_opsNum(item&&item.inv_stock)),
+      wip:Math.max(0,_opsNum(item&&item.inv_wip)),
+      prodPerDay:Math.max(0,_opsNum(p.avg_received_per_day_7d)),
+      prod7:Math.max(0,_opsNum(p.received_7d)),
+      prodToday:Math.max(0,_opsNum(p.received_today)),
+      pending:Math.max(0,_opsNum(p.pending_balance))
+    });
+  });
+  rows.sort((a,b)=>b.drr-a.drr||b.totalSold-a.totalSold||b.prodPerDay-a.prodPerDay||a.sku.localeCompare(b.sku));
+  return rows;
+}
+function renderRakhiProductionSkuTable(){
+  const host=document.getElementById('rpSkuPerfContent');
+  if(!host)return;
+  if(!_rakhiProdData){host.innerHTML='<div class="home-empty" style="padding:24px">Loading Production data...</div>';return;}
+  if(!master||!master.length){host.innerHTML='<div class="home-empty" style="padding:24px">Product data is still loading...</div>';return;}
+  const rows=_rakhiProdSkuPerformanceRows();
+  if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:24px">No SKUs match the current Rakhi Production filters.</div>';return;}
+  const body=rows.map(r=>`<tr>
+    <td>${_opsPhoto(r.image)}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td>
+    <td>${r.group==='rakhi'?'<span class="ops-badge ops-badge-gold">Rakhi SKU</span>':'<span class="ops-badge ops-badge-gray">Other SKU</span>'}</td>
+    <td class="ops-num"><b>${Math.round(r.totalSold).toLocaleString('en-IN')}</b><div class="small-note" style="white-space:nowrap">Direct ${Math.round(r.directSold).toLocaleString('en-IN')} + CMB ${Math.round(r.comboSold).toLocaleString('en-IN')}</div></td>
+    <td class="ops-num"><b>${r.drr.toFixed(2)}</b><div class="small-note">30D usage / 30</div></td>
+    <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
+    <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
+    <td class="ops-num"><b>${r.prodPerDay.toFixed(2)}</b><div class="small-note" style="white-space:nowrap">7D received ${Math.round(r.prod7).toLocaleString('en-IN')} | Today ${Math.round(r.prodToday).toLocaleString('en-IN')}</div></td>
+  </tr>`).join('');
+  host.innerHTML=`<table class="ops-table" style="min-width:980px"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
+}
 function loadRakhiProduction(forceFresh=false){
   const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
   if(!host)return;
@@ -14038,6 +14170,7 @@ function renderRakhiProduction(){
     <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Since 06-Aug-2026 baseline</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
+  renderRakhiProductionSkuTable();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
   const status=(r)=>{
     const k=String(r.status_key||'');
@@ -14062,10 +14195,10 @@ function renderRakhiProduction(){
   </tr></thead><tbody>${body}</tbody></table>`;
 }
 function resetRakhiProduction(){
-  const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2');
-  if(a)a.value='';if(b)b.value='';if(c)c.value='';renderRakhiProduction();
+  const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
+  if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';renderRakhiProduction();
 }
-window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
+window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
 
 /* ── PROFIT MARGIN (admin) ── */
 let PM_MODE = 'old';
@@ -19326,6 +19459,45 @@ def _build_rakhi_production_tracker():
     report = _build_production(row_limit=None)
     live_rows = list(report.get("rows") or [])
 
+    # Per-SKU production inflow for the SKU performance table.  Receiving Qty
+    # is attributed to its Receiving Date.  Production / Day is the last seven
+    # calendar days divided by seven, including zero-receipt days.
+    production_by_sku = {}
+    today_date = now_ist().date()
+    start_7d = today_date - timedelta(days=6)
+    for r in live_rows:
+        sk = _rakhi_prod_sku_key(r.get("sku", ""))
+        if not sk:
+            continue
+        g = production_by_sku.setdefault(sk, {
+            "received_7d": 0.0, "received_today": 0.0,
+            "pending_balance": 0.0, "avg_received_per_day_7d": 0.0,
+        })
+        try:
+            recv_qty = max(0.0, float(r.get("recv_qty") or 0))
+        except (TypeError, ValueError):
+            recv_qty = 0.0
+        try:
+            g["pending_balance"] += max(0.0, float(r.get("bal_qty") or 0))
+        except (TypeError, ValueError):
+            pass
+        recv_iso = clean(r.get("receiving_iso", ""))
+        recv_date = None
+        if recv_iso:
+            try:
+                recv_date = datetime.strptime(recv_iso[:10], "%Y-%m-%d").date()
+            except Exception:
+                recv_date = None
+        if recv_date is not None and start_7d <= recv_date <= today_date:
+            g["received_7d"] += recv_qty
+        if recv_date == today_date:
+            g["received_today"] += recv_qty
+    for g in production_by_sku.values():
+        g["received_7d"] = int(round(g["received_7d"]))
+        g["received_today"] = int(round(g["received_today"]))
+        g["pending_balance"] = int(round(g["pending_balance"]))
+        g["avg_received_per_day_7d"] = round(g["received_7d"] / 7.0, 2)
+
     # All Product CN Name is used for display; the plan remains SKU-driven.
     cn_map = {}
     try:
@@ -19434,6 +19606,7 @@ def _build_rakhi_production_tracker():
         "arrived_qty": int(round(sum(r["arrived_qty"] for r in out))),
         "coming_qty": int(round(sum(r["coming_qty"] for r in out))),
         "missing_rows": sum(1 for r in out if not r["source_found"]),
+        "production_by_sku": production_by_sku,
     }
 
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
