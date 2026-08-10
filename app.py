@@ -6800,6 +6800,116 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
+  <style id="rakhi-production-compact-tables">
+  /* Rakhi Production only: compact, readable tables. No data/logic changes. */
+  #vRakhiProduction .rp-compact-wrap{
+    max-height:430px;
+    overflow:auto!important;
+    border-radius:14px!important;
+  }
+  #vRakhiProduction table.rp-compact-table{
+    width:100%!important;
+    min-width:920px!important;
+    border-collapse:collapse!important;
+    table-layout:auto!important;
+  }
+  #vRakhiProduction table.rp-perf-table{min-width:1030px!important;}
+  #vRakhiProduction table.rp-stock-table{min-width:920px!important;}
+  #vRakhiProduction table.rp-compact-table th,
+  #vRakhiProduction table.rp-compact-table td{
+    padding:6px 7px!important;
+    vertical-align:middle!important;
+  }
+  #vRakhiProduction table.rp-compact-table th{
+    position:sticky;
+    top:0;
+    z-index:4;
+    font-size:8px!important;
+    line-height:1.15!important;
+    letter-spacing:.65px!important;
+    white-space:nowrap!important;
+  }
+  #vRakhiProduction table.rp-compact-table td{
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+  #vRakhiProduction table.rp-compact-table .ops-num{white-space:nowrap!important;}
+  #vRakhiProduction table.rp-compact-table .small-note{
+    font-size:8px!important;
+    line-height:1.15!important;
+    margin-top:2px!important;
+    white-space:normal!important;
+  }
+  #vRakhiProduction table.rp-compact-table .sku-link{
+    font-size:10px!important;
+    line-height:1.15!important;
+    padding:0!important;
+  }
+  #vRakhiProduction table.rp-compact-table .ops-badge{
+    font-size:7px!important;
+    padding:3px 5px!important;
+    line-height:1!important;
+  }
+  #vRakhiProduction .ops-photo,
+  #vRakhiProduction .ops-photo-ph{
+    width:46px!important;
+    height:46px!important;
+    min-width:46px!important;
+    max-width:46px!important;
+    border:1px solid #e5dcc8;
+    border-radius:8px;
+    background:#fff;
+    padding:3px;
+    box-sizing:border-box;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    margin:auto;
+  }
+  #vRakhiProduction img.ops-photo{
+    object-fit:contain!important;
+    object-position:center!important;
+  }
+  #vRakhiProduction .ops-photo-ph{font-size:18px!important;color:#b9a56b;}
+  #vRakhiProduction table.rp-perf-table th:nth-child(1),
+  #vRakhiProduction table.rp-perf-table td:nth-child(1),
+  #vRakhiProduction table.rp-stock-table th:nth-child(1),
+  #vRakhiProduction table.rp-stock-table td:nth-child(1){width:54px;min-width:54px;}
+  #vRakhiProduction table.rp-perf-table th:nth-child(2),
+  #vRakhiProduction table.rp-perf-table td:nth-child(2){min-width:165px;}
+  #vRakhiProduction table.rp-stock-table th:nth-child(2),
+  #vRakhiProduction table.rp-stock-table td:nth-child(2){min-width:180px;}
+  #vRakhiProduction table.rp-perf-table th:nth-child(n+4),
+  #vRakhiProduction table.rp-perf-table td:nth-child(n+4),
+  #vRakhiProduction table.rp-stock-table th:nth-child(n+3),
+  #vRakhiProduction table.rp-stock-table td:nth-child(n+3){text-align:center;}
+  #vRakhiProduction #rpContent{
+    max-height:430px;
+    overflow:auto!important;
+  }
+  #vRakhiProduction table.rp-main-table{
+    min-width:1160px!important;
+  }
+  #vRakhiProduction table.rp-main-table th{
+    position:sticky;
+    top:0;
+    z-index:4;
+    padding:7px 7px!important;
+    font-size:8px!important;
+    line-height:1.1!important;
+    letter-spacing:.55px!important;
+    white-space:nowrap!important;
+  }
+  #vRakhiProduction table.rp-main-table td{
+    padding:6px 7px!important;
+    font-size:9px!important;
+    line-height:1.2!important;
+  }
+  @media(max-width:900px){
+    #vRakhiProduction .rp-compact-wrap,#vRakhiProduction #rpContent{max-height:360px;}
+    #vRakhiProduction .ops-photo,#vRakhiProduction .ops-photo-ph{width:40px!important;height:40px!important;min-width:40px!important;max-width:40px!important;}
+  }
+  </style>
   <div id="vRakhiProduction" style="display:none">
   <div class="insights-head">
     <div>
@@ -6820,7 +6930,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <button class="go-btn" style="width:auto;padding:10px 18px;background:#f3f6fb;color:#111" onclick="resetRakhiProduction()">Reset</button>
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
-  <div id="rpContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="small-note" style="margin-top:10px">Arrived Qty uses the live Production Rec. Qty. column J and is allocated to the earliest Need By tranche first. Production Delivery Date comes from column L. Still Coming is the remaining quantity for that Need By row.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
@@ -6839,7 +6949,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="small-note" style="align-self:center;margin-top:18px">Search SKU and Need By date filters above also narrow this table.</div>
   </div>
-  <div id="rpSkuPerfContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div id="rpSkuPerfContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
 
   <div class="insights-head" style="margin-top:30px;margin-bottom:10px">
     <div>
@@ -6851,12 +6961,12 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div><div class="insights-title" style="font-size:.98rem;color:#9a5b00">Priority: Estimated Stock-Out in 15 Days or Less</div></div>
     <div class="insight-toolbar-actions"><button class="go-btn" style="width:auto;padding:8px 12px;background:#2f6f3e" onclick="exportRakhiProductionStockout15()">Export CSV</button></div>
   </div>
-  <div id="rpRakhiOos15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div id="rpRakhiOos15Content" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="insights-head" style="margin-top:22px;margin-bottom:8px">
     <div><div class="insights-title" style="font-size:.98rem;color:#2f6f3e">Estimated Stock-Out Above 15 Days / No Recent Demand</div></div>
     <div class="insight-toolbar-actions"><button class="go-btn" style="width:auto;padding:8px 12px;background:#2f6f3e" onclick="exportRakhiProductionStockoutOver15()">Export CSV</button></div>
   </div>
-  <div id="rpRakhiOosOver15Content" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div id="rpRakhiOosOver15Content" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   </div>
 
   <div id="vDiscount" style="display:none">
@@ -14161,7 +14271,7 @@ function renderRakhiProductionSkuTable(){
     <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
     <td class="ops-num"><b>${r.prodPerDay.toFixed(2)}</b><div class="small-note" style="white-space:nowrap">7D Rec. Qty. ${Math.round(r.prod7).toLocaleString('en-IN')} | Today ${Math.round(r.prodToday).toLocaleString('en-IN')}</div></td>
   </tr>`).join('');
-  host.innerHTML=`<table class="ops-table" style="min-width:1240px"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Delivery Date</th><th>Received Qty</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table rp-compact-table rp-perf-table"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Delivery Date</th><th>Received Qty</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 function _rakhiProdAllRakhiComponentSkus(){
   const unique=new Map();
@@ -14244,7 +14354,7 @@ function _rakhiProdStockoutTableHtml(rows,emptyText){
     <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
     <td>${escHtml(r.receivingDate||'—')}</td>
   </tr>`).join('');
-  return `<table class="ops-table" style="min-width:1120px"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="ops-table rp-compact-table rp-stock-table"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
 }
 function renderRakhiProductionStockoutTables(){
   const near=document.getElementById('rpRakhiOos15Content'),far=document.getElementById('rpRakhiOosOver15Content');
@@ -14327,7 +14437,7 @@ function renderRakhiProduction(){
     <td>${escHtml(r.receiving_dates||'—')}</td>
     <td>${status(r)}</td>
   </tr>`).join('');
-  host.innerHTML=`<table class="ro" style="width:100%;min-width:1320px;border-collapse:collapse"><thead><tr>
+  host.innerHTML=`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
     <th>Need By</th><th>Order Date</th><th>Order No.</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Arrived Qty</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody></table>`;
 }
