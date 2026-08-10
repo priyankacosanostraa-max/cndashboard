@@ -6815,6 +6815,11 @@ select.lg-in option{background:#fff;color:#1a1610}
   }
   #vRakhiProduction table.rp-perf-table{min-width:1030px!important;}
   #vRakhiProduction table.rp-stock-table{min-width:920px!important;}
+  #vRakhiProduction table.rp-stock-table thead th{
+    background:#fff!important;
+    color:#111827!important;
+    border-bottom:1px solid #e5e7eb!important;
+  }
   #vRakhiProduction table.rp-compact-table th,
   #vRakhiProduction table.rp-compact-table td{
     padding:6px 7px!important;
@@ -6931,12 +6936,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">Arrived Qty uses the live Production Rec. Qty. column J and is allocated to the earliest Need By tranche first. Production Delivery Date comes from column L. Still Coming is the remaining quantity for that Need By row.</div>
+  <div class="small-note" style="margin-top:10px">Arrived Qty counts only receipts after the 06-Aug-2026 baseline. Baseline order rows use the drop from the file's Balance Qty to the live Balance Qty; newer Rakhi production orders are tracked separately from live Rec. Qty. Production Delivery Date comes from column L.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
       <div class="insights-title" style="font-size:1.05rem">SKU Sales + Production View</div>
-      <div class="small-note">Plan SKUs only. Sold Qty includes direct sales plus child usage inside CMBs. DRR uses the last 30 days. Delivery Date comes from Production column L. Received Qty and Production / Day use Production Rec. Qty. column J; the daily average is dated by Rec. Date column M.</div>
+      <div class="small-note">Plan SKUs only. Sold Qty includes direct sales plus child usage inside CMBs. DRR uses the last 30 days. Delivery Date comes from Production column L. Received Qty shows only post-06-Aug baseline receipts; newer production order numbers use column J and Rec. Date column M.</div>
     </div>
   </div>
   <div class="filter-box" style="margin:0 0 14px;display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
@@ -6954,7 +6959,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:30px;margin-bottom:10px">
     <div>
       <div class="insights-title" style="font-size:1.05rem">Rakhi SKU Stock-Out Tracker</div>
-      <div class="small-note">CMB parent SKUs are excluded. Standalone Rakhi SKUs plus child SKUs used inside Rakhi CMBs are included. Child Sold Qty and DRR include direct sales plus usage inside every CMB that uses that child, including when the same child is used in multiple CMBs. Estimated stock-out days use current Inv Stock / 30D DRR; WIP and received quantity are shown separately and are not double-counted into stock cover.</div>
+      <div class="small-note">CMB parent SKUs are excluded. Standalone Rakhi SKUs plus child SKUs used inside Rakhi CMBs are included. Child Sold Qty and DRR include direct sales plus usage inside every CMB that uses that child, including when the same child is used in multiple CMBs. Received Qty counts only production received after the 06-Aug baseline (including newer Rakhi order numbers such as 1427/1428). Estimated stock-out days use current Inv Stock / 30D DRR.</div>
     </div>
   </div>
   <div class="insights-head" style="margin-top:14px;margin-bottom:8px">
@@ -14311,7 +14316,7 @@ function renderRakhiProductionSkuTable(){
     <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
     <td>${escHtml(r.deliveryDate||'—')}</td>
-    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
+    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">After 06-Aug baseline</div></td>
     <td class="ops-num"><b>${r.prodPerDay.toFixed(2)}</b><div class="small-note" style="white-space:nowrap">7D Rec. Qty. ${Math.round(r.prod7).toLocaleString('en-IN')} | Today ${Math.round(r.prodToday).toLocaleString('en-IN')}</div></td>
   </tr>`).join('');
   host.innerHTML=`<table class="ops-table rp-compact-table rp-perf-table"><thead><tr><th>Photo</th><th>SKU</th><th>SKU Group</th><th>Sold Qty (Direct + CMB)</th><th>Daily Run Rate</th><th>Inv Stock</th><th>Inv WIP</th><th>Delivery Date</th><th>Received Qty</th><th>Production / Day (7D Avg)</th></tr></thead><tbody>${body}</tbody></table>`;
@@ -14394,7 +14399,7 @@ function _rakhiProdStockoutTableHtml(rows,emptyText){
     <td class="ops-num">${_rakhiProdOosDaysCell(r)}</td>
     <td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td>
-    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">Production J: Rec. Qty.</div></td>
+    <td class="ops-num"><b>${Math.round(r.receivedQty).toLocaleString('en-IN')}</b><div class="small-note">After 06-Aug baseline</div></td>
     <td>${escHtml(r.receivingDate||'—')}</td>
   </tr>`).join('');
   return `<table class="ops-table rp-compact-table rp-stock-table"><thead><tr><th>Photo</th><th>SKU</th><th>Sold Qty</th><th>DRR</th><th>Est. Stock-Out Days</th><th>Inv Stock</th><th>Inv WIP</th><th>Received Qty</th><th>Receiving Date</th></tr></thead><tbody>${body}</tbody></table>`;
@@ -14455,7 +14460,7 @@ function renderRakhiProduction(){
   const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Planned Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} need-by rows</div></div>
-    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Production Rec. Qty. (column J)</div></div>
+    <div class="yoy-card"><div class="yc-label">Arrived</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Received after 06-Aug baseline</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
   renderRakhiProductionSkuTable();
@@ -19457,6 +19462,12 @@ def _rakhi_prod_order_key(value):
         s = s.split(".", 1)[0]
     return s.casefold()
 
+def _rakhi_prod_order_rank(value):
+    """Numeric order sequence for comparing newer production orders."""
+    s = _rakhi_prod_order_key(value)
+    m = re.search(r"\d+", s)
+    return int(m.group(0)) if m else None
+
 def _rakhi_prod_sku_key(value):
     return re.sub(r"[^A-Z0-9]", "", clean(value).upper())
 
@@ -19742,12 +19753,40 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 def _build_rakhi_production_tracker():
     """Join the supplied Aug-2026 need-by plan to the live Production sheet.
 
-    The supplied file provides the August need-by plan.  Live received quantity
-    is taken from Production column J (Rec. Qty.) and allocated to the earliest
-    Need By tranche first. Production delivery date is taken from column L.
+    The supplied file provides the August need-by plan and the 06-Aug Balance
+    Qty baseline. Baseline orders count only the subsequent Balance Qty drop;
+    newer Rakhi production orders use their live column-J Rec. Qty. Production
+    delivery date is taken from column L.
     """
     report = _build_production(row_limit=None)
     live_rows = list(report.get("rows") or [])
+
+    # Snapshot lookup: the uploaded 06-Aug file is the baseline.  For order+SKU
+    # rows that already existed in that file, only the Balance Qty drop after
+    # the snapshot counts as newly received.  Newer production orders for the
+    # same SKU (for example Rakhi repeat orders 1427 / 1428) use their live
+    # column-J Rec. Qty because they were not part of the baseline snapshot.
+    baseline_balance_by_key = {}
+    baseline_latest_order_rank_by_sku = {}
+    rakhi_direct_baseline_ranks = []
+    for raw in _RAKHI_PRODUCTION_PLAN:
+        _od, _ono, _sku, _qty, _baseline_balance, _priority, _need = raw
+        _ok = _rakhi_prod_order_key(_ono)
+        _sk = _rakhi_prod_sku_key(_sku)
+        if not _ok or not _sk:
+            continue
+        _key = (_ok, _sk)
+        baseline_balance_by_key[_key] = max(
+            baseline_balance_by_key.get(_key, 0.0), float(_baseline_balance or 0)
+        )
+        _rank = _rakhi_prod_order_rank(_ono)
+        if _rank is not None:
+            baseline_latest_order_rank_by_sku[_sk] = max(
+                baseline_latest_order_rank_by_sku.get(_sk, _rank), _rank
+            )
+            if _sk.startswith("RKH"):
+                rakhi_direct_baseline_ranks.append(_rank)
+    rakhi_direct_baseline_rank = max(rakhi_direct_baseline_ranks) if rakhi_direct_baseline_ranks else None
 
     # Per-SKU production inflow for the SKU performance table.  Receiving Qty
     # is attributed to its Receiving Date.  Production / Day is the last seven
@@ -19822,7 +19861,8 @@ def _build_rakhi_production_tracker():
             continue
         g = live.setdefault(key, {
             "balance": 0.0, "recv": 0.0, "order_qty": 0.0,
-            "receiving_dates": set(), "delivery_dates": set(), "rows": 0,
+            "receiving_dates": set(), "receiving_pairs": set(),
+            "delivery_dates": set(), "order_types": set(), "channels": set(), "rows": 0,
         })
         g["balance"] += float(r.get("bal_qty") or 0)
         g["recv"] += float(r.get("recv_qty") or 0)
@@ -19830,8 +19870,87 @@ def _build_rakhi_production_tracker():
         g["rows"] += 1
         if r.get("receiving_date"):
             g["receiving_dates"].add(str(r.get("receiving_date")))
+        if r.get("receiving_iso") or r.get("receiving_date"):
+            g["receiving_pairs"].add((str(r.get("receiving_iso") or ""), str(r.get("receiving_date") or r.get("receiving_iso") or "")))
         if r.get("delivery_date"):
             g["delivery_dates"].add(str(r.get("delivery_date")))
+        if r.get("order_type"):
+            g["order_types"].add(str(r.get("order_type")))
+        if r.get("channel"):
+            g["channels"].add(str(r.get("channel")))
+
+    # Replace historical cumulative Rec. Qty with only post-baseline receipts.
+    # Existing baseline orders: new received = baseline Balance - current Balance.
+    # Orders absent from the baseline: count live J only when the order number is
+    # newer than that SKU's baseline order. For component SKUs that were not in
+    # the baseline file, require a Rakhi-labelled production order and compare
+    # against the latest direct-Rakhi baseline order. This excludes old customer /
+    # SOR receipts such as historical rows while automatically including 1427,
+    # 1428 and future Rakhi repeat orders.
+    post_receipts_by_sku = {}
+    for (order_key, sk), lv in live.items():
+        post_qty = 0.0
+        if (order_key, sk) in baseline_balance_by_key:
+            base_bal = max(0.0, float(baseline_balance_by_key.get((order_key, sk), 0.0) or 0.0))
+            current_bal = float(lv.get("balance") or 0.0)
+            post_qty = max(0.0, base_bal - current_bal)
+        else:
+            order_rank = _rakhi_prod_order_rank(order_key)
+            sku_cutoff = baseline_latest_order_rank_by_sku.get(sk)
+            rakhi_text = " ".join(list(lv.get("order_types") or []) + list(lv.get("channels") or [])).casefold()
+            is_new_for_known_sku = (
+                order_rank is not None and sku_cutoff is not None and order_rank > sku_cutoff
+            )
+            is_new_rakhi_component = (
+                order_rank is not None and sku_cutoff is None
+                and rakhi_direct_baseline_rank is not None
+                and order_rank > rakhi_direct_baseline_rank
+                and "rakhi" in rakhi_text
+            )
+            if is_new_for_known_sku or is_new_rakhi_component:
+                post_qty = max(0.0, float(lv.get("recv") or 0.0))
+        if post_qty <= 1e-9:
+            continue
+        pg = post_receipts_by_sku.setdefault(sk, {
+            "received_total": 0.0, "received_7d": 0.0, "received_today": 0.0,
+            "receiving_pairs": set(), "order_nos": set(),
+        })
+        pg["received_total"] += post_qty
+        pg["order_nos"].add(order_key)
+        pairs = sorted(lv.get("receiving_pairs") or set(), key=lambda x: (x[0] or "0000-00-00", x[1]))
+        if pairs:
+            latest_pair = pairs[-1]
+            pg["receiving_pairs"].add(latest_pair)
+            try:
+                rec_date = datetime.strptime(latest_pair[0][:10], "%Y-%m-%d").date() if latest_pair[0] else None
+            except Exception:
+                rec_date = None
+            if rec_date is not None and start_7d <= rec_date <= today_date:
+                pg["received_7d"] += post_qty
+            if rec_date == today_date:
+                pg["received_today"] += post_qty
+
+    # Overwrite only the receipt-related fields; keep existing delivery/pending
+    # calculations unchanged.
+    for sk, g in production_by_sku.items():
+        pg = post_receipts_by_sku.get(sk)
+        if not pg:
+            g["received_total"] = 0
+            g["received_7d"] = 0
+            g["received_today"] = 0
+            g["avg_received_per_day_7d"] = 0.0
+            g["receiving_dates"] = []
+            g["receiving_date_display"] = ""
+            g["received_order_nos"] = []
+            continue
+        g["received_total"] = int(round(pg["received_total"]))
+        g["received_7d"] = int(round(pg["received_7d"]))
+        g["received_today"] = int(round(pg["received_today"]))
+        g["avg_received_per_day_7d"] = round(g["received_7d"] / 7.0, 2)
+        pairs = sorted(pg["receiving_pairs"], key=lambda x: (x[0] or "0000-00-00", x[1]))
+        g["receiving_dates"] = [p[1] for p in pairs]
+        g["receiving_date_display"] = pairs[-1][1] if pairs else ""
+        g["received_order_nos"] = sorted(pg["order_nos"], key=lambda x: (_rakhi_prod_order_rank(x) or -1, x))
 
     groups = {}
     for seq, raw in enumerate(_RAKHI_PRODUCTION_PLAN):
@@ -19859,9 +19978,10 @@ def _build_rakhi_production_tracker():
         lv = live.get(key)
         source_found = lv is not None
         live_balance = float(lv.get("balance") or 0) if lv else 0.0
-        # User-confirmed received source is Production column J (Rec. Qty.).
-        # Allocate that received quantity to the earliest Need By tranche first.
-        received_for_plan = max(0.0, float(lv.get("recv") or 0)) if source_found else 0.0
+        # The uploaded file is the 06-Aug baseline. Do not re-count quantity
+        # received before that snapshot. For this exact baseline order+SKU, only
+        # the drop in Balance Qty since the snapshot is newly arrived.
+        received_for_plan = max(0.0, g["baseline_balance"] - live_balance) if source_found else 0.0
         received_for_plan = min(received_for_plan, g["plan_total"])
         remaining_received = received_for_plan
         parts = sorted(g["parts"], key=lambda p: (p["need_by_iso"], p["seq"]))
