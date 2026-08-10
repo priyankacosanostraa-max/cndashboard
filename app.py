@@ -6910,6 +6910,15 @@ select.lg-in option{background:#fff;color:#1a1610}
     font-size:9px!important;
     line-height:1.2!important;
   }
+  #vRakhiProduction table.rp-main-table tfoot td{
+    position:sticky;
+    bottom:0;
+    z-index:6;
+    background:#fffdf7!important;
+    border-top:2px solid #b8860b!important;
+    box-shadow:0 -3px 10px rgba(70,54,18,.10);
+    font-weight:900!important;
+  }
   @media(max-width:900px){
     #vRakhiProduction .rp-compact-wrap,#vRakhiProduction #rpContent{max-height:360px;}
     #vRakhiProduction .ops-photo,#vRakhiProduction .ops-photo-ph{width:40px!important;height:40px!important;min-width:40px!important;max-width:40px!important;}
@@ -6919,9 +6928,10 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head">
     <div>
       <div class="insights-title">Rakhi Production Tracker</div>
-      <div class="small-note">Supplied plan rows are kept, and every live RKH order/SKU from Production (PPC-WIP) is added automatically. Need By plan text is treated as August 2026.</div>
+      <div class="small-note">Supplied plan rows are kept, and every live Production order/SKU with Balance Qty above 0 is added automatically. RKH rows are Need By 13-Aug-2026; non-RKH live rows through Order No. 1435 are Need By 31-Aug-2026, and later order numbers stay blank.</div>
     </div>
     <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiProductionMain()">Export CSV</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhiProduction(true)">Refresh</button>
     </div>
   </div>
@@ -6936,6 +6946,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       <input class="fi" id="rpSku" placeholder="type SKU…" oninput="rakhiProdSearchDebounced()"></div>
     <div class="fc"><label class="fl">Search Order No.</label>
       <input class="fi" id="rpOrder" placeholder="e.g. 1398 / 1427" oninput="rakhiProdSearchDebounced()"></div>
+    <div class="fc"><label class="fl">Need By Date</label>
+      <select class="fs" id="rpNeedByExact" onchange="renderRakhiProduction()">
+        <option value="all">All Need By Dates</option>
+      </select></div>
     <div class="fc"><label class="fl">Need By date from</label>
       <input class="fi" id="rpD1" type="date" onchange="renderRakhiProduction()"></div>
     <div class="fc"><label class="fl">Need By date to</label>
@@ -6944,7 +6958,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + live Production RKH orders. Direct RKH SKUs are Need By 13-Aug-2026. Production Balance Qty comes from live PPC-WIP column K; repeated same-date SKU rows share only the highest balance for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
+  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -14155,6 +14169,27 @@ function _rakhiProdSkuNorm(v){
   try{s=s.normalize('NFKC');}catch(_e){}
   return s.toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
+function _rakhiProdFillNeedByDropdown(){
+  const el=document.getElementById('rpNeedByExact');
+  if(!el)return;
+  const current=el.value||'all';
+  const rows=(_rakhiProdData&&_rakhiProdData.rows)||[];
+  const dates=new Map();
+  let hasBlank=false;
+  rows.forEach(r=>{
+    const iso=String(r&&r.need_by_iso||'').trim();
+    if(!iso){hasBlank=true;return;}
+    if(!dates.has(iso))dates.set(iso,String(r&&r.need_by_display||r&&r.need_by_text||iso));
+  });
+  const options=['<option value="all">All Need By Dates</option>'];
+  Array.from(dates.entries()).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([iso,label])=>{
+    options.push(`<option value="${escHtml(iso)}">${escHtml(label||iso)}</option>`);
+  });
+  if(hasBlank)options.push('<option value="__blank__">Blank / No Need By</option>');
+  el.innerHTML=options.join('');
+  const valid=current==='all'||current==='__blank__'?current:(dates.has(current)?current:'all');
+  el.value=(valid==='__blank__'&&!hasBlank)?'all':valid;
+}
 function _rakhiProdRows(applyMainOnlyFilters=true){
   const rows=(_rakhiProdData&&_rakhiProdData.rows)||[];
   const q=_rakhiProdSkuNorm(document.getElementById('rpSku')?.value||'');
@@ -14162,11 +14197,14 @@ function _rakhiProdRows(applyMainOnlyFilters=true){
   const d2=document.getElementById('rpD2')?.value||'';
   const group=applyMainOnlyFilters?(document.getElementById('rpMainSkuType')?.value||'all'):'all';
   const orderQ=applyMainOnlyFilters?String(document.getElementById('rpOrder')?.value||'').trim().toLocaleLowerCase('en-US'):'';
+  const needByExact=applyMainOnlyFilters?(document.getElementById('rpNeedByExact')?.value||'all'):'all';
   return rows.filter(r=>{
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(q&&!_rakhiProdSkuNorm(r.sku).includes(q))return false;
     if(d1&&(!r.need_by_iso||r.need_by_iso<d1))return false;
     if(d2&&(!r.need_by_iso||r.need_by_iso>d2))return false;
+    if(needByExact==='__blank__'&&String(r.need_by_iso||'').trim())return false;
+    if(needByExact!=='all'&&needByExact!=='__blank__'&&String(r.need_by_iso||'').trim()!==needByExact)return false;
     if(group==='rakhi'&&!/^RKH(?:[-_]|\d)/i.test(String(r.sku||'')))return false;
     if(group==='other'&&/^RKH(?:[-_]|\d)/i.test(String(r.sku||'')))return false;
     if(orderQ&&!String(r.order_no||'').toLocaleLowerCase('en-US').includes(orderQ))return false;
@@ -14466,6 +14504,7 @@ function renderRakhiProduction(){
   const host=document.getElementById('rpContent'),sum=document.getElementById('rpSummary');
   if(!host)return;
   if(!_rakhiProdData){loadRakhiProduction(false);return;}
+  _rakhiProdFillNeedByDropdown();
   const rows=_rakhiProdRows(true);
   const planned=rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0);
   const arrived=rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0);
@@ -14475,7 +14514,7 @@ function renderRakhiProduction(){
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
   if(sum)sum.innerHTML=`
-    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} plan + live Production rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} plan + live pending Production rows</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
@@ -14495,8 +14534,7 @@ function renderRakhiProduction(){
     today:rows.reduce((s,r)=>s+(Number(r.received_today)||0),0),
     yesterday:rows.reduce((s,r)=>s+(Number(r.received_yesterday)||0),0),
     dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0),
-    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0),
-    liveBal:rows.reduce((s,r)=>s+(Number(r.live_balance_qty)||0),0)
+    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0)
   };
   const body=rows.map(r=>`<tr>
     <td><b>${escHtml(r.need_by_display||r.need_by_text||'—')}</b></td>
@@ -14512,7 +14550,6 @@ function renderRakhiProduction(){
     <td class="ops-num"><b>${receiptCell(r,r.received_yesterday)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_day_before)}</b></td>
     <td class="ops-num"><b>${Math.round(Number(r.coming_qty)||0).toLocaleString('en-IN')}</b></td>
-    <td class="ops-num">${r.source_found?Math.round(Number(r.live_balance_qty)||0).toLocaleString('en-IN'):'—'}</td>
     <td>${escHtml(r.production_delivery_dates||'—')}</td>
     <td>${r.receipt_source_ok===false?'—':escHtml(r.latest_receiving_date_display||'—')}</td>
     <td>${status(r)}</td>
@@ -14521,7 +14558,7 @@ function renderRakhiProduction(){
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
     :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody><tfoot><tr style="background:#fffdf7;border-top:2px solid #b8860b;font-weight:900">
     <td colspan="6" style="text-align:right">GRAND TOTAL</td>
     <td class="ops-num">${Math.round(totals.qty).toLocaleString('en-IN')}</td>
@@ -14531,16 +14568,46 @@ function renderRakhiProduction(){
     <td class="ops-num">${Math.round(totals.yesterday).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(totals.dayBefore).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(totals.coming).toLocaleString('en-IN')}</td>
-    <td class="ops-num">${Math.round(totals.liveBal).toLocaleString('en-IN')}</td>
     <td colspan="3"></td>
   </tr></tfoot></table>`;
 }
+function exportRakhiProductionMain(){
+  const rows=_rakhiProdRows(true);
+  if(!rows.length){alert('No Rakhi Production rows to export for the current filters.');return;}
+  const meta=(_rakhiProdData&&_rakhiProdData.rakhi_receipts_meta)||{};
+  const headers=[
+    'Need By','Order Date','Order No.','SKU','CN Name','Qty Required','Production Balance Qty',
+    'Received After 06-Aug-2026',
+    meta.today_display?`Today (${meta.today_display})`:'Today',
+    meta.yesterday_display?`Yesterday (${meta.yesterday_display})`:'Yesterday',
+    meta.day_before_display?`Day Before (${meta.day_before_display})`:'Day Before',
+    'Still Coming','Production Delivery Date','Latest Receiving Date','Status','Image Link'
+  ];
+  const data=rows.map(r=>[
+    r.need_by_display||r.need_by_text||'',r.order_date_display||r.order_date||'',r.order_no||'',r.sku||'',r.cn_name||'',
+    Math.round(Number(r.qty_required)||0),Math.round(Number(r.production_balance_qty)||0),
+    Math.round(Number(r.received_since_aug6??r.arrived_qty)||0),Math.round(Number(r.received_today)||0),
+    Math.round(Number(r.received_yesterday)||0),Math.round(Number(r.received_day_before)||0),Math.round(Number(r.coming_qty)||0),
+    r.production_delivery_dates||'',r.latest_receiving_date_display||'',r.status||'',r.image_url||''
+  ]);
+  const totals={
+    qty:rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0),
+    prodBal:rows.reduce((s,r)=>s+(Number(r.production_balance_qty)||0),0),
+    received:rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0),
+    today:rows.reduce((s,r)=>s+(Number(r.received_today)||0),0),
+    yesterday:rows.reduce((s,r)=>s+(Number(r.received_yesterday)||0),0),
+    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0),
+    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0)
+  };
+  data.push(['GRAND TOTAL','','','','',Math.round(totals.qty),Math.round(totals.prodBal),Math.round(totals.received),Math.round(totals.today),Math.round(totals.yesterday),Math.round(totals.dayBefore),Math.round(totals.coming),'','','','']);
+  _dlCsv(headers,data,'rakhi_production_tracker');
+}
 function resetRakhiProduction(){
   const a=document.getElementById('rpSku'),b=document.getElementById('rpD1'),c=document.getElementById('rpD2'),g=document.getElementById('rpSkuType');
-  const mg=document.getElementById('rpMainSkuType'),oq=document.getElementById('rpOrder');
-  if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';if(mg)mg.value='all';if(oq)oq.value='';renderRakhiProduction();
+  const mg=document.getElementById('rpMainSkuType'),oq=document.getElementById('rpOrder'),nb=document.getElementById('rpNeedByExact');
+  if(a)a.value='';if(b)b.value='';if(c)c.value='';if(g)g.value='rakhi';if(mg)mg.value='all';if(oq)oq.value='';if(nb)nb.value='all';renderRakhiProduction();
 }
-window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.exportRakhiProductionStockout15=exportRakhiProductionStockout15;window.exportRakhiProductionStockoutOver15=exportRakhiProductionStockoutOver15;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
+window.loadRakhiProduction=loadRakhiProduction;window.renderRakhiProduction=renderRakhiProduction;window.renderRakhiProductionSkuTable=renderRakhiProductionSkuTable;window.renderRakhiProductionStockoutTables=renderRakhiProductionStockoutTables;window.exportRakhiProductionMain=exportRakhiProductionMain;window.exportRakhiProductionStockout15=exportRakhiProductionStockout15;window.exportRakhiProductionStockoutOver15=exportRakhiProductionStockoutOver15;window.resetRakhiProduction=resetRakhiProduction;window.rakhiProdSearchDebounced=rakhiProdSearchDebounced;
 
 /* ── PROFIT MARGIN (admin) ── */
 let PM_MODE = 'old';
@@ -19702,6 +19769,21 @@ def _rakhi_prod_order_rank(value):
     m = re.search(r"\d+", s)
     return int(m.group(0)) if m else None
 
+def _rakhi_prod_live_need_by(sku, order_no):
+    """Need-by rule for live Production rows that are not in the supplied plan.
+
+    Direct RKH is always due 13-Aug-2026. Other live pending SKUs through
+    Order No. 1435 are due 31-Aug-2026. Later/non-numeric order numbers are
+    intentionally left blank. Inputs may be int/float/text/mixed case.
+    """
+    sk = _rakhi_prod_sku_key(sku)
+    if sk.startswith("RKH"):
+        return "2026-08-13", "Need By 13th"
+    rank = _rakhi_prod_order_rank(order_no)
+    if rank is not None and rank <= 1435:
+        return "2026-08-31", "Need By 31st"
+    return "", ""
+
 def _rakhi_prod_sku_key(value):
     """Case/punctuation/Unicode-insensitive SKU key for CSV + Production joins."""
     if value is None:
@@ -20245,14 +20327,27 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         g = live.setdefault(key, {
             "order_no_display": key[0] if re.fullmatch(r"\d+", key[0]) else (clean(r.get("order_no", "")) or key[0]),
             "sku_display": (f"RKH-{key[1][3:]}" if key[1].startswith("RKH") and key[1][3:].isdigit() else (clean(r.get("sku", "")).upper() or key[1])),
-            "balance": 0.0, "recv": 0.0, "order_qty": 0.0,
+            "balance": 0.0, "recv": 0.0, "order_qty": 0.0, "max_order_qty": 0.0,
+            "has_positive_balance": False, "max_positive_balance": 0.0,
             "receiving_dates": set(), "receiving_pairs": set(),
             "delivery_dates": set(), "delivery_pairs": set(),
             "order_dates": set(), "order_types": set(), "channels": set(), "rows": 0,
         })
-        g["balance"] += float(r.get("bal_qty") or 0)
+        try:
+            _row_bal = float(r.get("bal_qty") or 0)
+        except (TypeError, ValueError):
+            _row_bal = 0.0
+        try:
+            _row_order_qty = max(0.0, float(r.get("order_qty") or 0))
+        except (TypeError, ValueError):
+            _row_order_qty = 0.0
+        g["balance"] += _row_bal
         g["recv"] += float(r.get("recv_qty") or 0)
-        g["order_qty"] += float(r.get("order_qty") or 0)
+        g["order_qty"] += _row_order_qty
+        g["max_order_qty"] = max(float(g.get("max_order_qty") or 0.0), _row_order_qty)
+        if _row_bal > 0:
+            g["has_positive_balance"] = True
+            g["max_positive_balance"] = max(float(g.get("max_positive_balance") or 0.0), _row_bal)
         g["rows"] += 1
         if r.get("date") or r.get("date_disp"):
             g["order_dates"].add((str(r.get("date") or ""), str(r.get("date_disp") or r.get("date") or "")))
@@ -20386,25 +20481,32 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
             "need_by_iso": need_iso, "source": "plan",
         })
 
-    # The uploaded Production Data plan is still kept exactly as supplied. Add
-    # newer RKH order/SKU rows from the LIVE PPC-WIP Production tab when they
-    # are not already in the plan. This automatically brings in 1422, 1423,
-    # 1427, 1428 and future RKH production orders without hard-coding them, while
-    # avoiding old pre-plan RKH history. Non-RKH rows remain plan-driven so the
-    # existing Other SKU view is unchanged.
+    # Keep every supplied Production Data plan row, then add every LIVE PPC-WIP
+    # order+SKU not already in that file when physical column K has a positive
+    # Balance Qty. This is intentionally not RKH-only: other running production
+    # orders are also visible. RKH rows are due 13-Aug; non-RKH rows through
+    # Order No. 1435 are due 31-Aug; later order numbers have blank Need By.
     live_rakhi_added = 0
+    live_other_added = 0
     for key, lv in live.items():
         order_key, sku_key = key
-        if key in groups or not sku_key.startswith("RKH"):
+        if key in groups or not order_key or not sku_key:
             continue
-        order_rank = _rakhi_prod_order_rank(order_key)
-        if rakhi_direct_baseline_rank is not None and order_rank is not None and order_rank <= rakhi_direct_baseline_rank:
+        if not bool(lv.get("has_positive_balance")):
             continue
         try:
-            live_order_qty = max(0.0, float(lv.get("order_qty") or 0.0))
+            live_order_qty = max(0.0, float(lv.get("max_order_qty") or 0.0))
         except (TypeError, ValueError):
             live_order_qty = 0.0
-        if live_order_qty <= 1e-9:
+        try:
+            live_positive_balance = max(0.0, float(lv.get("max_positive_balance") or 0.0))
+        except (TypeError, ValueError):
+            live_positive_balance = 0.0
+        # Order Qty remains the requested source for Qty Required. If a malformed
+        # live row has blank/zero Order Qty but a positive Balance Qty, keep the
+        # running order visible using its positive balance as a safe fallback.
+        live_required_qty = live_order_qty if live_order_qty > 1e-9 else live_positive_balance
+        if live_required_qty <= 1e-9:
             continue
 
         order_pairs = sorted(
@@ -20412,28 +20514,28 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
             key=lambda x: (x[0] or "9999-99-99", x[1]),
         )
         order_date_iso = order_pairs[0][0] if order_pairs else ""
-        delivery_pairs = sorted(
-            lv.get("delivery_pairs") or set(),
-            key=lambda x: (x[0] or "9999-99-99", x[1]),
-        )
-        delivery_iso = "2026-08-13"
-        delivery_text = "Need By 13th"
+        need_iso, need_text = _rakhi_prod_live_need_by(sku_key, order_key)
+        is_rakhi = sku_key.startswith("RKH")
+        seq_offset = live_rakhi_added + live_other_added
         groups[key] = {
             "order_no": clean(lv.get("order_no_display", "")) or order_key,
             "sku": clean(lv.get("sku_display", "")).upper() or sku_key,
             "baseline_balance": 0.0,
-            "plan_total": live_order_qty,
+            "plan_total": live_required_qty,
             "parts": [{
-                "seq": 1000000 + live_rakhi_added,
+                "seq": 1000000 + seq_offset,
                 "order_date": order_date_iso,
-                "qty_required": live_order_qty,
+                "qty_required": live_required_qty,
                 "priority": "Live Production",
-                "need_by_text": delivery_text,
-                "need_by_iso": delivery_iso,
+                "need_by_text": need_text,
+                "need_by_iso": need_iso,
                 "source": "live_production",
             }],
         }
-        live_rakhi_added += 1
+        if is_rakhi:
+            live_rakhi_added += 1
+        else:
+            live_other_added += 1
 
     out = []
     today_iso = now_ist().date().isoformat()
@@ -20591,6 +20693,8 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         "coming_qty": int(round(sum(r["coming_qty"] for r in out))),
         "missing_rows": sum(1 for r in out if not r["source_found"]),
         "live_rakhi_rows_added": int(live_rakhi_added),
+        "live_other_rows_added": int(live_other_added),
+        "live_pending_rows_added": int(live_rakhi_added + live_other_added),
         "production_by_sku": production_by_sku,
         "rakhi_receipts_by_sku": rakhi_receipts.get("by_sku") or {},
         "rakhi_receipts_by_order_sku": rakhi_receipts.get("by_order_sku") or {},
