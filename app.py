@@ -6893,7 +6893,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     overflow:auto!important;
   }
   #vRakhiProduction table.rp-main-table{
-    min-width:1540px!important;
+    min-width:1640px!important;
   }
   #vRakhiProduction table.rp-main-table th{
     position:sticky;
@@ -6919,7 +6919,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head">
     <div>
       <div class="insights-title">Rakhi Production Tracker</div>
-      <div class="small-note">Need By text from the supplied plan is treated as August 2026. Live quantities come from the Production (PPC-WIP) sheet.</div>
+      <div class="small-note">Supplied plan rows are kept, and every live RKH order/SKU from Production (PPC-WIP) is added automatically. Need By plan text is treated as August 2026.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadRakhiProduction(true)">Refresh</button>
@@ -6944,7 +6944,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
-  <div class="small-note" style="margin-top:10px">Received quantities in this first table come from the live Rakhi receiving sheet by exact Order No. + SKU. Only dates after 06-Aug-2026 are counted. Today, Yesterday and Day Before update automatically in IST; Production Delivery Date still comes from PPC-WIP column L.</div>
+  <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + live Production RKH orders (including new order numbers). Order Qty comes from PPC-WIP; received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU, for dates after 06-Aug-2026. Today, Yesterday and Day Before update automatically in IST.</div>
 
   <div class="insights-head" style="margin-top:28px;margin-bottom:10px">
     <div>
@@ -14475,7 +14475,7 @@ function renderRakhiProduction(){
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
   if(sum)sum.innerHTML=`
-    <div class="yoy-card"><div class="yc-label">Planned Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} need-by rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} plan + live Production rows</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
     <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
@@ -14496,6 +14496,7 @@ function renderRakhiProduction(){
     <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku||'').replace(/'/g,"\\'")}')">${escHtml(r.sku||'')}</button></td>
     <td>${escHtml(r.cn_name||'—')}</td>
     <td class="ops-num"><b>${Math.round(Number(r.qty_required)||0).toLocaleString('en-IN')}</b></td>
+    <td class="ops-num"><b>${Math.round(Number(r.production_order_qty)||0).toLocaleString('en-IN')}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_since_aug6??r.arrived_qty)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_today)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_yesterday)}</b></td>
@@ -14508,9 +14509,9 @@ function renderRakhiProduction(){
   </tr>`).join('');
   const sourceNote=meta.source_ok===false
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
-    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
+    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Order Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Live Balance Qty</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody></table>`;
 }
 function resetRakhiProduction(){
@@ -19282,8 +19283,8 @@ _PROD_CACHE = {"rows": None, "ts": 0}
 # Rakhi Production plan snapshot supplied by user (Production Data sheet).
 # Delivery text such as "Need By 12th" is interpreted as August 2026.
 _RAKHI_PRODUCTION_BASELINE_DATE = "2026-08-06"
-# Live Rakhi receiving sheet supplied by user.  This sheet is the source of
-# post-06-Aug SKU receipts shown in the two Rakhi stock-out tables.
+# Live Rakhi receiving sheet supplied by user.  This sheet is the authoritative
+# source of post-06-Aug receipts shown in the FIRST Rakhi Production tracker.
 _RAKHI_RECEIPTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1708754136&single=true&output=csv"
 _RAKHI_RECEIPTS_CACHE = {"payload": None, "ts": 0.0}
 _RAKHI_RECEIPTS_CACHE_TTL = 60
@@ -19648,10 +19649,31 @@ def _rakhi_prod_need_by_iso(value):
     return ""
 
 def _rakhi_prod_order_key(value):
-    s = clean(value).strip()
-    if re.fullmatch(r"\d+\.0+", s):
-        s = s.split(".", 1)[0]
-    return s.casefold()
+    """Stable Order No. key across int/float/text/case/spacing formats."""
+    if value is None:
+        return ""
+    try:
+        if isinstance(value, (int, np.integer)):
+            return str(int(value))
+        if isinstance(value, (float, np.floating)) and np.isfinite(value) and float(value).is_integer():
+            return str(int(value))
+    except Exception:
+        pass
+    s = str(value)
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s)
+    except Exception:
+        pass
+    s = s.replace("\u00a0", " ").strip().strip("'\"")
+    # Spreadsheet exports often turn integer order numbers into 1427.0 / 1427.000.
+    compact = re.sub(r"\s+", "", s)
+    if re.fullmatch(r"[+-]?\d+(?:\.0+)?", compact):
+        try:
+            return str(int(float(compact)))
+        except Exception:
+            pass
+    return re.sub(r"\s+", " ", s).strip().casefold()
 
 def _rakhi_prod_order_rank(value):
     """Numeric order sequence for comparing newer production orders."""
@@ -19660,7 +19682,17 @@ def _rakhi_prod_order_rank(value):
     return int(m.group(0)) if m else None
 
 def _rakhi_prod_sku_key(value):
-    return re.sub(r"[^A-Z0-9]", "", clean(value).upper())
+    """Case/punctuation/Unicode-insensitive SKU key for CSV + Production joins."""
+    if value is None:
+        return ""
+    s = str(value)
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s)
+    except Exception:
+        pass
+    s = s.replace("\u00a0", " ").strip().upper()
+    return re.sub(r"[^A-Z0-9]", "", s)
 
 def _build_rakhi_receipts_after_aug6(force=False):
     """Aggregate the user's published Rakhi receiving sheet after 06-Aug-2026.
@@ -19750,7 +19782,10 @@ def _build_rakhi_receipts_after_aug6(force=False):
 
     try:
         df = _fetch_csv_fresh(_RAKHI_RECEIPTS_CSV_URL)
-        cols = [str(c).strip() for c in df.columns]
+        # Keep the ORIGINAL dataframe column objects/names. find_col() already
+        # normalizes case/punctuation/spacing; stripping here would break r.get()
+        # when a published CSV header itself contains leading/trailing spaces.
+        cols = list(df.columns)
         date_col = find_col(cols, "Date")
         order_col = find_col(cols, "Order No.", "Order No", "Order")
         sku_col = find_col(cols, "SKU No.", "SKU No", "SKU")
@@ -20187,20 +20222,27 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         if not key[0] or not key[1]:
             continue
         g = live.setdefault(key, {
+            "order_no_display": key[0] if re.fullmatch(r"\d+", key[0]) else (clean(r.get("order_no", "")) or key[0]),
+            "sku_display": (f"RKH-{key[1][3:]}" if key[1].startswith("RKH") and key[1][3:].isdigit() else (clean(r.get("sku", "")).upper() or key[1])),
             "balance": 0.0, "recv": 0.0, "order_qty": 0.0,
             "receiving_dates": set(), "receiving_pairs": set(),
-            "delivery_dates": set(), "order_types": set(), "channels": set(), "rows": 0,
+            "delivery_dates": set(), "delivery_pairs": set(),
+            "order_dates": set(), "order_types": set(), "channels": set(), "rows": 0,
         })
         g["balance"] += float(r.get("bal_qty") or 0)
         g["recv"] += float(r.get("recv_qty") or 0)
         g["order_qty"] += float(r.get("order_qty") or 0)
         g["rows"] += 1
+        if r.get("date") or r.get("date_disp"):
+            g["order_dates"].add((str(r.get("date") or ""), str(r.get("date_disp") or r.get("date") or "")))
         if r.get("receiving_date"):
             g["receiving_dates"].add(str(r.get("receiving_date")))
         if r.get("receiving_iso") or r.get("receiving_date"):
             g["receiving_pairs"].add((str(r.get("receiving_iso") or ""), str(r.get("receiving_date") or r.get("receiving_iso") or "")))
         if r.get("delivery_date"):
             g["delivery_dates"].add(str(r.get("delivery_date")))
+        if r.get("delivery_iso") or r.get("delivery_date"):
+            g["delivery_pairs"].add((str(r.get("delivery_iso") or ""), str(r.get("delivery_date") or r.get("delivery_iso") or "")))
         if r.get("order_type"):
             g["order_types"].add(str(r.get("order_type")))
         if r.get("channel"):
@@ -20296,8 +20338,57 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
             "seq": seq, "order_date": str(order_date or ""),
             "qty_required": max(0.0, float(qty_required or 0)),
             "priority": str(priority or ""), "need_by_text": str(need_by_text or ""),
-            "need_by_iso": need_iso,
+            "need_by_iso": need_iso, "source": "plan",
         })
+
+    # The uploaded Production Data plan is still kept exactly as supplied. Add
+    # newer RKH order/SKU rows from the LIVE PPC-WIP Production tab when they
+    # are not already in the plan. This automatically brings in 1422, 1423,
+    # 1427, 1428 and future RKH production orders without hard-coding them, while
+    # avoiding old pre-plan RKH history. Non-RKH rows remain plan-driven so the
+    # existing Other SKU view is unchanged.
+    live_rakhi_added = 0
+    for key, lv in live.items():
+        order_key, sku_key = key
+        if key in groups or not sku_key.startswith("RKH"):
+            continue
+        order_rank = _rakhi_prod_order_rank(order_key)
+        if rakhi_direct_baseline_rank is not None and order_rank is not None and order_rank <= rakhi_direct_baseline_rank:
+            continue
+        try:
+            live_order_qty = max(0.0, float(lv.get("order_qty") or 0.0))
+        except (TypeError, ValueError):
+            live_order_qty = 0.0
+        if live_order_qty <= 1e-9:
+            continue
+
+        order_pairs = sorted(
+            lv.get("order_dates") or set(),
+            key=lambda x: (x[0] or "9999-99-99", x[1]),
+        )
+        order_date_iso = order_pairs[0][0] if order_pairs else ""
+        delivery_pairs = sorted(
+            lv.get("delivery_pairs") or set(),
+            key=lambda x: (x[0] or "9999-99-99", x[1]),
+        )
+        delivery_iso = delivery_pairs[0][0] if delivery_pairs else ""
+        delivery_text = delivery_pairs[0][1] if delivery_pairs else ""
+        groups[key] = {
+            "order_no": clean(lv.get("order_no_display", "")) or order_key,
+            "sku": clean(lv.get("sku_display", "")).upper() or sku_key,
+            "baseline_balance": 0.0,
+            "plan_total": live_order_qty,
+            "parts": [{
+                "seq": 1000000 + live_rakhi_added,
+                "order_date": order_date_iso,
+                "qty_required": live_order_qty,
+                "priority": "Live Production",
+                "need_by_text": delivery_text,
+                "need_by_iso": delivery_iso,
+                "source": "live_production",
+            }],
+        }
+        live_rakhi_added += 1
 
     out = []
     today_iso = now_ist().date().isoformat()
@@ -20312,7 +20403,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         lv = live.get(key)
         source_found = lv is not None
         live_balance = float(lv.get("balance") or 0) if lv else 0.0
-        parts = sorted(g["parts"], key=lambda p: (p["need_by_iso"], p["seq"]))
+        parts = sorted(g["parts"], key=lambda p: (p.get("need_by_iso") or "9999-12-31", p["seq"]))
 
         # The live Rakhi receiving sheet is authoritative for arrivals in this
         # first table. Match by exact normalized Order No. + SKU, then allocate
@@ -20373,7 +20464,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 status_key, status = "missing", "Not found in Production"
             elif coming <= 1e-9:
                 status_key, status = "arrived", "Arrived"
-            elif p["need_by_iso"] < today_iso:
+            elif p.get("need_by_iso") and p["need_by_iso"] < today_iso:
                 status_key, status = "overdue", "Overdue / Coming"
             elif arrived > 1e-9:
                 status_key, status = "partial", "Partly Arrived"
@@ -20399,8 +20490,11 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 "need_by_iso": p["need_by_iso"], "need_by_display": need_disp, "need_by_text": p["need_by_text"],
                 "order_date": p["order_date"], "order_date_display": order_disp,
                 "order_no": g["order_no"], "sku": g["sku"], "cn_name": cn_name, "priority": p["priority"],
+                "row_source": p.get("source", "plan"),
                 "image_url": _RAKHI_PRODUCTION_IMAGE_BY_KEY.get(key, "") or master_image_map.get(key[1], ""),
-                "qty_required": int(round(qty)), "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
+                "qty_required": int(round(qty)),
+                "production_order_qty": int(round(float(lv.get("order_qty") or 0))) if lv else 0,
+                "arrived_qty": int(round(arrived)), "coming_qty": int(round(coming)),
                 "received_since_aug6": int(round(arrived)),
                 "received_today": int(round(ps["today"])),
                 "received_yesterday": int(round(ps["yesterday"])),
@@ -20415,7 +20509,16 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
                 "source_found": source_found, "status_key": status_key, "status": status,
             })
 
-    out.sort(key=lambda r: (r.get("need_by_iso", "9999-99-99"), r.get("sku", ""), r.get("order_no", "")))
+    # Newly discovered live RKH orders are placed first so fresh order numbers
+    # (1422/1423/1427/1428/future) are visible immediately; plan rows retain
+    # their existing need-by ordering after that.
+    out.sort(key=lambda r: (
+        0 if r.get("row_source") == "live_production" else 1,
+        -(_rakhi_prod_order_rank(r.get("order_no")) or -1) if r.get("row_source") == "live_production" else 0,
+        r.get("need_by_iso") or "9999-12-31",
+        r.get("sku", ""),
+        r.get("order_no", ""),
+    ))
     return {
         "rows": out, "baseline_date": _RAKHI_PRODUCTION_BASELINE_DATE,
         "count": len(out), "unique_skus": len({r["sku"] for r in out}),
@@ -20423,6 +20526,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
         "arrived_qty": int(round(sum(r["arrived_qty"] for r in out))),
         "coming_qty": int(round(sum(r["coming_qty"] for r in out))),
         "missing_rows": sum(1 for r in out if not r["source_found"]),
+        "live_rakhi_rows_added": int(live_rakhi_added),
         "production_by_sku": production_by_sku,
         "rakhi_receipts_by_sku": rakhi_receipts.get("by_sku") or {},
         "rakhi_receipts_by_order_sku": rakhi_receipts.get("by_order_sku") or {},
