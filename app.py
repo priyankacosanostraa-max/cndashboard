@@ -638,6 +638,44 @@ def cn_sku_label(sku):
     name = cn_display_name(sku)
     return name if name else (str(sku) if sku is not None else "")
 
+
+def _patch_cn_catalog_into_cached_data():
+    """Apply refreshed website catalogue fields without re-downloading sales.
+
+    Previously every catalogue refresh triggered a second full dashboard data
+    rebuild. On startup that could make users wait through two expensive syncs.
+    The catalogue only affects display name + storefront price, so patch those
+    fields in the current compiled snapshot and invalidate role response gzip.
+    The normal background sheet refresh still runs on its own schedule.
+    """
+    if not CACHE.get("data"):
+        return False
+    changed = False
+    try:
+        with _DATA_LOCK:
+            data = CACHE.get("data")
+            if not data or not data[0]:
+                return False
+            for item in data[0]:
+                sku = item.get("sku", "")
+                if not sku:
+                    continue
+                new_name = cn_sku_label(sku)
+                new_price = cn_website_selling_price(sku)
+                if item.get("sku_name") != new_name:
+                    item["sku_name"] = new_name
+                    changed = True
+                if float(to_num(item.get("website_selling_price", 0))) != float(new_price):
+                    item["website_selling_price"] = new_price
+                    changed = True
+            if changed:
+                with _RESP_LOCK:
+                    _RESP_CACHE.clear()
+    except Exception as e:
+        print("CN catalog cache patch failed:", str(e)[:120])
+        return False
+    return changed
+
 # ════════════════════════════════════════════════════════════════
 #  🕉️ RELIGIOUS / SEASONAL SKU CLASSIFICATION
 #  Product naam (cosanostraa.com se mila hua, ya SKU khud) me keywords
@@ -979,29 +1017,40 @@ def simple_forecast(entries, days_ahead=30):
 
 # ── Data Engine ──────────────────────────────────────────────
 def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
-    """Google published-CSV ko Google ~5 min CDN-cache karta hai — cache-buster
-    param + no-cache headers se hamesha LATEST data milta hai.
+    """Fetch one published Google CSV without CDN-stale data.
 
-    `select_groups`/`select_positions` optional hain. Large marketplace sheets
-    ke case me pandas sirf required columns materialize karta hai, isliye three-
-    year history refresh ka peak RAM aur processing time controlled rehta hai.
+    PERFORMANCE: parse directly from response bytes instead of decoding the
+    entire CSV to a second giant Python string first. On the large sales sheets
+    this removes one full-size copy and makes pandas parsing noticeably faster.
+    `select_groups`/`select_positions` still keep marketplace sheets compact.
     """
-    bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
     headers = {"Cache-Control": "no-cache, no-store, max-age=0",
                "Pragma": "no-cache",
                "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard)"}
     last_err = None
+
+    def _read_bytes(content, **kwargs):
+        # Modern pandas can replace bad UTF-8 directly from BytesIO. Keep a
+        # compatibility fallback for older pandas builds used by some hosts.
+        try:
+            return pd.read_csv(io.BytesIO(content), encoding="utf-8",
+                               encoding_errors="replace", **kwargs)
+        except TypeError:
+            txt = content.decode("utf-8", errors="replace")
+            return pd.read_csv(io.StringIO(txt), **kwargs)
+
     for attempt in range(3):
         try:
-            r = requests.get(url + bust, headers=headers, timeout=45, allow_redirects=True)
+            bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
+            r = requests.get(url + bust, headers=headers, timeout=(8, 45), allow_redirects=True)
             r.raise_for_status()
-            txt = r.content.decode("utf-8", errors="replace")
-            if "<html" in txt[:200].lower():
+            content = r.content
+            if "<html" in content[:512].decode("utf-8", errors="replace").lower():
                 raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
             read_kwargs = {"dtype": str, "on_bad_lines": "skip"}
             raw_cols = []
             if select_groups or select_positions:
-                header = pd.read_csv(io.StringIO(txt), dtype=str, nrows=0, on_bad_lines="skip")
+                header = _read_bytes(content, dtype=str, nrows=0, on_bad_lines="skip")
                 raw_cols = list(header.columns)
                 clean_cols = [str(c).strip() for c in raw_cols]
                 selected_indexes = set()
@@ -1019,7 +1068,7 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
                         selected_indexes.add(idx)
                 if selected_indexes:
                     read_kwargs["usecols"] = sorted(selected_indexes)
-            frame = pd.read_csv(io.StringIO(txt), **read_kwargs)
+            frame = _read_bytes(content, **read_kwargs)
             if raw_cols:
                 # Preserve original sheet positions even after usecols compacts
                 # the DataFrame. H/D/J positional fallbacks must refer to the
@@ -1033,9 +1082,35 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
             return frame
         except Exception as e:
             last_err = e
-            time.sleep(2)
+            if attempt < 2:
+                time.sleep(1)
     raise last_err
 
+
+_DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "flipkart", "ajio", "tata", "tata cliq"}
+
+def _daily_reporting_group(channel, sub_channel, typ, customer=""):
+    """Return the Daily Reporting revenue bucket without changing any other tab.
+
+    DTC = Website; Marketplace = Amazon/Myntra/Nykaa/Ajio/Tata/Flipkart;
+    Q-Commerce = Blinkit + Instamart. Matching is deliberately tolerant of
+    case, punctuation and mixed text because the published source can change
+    formatting without changing meaning.
+    """
+    ch = str(channel or "").strip().casefold()
+    sub = str(sub_channel or "").strip().casefold()
+    tp = str(typ or "").strip().casefold()
+    cu = str(customer or "").strip().casefold()
+    hay = " ".join((ch, sub, tp, cu))
+    if ch == "d2c" or tp in ("website", "online") or "website" in hay:
+        return "dtc"
+    if sub in _DAILY_REPORT_MARKETPLACES:
+        return "marketplace"
+    if any(name in hay for name in ("amazon", "flipkart", "myntra", "nykaa", "ajio", "tata cliq")):
+        return "marketplace"
+    if tp in ("blinkit", "instamart", "swiggy instamart") or any(name in hay for name in ("blinkit", "instamart", "swiggy instamart")):
+        return "qcommerce"
+    return ""
 
 def _load_channel_order_events(inv_skus_map, dbg):
     """Build a compact SKU/date/channel -> exact-order identity feed.
@@ -1112,6 +1187,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
     ]
 
     event_sets = {}
+    reporting_order_sets = {}
     source_debug = {}
 
     def _platform_label(value):
@@ -1122,30 +1198,46 @@ def _load_channel_order_events(inv_skus_map, dbg):
             return "Flipkart"
         return ""
 
+    # These marketplace CSVs are independent and already use usecols, so a
+    # small fetch pool cuts network wait substantially without loading their
+    # full wide sheets into memory. Processing is still one source at a time.
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _fetch_order_source(spec):
+        select_groups = [spec["order_names"], spec["sku_names"], spec["date_names"]]
+        if spec["status_names"]:
+            select_groups.append(spec["status_names"])
+        if spec.get("platform_names"):
+            select_groups.append(spec["platform_names"])
+        if spec.get("customer_names"):
+            select_groups.append(spec["customer_names"])
+        for quantity_group in (
+            spec.get("net_qty_names"), spec.get("gross_qty_names"),
+            spec.get("return_qty_names"),
+        ):
+            if quantity_group:
+                select_groups.append(quantity_group)
+        select_positions = [spec["order_index"]]
+        if spec.get("platform_index") is not None:
+            select_positions.append(spec["platform_index"])
+        return _fetch_csv_fresh(
+            spec["url"], select_groups=select_groups,
+            select_positions=select_positions,
+        )
+
+    try:
+        _channel_workers = int(os.environ.get("CHANNEL_FETCH_WORKERS", "3"))
+    except Exception:
+        _channel_workers = 3
+    worker_count = max(1, min(len(sources), _channel_workers))
+    _wstage("fetching", f"Downloading {len(sources)} marketplace order feeds in parallel…")
+    fetch_pool = ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="cn-channel-fetch")
+    source_futures = {spec["key"]: fetch_pool.submit(_fetch_order_source, spec) for spec in sources}
+
     for spec in sources:
         frame = None
         try:
-            _wstage("fetching", f"Downloading {spec['key']} order IDs for AOV…")
-            select_groups = [spec["order_names"], spec["sku_names"], spec["date_names"]]
-            if spec["status_names"]:
-                select_groups.append(spec["status_names"])
-            if spec.get("platform_names"):
-                select_groups.append(spec["platform_names"])
-            if spec.get("customer_names"):
-                select_groups.append(spec["customer_names"])
-            for quantity_group in (
-                spec.get("net_qty_names"), spec.get("gross_qty_names"),
-                spec.get("return_qty_names"),
-            ):
-                if quantity_group:
-                    select_groups.append(quantity_group)
-            select_positions = [spec["order_index"]]
-            if spec.get("platform_index") is not None:
-                select_positions.append(spec["platform_index"])
-            frame = _fetch_csv_fresh(
-                spec["url"], select_groups=select_groups,
-                select_positions=select_positions,
-            )
+            frame = source_futures[spec["key"]].result()
             frame.columns = [str(c).strip() for c in frame.columns]
             src_cols = list(frame.columns)
             source_positions = frame.attrs.get("source_position_columns", {})
@@ -1188,24 +1280,10 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 if status and any(flag in status for flag in ("cancel", "void", "failed")):
                     continue
 
-                # AOV/repeat/order-count analytics must represent sold orders,
-                # not fully returned marketplace orders. Prefer the source's
-                # Net Qty; otherwise derive it from gross minus Return Qty.
-                sold_qty = None
-                if net_qty_col:
-                    sold_qty = to_num(row.get(net_qty_col, 0))
-                elif gross_qty_col:
-                    sold_qty = to_num(row.get(gross_qty_col, 0))
-                    if return_qty_col:
-                        sold_qty -= to_num(row.get(return_qty_col, 0))
-                if sold_qty is not None and sold_qty <= 0:
-                    resolved["returned_rows_skipped"] += 1
-                    continue
-
                 raw_order = clean(row.get(order_col, ""))
                 raw_sku = clean(row.get(sku_col, ""))
                 dt = parse_date_any(row.get(date_col, ""))
-                if not raw_order or raw_order.casefold() in ("0", "unknown") or not raw_sku or dt is None:
+                if not raw_order or raw_order.casefold() in ("0", "unknown", "nan", "none") or not raw_sku or dt is None:
                     continue
 
                 platform = spec["fixed_platform"] or _platform_label(row.get(platform_col, ""))
@@ -1218,6 +1296,26 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 order_token = hashlib.sha1(
                     (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
                 ).hexdigest()[:20]
+
+                # Daily Reporting counts genuine placed orders by exact source
+                # Order ID. A fully returned order is still an order, therefore
+                # this identity is captured before the sold-qty filter below.
+                reporting_order_sets.setdefault(date_iso, set()).add(
+                    f"{platform}|{order_token}"
+                )
+
+                # Existing AOV/repeat analytics keep their original rule: only
+                # sold orders survive here; fully returned rows are excluded.
+                sold_qty = None
+                if net_qty_col:
+                    sold_qty = to_num(row.get(net_qty_col, 0))
+                elif gross_qty_col:
+                    sold_qty = to_num(row.get(gross_qty_col, 0))
+                    if return_qty_col:
+                        sold_qty -= to_num(row.get(return_qty_col, 0))
+                if sold_qty is not None and sold_qty <= 0:
+                    resolved["returned_rows_skipped"] += 1
+                    continue
                 raw_customer = clean(row.get(customer_col, "")) if customer_col else ""
                 customer_token = ""
                 if raw_customer and raw_customer.casefold() not in ("0", "unknown", "na", "n/a"):
@@ -1250,6 +1348,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 del frame
             _gc.collect()
 
+    fetch_pool.shutdown(wait=True)
+
     compact = {
         sku: sorted(events.values(), key=lambda event: (event["d"], event["p"], event["o"]))
         for sku, events in event_sets.items()
@@ -1257,7 +1357,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
     dbg["channel_order_sources"] = source_debug
     dbg["channel_order_skus"] = len(compact)
     dbg["channel_order_events"] = sum(len(events) for events in compact.values())
-    return compact
+    return compact, reporting_order_sets
 
 _DATA_LOCK = threading.Lock()
 _DF_REFS = {}
@@ -1326,10 +1426,16 @@ def _refresh_data():
     global CACHE
     dbg = {"errors": []}
     try:
-        _wstage("fetching", "Downloading inventory sheet…")
-        inv   = _fetch_csv_fresh(INV_URL)
-        _wstage("fetching", "Downloading sales sheet (54k rows)…")
-        cosa = _fetch_csv_fresh(COSA_URL)
+        # Inventory and the main sales sheet are independent. Downloading them
+        # in parallel removes one full network wait from every cold/manual sync
+        # while keeping the exact same downstream calculations.
+        from concurrent.futures import ThreadPoolExecutor
+        _wstage("fetching", "Downloading inventory + sales sheets in parallel…")
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="cn-core-fetch") as ex:
+            f_inv = ex.submit(_fetch_csv_fresh, INV_URL)
+            f_cosa = ex.submit(_fetch_csv_fresh, COSA_URL)
+            inv = f_inv.result()
+            cosa = f_cosa.result()
         _DF_REFS["inv"] = inv; _DF_REFS["cosa"] = cosa
         inv.columns   = [str(c).strip() for c in inv.columns]
         cosa.columns = [str(c).strip() for c in cosa.columns]
@@ -1468,6 +1574,7 @@ def _refresh_data():
     website_city_events = {}
     website_payment_events = {}
     website_payment_summary = {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
+    daily_reporting_website_orders = {}
     try:
         _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
         web_orders = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
@@ -1516,6 +1623,12 @@ def _refresh_data():
             "Shipping Package Code", "Invoice Code", "Order ID", "Order Code",
             "Order Number", "Sale Order Code"
         ) or _wat(8)
+        # Daily Reporting explicitly needs Order No. basis. Prefer a true order
+        # number/id header before the package/invoice fallbacks used elsewhere.
+        W_REPORT_ORDER = (find_col(
+            web_orders.columns, "Order No", "Order No.", "Order Number",
+            "Order ID", "OrderId", "Sale Order Code", "Order Code"
+        ) or W_ORDER)
 
         dbg["website_repeat_cols"] = wcols
         dbg["website_repeat_resolved"] = {
@@ -1523,6 +1636,7 @@ def _refresh_data():
             "sku": W_SKU, "qty": W_QTY, "revenue": W_REV,
             "selling_price": W_SP, "status": W_STATUS,
             "return_qty": W_RTO, "cod": W_COD, "order": W_ORDER,
+            "daily_reporting_order": W_REPORT_ORDER,
         }
 
         # Repeat-rate sessions and Website/D2C city sales are built from the
@@ -1547,6 +1661,18 @@ def _refresh_data():
                     continue
                 n_web = re.sub(r"[^A-Z0-9]", "", raw_web_sku.upper())
                 mapped_web_sku = inv_skus_map.get(n_web, raw_web_sku.upper())
+
+                # Daily Reporting: one Website order is one exact Order No.,
+                # regardless of how many SKU lines it contains. Cancelled rows
+                # were already removed above. No customer/date approximation.
+                raw_report_order = clean(r.get(W_REPORT_ORDER, "")) if W_REPORT_ORDER else ""
+                if raw_report_order and raw_report_order.casefold() not in ("0", "unknown", "nan", "none"):
+                    report_token = hashlib.sha1(
+                        ("website|" + raw_report_order.casefold()).encode("utf-8", errors="ignore")
+                    ).hexdigest()[:20]
+                    daily_reporting_website_orders.setdefault(date_iso, set()).add(
+                        f"Website|{report_token}"
+                    )
 
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
@@ -1688,7 +1814,7 @@ def _refresh_data():
     # Marketplace AOV must use the actual source Order ID, not a customer-name
     # approximation.  Sources are read sequentially and released immediately
     # so a three-year refresh does not keep five large DataFrames in memory.
-    channel_order_events = _load_channel_order_events(inv_skus_map, dbg)
+    channel_order_events, daily_reporting_marketplace_orders = _load_channel_order_events(inv_skus_map, dbg)
 
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
@@ -1850,6 +1976,8 @@ def _refresh_data():
     orderdate_sales_exact = {}
     rakhi_sales_exact = {}
     orderdate_customer_activity = {}
+    daily_reporting_daily = {}
+    daily_reporting_qcommerce_orders = {}
     orderdate_customer_activity_ts = 0.0
     try:
         _wstage("fetching", "Downloading order-date sales sheet for Rakhi…")
@@ -1873,12 +2001,21 @@ def _refresh_data():
         OD_REV  = _od_at(8) or find_col(cosa_od.columns, "Net Revenue", "net rev", "revenue")
         OD_CUST = _od_at(9) or find_col(cosa_od.columns, "Customer Name", "customer", "client", "party")
         OD_TYPE = _od_at(10) or find_col(cosa_od.columns, "Type", "channel", "mode")
+        OD_ORDER = find_col(
+            cosa_od.columns, "Order No", "Order No.", "Order Number", "Order ID",
+            "OrderId", "Order Code", "order_no", "orderno"
+        )
+        OD_RET_AMT = find_col(
+            cosa_od.columns, "Return Amount", "Return Amt", "Return Value",
+            "Returned Amount", "return amount", "return amt"
+        )
 
         dbg["cossa_orderdate_cols"] = od_cols
         dbg["cossa_orderdate_resolved"] = {
             "date": OD_DATE, "fy": OD_FY, "sku": OD_SKU, "qty": OD_QTY,
             "return": OD_RET, "sp": OD_SP, "revenue": OD_REV,
-            "customer": OD_CUST, "type": OD_TYPE,
+            "customer": OD_CUST, "type": OD_TYPE, "order": OD_ORDER,
+            "return_amount": OD_RET_AMT,
         }
 
         od_total = len(cosa_od)
@@ -1942,6 +2079,40 @@ def _refresh_data():
                 fy = fy_bounds(dt_od)[0]
             channel = calc_channel(cust, typ)
             sub_channel = calc_sub_channel(cust, channel, typ)
+
+            # Daily Reporting is isolated from every existing revenue view.
+            # Source is COSA Order Date only. Return Amount is ADDED back to
+            # Net Revenue for all report channels; Website additionally gets
+            # +6% on Net Revenue itself (100 -> 106), exactly as requested.
+            dr_group = _daily_reporting_group(channel, sub_channel, typ, cust)
+            if dr_group:
+                if OD_RET_AMT:
+                    ret_amt_dr = abs(float(to_num(r.get(OD_RET_AMT, 0))))
+                else:
+                    ret_amt_dr = abs(float(ret * sp))
+                adjusted_rev = float(rev) + ret_amt_dr
+                if dr_group == "dtc":
+                    adjusted_rev = float(rev) * 1.06 + ret_amt_dr
+                day_slot = daily_reporting_daily.setdefault(order_date_iso, {
+                    "dtc": 0.0, "marketplace": 0.0, "qcommerce": 0.0, "total": 0.0
+                })
+                day_slot[dr_group] += adjusted_rev
+                day_slot["total"] += adjusted_rev
+
+                # Q-Commerce has no dedicated published order sheet in the
+                # current app. If COSA Order Date exposes an exact Order No.,
+                # use it; otherwise revenue still reports correctly and Orders
+                # remain strictly exact-ID based (no fake row/customer count).
+                if dr_group == "qcommerce" and OD_ORDER:
+                    raw_dr_order = clean(r.get(OD_ORDER, ""))
+                    if raw_dr_order and raw_dr_order.casefold() not in ("0", "unknown", "nan", "none"):
+                        q_token = hashlib.sha1(
+                            ("qcommerce|" + raw_dr_order.casefold()).encode("utf-8", errors="ignore")
+                        ).hexdigest()[:20]
+                        daily_reporting_qcommerce_orders.setdefault(order_date_iso, set()).add(
+                            f"QCommerce|{q_token}"
+                        )
+
             if str(typ).strip().lower() == "website":
                 cust = "Website"
 
@@ -1978,6 +2149,8 @@ def _refresh_data():
         orderdate_customer_activity_ts = time.time()
     except Exception as e:
         dbg["errors"].append(f"cossa_orderdate: {e}")
+        daily_reporting_daily = CACHE.get("daily_reporting_daily", {}) or {}
+        daily_reporting_qcommerce_orders = {}
         # A temporary sheet/network failure must not replace the last known
         # Order-Date customer activity with Dispatch-Date-only results.
         orderdate_customer_activity = CACHE.get("orderdate_customer_activity", {}) or {}
@@ -1989,6 +2162,17 @@ def _refresh_data():
             pass
         _DF_REFS.pop("cosa_orderdate", None)
         _gc.collect()
+
+    daily_reporting_orders = {}
+    for _source_order_map in (
+        daily_reporting_website_orders,
+        daily_reporting_marketplace_orders,
+        daily_reporting_qcommerce_orders,
+    ):
+        for _day, _keys in (_source_order_map or {}).items():
+            if not _day or not _keys:
+                continue
+            daily_reporting_orders.setdefault(str(_day), set()).update(_keys)
 
     # Safe fallback only when the main source genuinely contains an Order Date
     # column. We never substitute Dispatch Date for order-level AOV or Rakhi.
@@ -2458,6 +2642,8 @@ def _refresh_data():
     CACHE["channels"] = sorted([c for c in channels_ if c])
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
     CACHE["website_payment_summary"] = website_payment_summary
+    CACHE["daily_reporting_daily"] = daily_reporting_daily
+    CACHE["daily_reporting_orders"] = daily_reporting_orders
     CACHE["orderdate_customer_activity"] = orderdate_customer_activity
     CACHE["orderdate_customer_activity_ts"] = orderdate_customer_activity_ts
     CACHE["ts"]    = time.time()
@@ -5968,6 +6154,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
+  <button class="menu-item" id="m34" onclick="showTab('dailyreporting')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5h16v14H4Z"/><path d="M8 15v-4M12 15V8M16 15v-6M7 19h10"/></svg></span><span>Daily Reporting</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
   <button class="menu-item" id="m33" onclick="showTab('rakhiproduction')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9h10M7 13h6M7 17h4"/><path d="M16 14l2 2 3-4"/></svg></span><span>Rakhi Production</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
@@ -6908,20 +7095,25 @@ select.lg-in option{background:#fff;color:#1a1610}
     overflow:auto!important;
   }
   #vRakhiProduction table.rp-main-table{
-    min-width:1640px!important;
+    min-width:1510px!important;
   }
   #vRakhiProduction table.rp-main-table th{
     position:sticky;
     top:0;
     z-index:4;
     padding:7px 7px!important;
-    font-size:8px!important;
-    line-height:1.1!important;
-    letter-spacing:.55px!important;
+    font-size:9px!important;
+    line-height:1.2!important;
+    letter-spacing:.4px!important;
+    font-weight:800!important;
     white-space:nowrap!important;
   }
   #vRakhiProduction table.rp-main-table td{
     padding:6px 7px!important;
+    font-size:9px!important;
+    line-height:1.2!important;
+  }
+  #vRakhiProduction table.rp-main-table .sku-link{
     font-size:9px!important;
     line-height:1.2!important;
   }
@@ -6971,7 +7163,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <input class="fi" id="rpD2" type="date" onchange="renderRakhiProduction()"></div>
     <button class="go-btn" style="width:auto;padding:10px 18px;background:#f3f6fb;color:#111" onclick="resetRakhiProduction()">Reset</button>
   </div>
-  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(4,1fr)"></div>
+  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0 + completed receipt-only Order No./SKU rows needed to reconcile the Rakhi receiving sheet. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
@@ -7586,6 +7778,26 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-note">Every SKU with current Inv Stock at 0 is listed, even when detailed dated sales are unavailable. Average Daily Sale first uses filtered dated transactions; when Type and Channel are both All, it automatically falls back to the SKU’s 30/90/180/365-day sales summaries. Rows without usable history remain visible with zero estimated loss and a clear Demand Basis. Estimated OOS Days is capped by the selected limit. Potential Target Support equals estimated lost revenue; its target percentage uses the current total monthly target when available.</div>
   </div>
 
+
+  <div id="vDailyReporting" style="display:none">
+    <style>
+      .drp-shell{padding:16px 14px 28px}.drp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;padding:18px 20px;border:1px solid rgba(167,126,45,.18);border-radius:18px;background:linear-gradient(135deg,#fffdf8,#f8edcf)}
+      .drp-title{font-family:Georgia,serif;font-size:30px;color:#29231a}.drp-sub{font-size:10px;color:#695d4e;margin-top:5px;line-height:1.55}.drp-actions{display:flex;gap:8px;flex-wrap:wrap}.drp-btn{border:0;border-radius:10px;background:#c89a32;color:#1f180b;padding:10px 15px;font-size:9px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase;cursor:pointer}.drp-btn.alt{background:#fff;border:1px solid rgba(154,113,30,.28)}
+      .drp-card{border:1px solid rgba(148,111,37,.18);border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 10px 28px rgba(71,52,17,.05)}.drp-note{padding:9px 12px;font-size:9px;font-weight:700;color:#6a5b43;background:#f9f3e5;border-bottom:1px solid rgba(148,111,37,.14)}.drp-wrap{overflow:auto}.drp-table{width:100%;min-width:850px;border-collapse:collapse;font-size:12px}.drp-table th,.drp-table td{border:1px solid #ded8cc;padding:11px 12px;text-align:center}.drp-table th{background:#fff;font-size:11px;font-weight:900;color:#1e1a13}.drp-table th:first-child,.drp-table td:first-child{text-align:left;min-width:245px}.drp-table td:first-child{font-weight:800}.drp-table tr.drp-gap td{height:15px;padding:0;background:#fff}.drp-money{font-variant-numeric:tabular-nums}.drp-loading{padding:38px;text-align:center;color:#806c49;font-weight:800}.drp-foot{padding:10px 12px;font-size:9px;color:#7b6b54;line-height:1.5;border-top:1px solid rgba(148,111,37,.14);background:#fffdf8}
+      @media(max-width:760px){.drp-head{flex-direction:column}.drp-title{font-size:25px}.drp-shell{padding:10px 8px 22px}}
+    </style>
+    <div class="drp-shell">
+      <div class="drp-head">
+        <div><div class="drp-title">Daily Reporting</div><div class="drp-sub">Management view based on <b>Order Date / Order No.</b>, not Dispatch Date. The current-month column automatically extends every day.</div></div>
+        <div class="drp-actions"><button class="drp-btn alt" type="button" onclick="loadDailyReporting(true)">Refresh</button><button class="drp-btn" type="button" onclick="exportDailyReportingExcel()">Export Excel</button></div>
+      </div>
+      <div class="drp-card">
+        <div class="drp-note" id="drpSourceNote">Loading Order-Date report…</div>
+        <div class="drp-wrap" id="drpTableHost"><div class="drp-loading">Loading Daily Reporting…</div></div>
+        <div class="drp-foot" id="drpFoot"></div>
+      </div>
+    </div>
+  </div>
 
   <div id="vTarget" style="display:none">
   <div class="insights-head">
@@ -8529,6 +8741,7 @@ const MENU_TAB_META = {
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
+  m34: {name:"Daily Reporting",  desc:"Order-date revenue, exact orders, AOV and peak revenue with Excel export."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
   m33: {name:"Rakhi Production", desc:"August need-by production tracker for the supplied Rakhi plan."},
@@ -8555,7 +8768,7 @@ const MENU_TAB_META = {
 function _menuTabAllowedForRole(item){
   const id = String(item?.id || '');
   const employee = LOGIN_ROLE === 'employee';
-  if (employee) return !['m2','m7','m12','m14','m21'].includes(id);
+  if (employee) return !['m2','m7','m12','m14','m21','m34'].includes(id);
   return id !== 'm11';
 }
 
@@ -9875,6 +10088,7 @@ function loadData(force){
       _scOrderEventCache = null;
       _scWebsiteSessionIndex = null;
       _scChannelOrderIndex = null;
+      _dailyReportingData = null;
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
@@ -11311,6 +11525,8 @@ function applyRoleUI(){
   // Target (m10) and Insights (m6) dono role ko dikhne chahiye
   const tgtBtn = document.getElementById('m10');
   const insBtn = document.getElementById('m6');
+  const dailyReportingBtn = document.getElementById('m34');
+  if (dailyReportingBtn) dailyReportingBtn.style.display = isEmployee ? 'none' : '';
   if (tgtBtn) tgtBtn.style.display = '';
   if (insBtn) insBtn.style.display = '';
 
@@ -14721,7 +14937,6 @@ function renderRakhiProduction(){
   const rows=_rakhiProdRows(true);
   const planned=rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0);
   const arrived=rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0);
-  const coming=rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0);
   const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
   const meta=(_rakhiProdData&&_rakhiProdData.rakhi_receipts_meta)||{};
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
@@ -14729,7 +14944,6 @@ function renderRakhiProduction(){
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows (plan + live Production + completed receipts)</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
-    <div class="yoy-card"><div class="yc-label">Still Coming</div><div class="yc-val">${Math.round(coming).toLocaleString('en-IN')}</div><div class="yc-sub">Against this plan</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
   renderRakhiProductionSkuTable();
   renderRakhiProductionStockoutTables();
@@ -14737,7 +14951,7 @@ function renderRakhiProduction(){
   const status=(r)=>{
     const k=String(r.status_key||'');
     const styles={arrived:'background:#e6f4ea;color:#176b35',partial:'background:#fff3cd;color:#7a5a00',overdue:'background:#fde8e8;color:#a4262c',missing:'background:#eef1f5;color:#59636e',coming:'background:#e8f0fe;color:#2455a4'};
-    return `<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:10px;${styles[k]||styles.coming}">${escHtml(r.status||'Coming')}</span>`;
+    return `<span style="display:inline-block;padding:4px 8px;border-radius:999px;font-weight:800;font-size:9px;${styles[k]||styles.coming}">${escHtml(r.status||'Coming')}</span>`;
   };
   const receiptCell=(r,v)=>r.receipt_source_ok===false?'—':Math.round(Number(v)||0).toLocaleString('en-IN');
   const totals={
@@ -14746,8 +14960,7 @@ function renderRakhiProduction(){
     received:rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0),
     today:rows.reduce((s,r)=>s+(Number(r.received_today)||0),0),
     yesterday:rows.reduce((s,r)=>s+(Number(r.received_yesterday)||0),0),
-    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0),
-    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0)
+    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0)
   };
   const body=rows.map(r=>`<tr>
     <td><b>${escHtml(r.need_by_display||r.need_by_text||'—')}</b></td>
@@ -14762,7 +14975,6 @@ function renderRakhiProduction(){
     <td class="ops-num"><b>${receiptCell(r,r.received_today)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_yesterday)}</b></td>
     <td class="ops-num"><b>${receiptCell(r,r.received_day_before)}</b></td>
-    <td class="ops-num"><b>${Math.round(Number(r.coming_qty)||0).toLocaleString('en-IN')}</b></td>
     <td>${escHtml(r.production_delivery_dates||'—')}</td>
     <td>${r.receipt_source_ok===false?'—':escHtml(r.latest_receiving_date_display||'—')}</td>
     <td>${status(r)}</td>
@@ -14771,7 +14983,7 @@ function renderRakhiProduction(){
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
     :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Full-sheet receipt sync: ${meta.receipt_reconciled===false?'check required':'matched'}${meta.source_received_yesterday!==undefined?` · Sheet Yesterday ${Math.round(Number(meta.source_received_yesterday)||0).toLocaleString('en-IN')}`:''}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
-    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Still Coming</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
+    <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody><tfoot><tr style="background:#fffdf7;border-top:2px solid #b8860b;font-weight:900">
     <td colspan="6" style="text-align:right">GRAND TOTAL</td>
     <td class="ops-num">${Math.round(totals.qty).toLocaleString('en-IN')}</td>
@@ -14780,7 +14992,6 @@ function renderRakhiProduction(){
     <td class="ops-num">${Math.round(totals.today).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(totals.yesterday).toLocaleString('en-IN')}</td>
     <td class="ops-num">${Math.round(totals.dayBefore).toLocaleString('en-IN')}</td>
-    <td class="ops-num">${Math.round(totals.coming).toLocaleString('en-IN')}</td>
     <td colspan="3"></td>
   </tr></tfoot></table>`;
 }
@@ -14794,13 +15005,13 @@ function exportRakhiProductionMain(){
     meta.today_display?`Today (${meta.today_display})`:'Today',
     meta.yesterday_display?`Yesterday (${meta.yesterday_display})`:'Yesterday',
     meta.day_before_display?`Day Before (${meta.day_before_display})`:'Day Before',
-    'Still Coming','Production Delivery Date','Latest Receiving Date','Status','Image Link'
+    'Production Delivery Date','Latest Receiving Date','Status','Image Link'
   ];
   const data=rows.map(r=>[
     r.need_by_display||r.need_by_text||'',r.order_date_display||r.order_date||'',r.order_no||'',r.sku||'',r.cn_name||'',
     Math.round(Number(r.qty_required)||0),Math.round(Number(r.production_balance_qty)||0),
     Math.round(Number(r.received_since_aug6??r.arrived_qty)||0),Math.round(Number(r.received_today)||0),
-    Math.round(Number(r.received_yesterday)||0),Math.round(Number(r.received_day_before)||0),Math.round(Number(r.coming_qty)||0),
+    Math.round(Number(r.received_yesterday)||0),Math.round(Number(r.received_day_before)||0),
     r.production_delivery_dates||'',r.latest_receiving_date_display||'',r.status||'',r.image_url||''
   ]);
   const totals={
@@ -14809,10 +15020,9 @@ function exportRakhiProductionMain(){
     received:rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0),
     today:rows.reduce((s,r)=>s+(Number(r.received_today)||0),0),
     yesterday:rows.reduce((s,r)=>s+(Number(r.received_yesterday)||0),0),
-    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0),
-    coming:rows.reduce((s,r)=>s+(Number(r.coming_qty)||0),0)
+    dayBefore:rows.reduce((s,r)=>s+(Number(r.received_day_before)||0),0)
   };
-  data.push(['GRAND TOTAL','','','','',Math.round(totals.qty),Math.round(totals.prodBal),Math.round(totals.received),Math.round(totals.today),Math.round(totals.yesterday),Math.round(totals.dayBefore),Math.round(totals.coming),'','','','']);
+  data.push(['GRAND TOTAL','','','','',Math.round(totals.qty),Math.round(totals.prodBal),Math.round(totals.received),Math.round(totals.today),Math.round(totals.yesterday),Math.round(totals.dayBefore),'','','','']);
   _dlCsv(headers,data,'rakhi_production_tracker');
 }
 function resetRakhiProduction(){
@@ -18102,6 +18312,59 @@ function resetSalesComparison(){const end=todayISO||new Date().toISOString().sli
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
 window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window._scOrderSearchChanged=_scOrderSearchChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
+let _dailyReportingData = null;
+let _dailyReportingBusy = false;
+function _drpMoney(v){
+  const n=Number(v)||0;return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:0});
+}
+function _drpMetricValue(period,key,kind){
+  if(kind==='date')return escHtml(period?.[key]||'—');
+  if(kind==='orders')return (Number(period?.[key])||0).toLocaleString('en-IN');
+  return _drpMoney(period?.[key]);
+}
+function renderDailyReporting(){
+  const host=document.getElementById('drpTableHost'),note=document.getElementById('drpSourceNote'),foot=document.getElementById('drpFoot');if(!host)return;
+  const data=_dailyReportingData||{},periods=Array.isArray(data.periods)?data.periods:[];
+  if(!periods.length){host.innerHTML='<div class="drp-loading">No Daily Reporting data available.</div>';return;}
+  const metrics=[
+    ['Total Revenue','total_revenue','money'],
+    ['DTC Revenue','dtc_revenue','money'],
+    ['Marketplace Revenue','marketplace_revenue','money'],
+    ['Q-Commerce Revenue (Blinkit + Instamart)','qcommerce_revenue','money'],
+    ['Orders','orders','orders'],
+    ['AOV','aov','money'],
+    ['__gap__','',''],
+    ['Peak Revenue Date','peak_revenue_date','date'],
+    ['Peak Revenue Amount','peak_revenue_amount','money']
+  ];
+  const head='<tr><th>Metric</th>'+periods.map(p=>`<th>${escHtml(p.label||'')}</th>`).join('')+'</tr>';
+  const body=metrics.map(([label,key,kind])=>{
+    if(label==='__gap__')return `<tr class="drp-gap"><td colspan="${periods.length+1}"></td></tr>`;
+    return `<tr><td>${escHtml(label)}</td>${periods.map(p=>`<td class="${kind==='money'?'drp-money':''}">${_drpMetricValue(p,key,kind)}</td>`).join('')}</tr>`;
+  }).join('');
+  host.innerHTML=`<table class="drp-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  if(note)note.textContent=`${data.source_note||'Data basis: Order Date / Order No. — not Dispatch Date.'} As of ${data.as_of||''}`;
+  if(foot)foot.innerHTML=`${escHtml(data.revenue_note||'')}<br>${escHtml(data.order_note||'')}`;
+}
+async function loadDailyReporting(force=false){
+  if(LOGIN_ROLE==='employee')return;
+  if(_dailyReportingBusy)return;
+  if(_dailyReportingData&&!force){renderDailyReporting();return;}
+  _dailyReportingBusy=true;
+  const host=document.getElementById('drpTableHost');if(host)host.innerHTML='<div class="drp-loading">Loading Daily Reporting…</div>';
+  try{
+    const r=await fetch('/api/daily-reporting',{headers:{'ngrok-skip-browser-warning':'true','Cache-Control':force?'no-cache':'max-age=0'}});
+    const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
+    _dailyReportingData=d;renderDailyReporting();
+  }catch(e){if(host)host.innerHTML=`<div class="drp-loading" style="color:#b42318">${escHtml(e.message||String(e))}</div>`;}
+  finally{_dailyReportingBusy=false;}
+}
+function exportDailyReportingExcel(){
+  if(LOGIN_ROLE==='employee')return;
+  const a=document.createElement('a');a.href='/api/daily-reporting/export.xlsx';a.download='daily_reporting.xlsx';document.body.appendChild(a);a.click();a.remove();
+}
+window.loadDailyReporting=loadDailyReporting;window.renderDailyReporting=renderDailyReporting;window.exportDailyReportingExcel=exportDailyReportingExcel;
+
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
   // Recomputing six full-catalog passes after every keystroke was wasted work.
@@ -18116,7 +18379,7 @@ showTab = function(t){
   // Removed tabs and disabled views are redirected to Home.
   if (t === 'marketplaces' || t === 'smart' || t === 'insights' || t === 'stockstatus') t = 'home';
   if (t === 'anomaly') t = 'salesanomaly';
-  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
+  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk' || t === 'dailyreporting')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
     home: {id: 'vHome', btn: 'm1'},
@@ -18126,6 +18389,7 @@ showTab = function(t){
     skudetails: {id: 'vSkudetails', btn: 'm5'},
     insights: {id: 'vInsights', btn: 'm6'},
     target: {id: 'vTarget', btn: 'm10'},
+    dailyreporting: {id: 'vDailyReporting', btn: 'm34'},
     discount: {id: 'vDiscount', btn: 'm12'},
     production: {id: 'vProduction', btn: 'm13'},
     rakhiproduction: {id: 'vRakhiProduction', btn: 'm33'},
@@ -18181,6 +18445,7 @@ showTab = function(t){
       skudetails: 'SKU DETAILS',
       insights: 'INSIGHTS',
       target: 'TARGET',
+      dailyreporting: 'DAILY REPORTING',
       discount: 'DISCOUNTS',
       production: 'PRODUCTION',
       rakhiproduction: 'RAKHI PRODUCTION',
@@ -18219,6 +18484,7 @@ showTab = function(t){
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
+  if (t === 'dailyreporting') setTimeout(()=>{ try{ loadDailyReporting(false); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhiproduction') setTimeout(()=>{ try{ loadRakhiProduction(); }catch(e){console.error(e);} }, 0);
@@ -21334,6 +21600,214 @@ def api_ops_support():
         })
     except Exception as e:
         return jsonify({"error": f"ops support build failed: {e}"}), 500
+
+# ════════════════════════════════════════════════════════════════
+#  📊 DAILY REPORTING — Order-Date management report (admin only)
+#  New standalone tab. No existing tab uses these adjusted revenues.
+# ════════════════════════════════════════════════════════════════
+def _daily_reporting_month_bounds(anchor_dt, month_offset):
+    base_index = anchor_dt.year * 12 + (anchor_dt.month - 1) + int(month_offset)
+    year, month0 = divmod(base_index, 12)
+    month = month0 + 1
+    start = datetime(year, month, 1)
+    if month == 12:
+        next_start = datetime(year + 1, 1, 1)
+    else:
+        next_start = datetime(year, month + 1, 1)
+    return start, next_start - timedelta(days=1)
+
+
+def _build_daily_reporting():
+    # The main sync already parsed COSA Order Date + exact order source sheets.
+    # Reuse those compact caches here so opening this tab does not trigger a
+    # second multi-sheet download and does not slow down the dashboard.
+    if CACHE.get("data") is None:
+        get_data(False)
+    daily = CACHE.get("daily_reporting_daily", {}) or {}
+    order_daily = CACHE.get("daily_reporting_orders", {}) or {}
+
+    today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    cur_start = today_dt.replace(day=1)
+    p1_start, p1_end = _daily_reporting_month_bounds(today_dt, -1)
+    p2_start, p2_end = _daily_reporting_month_bounds(today_dt, -2)
+    ly1_start, ly1_end = _daily_reporting_month_bounds(today_dt, -13)
+    ly2_start, ly2_end = _daily_reporting_month_bounds(today_dt, -14)
+
+    periods = [
+        ("prev_month", p1_start, p1_end, p1_start.strftime("%B")),
+        ("prev_2_month", p2_start, p2_end, p2_start.strftime("%B")),
+        ("mtd", cur_start, today_dt, f"{today_dt.strftime('%b')} 1-{today_dt.day}"),
+        ("last_year_prev", ly1_start, ly1_end, f"Last Year {ly1_start.strftime('%B')}"),
+        ("last_year_prev_2", ly2_start, ly2_end, f"Last Year {ly2_start.strftime('%B')}"),
+    ]
+
+    def _one_period(key, start, end, label):
+        start_iso, end_iso = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+        dtc = marketplace = qcommerce = 0.0
+        order_keys = set()
+        peak_date = ""
+        peak_amount = None
+        for day, vals in daily.items():
+            ds = str(day or "")
+            if not (start_iso <= ds <= end_iso):
+                continue
+            dtc += float(vals.get("dtc") or 0)
+            marketplace += float(vals.get("marketplace") or 0)
+            qcommerce += float(vals.get("qcommerce") or 0)
+            day_total = float(vals.get("total") or 0)
+            if peak_amount is None or day_total > peak_amount or (day_total == peak_amount and ds < peak_date):
+                peak_amount = day_total
+                peak_date = ds
+        for day, keys in order_daily.items():
+            ds = str(day or "")
+            if start_iso <= ds <= end_iso:
+                order_keys.update(keys or set())
+        total = dtc + marketplace + qcommerce
+        orders = len(order_keys)
+        aov = total / orders if orders else 0.0
+        if not peak_date or peak_amount is None or peak_amount == 0:
+            peak_date_label = ""
+            peak_amount = 0.0
+        else:
+            try:
+                peak_date_label = datetime.strptime(peak_date, "%Y-%m-%d").strftime("%d-%b-%Y")
+            except Exception:
+                peak_date_label = peak_date
+        return {
+            "key": key, "label": label,
+            "from": start_iso, "to": end_iso,
+            "total_revenue": total,
+            "dtc_revenue": dtc,
+            "marketplace_revenue": marketplace,
+            "qcommerce_revenue": qcommerce,
+            "orders": orders,
+            "aov": aov,
+            "peak_revenue_date": peak_date_label,
+            "peak_revenue_amount": float(peak_amount or 0),
+        }
+
+    built = [_one_period(*p) for p in periods]
+    return {
+        "periods": built,
+        "as_of": today_dt.strftime("%d-%b-%Y"),
+        "source_note": "Data basis: Order Date / exact Order No. — not Dispatch Date.",
+        "revenue_note": "Daily Reporting only: Website Net Revenue × 1.06 + Return Amount; all other included channels Net Revenue + Return Amount.",
+        "order_note": "Orders use exact Order No. from Website and Amazon, Myntra, Nykaa, Ajio, Tata and Flipkart source sheets; Q-Commerce is included only when an exact Order No. exists in COSA Order Date.",
+    }
+
+
+@app.route("/api/daily-reporting")
+def api_daily_reporting():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin login required"}), 403
+    try:
+        return jsonify(_build_daily_reporting())
+    except Exception as e:
+        return jsonify({"error": f"daily reporting build failed: {e}"}), 500
+
+
+@app.route("/api/daily-reporting/export.xlsx")
+def api_daily_reporting_export_xlsx():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin login required"}), 403
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        rep = _build_daily_reporting()
+        periods = rep["periods"]
+        headers = ["Metric"] + [p["label"] for p in periods]
+        metrics = [
+            ("Total Revenue", "total_revenue", "money"),
+            ("DTC Revenue", "dtc_revenue", "money"),
+            ("Marketplace Revenue", "marketplace_revenue", "money"),
+            ("Q-Commerce Revenue (Blinkit + Instamart)", "qcommerce_revenue", "money"),
+            ("Orders", "orders", "integer"),
+            ("AOV", "aov", "money"),
+            ("", "", "blank"),
+            ("Peak Revenue Date", "peak_revenue_date", "text"),
+            ("Peak Revenue Amount", "peak_revenue_amount", "money"),
+        ]
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Daily Reporting"
+        max_col = len(headers)
+
+        top_fill = PatternFill("solid", fgColor="F3F3F3")
+        head_fill = PatternFill("solid", fgColor="FFFFFF")
+        head_font = Font(bold=True, size=11, color="111111")
+        title_font = Font(bold=True, size=11, color="333333")
+        thin = Side(style="thin", color="D9D9D9")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+        money_fmt = '₹#,##0.00'
+        int_fmt = '#,##0'
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
+        ws.cell(1, 1, rep["source_note"]).font = title_font
+        ws.cell(1, 1).alignment = center
+        for c in range(1, max_col + 1):
+            ws.cell(1, c).fill = top_fill
+            ws.cell(1, c).border = border
+
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(2, c, h)
+            cell.font = head_font
+            cell.fill = head_fill
+            cell.alignment = center
+            cell.border = border
+
+        row_no = 3
+        for label, key, kind in metrics:
+            if kind == "blank":
+                row_no += 1
+                continue
+            first = ws.cell(row_no, 1, label)
+            first.alignment = left
+            first.border = border
+            for idx, period in enumerate(periods, 2):
+                val = period.get(key, "")
+                cell = ws.cell(row_no, idx, val)
+                cell.alignment = center
+                cell.border = border
+                if kind == "money":
+                    cell.number_format = money_fmt
+                elif kind == "integer":
+                    cell.number_format = int_fmt
+            row_no += 1
+
+        ws.freeze_panes = "B3"
+        ws.column_dimensions["A"].width = 38
+        for c in range(2, max_col + 1):
+            ws.column_dimensions[get_column_letter(c)].width = 18
+        ws.row_dimensions[1].height = 24
+        ws.row_dimensions[2].height = 30
+
+        # Formula rules/source notes below the mirrored table, kept outside the
+        # requested shape so the visible report remains exactly management-ready.
+        note_row = row_no + 1
+        ws.merge_cells(start_row=note_row, start_column=1, end_row=note_row, end_column=max_col)
+        ws.cell(note_row, 1, rep["revenue_note"]).font = Font(italic=True, size=9, color="666666")
+        ws.cell(note_row, 1).alignment = left
+        ws.merge_cells(start_row=note_row + 1, start_column=1, end_row=note_row + 1, end_column=max_col)
+        ws.cell(note_row + 1, 1, rep["order_note"]).font = Font(italic=True, size=9, color="666666")
+        ws.cell(note_row + 1, 1).alignment = left
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"daily_reporting_{now_ist().strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(
+            bio.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"daily reporting excel export failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
 #  📅 DAILY REVENUE GLIMPSE  (admin/employee) — Target tab ka 2nd
@@ -25354,18 +25828,20 @@ def _warmup_and_refresh_loop():
             print("BG refresh error:", str(e)[:140])
 
 def _cn_catalog_loop():
-    """cosanostraa.com SKU->name catalog apne bilkul alag thread me
-    build/refresh hota hai — iska asli data-loading (_warmup_and_refresh_loop)
-    se koi lena-dena nahi, isliye ye kabhi bhi dashboard ko slow/stuck
-    nahi kar sakta, chahe cosanostraa.com down/slow ho."""
+    """Refresh cosanostraa.com names/prices without forcing a second sheet sync.
+
+    This thread is deliberately decoupled from the heavy sales/inventory data
+    refresh. Catalogue changes are patched into the current compiled snapshot;
+    the normal background sheet refresh remains the source of truth for data.
+    """
     try:
         cn_build_catalog(force=True)
         try:
-            get_data(True)      # ek extra refresh — taaki naam turant cards me aa jaayein,
-            _build_role_gz("admin")   # 10-min cycle ka wait na karna pade
-            print("CN catalog applied to data ✔")
+            if _patch_cn_catalog_into_cached_data():
+                _build_role_gz("admin")
+                print("CN catalog patched into cached dashboard ✔")
         except Exception as e:
-            print("post-CN data refresh failed:", str(e)[:120])
+            print("post-CN cache patch failed:", str(e)[:120])
     except Exception as e:
         print("CN catalog initial build failed:", str(e)[:120])
     while True:
@@ -25373,12 +25849,11 @@ def _cn_catalog_loop():
         try:
             cn_build_catalog(force=True)
             try:
-                # Recompile dashboard data so refreshed website prices reach Bulk immediately.
-                get_data(True)
-                _build_role_gz("admin")
-                print("CN catalog names + website prices refreshed ✔")
+                if _patch_cn_catalog_into_cached_data():
+                    _build_role_gz("admin")
+                    print("CN catalog names + website prices patched ✔")
             except Exception as e:
-                print("post-CN price refresh failed:", str(e)[:120])
+                print("post-CN cache patch failed:", str(e)[:120])
         except Exception as e:
             print("CN catalog refresh failed:", str(e)[:120])
 
