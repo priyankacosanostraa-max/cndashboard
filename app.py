@@ -5762,7 +5762,7 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 
-/* One-day second Sawan Somvaar login greeting — active on 10 August 2026 (IST). */
+/* Professional Sawan Shivratri greeting shown after every successful login. */
 .cnx-sawan-wish{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:22px;background:rgba(27,20,10,.48);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
 .cnx-sawan-wish.is-open{opacity:1;visibility:visible;pointer-events:auto}
 .cnx-sawan-card{position:relative;width:min(500px,94vw);overflow:hidden;padding:46px 42px 38px;border:1px solid rgba(168,121,32,.28);border-radius:30px;text-align:center;background:radial-gradient(circle at 50% -8%,rgba(232,204,132,.4),transparent 38%),linear-gradient(145deg,#fffefb 0%,#fbf3e4 66%,#ead8b8 100%);box-shadow:0 45px 110px rgba(39,28,10,.32),0 2px 0 rgba(255,255,255,.9) inset;transform:perspective(900px) translateY(30px) rotateX(8deg) scale(.94);transition:transform .5s cubic-bezier(.18,.85,.24,1.12)}
@@ -5927,9 +5927,9 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="cnx-sawan-card">
     <button class="cnx-sawan-close" type="button" aria-label="Close greeting" onclick="closeSawanSomvaarWish()">&times;</button>
     <div class="cnx-sawan-icon" aria-hidden="true">ॐ</div>
-    <div class="cnx-sawan-kicker">सावन का दूसरा सोमवार</div>
+    <div class="cnx-sawan-kicker">Happy Sawan Shivratri</div>
     <div class="cnx-sawan-title" id="cnxSawanTitle">हर हर महादेव</div>
-    <p class="cnx-sawan-copy">सावन के दूसरे सोमवार की हार्दिक शुभकामनाएँ। महादेव की कृपा से आपके कार्यों में सफलता, मन में शांति और जीवन में समृद्धि बनी रहे।</p>
+    <p class="cnx-sawan-copy">Warm wishes on the auspicious occasion of Sawan Shivratri. May Lord Shiva bless you with strength, clarity, peace, and prosperity in every endeavour.</p>
     <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">हर हर महादेव</button>
   </div>
 </div>
@@ -11188,8 +11188,6 @@ function playLoginSuccessSound(){
   } catch(e){}
 }
 
-const CNX_SAWAN_WISH_DATE = '2026-08-10';
-
 function cnxIstDateKey(at){
   const moment = at instanceof Date ? at : new Date();
   try {
@@ -11205,7 +11203,6 @@ function cnxIstDateKey(at){
 }
 
 function showSawanSomvaarWish(at){
-  if (cnxIstDateKey(at) !== CNX_SAWAN_WISH_DATE) return false;
   const wish = document.getElementById('cnxSawanWish');
   if (!wish) return false;
   wish.classList.add('is-open');
@@ -11298,7 +11295,7 @@ async function doLogin(){
     if (submitText) submitText.textContent = 'Access verified';
     playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
-    // Common success path: Admin and Employee both receive today's greeting.
+    // Common success path: Admin and Employee both receive the Sawan Shivratri greeting.
     setTimeout(() => showSawanSomvaarWish(), 220);
   } else {
     if (err) err.textContent = 'Invalid username or password.';
