@@ -6324,7 +6324,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
-  <button class="menu-item" id="m34" onclick="showTab('dailyreporting')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 19V5h16v14H4Z"/><path d="M8 15v-4M12 15V8M16 15v-6M7 19h10"/></svg></span><span>Daily Reporting</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
   <button class="menu-item" id="m33" onclick="showTab('rakhiproduction')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9h10M7 13h6M7 17h4"/><path d="M16 14l2 2 3-4"/></svg></span><span>Rakhi Production</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
@@ -7297,6 +7296,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     font-weight:900!important;
   }
   @media(max-width:900px){
+    #vRakhiProduction #rpSummary{grid-template-columns:1fr!important;}
     #vRakhiProduction .rp-compact-wrap,#vRakhiProduction #rpContent{max-height:360px;}
     #vRakhiProduction .ops-photo,#vRakhiProduction .ops-photo-ph{width:40px!important;height:40px!important;min-width:40px!important;max-width:40px!important;}
   }
@@ -7333,7 +7333,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <input class="fi" id="rpD2" type="date" onchange="renderRakhiProduction()"></div>
     <button class="go-btn" style="width:auto;padding:10px 18px;background:#f3f6fb;color:#111" onclick="resetRakhiProduction()">Reset</button>
   </div>
-  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,1fr)"></div>
+  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,minmax(0,1fr))"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0 + completed receipt-only Order No./SKU rows needed to reconcile the Rakhi receiving sheet. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
@@ -7949,25 +7949,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
-  <div id="vDailyReporting" style="display:none">
-    <style>
-      .drp-shell{padding:16px 14px 28px}.drp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px;padding:18px 20px;border:1px solid rgba(167,126,45,.18);border-radius:18px;background:linear-gradient(135deg,#fffdf8,#f8edcf)}
-      .drp-title{font-family:Georgia,serif;font-size:30px;color:#29231a}.drp-sub{font-size:10px;color:#695d4e;margin-top:5px;line-height:1.55}.drp-actions{display:flex;gap:8px;flex-wrap:wrap}.drp-btn{border:0;border-radius:10px;background:#c89a32;color:#1f180b;padding:10px 15px;font-size:9px;font-weight:900;letter-spacing:1.4px;text-transform:uppercase;cursor:pointer}.drp-btn.alt{background:#fff;border:1px solid rgba(154,113,30,.28)}
-      .drp-card{border:1px solid rgba(148,111,37,.18);border-radius:16px;background:#fff;overflow:hidden;box-shadow:0 10px 28px rgba(71,52,17,.05)}.drp-note{padding:9px 12px;font-size:9px;font-weight:700;color:#6a5b43;background:#f9f3e5;border-bottom:1px solid rgba(148,111,37,.14)}.drp-wrap{overflow:auto}.drp-table{width:100%;min-width:850px;border-collapse:collapse;font-size:12px}.drp-table th,.drp-table td{border:1px solid #ded8cc;padding:11px 12px;text-align:center}.drp-table th{background:#fff;font-size:11px;font-weight:900;color:#1e1a13}.drp-table th:first-child,.drp-table td:first-child{text-align:left;min-width:245px}.drp-table td:first-child{font-weight:800}.drp-table tr.drp-gap td{height:15px;padding:0;background:#fff}.drp-money{font-variant-numeric:tabular-nums}.drp-loading{padding:38px;text-align:center;color:#806c49;font-weight:800}.drp-foot{padding:10px 12px;font-size:9px;color:#7b6b54;line-height:1.5;border-top:1px solid rgba(148,111,37,.14);background:#fffdf8}
-      @media(max-width:760px){.drp-head{flex-direction:column}.drp-title{font-size:25px}.drp-shell{padding:10px 8px 22px}}
-    </style>
-    <div class="drp-shell">
-      <div class="drp-head">
-        <div><div class="drp-title">Daily Reporting</div><div class="drp-sub">Management view based on <b>Order Date / exact Order No.</b>, not Dispatch Date. Current month shows completed days only (today excluded) and extends automatically each day.</div></div>
-        <div class="drp-actions"><button class="drp-btn alt" type="button" onclick="loadDailyReporting(true)">Refresh</button><button class="drp-btn" type="button" onclick="exportDailyReportingExcel()">Export Excel</button></div>
-      </div>
-      <div class="drp-card">
-        <div class="drp-note" id="drpSourceNote">Loading Order-Date report…</div>
-        <div class="drp-wrap" id="drpTableHost"><div class="drp-loading">Loading Daily Reporting…</div></div>
-        <div class="drp-foot" id="drpFoot"></div>
-      </div>
-    </div>
-  </div>
 
   <div id="vTarget" style="display:none">
   <div class="insights-head">
@@ -8911,7 +8892,6 @@ const MENU_TAB_META = {
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
-  m34: {name:"Daily Reporting",  desc:"Order-date revenue, exact orders, AOV and peak revenue with Excel export."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
   m33: {name:"Rakhi Production", desc:"August need-by production tracker for the supplied Rakhi plan."},
@@ -8938,7 +8918,7 @@ const MENU_TAB_META = {
 function _menuTabAllowedForRole(item){
   const id = String(item?.id || '');
   const employee = LOGIN_ROLE === 'employee';
-  if (employee) return !['m2','m7','m12','m14','m21','m34'].includes(id);
+  if (employee) return !['m2','m7','m12','m14','m21'].includes(id);
   return id !== 'm11';
 }
 
@@ -10258,7 +10238,6 @@ function loadData(force){
       _scOrderEventCache = null;
       _scWebsiteSessionIndex = null;
       _scChannelOrderIndex = null;
-      _dailyReportingData = null;
       _masterSkuMap = {};
       _giftSetStoneMap = {};
       _bulkSkuLookup = {};
@@ -11695,8 +11674,6 @@ function applyRoleUI(){
   // Target (m10) and Insights (m6) dono role ko dikhne chahiye
   const tgtBtn = document.getElementById('m10');
   const insBtn = document.getElementById('m6');
-  const dailyReportingBtn = document.getElementById('m34');
-  if (dailyReportingBtn) dailyReportingBtn.style.display = isEmployee ? 'none' : '';
   if (tgtBtn) tgtBtn.style.display = '';
   if (insBtn) insBtn.style.display = '';
 
@@ -15117,10 +15094,48 @@ function renderRakhiProduction(){
   const meta=(_rakhiProdData&&_rakhiProdData.rakhi_receipts_meta)||{};
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
+
+  // Production pace KPIs. Average Qty/Day is cumulative inward since the
+  // 06-Aug baseline divided by elapsed calendar days after that baseline.
+  // Example: 5,950 received by 11-Aug => 5,950 / 5 = 1,190 units/day.
+  const DAY_MS=86400000;
+  const isoDate=v=>{
+    const s=String(v||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return null;
+    const d=new Date(`${s}T00:00:00Z`);
+    return Number.isNaN(d.getTime())?null:d;
+  };
+  const todayDate=isoDate(meta.today_iso)||new Date();
+  const baselineDate=isoDate(meta.baseline_date)||new Date('2026-08-06T00:00:00Z');
+  const elapsedDays=Math.max(1,Math.floor((Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate())-Date.UTC(baselineDate.getUTCFullYear(),baselineDate.getUTCMonth(),baselineDate.getUTCDate()))/DAY_MS));
+  const avgQtyPerDay=arrived/elapsedDays;
+
+  // Current Run Rate = rolling 3-day inward average (Today + Yesterday + Day Before).
+  const recent3Qty=rows.reduce((s,r)=>s+(Number(r.received_today)||0)+(Number(r.received_yesterday)||0)+(Number(r.received_day_before)||0),0);
+  const currentRunRate=recent3Qty/3;
+
+  // Required Run Rate = sum of each dated row's current Production Balance divided
+  // by its remaining calendar days to Need By. Blank Need By rows are excluded
+  // because they have no committed deadline; due/overdue rows use a minimum of 1 day.
+  let requiredRunRate=0,datedBalance=0,blankNeedByBalance=0;
+  rows.forEach(r=>{
+    const bal=Math.max(0,Number(r.production_balance_qty)||0);
+    if(!bal)return;
+    const need=isoDate(r.need_by_iso);
+    if(!need){blankNeedByBalance+=bal;return;}
+    const diff=Math.ceil((Date.UTC(need.getUTCFullYear(),need.getUTCMonth(),need.getUTCDate())-Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate()))/DAY_MS);
+    const daysLeft=Math.max(1,diff);
+    requiredRunRate+=bal/daysLeft;
+    datedBalance+=bal;
+  });
+  const rateFmt=v=>`${Math.round(Number(v)||0).toLocaleString('en-IN')} units/day`;
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows (plan + live Production + completed receipts)</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
-    <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>`;
+    <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>
+    <div class="yoy-card"><div class="yc-label">Average Qty per Day</div><div class="yc-val">${rateFmt(avgQtyPerDay)}</div><div class="yc-sub">Received after 06-Aug ÷ ${elapsedDays.toLocaleString('en-IN')} elapsed day${elapsedDays===1?'':'s'}</div></div>
+    <div class="yoy-card"><div class="yc-label">Current Run Rate</div><div class="yc-val">${rateFmt(currentRunRate)}</div><div class="yc-sub">Rolling 3-day inward average</div></div>
+    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(datedBalance).toLocaleString('en-IN')} dated balance ÷ days left by each Need By${blankNeedByBalance>0?` · ${Math.round(blankNeedByBalance).toLocaleString('en-IN')} undated excluded`:''}</div></div>`;
   renderRakhiProductionSkuTable();
   renderRakhiProductionStockoutTables();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
@@ -18488,58 +18503,6 @@ function resetSalesComparison(){const end=todayISO||new Date().toISOString().sli
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
 window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window._scOrderSearchChanged=_scOrderSearchChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
-let _dailyReportingData = null;
-let _dailyReportingBusy = false;
-function _drpMoney(v){
-  const n=Number(v)||0;return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:0});
-}
-function _drpMetricValue(period,key,kind){
-  if(kind==='date')return escHtml(period?.[key]||'—');
-  if(kind==='orders')return (Number(period?.[key])||0).toLocaleString('en-IN');
-  return _drpMoney(period?.[key]);
-}
-function renderDailyReporting(){
-  const host=document.getElementById('drpTableHost'),note=document.getElementById('drpSourceNote'),foot=document.getElementById('drpFoot');if(!host)return;
-  const data=_dailyReportingData||{},periods=Array.isArray(data.periods)?data.periods:[];
-  if(!periods.length){host.innerHTML='<div class="drp-loading">No Daily Reporting data available.</div>';return;}
-  const metrics=[
-    ['Total Revenue','total_revenue','money'],
-    ['DTC Revenue','dtc_revenue','money'],
-    ['Marketplace Revenue','marketplace_revenue','money'],
-    ['Q-Commerce Revenue (Blinkit + Instamart)','qcommerce_revenue','money'],
-    ['Orders','orders','orders'],
-    ['AOV','aov','money'],
-    ['__gap__','',''],
-    ['Peak Revenue Date','peak_revenue_date','date'],
-    ['Peak Revenue Amount','peak_revenue_amount','money']
-  ];
-  const head='<tr><th>Metric</th>'+periods.map(p=>`<th>${escHtml(p.label||'')}</th>`).join('')+'</tr>';
-  const body=metrics.map(([label,key,kind])=>{
-    if(label==='__gap__')return `<tr class="drp-gap"><td colspan="${periods.length+1}"></td></tr>`;
-    return `<tr><td>${escHtml(label)}</td>${periods.map(p=>`<td class="${kind==='money'?'drp-money':''}">${_drpMetricValue(p,key,kind)}</td>`).join('')}</tr>`;
-  }).join('');
-  host.innerHTML=`<table class="drp-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
-  if(note)note.textContent=`${data.source_note||'Data basis: Order Date / Order No. — not Dispatch Date.'} As of ${data.as_of||''}`;
-  if(foot)foot.innerHTML=`${escHtml(data.revenue_note||'')}<br>${escHtml(data.order_note||'')}`;
-}
-async function loadDailyReporting(force=false){
-  if(LOGIN_ROLE==='employee')return;
-  if(_dailyReportingBusy)return;
-  if(_dailyReportingData&&!force){renderDailyReporting();return;}
-  _dailyReportingBusy=true;
-  const host=document.getElementById('drpTableHost');if(host)host.innerHTML='<div class="drp-loading">Loading Daily Reporting…</div>';
-  try{
-    const r=await fetch('/api/daily-reporting',{headers:{'ngrok-skip-browser-warning':'true','Cache-Control':force?'no-cache':'max-age=0'}});
-    const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
-    _dailyReportingData=d;renderDailyReporting();
-  }catch(e){if(host)host.innerHTML=`<div class="drp-loading" style="color:#b42318">${escHtml(e.message||String(e))}</div>`;}
-  finally{_dailyReportingBusy=false;}
-}
-function exportDailyReportingExcel(){
-  if(LOGIN_ROLE==='employee')return;
-  const a=document.createElement('a');a.href='/api/daily-reporting/export.xlsx';a.download='daily_reporting.xlsx';document.body.appendChild(a);a.click();a.remove();
-}
-window.loadDailyReporting=loadDailyReporting;window.renderDailyReporting=renderDailyReporting;window.exportDailyReportingExcel=exportDailyReportingExcel;
 
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
@@ -18555,7 +18518,7 @@ showTab = function(t){
   // Removed tabs and disabled views are redirected to Home.
   if (t === 'marketplaces' || t === 'smart' || t === 'insights' || t === 'stockstatus') t = 'home';
   if (t === 'anomaly') t = 'salesanomaly';
-  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk' || t === 'dailyreporting')) t = 'home';
+  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
     home: {id: 'vHome', btn: 'm1'},
@@ -18565,7 +18528,6 @@ showTab = function(t){
     skudetails: {id: 'vSkudetails', btn: 'm5'},
     insights: {id: 'vInsights', btn: 'm6'},
     target: {id: 'vTarget', btn: 'm10'},
-    dailyreporting: {id: 'vDailyReporting', btn: 'm34'},
     discount: {id: 'vDiscount', btn: 'm12'},
     production: {id: 'vProduction', btn: 'm13'},
     rakhiproduction: {id: 'vRakhiProduction', btn: 'm33'},
@@ -18621,7 +18583,6 @@ showTab = function(t){
       skudetails: 'SKU DETAILS',
       insights: 'INSIGHTS',
       target: 'TARGET',
-      dailyreporting: 'DAILY REPORTING',
       discount: 'DISCOUNTS',
       production: 'PRODUCTION',
       rakhiproduction: 'RAKHI PRODUCTION',
@@ -18660,7 +18621,6 @@ showTab = function(t){
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
-  if (t === 'dailyreporting') setTimeout(()=>{ try{ loadDailyReporting(false); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhiproduction') setTimeout(()=>{ try{ loadRakhiProduction(); }catch(e){console.error(e);} }, 0);
