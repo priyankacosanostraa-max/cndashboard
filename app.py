@@ -786,9 +786,10 @@ def classify_status(item, current_month_key=""):
     # "New Launch" = sirf wahi jo IS MAHINE launch hua (launch date se).
     if current_month_key and item.get("launch_key") == current_month_key:
         return "New Launch"
-    total_inv = item["inv_stock"] + item["inv_wip"]
-    if total_inv >= 20 and item["qty_6m"] == 0: return "Slow Movers"
-    return "Good Running"
+    # Running status is SALES-ONLY. Stock/WIP never changes Good vs Slow.
+    # qty_1m is the dashboard's rolling latest-30-calendar-day sold quantity.
+    recent_30d = max(0, to_num(item.get("qty_1m", 0)))
+    return "Good Running" if recent_30d > 0 else "Slow Movers"
 
 
 # ════════════════════════════════════════════════════════════════
@@ -6083,7 +6084,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="filter-box" style="margin-top:-10px">
-      <span class="small-note"><b>New Launch</b> = launched this month (launch date) &nbsp;|&nbsp; <b>Slow Movers</b> = stock+WIP ≥ 20 &amp; no dispatch last 6 months &nbsp;|&nbsp; <b>No Record</b> = no dispatch in COSA &nbsp;|&nbsp; <b>Good Running</b> = all others</span>
+      <span class="small-note"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days &nbsp;|&nbsp; <b>Slow Movers</b> = 0 positive units sold in the latest 30 calendar days &nbsp;|&nbsp; Stock/WIP does not affect Good/Slow status &nbsp;|&nbsp; <b>New Launch</b> = launched this month &nbsp;|&nbsp; <b>No Record</b> = no dispatch in COSA</span>
     </div>
     <div class="grid" id="gMatrix"></div>
   </div>
@@ -6299,7 +6300,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vSkudetails" style="display:none">
     <div class="filter-box" style="margin:8px 0 10px;padding:10px 14px">
-      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least one filtered unit sold in the latest 30-day window, or Stock+WIP is below 20; <b>Slow Movers</b> = Stock+WIP is 20+ and no filtered unit was sold in that 30-day window.</div>
+      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days under the active SKU Details filters. <b>Slow Movers</b> = 0 positive units sold in that same 30-day window. <b>Stock/WIP is not used</b> to decide Good vs Slow; New Launch and No Record remain separate statuses.</div>
     </div>
     <div class="filter-box" style="margin:8px 0 16px">
       <label class="fl" style="margin-bottom:8px;display:block">Search SKU / CN Name</label>
@@ -6336,7 +6337,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           </div>
           <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetSdFilters()">Reset Filters</button>
         </div>
-        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, trend chart, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is SOR.</div>
+        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, sales/return trend charts, net-revenue contribution, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is SOR.</div>
       </div>
 
       <div class="sd-head">
@@ -6351,10 +6352,11 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi"><div class="kpi-t">Total Orders</div><div class="kpi-v" id="sdOrders" style="color:#d4af5a">0</div><div class="small-note" id="sdOrdersMeta" style="margin-top:4px;white-space:normal">Unique Order IDs / customer-date sessions</div></div>
         <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div><div class="small-note" id="sdQtyMeta" style="margin-top:4px;white-space:normal">Final Qty by Order Date</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
+        <div class="kpi rev-only"><div class="kpi-t">Net Revenue Contribution</div><div class="kpi-v" id="sdRevContribution" style="color:#b68b00">0.00%</div><div class="small-note" id="sdRevContributionMeta" style="margin-top:4px;white-space:normal">SKU share of total net revenue under the active filters</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">STR (Sell-Through Rate)</div><div class="kpi-v" id="sdStrPct" style="color:#b68b00">0%</div><div class="small-note" id="sdStrMeta" style="margin-top:4px;white-space:normal">Filtered Sold Qty ÷ (Filtered Sold Qty + Inv Stock)</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
-        <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div></div>
+        <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div><div class="small-note" id="sdRetMeta" style="margin-top:4px;white-space:normal">Filtered Return Qty ÷ (Filtered Final Qty + Return Qty)</div></div>
         <div class="kpi" id="sdWebsiteRepeatCard" style="display:none"><div class="kpi-t">Repeat Customer Rate</div><div class="kpi-v" id="sdWebsiteRepeatRate" style="color:#b68b00">0%</div><div class="small-note" id="sdWebsiteRepeatMeta" style="margin-top:4px;white-space:normal">0 repeat customers</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Return Amount</div><div class="kpi-v" id="sdRetAmt" style="color:#c0392b">₹0</div></div>
         <div class="kpi"><div class="kpi-t">Current Stock</div><div class="kpi-v" id="sdStock" style="color:#2ecc71">0</div></div>
@@ -6371,6 +6373,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="filter-box" style="margin:14px 0">
         <label class="fl" style="margin-bottom:10px;display:block">Sales Trend (Qty over time) — click a point to see that day's sale</label>
         <div id="sdTrendChart" style="position:relative"></div>
+      </div>
+
+      <!-- RETURN TREND -->
+      <div class="filter-box" style="margin:14px 0">
+        <label class="fl" style="margin-bottom:10px;display:block">Return Qty Trend — hover any point for Return Qty, Final Qty and Return Rate</label>
+        <div id="sdReturnTrendChart" style="position:relative"></div>
       </div>
 
       <!-- CHANNEL PERFORMANCE: bar chart + best/worst summary -->
@@ -7735,9 +7743,8 @@ function giftSetStoneDetails(sku){
   return _giftSetStoneMap[String(sku || '').trim().toUpperCase()] || '';
 }
 function skuHealthMeta(itemOrSku){
-  // One clear, consistent scene flag wherever a SKU is displayed.
-  // OOS and OOS Soon deliberately use sellable Inv Stock (not WIP), exactly
-  // like the OOS tab. WIP remains incoming support and does not hide an OOS.
+  // Good/Slow is SALES-ONLY. Inventory can add an OOS risk annotation, but it
+  // can never switch a SKU between Good Running and Slow Movers.
   let item = itemOrSku;
   if (!item || typeof item !== 'object') {
     const key = String(itemOrSku || '').trim().toUpperCase();
@@ -7748,31 +7755,29 @@ function skuHealthMeta(itemOrSku){
   const stock = Math.max(0, Number(item.inv_stock) || 0);
   const wip = Math.max(0, Number(item.inv_wip) || 0);
   const sale30 = Math.max(0, Number(item.qty_1m) || 0);
+  const existingStatus = String(item.status || '').trim().toLowerCase();
 
+  if (existingStatus === 'no record') return {key:'none', label:'⚪ NO RECORD', title:'No dispatch record in COSA'};
+  if (existingStatus === 'new launch') return {key:'new', label:'🔵 NEW LAUNCH', title:'Launched in the current month'};
+
+  let stockRisk = '';
+  let stockRiskTitle = '';
   if (stock <= 0) {
-    return {key:'oos', label:'🔴 OOS', title:`Inv Stock 0${wip > 0 ? ` · ${Math.round(wip)} WIP incoming` : ''}`};
-  }
-
-  if (sale30 > 0) {
+    stockRisk = ' · 🔴 OOS';
+    stockRiskTitle = ` · Inv Stock 0${wip > 0 ? `; ${Math.round(wip)} WIP incoming` : ''}`;
+  } else if (sale30 > 0) {
     const drr = sale30 / 30;
     const coverDays = drr > 0 ? stock / drr : Infinity;
     if (coverDays <= 30) {
-      return {key:'soon', label:'🟠 OOS SOON', title:`Approx. ${coverDays < 1 ? '<1' : coverDays.toFixed(coverDays < 10 ? 1 : 0)} days of Inv Stock cover`};
+      stockRisk = ' · 🟠 OOS SOON';
+      stockRiskTitle = ` · approx. ${coverDays < 1 ? '<1' : coverDays.toFixed(coverDays < 10 ? 1 : 0)} days Inv Stock cover`;
     }
-    return {key:'good', label:'🟢 GOOD RUNNING', title:`${Math.round(sale30)} units sold in the latest 30 days`};
   }
 
-  const existingStatus = String(item.status || '').trim().toLowerCase();
-  if (existingStatus === 'good running') {
-    return {key:'good', label:'🟢 GOOD RUNNING', title:'Good Running by the dashboard status rule'};
+  if (sale30 > 0) {
+    return {key:'good', label:`🟢 GOOD RUNNING${stockRisk}`, title:`${Math.round(sale30)} units sold in the latest 30 days${stockRiskTitle}`};
   }
-  if (existingStatus === 'slow movers') {
-    return {key:'slow', label:'⚪ SLOW / NO 30D SALE', title:'No sale in the latest 30 days'};
-  }
-  if (existingStatus === 'new launch') {
-    return {key:'new', label:'🔵 NEW LAUNCH', title:'Launched in the current month'};
-  }
-  return {key:'slow', label:'⚪ NO 30D SALE', title:'No positive sale in the latest 30 days'};
+  return {key:'slow', label:`⚪ SLOW / NO 30D SALE${stockRisk}`, title:`No positive sale in the latest 30 days${stockRiskTitle}`};
 }
 
 function skuHealthFlagText(itemOrSku){
@@ -7870,9 +7875,59 @@ function skuTopCityText(itemOrSku){
   return `〔📍 TOP CITY: ${m.label || m.city} · ${qtyLabel} qty〕`;
 }
 
+// Net Revenue Contribution is shown anywhere a SKU label is rendered. Tabs with
+// transaction filters can install a context map so both numerator and denominator
+// follow those exact filters; other tabs fall back to the all-dashboard total.
+let _skuRevenueShareContext = {tab:'', total:0, map:new Map()};
+let _skuRevenueGlobalCnCache = {masterRef:null, query:'', total:0, map:new Map()};
+function _skuRevenueKey(v){ return String(v || '').trim().toUpperCase(); }
+function _setSkuRevenueShareContext(tab, map, total){
+  _skuRevenueShareContext = {
+    tab:String(tab || ''),
+    total:Number(total) || 0,
+    map:(map instanceof Map) ? map : new Map()
+  };
+}
+function _globalSkuRevenueShareData(){
+  const q = (typeof cnxGlobalCnQuery === 'function') ? cnxGlobalCnQuery() : '';
+  if (!q) return {total:Number(grandNetRevenue)||0, map:null};
+  if (_skuRevenueGlobalCnCache.masterRef === master && _skuRevenueGlobalCnCache.query === q) return _skuRevenueGlobalCnCache;
+  const map = new Map(); let total = 0;
+  (master || []).forEach(item => {
+    if (typeof cnxItemMatchesGlobalCn === 'function' && !cnxItemMatchesGlobalCn(item)) return;
+    const rev = Number(item?.total_net_revenue) || 0;
+    map.set(_skuRevenueKey(item?.sku), rev); total += rev;
+  });
+  _skuRevenueGlobalCnCache = {masterRef:master, query:q, total, map};
+  return _skuRevenueGlobalCnCache;
+}
+function skuRevenueContributionMeta(itemOrSku){
+  if (LOGIN_ROLE === 'employee') return null;
+  const key = _skuRevenueKey((itemOrSku && typeof itemOrSku === 'object') ? itemOrSku.sku : itemOrSku);
+  const ctx = _skuRevenueShareContext || {};
+  let rev = 0, total = 0;
+  if (ctx.tab === currentTab && ctx.map instanceof Map) {
+    rev = Number(ctx.map.get(key)) || 0;
+    total = Number(ctx.total) || 0;
+  } else {
+    const globalData = _globalSkuRevenueShareData();
+    total = Number(globalData.total) || 0;
+    if (globalData.map instanceof Map) rev = Number(globalData.map.get(key)) || 0;
+    else {
+      const item = (itemOrSku && typeof itemOrSku === 'object') ? itemOrSku : (_masterSkuMap[key] || null);
+      rev = Number(item?.total_net_revenue) || 0;
+    }
+  }
+  return {rev, total, pct: total > 0 ? (rev / total) * 100 : 0};
+}
+function skuRevenueContributionText(itemOrSku){
+  const m = skuRevenueContributionMeta(itemOrSku);
+  return m ? `〔REV SHARE ${m.pct.toFixed(2)}%〕` : '';
+}
+
 function skuCodeWithFlag(sku){
   const code = String(sku || '').trim();
-  const parts = [code, skuHealthFlagText(code), skuTopCityText(code)].filter(Boolean);
+  const parts = [code, skuHealthFlagText(code), skuTopCityText(code), skuRevenueContributionText(code)].filter(Boolean);
   return parts.join(' ');
 }
 
@@ -7895,12 +7950,15 @@ function skuLabel(sku, name){
   const label = stone ? (base + ' - ' + stone) : base;
   const flag = skuHealthFlagText(sku);
   const city = skuTopCityText(sku);
-  return [label, flag, city].filter(Boolean).join(' ');
+  const revenueShare = skuRevenueContributionText(sku);
+  return [label, flag, city, revenueShare].filter(Boolean).join(' ');
 }
 window.skuHealthMeta = skuHealthMeta;
 window.skuHealthFlagText = skuHealthFlagText;
 window.skuTopCityMeta = skuTopCityMeta;
 window.skuTopCityText = skuTopCityText;
+window.skuRevenueContributionMeta = skuRevenueContributionMeta;
+window.skuRevenueContributionText = skuRevenueContributionText;
 window.isWebsiteD2CFilterActive = isWebsiteD2CFilterActive;
 window.skuCodeWithFlag = skuCodeWithFlag;
 window.skuTextWithFlags = skuTextWithFlags;
@@ -8400,8 +8458,8 @@ function updateExportHint(){
 function openSkuDetails(sku){
   currentSdSku = sku;
   lastTab = currentTab || 'home';
-  renderSkuDetails(sku);
   showTab('skudetails');
+  renderSkuDetails(sku);
 }
 
 /* ── SKU Details: SKU + All Product AF-column CN Name lookup ── */
@@ -8669,6 +8727,82 @@ function _sdDisplayDate(iso){
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString('en-GB', {day:'2-digit', month:'short', year:'numeric'});
 }
+function _sdIsRakhiItem(item){
+  const sku = _skuRevenueKey(item?.sku);
+  const text = `${item?.sku_name||''} ${item?.cn_name||''} ${item?.taxon||''}`.toLowerCase();
+  return sku.startsWith('RKH-') || /\brakhi\b/i.test(text);
+}
+function _sdTargetLaunchIso(channel){
+  if (channel === 'Website') return '2026-07-22';
+  const raw = (typeof RAKHI_TARGETS !== 'undefined' && RAKHI_TARGETS?.[channel]) ? String(RAKHI_TARGETS[channel].launch || '') : '';
+  const m = raw.match(/(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)/i);
+  if (!m) return '';
+  const months = {jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12};
+  const mon = months[String(m[2]).toLowerCase()];
+  const day = Number(m[1]);
+  if (!mon || !day) return '';
+  return `2026-${String(mon).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function _sdRakhiChannelsFromEntries(ents){
+  const channels = new Set();
+  (ents || []).forEach(e => {
+    const typ = String(e?.type || '').trim().toLowerCase();
+    const hay = `${e?.cust||''} ${e?.channel||''} ${e?.sub_channel||''} ${e?.type||''}`.toLowerCase();
+    if (typ === 'website' || hay.includes('website')) channels.add('Website');
+    ['Blinkit','Instamart','Myntra','Nykaa','IGP','Flipkart','Amazon','Ajio'].forEach(ch => {
+      if (hay.includes(ch.toLowerCase())) channels.add(ch);
+    });
+  });
+  return channels;
+}
+function _sdLaunchDateDisplay(item, ents){
+  if (!_sdIsRakhiItem(item)) return item?.launch_date || '—';
+  const channels = _sdRakhiChannelsFromEntries(ents);
+  const selectedTypes = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>String(c.value||''));
+  const selectedMps = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||''));
+  if (selectedTypes.includes('Website')) channels.add('Website');
+  selectedMps.forEach(mp => channels.add(mp));
+  if (!channels.size && selectedTypes.includes('SOR')) ['Myntra','Nykaa','Amazon','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
+  if (!channels.size) ['Website','IGP','Amazon','Flipkart','Myntra','Nykaa','Instamart'].forEach(ch=>channels.add(ch));
+  const parts = Array.from(channels).map(ch => {
+    const iso = _sdTargetLaunchIso(ch);
+    return iso ? `${ch}: ${_sdDisplayDate(iso)}` : '';
+  }).filter(Boolean);
+  return parts.length ? parts.join(' · ') : '—';
+}
+let _sdRevenueShareCache = {masterRef:null, signature:'', total:0, map:new Map()};
+function _sdRevenueFilterSignature(){
+  const d1=document.getElementById('sdD1')?.value||'', d2=document.getElementById('sdD2')?.value||'';
+  const types=Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value).sort();
+  const mps=Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value).sort();
+  const cn=(typeof cnxGlobalCnQuery==='function'?cnxGlobalCnQuery():'');
+  return JSON.stringify([d1,d2,types,mps,cn]);
+}
+function _sdBuildRevenueShareContext(){
+  const signature=_sdRevenueFilterSignature();
+  if (_sdRevenueShareCache.masterRef === master && _sdRevenueShareCache.signature === signature){
+    _setSkuRevenueShareContext('skudetails', _sdRevenueShareCache.map, _sdRevenueShareCache.total);
+    return _sdRevenueShareCache;
+  }
+  const map=new Map(); let total=0;
+  if (LOGIN_ROLE !== 'employee'){
+    (master||[]).forEach(it=>{
+      if (typeof cnxItemMatchesGlobalCn==='function' && !cnxItemMatchesGlobalCn(it)) return;
+      const rev=_sdFilteredEntries(it).reduce((sum,e)=>sum+(Number(e?.rev)||0),0);
+      map.set(_skuRevenueKey(it?.sku),rev); total+=rev;
+    });
+  }
+  _sdRevenueShareCache={masterRef:master,signature,total,map};
+  _setSkuRevenueShareContext('skudetails',map,total);
+  return _sdRevenueShareCache;
+}
+function _sdReturnStatsFromEntries(ents){
+  const rows=Array.isArray(ents)?ents:[];
+  const sold=rows.reduce((s,e)=>s+Math.max(0,Number(e?.qty)||0),0);
+  const returned=rows.reduce((s,e)=>s+Math.max(0,Number(e?.ret)||0),0);
+  const base=sold+returned;
+  return {sold,returned,base,rate:base>0?(returned/base)*100:0};
+}
 function _sdFilteredStatus(item, ents){
   const rows = Array.isArray(ents) ? ents : [];
   // Status follows the currently selected Date, Type and Marketplace filters.
@@ -8679,6 +8813,7 @@ function _sdFilteredStatus(item, ents){
   let anchor = selectedTo ? new Date(selectedTo + 'T23:59:59') : now;
   if (Number.isNaN(anchor.getTime())) anchor = now;
 
+  if ((Number(item?.dispatch_count) || 0) <= 0) return 'No Record';
   const anchorMonthKey = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`;
   if (item?.launch_key && item.launch_key === anchorMonthKey) return 'New Launch';
 
@@ -8696,9 +8831,7 @@ function _sdFilteredStatus(item, ents){
     if (q > 0) recentSoldQty += q;
   });
 
-  const stockWip = (parseFloat(item?.inv_stock) || 0) + (parseFloat(item?.inv_wip) || 0);
-  if (stockWip >= 20 && recentSoldQty <= 0) return 'Slow Movers';
-  return 'Good Running';
+  return recentSoldQty > 0 ? 'Good Running' : 'Slow Movers';
 }
 function _sdSellThroughStats(item, ents){
   // Standard retail sell-through rate, fully responsive to the active
@@ -8881,6 +9014,8 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
   const filteredStatus = _sdFilteredStatus(item, usageEntries);
   const metaStatusEl = document.getElementById('sdMetaStatus');
   if (metaStatusEl) metaStatusEl.textContent = filteredStatus;
+  const metaLaunchEl = document.getElementById('sdMetaLaunch');
+  if (metaLaunchEl) metaLaunchEl.textContent = _sdLaunchDateDisplay(item, ents);
 
   const byChannel = {};
   const byMarketplace = {};
@@ -8912,7 +9047,8 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
   const snapBody = document.querySelector('#sdSnapshotTable tbody');
   if (snapBody){
     const rows = [
-      ['Launch Date', item.launch_date || '—'],
+      ['Launch Date', _sdLaunchDateDisplay(item, ents)],
+      ['Net Revenue Contribution (Filtered)', LOGIN_ROLE==='employee' ? '—' : ((skuRevenueContributionMeta(item)?.pct || 0).toFixed(2) + '%')],
       ['Current Stock', stock.toLocaleString('en-IN')],
       ['WIP', wip.toLocaleString('en-IN')],
       ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
@@ -8993,6 +9129,8 @@ function renderSkuDetails(sku){
   if (emptyEl) emptyEl.style.display = 'none';
   if (contentEl) contentEl.style.display = 'block';
 
+  _sdBuildRevenueShareContext();
+
   const imgEl = document.getElementById('sdImg');
   if (imgEl) {
     imgEl.innerHTML = (item.image_url && String(item.image_url).toLowerCase() !== 'nan' && item.image_url !== '')
@@ -9008,6 +9146,7 @@ function renderSkuDetails(sku){
     `<span>CN Class: <b>${cnClassBadge(cnClassOf(item))}</b></span>` +
     `<span>Category: <b>${safeText(item.taxon)}</b></span>` +
     `<span>Plating: <b>${safeText(item.plating)}</b></span>` +
+    `<span>Launch Date: <b id="sdMetaLaunch">${escHtml(_sdLaunchDateDisplay(item, item.sales_entries || []))}</b></span>` +
     (item.stone_color ? `<span>Stone Color: <b>${safeText(item.stone_color)}</b></span>` : '') +
     (item.dimensions ? `<span>Dimensions: <b>${safeText(item.dimensions)}</b></span>` : '') +
     (item.combo_skus ? `<span>Combo SKUs: <b>${safeText(skuTextWithFlags(item.combo_skus))}</b></span>` : '') +
@@ -9026,12 +9165,13 @@ function renderSkuDetails(sku){
     const wip = parseFloat(item.inv_wip) || 0;
     const avail = stock + wip;
     const initialSellThrough = _sdSellThroughStats(item, item.sales_entries || []);
-    const launchDisp = item.launch_date || '—';
+    const launchDisp = _sdLaunchDateDisplay(item, item.sales_entries || []);
     const rows = [
       ['SKU Code', escHtml(item.sku || '—')],
       ['CN Name (All Product AF)', escHtml(item.cn_name || '—')],
       ['CN Classification', cnClassBadge(cnClassOf(item))],
       ['Launch Date', launchDisp],
+      ['Net Revenue Contribution (Filtered)', LOGIN_ROLE==='employee' ? '—' : ((skuRevenueContributionMeta(item)?.pct || 0).toFixed(2) + '%')],
       ['Current Stock', stock.toLocaleString('en-IN')],
       ['WIP', wip.toLocaleString('en-IN')],
       ['Available (Stock+WIP)', avail.toLocaleString('en-IN')],
@@ -9101,6 +9241,7 @@ function renderSkuDetails(sku){
 function renderSdTable(){
   const item = (master || []).find(i => i.sku === currentSdSku);
   if (!item) return;
+  _sdBuildRevenueShareContext();
   let ents = _sdFilteredEntries(item).slice();
   ents.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
@@ -9109,17 +9250,13 @@ function renderSdTable(){
   const orderStats = _sdOrderStats(usage);
   const totalQty = usage.totalQty;
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
-  const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
+  const returnStats = _sdReturnStatsFromEntries(ents);
+  const totalRet = returnStats.returned;
   const sellThrough = _sdSellThroughStats(item, usage.entries);
-  // Return % = returned units divided by the original dispatched units.
-  // COSA Final Qty is the net sold quantity, so original dispatched qty is
-  // Final Qty + Return Qty. This stays fully filter-aware because both totals
-  // are calculated from the currently filtered transaction rows.
-  // Returns and return amount below belong to the selected SKU's direct COSA
-  // rows, so their denominator must stay direct too (combo-parent demand is a
-  // separate inventory-consumption quantity and must not dilute Return %).
-  const returnBaseQty = directQty + totalRet;
-  const totalRetPct = returnBaseQty > 0 ? (totalRet / returnBaseQty) * 100 : 0;
+  // Return rate is calculated only from the same currently filtered direct
+  // COSA rows: Return Qty ÷ (Final Qty + Return Qty).
+  const returnBaseQty = returnStats.base;
+  const totalRetPct = returnStats.rate;
   const totalRetAmt = ents.reduce((s,e) => {
     const r = parseFloat(e.ret) || 0;
     if (!r) return s;
@@ -9145,11 +9282,16 @@ function renderSdTable(){
     ? `${Math.round(usage.directQty).toLocaleString('en-IN')} direct + ${Math.round(usage.comboQty).toLocaleString('en-IN')} via ${parentCodes.join(', ')}`
     : 'Final Qty by Order Date');
   setT('sdRev', fmt(totalRev));
+  const revContribution = skuRevenueContributionMeta(item);
+  setT('sdSku', skuLabel(item.sku, item.sku_name));
+  setT('sdRevContribution', (revContribution?.pct || 0).toFixed(2) + '%');
+  setT('sdRevContributionMeta', `${fmt(totalRev)} of ${fmt(revContribution?.total || 0)} filtered total net revenue`);
   setT('sdDiscPct', overallDiscPct + '%');
   setT('sdStrPct', sellThrough.rate.toFixed(1) + '%');
   setT('sdStrMeta', `${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold ÷ (${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold + ${Math.round(sellThrough.invStock).toLocaleString('en-IN')} stock)`);
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
   setT('sdRetPct', totalRetPct.toFixed(1) + '%');
+  setT('sdRetMeta', `${Math.round(totalRet).toLocaleString('en-IN')} returned ÷ ${Math.round(returnBaseQty).toLocaleString('en-IN')} dispatched under current filters`);
   setT('sdRetAmt', fmt(totalRetAmt));
 
   const websiteRepeat = _sdWebsiteRepeatStats(item, usage.skus);
@@ -9165,6 +9307,7 @@ function renderSdTable(){
   _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage);
 
   renderSdTrend();
+  renderSdReturnTrend();
   renderSdChannel();
 
   const body = document.getElementById('sdBody');
@@ -9218,6 +9361,7 @@ function _sdFilteredOrderEntries(item){
 function renderSdAll(){
   renderSdTable();
   renderSdTrend();
+  renderSdReturnTrend();
   renderSdChannel();
 }
 function resetSdFilters(){
@@ -9327,6 +9471,55 @@ function sdTrendPointClick(data){
   window._sdPopupTimer = setTimeout(() => { popup.style.display = 'none'; }, 4000);
 }
 window.sdTrendPointClick = sdTrendPointClick;
+
+
+/* ── Return Qty Trend — follows the exact SKU Details filters and shows hover values ── */
+let _sdReturnTrendData = [];
+function renderSdReturnTrend(){
+  const item = (master || []).find(i => i.sku === currentSdSku);
+  const host = document.getElementById('sdReturnTrendChart');
+  if (!item || !host) return;
+  const ents = _sdFilteredEntries(item).filter(e => e.date && e.date !== 'N/A');
+  if (!ents.length){ host.innerHTML = '<div class="insight-empty">No dated transactions in this range</div>'; _sdReturnTrendData=[]; return; }
+
+  const dates=ents.map(e=>e.date).sort(), first=dates[0], last=dates[dates.length-1];
+  const spanDays=Math.max(1,Math.round((new Date(last)-new Date(first))/86400000));
+  let granularity='day'; if(spanDays>400)granularity='month'; else if(spanDays>60)granularity='week';
+  const weekStart=dateStr=>{const d=new Date(dateStr+'T00:00:00');const day=(d.getDay()+6)%7;d.setDate(d.getDate()-day);return d.toISOString().slice(0,10);};
+  const bucketKey=dateStr=>granularity==='month'?dateStr.slice(0,7):(granularity==='week'?weekStart(dateStr):dateStr);
+  const bucketLabel=key=>granularity==='month'?new Date(key+'-01T00:00:00').toLocaleDateString('en-GB',{month:'short',year:'2-digit'}):new Date(key+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:granularity==='day'?'2-digit':undefined});
+  const buckets={};
+  ents.forEach(e=>{
+    const k=bucketKey(e.date), b=buckets[k]||(buckets[k]={ret:0,sold:0});
+    b.ret+=Math.max(0,Number(e.ret)||0); b.sold+=Math.max(0,Number(e.qty)||0);
+  });
+  const keys=Object.keys(buckets).sort(), vals=keys.map(k=>buckets[k].ret), maxV=Math.max(1,...vals);
+  const W=900,H=260,PAD_L=40,PAD_R=24,PAD_T=30,PAD_B=40,plotW=W-PAD_L-PAD_R,plotH=H-PAD_T-PAD_B;
+  const stepX=keys.length>1?plotW/(keys.length-1):0;
+  const pts=vals.map((v,i)=>[PAD_L+i*stepX,PAD_T+plotH-(v/maxV)*plotH]);
+  const pathD=pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const areaD=pathD+` L${pts[pts.length-1][0].toFixed(1)},${PAD_T+plotH} L${pts[0][0].toFixed(1)},${PAD_T+plotH} Z`;
+  const labelEvery=Math.max(1,Math.ceil(keys.length/10));
+  const labels=keys.map((k,i)=>(i%labelEvery===0||i===keys.length-1)?`<text x="${pts[i][0].toFixed(1)}" y="${H-12}" font-size="11" fill="#8c7a42" text-anchor="middle">${bucketLabel(k)}</text>`:'').join('');
+  _sdReturnTrendData=keys.map((k,i)=>{
+    const b=buckets[k], base=b.sold+b.ret, rate=base>0?b.ret/base*100:0;
+    return {label:granularity==='week'?'Week of '+bucketLabel(k):bucketLabel(k),ret:b.ret,sold:b.sold,rate,x:pts[i][0],y:pts[i][1]};
+  });
+  const dots=_sdReturnTrendData.map((d,i)=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="6" fill="#c0392b" style="cursor:pointer" onmouseenter="sdReturnPointHover(event,${i})" onmousemove="sdReturnPointHover(event,${i})" onmouseleave="sdReturnPointLeave()"><title>${d.label}: ${d.ret} returned</title></circle>`).join('');
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;display:block;margin:0 auto">${labels}<path d="${areaD}" fill="rgba(192,57,43,.10)" stroke="none"></path><path d="${pathD}" fill="none" stroke="#c0392b" stroke-width="2"></path>${dots}<text x="${PAD_L}" y="18" font-size="12" fill="#8c7a42">Peak Return Qty: ${Math.max(0,...vals).toLocaleString('en-IN')} (${granularity})</text></svg><div id="sdReturnTrendTooltip" style="display:none;position:absolute;min-width:160px;background:#1f2430;color:#fff;padding:9px 12px;border-radius:8px;font-size:.76rem;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:30;pointer-events:none"></div>`;
+}
+function sdReturnPointHover(ev,index){
+  const host=document.getElementById('sdReturnTrendChart'), tip=document.getElementById('sdReturnTrendTooltip'), d=_sdReturnTrendData[index];
+  if(!host||!tip||!d)return;
+  tip.innerHTML=`<b>${escHtml(d.label)}</b><br>Return Qty: <b>${Math.round(d.ret).toLocaleString('en-IN')}</b><br>Final Qty: <b>${Math.round(d.sold).toLocaleString('en-IN')}</b><br>Return Rate: <b>${d.rate.toFixed(1)}%</b>`;
+  tip.style.display='block';
+  const r=host.getBoundingClientRect();
+  const left=Math.max(6,Math.min(r.width-175,(ev?.clientX||r.left)-r.left+12));
+  const top=Math.max(6,Math.min(r.height-95,(ev?.clientY||r.top)-r.top-80));
+  tip.style.left=left+'px'; tip.style.top=top+'px';
+}
+function sdReturnPointLeave(){const tip=document.getElementById('sdReturnTrendTooltip');if(tip)tip.style.display='none';}
+window.renderSdReturnTrend=renderSdReturnTrend; window.sdReturnPointHover=sdReturnPointHover; window.sdReturnPointLeave=sdReturnPointLeave;
 
 /* ── Channel-wise Qty bar chart + best/worst channel + AOV/discount% per channel ── */
 function renderSdChannel(){
@@ -9870,6 +10063,7 @@ function applyF(){
 
   let ky=0, km=0, kf=0, kpf=0, kt=0;
   const cards = [];
+  const revenueShareMap = new Map();
   const CAP = 120;
   const drill = !!(custQ || d1 || d2);
   const anyEntryFilter = !!(custQ || d1 || d2 || typeSel.length || chanSel.length || subChanSel.length || fyQ !== 'All FYs');
@@ -9935,12 +10129,14 @@ function applyF(){
     }
 
     ky += yRev; km += mRev; kf += fRev; kpf += pfRev;
-    kt += anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
+    const itemFilteredRevenue = anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
+    kt += itemFilteredRevenue;
+    revenueShareMap.set(_skuRevenueKey(item.sku), itemFilteredRevenue);
 
     if (drill) {
       fe.forEach(e => txns.push({ ...e, sku: item.sku, sku_name: item.sku_name }));
     } else if (cards.length < CAP) {
-      cards.push({ mrp: parseFloat(item.mrp) || 0, html: mkCard({
+      const cardItem = {
         ...item,
         final_qty: anyEntryFilter ? feQty : item.final_qty,
         customer_count: filteredCustomerCount,
@@ -9948,13 +10144,13 @@ function applyF(){
         qty_3m: anyEntryFilter ? Math.round(q3m) : item.qty_3m,
         qty_6m: anyEntryFilter ? Math.round(q6m) : item.qty_6m,
         qty_1y: anyEntryFilter ? Math.round(q1y) : item.qty_1y,
-        rev_yesterday: yRev,
-        rev_month: mRev,
-        rev_fy: fRev,
-        rev_prev_fy: pfRev
-      }, anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0), null, false) });
+        rev_yesterday: yRev, rev_month: mRev, rev_fy: fRev, rev_prev_fy: pfRev
+      };
+      cards.push({ mrp: parseFloat(item.mrp) || 0, render: () => mkCard(cardItem, itemFilteredRevenue, null, false) });
     }
   });
+
+  _setSkuRevenueShareContext('matrix', revenueShareMap, kt);
 
   const grid = document.getElementById('gMatrix');
   if (grid) {
@@ -10042,7 +10238,7 @@ function applyF(){
       // MRP range select hua → low MRP pehle, phir high (ascending).
       let ordered = cards;
       if (mrpRange) ordered = cards.slice().sort((a,b) => a.mrp - b.mrp);
-      grid.innerHTML = ordered.map(c => c.html).join('') || '<div class="no-data">No data matches filters</div>';
+      grid.innerHTML = ordered.map(c => c.render()).join('') || '<div class="no-data">No data matches filters</div>';
     }
   }
   const setTxt = (id, val) => { const el=document.getElementById(id); if (el) el.textContent = fmt(val); };
@@ -10322,6 +10518,12 @@ function applyRO(){
   });
 
   roFiltered = filtered;
+  const roRevenueShareMap = new Map(); let roRevenueShareTotal = 0;
+  filtered.forEach(it => {
+    const rv = Number(it._fRev ?? it.total_net_revenue ?? 0) || 0;
+    roRevenueShareMap.set(_skuRevenueKey(it.sku), rv); roRevenueShareTotal += rv;
+  });
+  _setSkuRevenueShareContext('repeat', roRevenueShareMap, roRevenueShareTotal);
 
   const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
@@ -10631,6 +10833,10 @@ function applyColFilters(){
       return true;
     });
   }
+
+  const cfRevenueShareMap = new Map(); let cfRevenueShareTotal = 0;
+  colFiltered.forEach(it => { const rv=Number(it._fRev ?? it.total_net_revenue ?? 0)||0; cfRevenueShareMap.set(_skuRevenueKey(it.sku),rv); cfRevenueShareTotal+=rv; });
+  _setSkuRevenueShareContext('repeat', cfRevenueShareMap, cfRevenueShareTotal);
 
   // Re-render tbody only (not thead / KPIs)
   const RO_CAP = 120;
@@ -12932,6 +13138,9 @@ function renderRakhi(){
   // (exportRakhi) teeno isi filtered list ko follow karte hain.
   const fRows = ((rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   _rakhiFilteredRows = fRows;
+  const rkhRevenueShareMap = new Map(); let rkhRevenueShareTotal = 0;
+  fRows.forEach(r => { const key=_skuRevenueKey(r.sku), rv=Number(r.rev)||0; rkhRevenueShareMap.set(key,(rkhRevenueShareMap.get(key)||0)+rv); rkhRevenueShareTotal+=rv; });
+  _setSkuRevenueShareContext('rakhi', rkhRevenueShareMap, rkhRevenueShareTotal);
   const emp = LOGIN_ROLE === 'employee';
   if (sumHost){
     const totQty = fRows.reduce((s, r) => s + _rkhEffectiveQty(r), 0);
