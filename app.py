@@ -1154,18 +1154,25 @@ def _daily_reporting_platform(group, sub_channel="", typ="", customer=""):
 def _daily_reporting_adjusted_revenue(net_revenue, group, return_amount=None, return_qty=0, selling_price=0):
     """Daily Reporting-only revenue formula.
 
-    Every included channel = Net Revenue + Return Amount. Website/DTC additionally
-    gets 6% added on Net Revenue. An explicit Return Amount is authoritative when
-    populated; otherwise Return Qty x Selling Price is used row-by-row.
+    Return Amount gets the 6% uplift for EVERY included channel. Website/DTC
+    additionally gets the same 6% uplift on Net Revenue itself:
+
+      Website/DTC      = (Net Revenue x 1.06) + (Return Amount x 1.06)
+      Marketplace/QC  =  Net Revenue          + (Return Amount x 1.06)
+
+    An explicit Return Amount is authoritative when populated; otherwise
+    Return Qty x Selling Price is used row-by-row. No other dashboard tab uses
+    this adjusted formula.
     """
     net = float(to_num(net_revenue))
     explicit_raw = clean(return_amount) if return_amount is not None else ""
     explicit = abs(float(to_num(return_amount))) if explicit_raw else 0.0
     derived = abs(float(to_num(return_qty)) * float(to_num(selling_price)))
     ret_amt = explicit if explicit > 0 else derived
-    adjusted = net + ret_amt
+    return_with_uplift = ret_amt * 1.06
+    adjusted = net + return_with_uplift
     if group == "dtc":
-        adjusted = net * 1.06 + ret_amt
+        adjusted = (net * 1.06) + return_with_uplift
     return adjusted, ret_amt
 
 def _daily_reporting_group(channel, sub_channel, typ, customer=""):
@@ -1203,6 +1210,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
         {
             "key": "amazon_flipkart", "url": AMAZON_FLIPKART_SALES_URL,
             "fixed_platform": "", "order_index": 7, "platform_index": 9,
+            # Daily Reporting: H = Order id; J = Amazon/Flipkart discriminator.
+            "report_order_index": 7, "report_platform_index": 9,
+            "report_order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
             "order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
             "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code", "Seller SKU"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
@@ -1218,6 +1228,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
         {
             "key": "myntra", "url": MYNTRA_SALES_URL,
             "fixed_platform": "Myntra", "order_index": 7,
+            # Daily Reporting: H = Order id.
+            "report_order_index": 7,
+            "report_order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
             "order_names": ("Order id", "Order ID", "OrderId", "Order No", "Order Number"),
             "sku_names": ("SKU No.", "SKU No", "SKU", "Seller_sku_code", "Seller SKU"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
@@ -1230,6 +1243,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
         {
             "key": "nykaa", "url": NYKAA_SALES_URL,
             "fixed_platform": "Nykaa", "order_index": 3,
+            # Daily Reporting: D = orderno.
+            "report_order_index": 3,
+            "report_order_names": ("orderno", "Order No", "Order Number", "Order ID", "MagentoOrderNo"),
             "order_names": ("orderno", "Order No", "Order Number", "Order ID", "MagentoOrderNo"),
             "sku_names": ("SKU", "SKUCode", "SKU Code", "Seller SKU"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "upddate"),
@@ -1242,6 +1258,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
         {
             "key": "tata", "url": TATA_SALES_URL,
             "fixed_platform": "Tata", "order_index": 3,
+            # Daily Reporting: D = OrderId.
+            "report_order_index": 3,
+            "report_order_names": ("OrderId", "Order ID", "Order No", "Order Number"),
             "order_names": ("OrderId", "Order ID", "Order No", "Order Number"),
             "sku_names": ("SKU", "Seller SKU", "Item Code"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Order Allocate Date"),
@@ -1254,6 +1273,10 @@ def _load_channel_order_events(inv_skus_map, dbg):
         {
             "key": "ajio", "url": AJIO_SALES_URL,
             "fixed_platform": "Ajio", "order_index": 3,
+            # Daily Reporting ONLY: F = FWD Seller Order NO. Keep the existing
+            # order_index/order_names below untouched for other dashboard tabs.
+            "report_order_index": 5,
+            "report_order_names": ("FWD Seller Order NO", "FWD Seller Order No", "FWD Seller Order Number", "Seller Order No", "Seller Order Number"),
             "order_names": ("Cust Order No", "Customer Order No", "Order No", "Order ID"),
             "sku_names": ("SKU", "Seller SKU", "Seller Style Code"),
             "date_names": ("Order_Date", "Order Date", "Cust Order Date", "FWD PO Date"),
@@ -1284,6 +1307,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
 
     def _fetch_order_source(spec):
         select_groups = [spec["order_names"], spec["sku_names"], spec["date_names"]]
+        if spec.get("report_order_names"):
+            select_groups.append(spec["report_order_names"])
         if spec["status_names"]:
             select_groups.append(spec["status_names"])
         if spec.get("platform_names"):
@@ -1297,8 +1322,11 @@ def _load_channel_order_events(inv_skus_map, dbg):
             if quantity_group:
                 select_groups.append(quantity_group)
         select_positions = [spec["order_index"]]
-        if spec.get("platform_index") is not None:
-            select_positions.append(spec["platform_index"])
+        for _pos_name in ("report_order_index", "platform_index", "report_platform_index"):
+            _pos = spec.get(_pos_name)
+            if isinstance(_pos, int):
+                select_positions.append(_pos)
+        select_positions = sorted(set(select_positions))
         return _fetch_csv_fresh(
             spec["url"], select_groups=select_groups,
             select_positions=select_positions,
@@ -1328,9 +1356,26 @@ def _load_channel_order_events(inv_skus_map, dbg):
             platform_col = (find_col(frame.columns, *spec.get("platform_names", ()))
                             if spec.get("platform_names") else None)
             if platform_col is None and spec.get("platform_index") is not None:
-                # This positional branch is mainly for the non-compact fallback;
-                # normal published sheets resolve via platform_names above.
+                # Existing AOV/repeat analytics keep their original resolution.
                 platform_col = src_at(spec["platform_index"])
+
+            # Daily Reporting uses the user-confirmed PHYSICAL source columns as
+            # authoritative. Header matching is only a fallback. This avoids a
+            # similarly named order field elsewhere in a marketplace sheet from
+            # silently inflating/deflating the management order count.
+            report_order_col = None
+            if isinstance(spec.get("report_order_index"), int):
+                report_order_col = src_at(spec["report_order_index"])
+            if not report_order_col and spec.get("report_order_names"):
+                report_order_col = find_col(frame.columns, *spec["report_order_names"])
+            if not report_order_col:
+                report_order_col = order_col
+
+            report_platform_col = None
+            if isinstance(spec.get("report_platform_index"), int):
+                report_platform_col = src_at(spec["report_platform_index"])
+            if not report_platform_col:
+                report_platform_col = platform_col
             status_col = find_col(frame.columns, *spec["status_names"]) if spec["status_names"] else None
             customer_col = (find_col(frame.columns, *spec.get("customer_names", ()))
                             if spec.get("customer_names") else None)
@@ -1341,6 +1386,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
             resolved = {
                 "rows": len(frame), "order": order_col, "sku": sku_col,
                 "date": date_col, "platform": platform_col,
+                "report_order": report_order_col, "report_platform": report_platform_col,
                 "status": status_col, "customer": customer_col,
                 "net_qty": net_qty_col, "gross_qty": gross_qty_col,
                 "return_qty": return_qty_col,
@@ -1359,9 +1405,25 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 if status and any(flag in status for flag in ("cancel", "void", "failed")):
                     continue
 
+                # Daily Reporting order count is source-sheet authoritative and
+                # deliberately independent of SKU availability. One order can
+                # span many SKU rows; the per-day set de-duplicates it exactly.
+                dt = parse_date_any(row.get(date_col, ""))
+                if dt is not None:
+                    report_platform = spec["fixed_platform"] or _platform_label(
+                        row.get(report_platform_col, "") if report_platform_col else ""
+                    )
+                    raw_report_order = row.get(report_order_col, "") if report_order_col else ""
+                    report_order_token = _daily_reporting_order_token(report_platform, raw_report_order)
+                    if report_platform and report_order_token:
+                        reporting_order_sets.setdefault(
+                            dt.strftime("%Y-%m-%d"), set()
+                        ).add(report_order_token)
+
+                # Existing AOV/repeat analytics below remain unchanged and can
+                # still require SKU + their original order field.
                 raw_order = clean(row.get(order_col, ""))
                 raw_sku = clean(row.get(sku_col, ""))
-                dt = parse_date_any(row.get(date_col, ""))
                 if not raw_order or raw_order.casefold() in ("0", "unknown", "nan", "none") or not raw_sku or dt is None:
                     continue
 
@@ -1375,14 +1437,6 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 order_token = hashlib.sha1(
                     (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
                 ).hexdigest()[:20]
-
-                # Daily Reporting gets its own normalized exact-Order-No token.
-                # This prevents 1427 / 1427.0 / 1,427 from being counted as
-                # different orders while leaving every existing AOV event key
-                # below completely unchanged.
-                report_order_token = _daily_reporting_order_token(platform, raw_order)
-                if report_order_token:
-                    reporting_order_sets.setdefault(date_iso, set()).add(report_order_token)
 
                 # Existing AOV/repeat analytics keep their original rule: only
                 # sold orders survive here; fully returned rows are excluded.
@@ -2146,9 +2200,8 @@ def _refresh_data():
             typ  = norm_type(r.get(OD_TYPE, "Regular")) if OD_TYPE else "Regular"
 
             # Daily Reporting is isolated from every existing revenue view.
-            # It resolves its own cossa_orderdate columns header-first and uses
-            # Net Revenue + Return Amount for every included channel. Website
-            # additionally gets +6% on Net Revenue.
+            # Return Amount gets +6% for EVERY included channel. Website/DTC
+            # additionally gets +6% on Net Revenue itself.
             dr_cust = norm_cust(r.get(DR_OD_CUST, "Unknown")) if DR_OD_CUST else "Unknown"
             dr_typ = norm_type(r.get(DR_OD_TYPE, "Regular")) if DR_OD_TYPE else "Regular"
             dr_channel = calc_channel(dr_cust, dr_typ)
@@ -2171,11 +2224,11 @@ def _refresh_data():
                 day_slot["net"] += float(dr_net_rev)
                 day_slot["return_amount"] += float(ret_amt_dr)
 
-                # When cossa_orderdate itself exposes an Order No., merge it as
-                # an exact normalized fallback. The platform-aware token matches
-                # the dedicated Website/marketplace sheet token, so the same
-                # order can never be double-counted across the two sources.
-                if DR_OD_ORDER:
+                # DTC orders come from the Website source and marketplace
+                # orders come ONLY from their dedicated marketplace sheets.
+                # cossa_orderdate remains an order fallback only for Q-Commerce,
+                # where no separate order-ID feed is configured here.
+                if DR_OD_ORDER and dr_group == "qcommerce":
                     raw_dr_order = r.get(DR_OD_ORDER, "")
                     dr_platform = _daily_reporting_platform(
                         dr_group, dr_sub_channel, dr_typ, dr_cust
@@ -21942,8 +21995,8 @@ def _build_daily_reporting():
         "periods": built,
         "as_of": completed_through.strftime("%d-%b-%Y"),
         "source_note": "Data basis: completed Order Date / normalized exact Order No. — not Dispatch Date.",
-        "revenue_note": "Daily Reporting only: every channel = Net Revenue + Return Amount; Website additionally gets 6% on Net Revenue.",
-        "order_note": "Orders are unique normalized exact Order No. values (for example 1427, 1427.0 and 1,427 count once) from Website/marketplace sources with cossa_orderdate exact-order fallback when present.",
+        "revenue_note": "Daily Reporting only: Return Amount gets +6% for every channel; Website also gets +6% on Net Revenue.",
+        "order_note": "Orders are unique normalized exact Order No. values from the source order sheets: Myntra H (Order id), Ajio F (FWD Seller Order NO), Amazon/Flipkart H (Order id; J identifies marketplace), Nykaa D (orderno), Tata D (OrderId), plus Website orders; cossa_orderdate order fallback is used only for Q-Commerce.",
     }
 
 
