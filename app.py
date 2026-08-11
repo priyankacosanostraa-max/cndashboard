@@ -7333,7 +7333,17 @@ select.lg-in option{background:#fff;color:#1a1610}
       <input class="fi" id="rpD2" type="date" onchange="renderRakhiProduction()"></div>
     <button class="go-btn" style="width:auto;padding:10px 18px;background:#f3f6fb;color:#111" onclick="resetRakhiProduction()">Reset</button>
   </div>
-  <div id="rpSummary" class="yoy-grid" style="margin-bottom:16px;grid-template-columns:repeat(3,minmax(0,1fr))"></div>
+
+  <style>
+    /* Rakhi Production only: compact KPI strip so KPIs + table fit together on screen. */
+    #rpSummary .yoy-card{padding:9px 11px;min-height:76px;border-radius:14px;display:flex;flex-direction:column;justify-content:center;overflow:hidden}
+    #rpSummary .yc-label{font-size:.54rem;letter-spacing:.12em;line-height:1.15;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #rpSummary .yc-val{font-family:Inter,Arial,sans-serif !important;font-size:1.22rem;font-weight:800;line-height:1.05;white-space:nowrap;margin:0}
+    #rpSummary .yc-sub{font-size:.55rem;line-height:1.22;margin-top:4px;min-height:1.35em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+    @media(max-width:1100px){#rpSummary{grid-template-columns:repeat(3,minmax(0,1fr)) !important}}
+    @media(max-width:650px){#rpSummary{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
+  </style>
+  <div id="rpSummary" class="yoy-grid" style="margin-bottom:8px;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0 + completed receipt-only Order No./SKU rows needed to reconcile the Rakhi receiving sheet. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
@@ -15130,12 +15140,12 @@ function renderRakhiProduction(){
   });
   const rateFmt=v=>`${Math.round(Number(v)||0).toLocaleString('en-IN')} units/day`;
   if(sum)sum.innerHTML=`
-    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows (plan + live Production + completed receipts)</div></div>
-    <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Exact Order No. + SKU from Rakhi sheet</div></div>
+    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Rakhi inward sheet</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>
-    <div class="yoy-card"><div class="yc-label">Average Qty per Day</div><div class="yc-val">${rateFmt(avgQtyPerDay)}</div><div class="yc-sub">Received after 06-Aug ÷ ${elapsedDays.toLocaleString('en-IN')} elapsed day${elapsedDays===1?'':'s'}</div></div>
+    <div class="yoy-card"><div class="yc-label">Average Qty per Day</div><div class="yc-val">${rateFmt(avgQtyPerDay)}</div><div class="yc-sub">Since 06-Aug · ${elapsedDays.toLocaleString('en-IN')} elapsed day${elapsedDays===1?'':'s'}</div></div>
     <div class="yoy-card"><div class="yc-label">Current Run Rate</div><div class="yc-val">${rateFmt(currentRunRate)}</div><div class="yc-sub">Rolling 3-day inward average</div></div>
-    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(datedBalance).toLocaleString('en-IN')} dated balance ÷ days left by each Need By${blankNeedByBalance>0?` · ${Math.round(blankNeedByBalance).toLocaleString('en-IN')} undated excluded`:''}</div></div>`;
+    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(datedBalance).toLocaleString('en-IN')} dated balance${blankNeedByBalance>0?` · ${Math.round(blankNeedByBalance).toLocaleString('en-IN')} undated excluded`:''}</div></div>`;
   renderRakhiProductionSkuTable();
   renderRakhiProductionStockoutTables();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
