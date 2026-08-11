@@ -7343,7 +7343,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     @media(max-width:1100px){#rpSummary{grid-template-columns:repeat(3,minmax(0,1fr)) !important}}
     @media(max-width:650px){#rpSummary{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}
   </style>
-  <div id="rpSummary" class="yoy-grid" style="margin-bottom:8px;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px"></div>
+  <div id="rpSummary" class="yoy-grid" style="margin-bottom:8px;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px"></div>
   <div id="rpContent" class="ro-table-wrap rp-compact-wrap" style="padding:0;overflow:auto"></div>
   <div class="small-note" style="margin-top:10px">First table = supplied Production Data plan + every live PPC-WIP order/SKU whose physical Balance Qty (column K) is above 0 + completed receipt-only Order No./SKU rows needed to reconcile the Rakhi receiving sheet. For live rows not present in the supplied Excel, Qty Required equals the displayed Production Balance Qty. RKH SKUs are Need By 13-Aug-2026. Non-RKH live rows not in the supplied Excel are Need By 31-Aug-2026 through Order No. 1435; later order numbers have blank Need By. Repeated same-date SKU rows share only the highest Production Balance Qty for that date/SKU. Received quantities come only from the Rakhi receiving sheet by normalized exact Order No. + SKU after 06-Aug-2026.</div>
 
@@ -15098,16 +15098,16 @@ function renderRakhiProduction(){
   if(!_rakhiProdData){loadRakhiProduction(false);return;}
   _rakhiProdFillNeedByDropdown();
   const rows=_rakhiProdRows(true);
-  const planned=rows.reduce((s,r)=>s+(Number(r.qty_required)||0),0);
+  const balanceQty=rows.reduce((s,r)=>s+Math.max(0,Number(r.production_balance_qty)||0),0);
   const arrived=rows.reduce((s,r)=>s+(Number(r.received_since_aug6??r.arrived_qty)||0),0);
   const skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
   const meta=(_rakhiProdData&&_rakhiProdData.rakhi_receipts_meta)||{};
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
 
-  // Production pace KPIs. Average Qty/Day is always calculated from the
-  // live filtered inward quantity since the 06-Aug baseline and the current date.
-  // Nothing is hard-coded: both quantity and elapsed days update with live data/day.
+  // Production pace KPIs. Required Run Rate is the actual inward pace since
+  // 06-Aug: live received quantity divided by inclusive calendar days from
+  // 06-Aug through today. Both numerator and denominator update automatically.
   const DAY_MS=86400000;
   const isoDate=v=>{
     const s=String(v||'').trim();
@@ -15117,36 +15117,21 @@ function renderRakhiProduction(){
   };
   const todayDate=isoDate(meta.today_iso)||new Date();
   const baselineDate=isoDate(meta.baseline_date)||new Date('2026-08-06T00:00:00Z');
-  const elapsedDays=Math.max(1,Math.floor((Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate())-Date.UTC(baselineDate.getUTCFullYear(),baselineDate.getUTCMonth(),baselineDate.getUTCDate()))/DAY_MS));
-  const avgQtyPerDay=arrived/elapsedDays;
+  const elapsedDays=Math.max(1,Math.floor((Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate())-Date.UTC(baselineDate.getUTCFullYear(),baselineDate.getUTCMonth(),baselineDate.getUTCDate()))/DAY_MS)+1);
 
   // Current Run Rate = rolling 3-day inward average (Today + Yesterday + Day Before).
   const recent3Qty=rows.reduce((s,r)=>s+(Number(r.received_today)||0)+(Number(r.received_yesterday)||0)+(Number(r.received_day_before)||0),0);
   const currentRunRate=recent3Qty/3;
 
-  // Required Run Rate = only rows that HAVE a Need By date are included.
-  // Their current Production Balance is pooled, then divided by the calendar days
-  // still pending until 31-Aug of the current planning year. Blank Need By rows are
-  // excluded completely. The denominator drops automatically every calendar day.
-  let datedBalance=0,blankNeedByBalance=0;
-  rows.forEach(r=>{
-    const bal=Math.max(0,Number(r.production_balance_qty)||0);
-    if(!bal)return;
-    const need=isoDate(r.need_by_iso);
-    if(!need){blankNeedByBalance+=bal;return;}
-    datedBalance+=bal;
-  });
-  const aug31Date=new Date(Date.UTC(todayDate.getUTCFullYear(),7,31));
-  const pendingToAug31=Math.max(1,Math.ceil((Date.UTC(aug31Date.getUTCFullYear(),aug31Date.getUTCMonth(),aug31Date.getUTCDate())-Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate()))/DAY_MS));
-  const requiredRunRate=datedBalance/pendingToAug31;
+  // Required Run Rate = Received After 06-Aug / inclusive days since 06-Aug.
+  const requiredRunRate=arrived/elapsedDays;
   const rateFmt=v=>`${Math.round(Number(v)||0).toLocaleString('en-IN')} units/day`;
   if(sum)sum.innerHTML=`
-    <div class="yoy-card"><div class="yc-label">Tracked Qty</div><div class="yc-val">${Math.round(planned).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} tracker rows</div></div>
+    <div class="yoy-card"><div class="yc-label">Balance Qty</div><div class="yc-val">${Math.round(balanceQty).toLocaleString('en-IN')}</div><div class="yc-sub">Current Production Balance Qty</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Rakhi inward sheet</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>
-    <div class="yoy-card"><div class="yc-label">Average Qty per Day</div><div class="yc-val">${rateFmt(avgQtyPerDay)}</div><div class="yc-sub">Live inward ÷ ${elapsedDays.toLocaleString('en-IN')} day${elapsedDays===1?'':'s'} since 06-Aug</div></div>
     <div class="yoy-card"><div class="yc-label">Current Run Rate</div><div class="yc-val">${rateFmt(currentRunRate)}</div><div class="yc-sub">Rolling 3-day inward average</div></div>
-    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(datedBalance).toLocaleString('en-IN')} dated balance ÷ ${pendingToAug31.toLocaleString('en-IN')} day${pendingToAug31===1?'':'s'} to 31-Aug${blankNeedByBalance>0?` · undated excluded`:''}</div></div>`;
+    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(arrived).toLocaleString('en-IN')} received ÷ ${elapsedDays.toLocaleString('en-IN')} day${elapsedDays===1?'':'s'} since 06-Aug (inclusive)</div></div>`;
   renderRakhiProductionSkuTable();
   renderRakhiProductionStockoutTables();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
