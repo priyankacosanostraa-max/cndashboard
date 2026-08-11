@@ -14920,8 +14920,14 @@ function loadRakhiProduction(forceFresh=false){
   if(!host)return;
   host.innerHTML='<div class="home-empty" style="padding:30px">Loading live Production data…</div>';
   if(sum)sum.innerHTML='';
-  const url='/api/rakhi-production'+(forceFresh?'?fresh=1':'');
-  fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
+  const qs=new URLSearchParams();
+  // Receipt data is deliberately refreshed on every tab load. Production itself
+  // stays cached unless the user presses Refresh, so live inward sync is quick.
+  qs.set('receipt_fresh','1');
+  qs.set('_ts',String(Date.now()));
+  if(forceFresh)qs.set('fresh','1');
+  const url='/api/rakhi-production?'+qs.toString();
+  fetch(url,{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}})
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error){host.innerHTML='<div class="home-empty" style="padding:30px">'+escHtml(d.error)+'</div>';return;}
@@ -14981,7 +14987,7 @@ function renderRakhiProduction(){
   </tr>`).join('');
   const sourceNote=meta.source_ok===false
     ?`<div class="small-note" style="padding:7px 10px;color:#b3261e;background:#fff4f4;border-bottom:1px solid #fecaca">Live Rakhi receiving sheet could not refresh: ${escHtml(meta.error||'source unavailable')}. Arrived totals temporarily use the old baseline Balance-drop fallback; Today/Yesterday/Day Before remain unavailable.</div>`
-    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Live receiving source: normalized exact Order No. + SKU, dates strictly after 06-Aug-2026. Today ${escHtml(meta.today_display||'')} · Yesterday ${escHtml(meta.yesterday_display||'')} · Day Before ${escHtml(meta.day_before_display||'')}. Full-sheet receipt sync: ${meta.receipt_reconciled===false?'check required':'matched'}${meta.source_received_yesterday!==undefined?` · Sheet Yesterday ${Math.round(Number(meta.source_received_yesterday)||0).toLocaleString('en-IN')}`:''}. Source refresh cache: 60 seconds; Refresh forces a new fetch.</div>`;
+    :`<div class="small-note" style="padding:7px 10px;background:#f8fafc;border-bottom:1px solid #e5e7eb">Receiving Date as per Inward Inventory Date.</div>`;
   host.innerHTML=sourceNote+`<table class="ro rp-main-table" style="width:100%;border-collapse:collapse"><thead><tr>
     <th>Need By</th><th>Order Date</th><th>Order No.</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Qty Required</th><th>Production Balance Qty</th><th>Received After 06-Aug</th><th>Today<br>${escHtml(todayLabel)}</th><th>Yesterday<br>${escHtml(yesterdayLabel)}</th><th>Day Before<br>${escHtml(dayBeforeLabel)}</th><th>Production Delivery Date</th><th>Latest Receiving Date</th><th>Status</th>
   </tr></thead><tbody>${body}</tbody><tfoot><tr style="background:#fffdf7;border-top:2px solid #b8860b;font-weight:900">
@@ -19845,8 +19851,16 @@ _RAKHI_PRODUCTION_BASELINE_DATE = "2026-08-06"
 # Live Rakhi receiving sheet supplied by user.  This sheet is the authoritative
 # source of post-06-Aug receipts shown in the FIRST Rakhi Production tracker.
 _RAKHI_RECEIPTS_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1708754136&single=true&output=csv"
+# Direct Google-Sheets CSV fallbacks for the same Rakhi tab.  The published
+# /pub CSV can occasionally trail the live sheet, so the tracker compares all
+# reachable sources and uses the one with the newest valid inward date.
+_RAKHI_RECEIPTS_DIRECT_URLS = [
+    os.environ.get("RAKHI_RECEIPTS_DIRECT_CSV_URL", "").strip(),
+    "https://docs.google.com/spreadsheets/d/1o80tASST-cApEIFFdYrn9otLVq9mRVQIn4wak8pBzpM/gviz/tq?tqx=out:csv&gid=1708754136",
+    "https://docs.google.com/spreadsheets/d/1o80tASST-cApEIFEdYrn9otLVq9mRVQIn4wak8pBzpM/gviz/tq?tqx=out:csv&gid=1708754136",
+]
 _RAKHI_RECEIPTS_CACHE = {"payload": None, "ts": 0.0}
-_RAKHI_RECEIPTS_CACHE_TTL = 60
+_RAKHI_RECEIPTS_CACHE_TTL = 15
 _RAKHI_PRODUCTION_PLAN = [
     ('2026-07-04', '1398', 'LP-0294', 333, 1000, 'Priority 1', 'Need By 12th'),
     ('2026-06-24', '1387', 'BH-2237', 10, 10, 'Priority 1', 'Need By 12th'),
@@ -20225,8 +20239,9 @@ def _rakhi_prod_order_key(value):
     except Exception:
         pass
     s = s.replace("\u00a0", " ").strip().strip("'\"")
-    # Spreadsheet exports often turn integer order numbers into 1427.0 / 1427.000.
-    compact = re.sub(r"\s+", "", s)
+    # Spreadsheet exports can format integer order numbers as 1427.0,
+    # 1,427.00, or text with spaces. Normalize all of them to the same key.
+    compact = re.sub(r"[,\s]+", "", s)
     if re.fullmatch(r"[+-]?\d+(?:\.0+)?", compact):
         try:
             return str(int(float(compact)))
@@ -20267,6 +20282,121 @@ def _rakhi_prod_sku_key(value):
         pass
     s = s.replace("\u00a0", " ").strip().upper()
     return re.sub(r"[^A-Z0-9]", "", s)
+
+def _fetch_rakhi_receipts_freshest(today_date):
+    """Fetch the freshest reachable Rakhi inward CSV.
+
+    The same Google sheet is exposed through the user's published CSV and, when
+    public access permits it, through the live GViz CSV endpoint.  All sources
+    are fetched in parallel and ranked by newest valid Date first, then by the
+    amount/row count after the 06-Aug baseline.  This prevents an older
+    Publish-to-web snapshot from winning merely because it returned first.
+    """
+    baseline_date = datetime.strptime(_RAKHI_PRODUCTION_BASELINE_DATE, "%Y-%m-%d").date()
+    specs = []
+    seen = set()
+    for label, url in [
+        ("direct", u) for u in _RAKHI_RECEIPTS_DIRECT_URLS if u
+    ] + [("published", _RAKHI_RECEIPTS_CSV_URL)]:
+        url = str(url or "").strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        specs.append((label, url))
+
+    headers = {
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard-RakhiLive)",
+        "Accept": "text/csv,text/plain,*/*",
+    }
+
+    def _fetch_one(idx, label, url):
+        bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}-{idx}"
+        r = requests.get(url + bust, headers=headers, timeout=(5, 18), allow_redirects=True)
+        r.raise_for_status()
+        content = r.content
+        if "<html" in content[:1024].decode("utf-8", errors="replace").lower():
+            raise ValueError("HTML returned instead of CSV")
+        try:
+            df = pd.read_csv(io.BytesIO(content), dtype=str, on_bad_lines="skip",
+                             encoding="utf-8", encoding_errors="replace")
+        except TypeError:
+            df = pd.read_csv(io.StringIO(content.decode("utf-8", errors="replace")),
+                             dtype=str, on_bad_lines="skip")
+        cols = list(df.columns)
+        date_col = find_col(cols, "Date")
+        order_col = find_col(cols, "Order No.", "Order No", "Order")
+        sku_col = find_col(cols, "SKU No.", "SKU No", "SKU")
+        qty_col = find_col(cols, "SUM of Qty.", "SUM of Qty", "Sum Qty", "Qty")
+        if not all((date_col, order_col, sku_col, qty_col)):
+            raise ValueError("required Rakhi inward columns not found")
+
+        latest = None
+        post_rows = 0
+        post_qty = 0.0
+        for _, row in df.iterrows():
+            dt = parse_date_any(row.get(date_col))
+            if dt is None:
+                continue
+            d = dt.date()
+            if d > today_date:
+                continue
+            if latest is None or d > latest:
+                latest = d
+            if d > baseline_date:
+                q = max(0.0, to_num(row.get(qty_col)))
+                if q > 0:
+                    post_rows += 1
+                    post_qty += q
+        rank = (
+            latest.toordinal() if latest else -1,
+            post_rows,
+            int(round(post_qty)),
+            int(len(df)),
+        )
+        return {
+            "df": df,
+            "label": label,
+            "url": url,
+            "rank": rank,
+            "latest": latest,
+            "post_rows": post_rows,
+            "post_qty": int(round(post_qty)),
+            "rows": int(len(df)),
+        }
+
+    results = []
+    errors = []
+    try:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=max(1, min(4, len(specs))), thread_name_prefix="rakhi-inward") as ex:
+            futures = {ex.submit(_fetch_one, i, label, url): (label, url) for i, (label, url) in enumerate(specs)}
+            for fut in as_completed(futures):
+                label, _url = futures[fut]
+                try:
+                    results.append(fut.result())
+                except Exception as exc:
+                    errors.append(f"{label}: {str(exc)[:180]}")
+    except Exception:
+        # Conservative fallback if thread creation is unavailable on a host.
+        for i, (label, url) in enumerate(specs):
+            try:
+                results.append(_fetch_one(i, label, url))
+            except Exception as exc:
+                errors.append(f"{label}: {str(exc)[:180]}")
+
+    if not results:
+        raise ValueError("Rakhi inward source unavailable" + (": " + " | ".join(errors) if errors else ""))
+    best = max(results, key=lambda x: x["rank"])
+    return best["df"], {
+        "source_mode": best["label"],
+        "source_latest_date": best["latest"].isoformat() if best["latest"] else "",
+        "source_latest_date_display": best["latest"].strftime("%d-%b-%Y") if best["latest"] else "",
+        "source_candidate_count": len(results),
+        "source_fetch_errors": errors,
+    }
+
 
 def _build_rakhi_receipts_after_aug6(force=False):
     """Aggregate the user's published Rakhi receiving sheet after 06-Aug-2026.
@@ -20359,7 +20489,8 @@ def _build_rakhi_receipts_after_aug6(force=False):
         }
 
     try:
-        df = _fetch_csv_fresh(_RAKHI_RECEIPTS_CSV_URL)
+        df, source_meta = _fetch_rakhi_receipts_freshest(today_date)
+        payload.update(source_meta)
         # Keep the ORIGINAL dataframe column objects/names. find_col() already
         # normalizes case/punctuation/spacing; stripping here would break r.get()
         # when a published CSV header itself contains leading/trailing spaces.
@@ -23324,8 +23455,9 @@ def api_rakhi_production():
         return jsonify({"error": "login required"}), 401
     try:
         fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+        receipt_fresh = fresh or request.args.get("receipt_fresh", "0").strip().lower() in ("1", "true", "yes")
         _refresh_production_cache_if_requested()
-        resp = jsonify(_build_rakhi_production_tracker(force_rakhi_receipts=fresh))
+        resp = jsonify(_build_rakhi_production_tracker(force_rakhi_receipts=receipt_fresh))
         resp.headers["Cache-Control"] = "no-store"
         return resp
     except Exception as e:
