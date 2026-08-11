@@ -1089,6 +1089,85 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
 
 _DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "flipkart", "ajio", "tata", "tata cliq"}
 
+def _daily_reporting_order_key(value):
+    """Canonical exact Order No. key for Daily Reporting only.
+
+    Spreadsheet exports can represent the same numeric order as 1427, 1427.0,
+    1,427 or text.  Daily Reporting must count that as one order, without
+    changing the order identities used by any other dashboard feature.
+    """
+    if value is None:
+        return ""
+    try:
+        if isinstance(value, (int, np.integer)):
+            return str(int(value))
+        if isinstance(value, (float, np.floating)) and np.isfinite(value) and float(value).is_integer():
+            return str(int(value))
+    except Exception:
+        pass
+    s = str(value)
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s)
+    except Exception:
+        pass
+    s = s.replace("\u00a0", " ").strip().strip("'\"")
+    compact = re.sub(r"[,\s]+", "", s)
+    if re.fullmatch(r"[+-]?\d+(?:\.0+)?", compact):
+        try:
+            return str(int(float(compact)))
+        except Exception:
+            pass
+    return re.sub(r"\s+", " ", s).strip().casefold()
+
+def _daily_reporting_order_token(platform, raw_order):
+    key = _daily_reporting_order_key(raw_order)
+    if not key or key in ("0", "unknown", "nan", "none", "na", "n/a"):
+        return ""
+    plat = str(platform or "").strip() or "Other"
+    digest = hashlib.sha1(
+        (plat.casefold() + "|" + key).encode("utf-8", errors="ignore")
+    ).hexdigest()[:20]
+    return f"{plat}|{digest}"
+
+def _daily_reporting_platform(group, sub_channel="", typ="", customer=""):
+    if group == "dtc":
+        return "Website"
+    hay = " ".join(str(v or "").casefold() for v in (sub_channel, typ, customer))
+    if group == "marketplace":
+        for token, label in (
+            ("amazon", "Amazon"), ("flipkart", "Flipkart"),
+            ("myntra", "Myntra"), ("nykaa", "Nykaa"),
+            ("ajio", "Ajio"), ("tata", "Tata"),
+        ):
+            if token in hay:
+                return label
+        return "Marketplace"
+    if group == "qcommerce":
+        if "blinkit" in hay:
+            return "Blinkit"
+        if "instamart" in hay or "swiggy" in hay:
+            return "Instamart"
+        return "QCommerce"
+    return "Other"
+
+def _daily_reporting_adjusted_revenue(net_revenue, group, return_amount=None, return_qty=0, selling_price=0):
+    """Daily Reporting-only revenue formula.
+
+    Every included channel = Net Revenue + Return Amount. Website/DTC additionally
+    gets 6% added on Net Revenue. An explicit Return Amount is authoritative when
+    populated; otherwise Return Qty x Selling Price is used row-by-row.
+    """
+    net = float(to_num(net_revenue))
+    explicit_raw = clean(return_amount) if return_amount is not None else ""
+    explicit = abs(float(to_num(return_amount))) if explicit_raw else 0.0
+    derived = abs(float(to_num(return_qty)) * float(to_num(selling_price)))
+    ret_amt = explicit if explicit > 0 else derived
+    adjusted = net + ret_amt
+    if group == "dtc":
+        adjusted = net * 1.06 + ret_amt
+    return adjusted, ret_amt
+
 def _daily_reporting_group(channel, sub_channel, typ, customer=""):
     """Return the Daily Reporting revenue bucket without changing any other tab.
 
@@ -1297,12 +1376,13 @@ def _load_channel_order_events(inv_skus_map, dbg):
                     (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
                 ).hexdigest()[:20]
 
-                # Daily Reporting counts genuine placed orders by exact source
-                # Order ID. A fully returned order is still an order, therefore
-                # this identity is captured before the sold-qty filter below.
-                reporting_order_sets.setdefault(date_iso, set()).add(
-                    f"{platform}|{order_token}"
-                )
+                # Daily Reporting gets its own normalized exact-Order-No token.
+                # This prevents 1427 / 1427.0 / 1,427 from being counted as
+                # different orders while leaving every existing AOV event key
+                # below completely unchanged.
+                report_order_token = _daily_reporting_order_token(platform, raw_order)
+                if report_order_token:
+                    reporting_order_sets.setdefault(date_iso, set()).add(report_order_token)
 
                 # Existing AOV/repeat analytics keep their original rule: only
                 # sold orders survive here; fully returned rows are excluded.
@@ -1639,6 +1719,26 @@ def _refresh_data():
             "daily_reporting_order": W_REPORT_ORDER,
         }
 
+        # Daily Reporting order count is intentionally independent of the
+        # repeat/customer/address columns below. A Website order only needs
+        # Order Date + exact Order No.; SKU/name/address availability must never
+        # suppress it from the management order count.
+        if W_DATE and W_REPORT_ORDER:
+            for _dr_web_row in _df_chunks(web_orders):
+                _dr_status = str(_dr_web_row.get(W_STATUS, "") or "").strip().casefold() if W_STATUS else ""
+                if _dr_status and any(x in _dr_status for x in ("cancel", "void", "failed")):
+                    continue
+                _dr_dt = parse_date_any(_dr_web_row.get(W_DATE, ""))
+                if _dr_dt is None:
+                    continue
+                _dr_token = _daily_reporting_order_token(
+                    "Website", _dr_web_row.get(W_REPORT_ORDER, "")
+                )
+                if _dr_token:
+                    daily_reporting_website_orders.setdefault(
+                        _dr_dt.strftime("%Y-%m-%d"), set()
+                    ).add(_dr_token)
+
         # Repeat-rate sessions and Website/D2C city sales are built from the
         # same Website order source. City rows are compacted by SKU + date +
         # city so the browser can recalculate the top city for active date
@@ -1661,18 +1761,6 @@ def _refresh_data():
                     continue
                 n_web = re.sub(r"[^A-Z0-9]", "", raw_web_sku.upper())
                 mapped_web_sku = inv_skus_map.get(n_web, raw_web_sku.upper())
-
-                # Daily Reporting: one Website order is one exact Order No.,
-                # regardless of how many SKU lines it contains. Cancelled rows
-                # were already removed above. No customer/date approximation.
-                raw_report_order = clean(r.get(W_REPORT_ORDER, "")) if W_REPORT_ORDER else ""
-                if raw_report_order and raw_report_order.casefold() not in ("0", "unknown", "nan", "none"):
-                    report_token = hashlib.sha1(
-                        ("website|" + raw_report_order.casefold()).encode("utf-8", errors="ignore")
-                    ).hexdigest()[:20]
-                    daily_reporting_website_orders.setdefault(date_iso, set()).add(
-                        f"Website|{report_token}"
-                    )
 
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
@@ -1978,6 +2066,7 @@ def _refresh_data():
     orderdate_customer_activity = {}
     daily_reporting_daily = {}
     daily_reporting_qcommerce_orders = {}
+    daily_reporting_cosa_orders = {}
     orderdate_customer_activity_ts = 0.0
     try:
         _wstage("fetching", "Downloading order-date sales sheet for Rakhi…")
@@ -2010,6 +2099,24 @@ def _refresh_data():
             "Returned Amount", "return amount", "return amt"
         )
 
+        # Daily Reporting has independent header-first resolution so a newly
+        # inserted column in cossa_orderdate cannot shift revenue/customer/type
+        # and silently corrupt this management report. Existing tabs keep their
+        # original positional mapping above.
+        DR_OD_REV = find_col(cosa_od.columns, "Net Revenue", "net rev", "revenue") or OD_REV
+        DR_OD_CUST = find_col(cosa_od.columns, "Customer Name", "customer", "client", "party") or OD_CUST
+        DR_OD_TYPE = find_col(cosa_od.columns, "Type", "channel", "mode") or OD_TYPE
+        DR_OD_RET = find_col(cosa_od.columns, "Return Qty", "return qty", "returns", "returned qty") or OD_RET
+        DR_OD_SP = find_col(cosa_od.columns, "Selling Price", "selling price", "sp", "unit price") or OD_SP
+        DR_OD_RET_AMT = find_col(
+            cosa_od.columns, "Return Amount", "Return Amt", "Return Value",
+            "Returned Amount", "return amount", "return amt"
+        )
+        DR_OD_ORDER = find_col(
+            cosa_od.columns, "Order No", "Order No.", "Order Number", "Order ID",
+            "OrderId", "Order Code", "order_no", "orderno"
+        )
+
         dbg["cossa_orderdate_cols"] = od_cols
         dbg["cossa_orderdate_resolved"] = {
             "date": OD_DATE, "fy": OD_FY, "sku": OD_SKU, "qty": OD_QTY,
@@ -2037,6 +2144,47 @@ def _refresh_data():
 
             cust = norm_cust(r.get(OD_CUST, "Unknown")) if OD_CUST else "Unknown"
             typ  = norm_type(r.get(OD_TYPE, "Regular")) if OD_TYPE else "Regular"
+
+            # Daily Reporting is isolated from every existing revenue view.
+            # It resolves its own cossa_orderdate columns header-first and uses
+            # Net Revenue + Return Amount for every included channel. Website
+            # additionally gets +6% on Net Revenue.
+            dr_cust = norm_cust(r.get(DR_OD_CUST, "Unknown")) if DR_OD_CUST else "Unknown"
+            dr_typ = norm_type(r.get(DR_OD_TYPE, "Regular")) if DR_OD_TYPE else "Regular"
+            dr_channel = calc_channel(dr_cust, dr_typ)
+            dr_sub_channel = calc_sub_channel(dr_cust, dr_channel, dr_typ)
+            dr_group = _daily_reporting_group(dr_channel, dr_sub_channel, dr_typ, dr_cust)
+            if dr_group:
+                dr_net_rev = to_num(r.get(DR_OD_REV, 0)) if DR_OD_REV else 0.0
+                dr_return_qty = to_num(r.get(DR_OD_RET, 0)) if DR_OD_RET else 0.0
+                dr_sp = to_num(r.get(DR_OD_SP, 0)) if DR_OD_SP else 0.0
+                dr_explicit_return = r.get(DR_OD_RET_AMT, "") if DR_OD_RET_AMT else None
+                adjusted_rev, ret_amt_dr = _daily_reporting_adjusted_revenue(
+                    dr_net_rev, dr_group, dr_explicit_return, dr_return_qty, dr_sp
+                )
+                day_slot = daily_reporting_daily.setdefault(order_date_iso, {
+                    "dtc": 0.0, "marketplace": 0.0, "qcommerce": 0.0, "total": 0.0,
+                    "net": 0.0, "return_amount": 0.0
+                })
+                day_slot[dr_group] += adjusted_rev
+                day_slot["total"] += adjusted_rev
+                day_slot["net"] += float(dr_net_rev)
+                day_slot["return_amount"] += float(ret_amt_dr)
+
+                # When cossa_orderdate itself exposes an Order No., merge it as
+                # an exact normalized fallback. The platform-aware token matches
+                # the dedicated Website/marketplace sheet token, so the same
+                # order can never be double-counted across the two sources.
+                if DR_OD_ORDER:
+                    raw_dr_order = r.get(DR_OD_ORDER, "")
+                    dr_platform = _daily_reporting_platform(
+                        dr_group, dr_sub_channel, dr_typ, dr_cust
+                    )
+                    dr_order_token = _daily_reporting_order_token(dr_platform, raw_dr_order)
+                    if dr_order_token:
+                        daily_reporting_cosa_orders.setdefault(order_date_iso, set()).add(
+                            dr_order_token
+                        )
 
             # One customer can have many SKU/order lines on one day. Dates are
             # de-duplicated, while Qty/Revenue retain every valid positive line.
@@ -2080,39 +2228,6 @@ def _refresh_data():
             channel = calc_channel(cust, typ)
             sub_channel = calc_sub_channel(cust, channel, typ)
 
-            # Daily Reporting is isolated from every existing revenue view.
-            # Source is COSA Order Date only. Return Amount is ADDED back to
-            # Net Revenue for all report channels; Website additionally gets
-            # +6% on Net Revenue itself (100 -> 106), exactly as requested.
-            dr_group = _daily_reporting_group(channel, sub_channel, typ, cust)
-            if dr_group:
-                if OD_RET_AMT:
-                    ret_amt_dr = abs(float(to_num(r.get(OD_RET_AMT, 0))))
-                else:
-                    ret_amt_dr = abs(float(ret * sp))
-                adjusted_rev = float(rev) + ret_amt_dr
-                if dr_group == "dtc":
-                    adjusted_rev = float(rev) * 1.06 + ret_amt_dr
-                day_slot = daily_reporting_daily.setdefault(order_date_iso, {
-                    "dtc": 0.0, "marketplace": 0.0, "qcommerce": 0.0, "total": 0.0
-                })
-                day_slot[dr_group] += adjusted_rev
-                day_slot["total"] += adjusted_rev
-
-                # Q-Commerce has no dedicated published order sheet in the
-                # current app. If COSA Order Date exposes an exact Order No.,
-                # use it; otherwise revenue still reports correctly and Orders
-                # remain strictly exact-ID based (no fake row/customer count).
-                if dr_group == "qcommerce" and OD_ORDER:
-                    raw_dr_order = clean(r.get(OD_ORDER, ""))
-                    if raw_dr_order and raw_dr_order.casefold() not in ("0", "unknown", "nan", "none"):
-                        q_token = hashlib.sha1(
-                            ("qcommerce|" + raw_dr_order.casefold()).encode("utf-8", errors="ignore")
-                        ).hexdigest()[:20]
-                        daily_reporting_qcommerce_orders.setdefault(order_date_iso, set()).add(
-                            f"QCommerce|{q_token}"
-                        )
-
             if str(typ).strip().lower() == "website":
                 cust = "Website"
 
@@ -2151,6 +2266,7 @@ def _refresh_data():
         dbg["errors"].append(f"cossa_orderdate: {e}")
         daily_reporting_daily = CACHE.get("daily_reporting_daily", {}) or {}
         daily_reporting_qcommerce_orders = {}
+        daily_reporting_cosa_orders = {}
         # A temporary sheet/network failure must not replace the last known
         # Order-Date customer activity with Dispatch-Date-only results.
         orderdate_customer_activity = CACHE.get("orderdate_customer_activity", {}) or {}
@@ -2168,6 +2284,7 @@ def _refresh_data():
         daily_reporting_website_orders,
         daily_reporting_marketplace_orders,
         daily_reporting_qcommerce_orders,
+        daily_reporting_cosa_orders,
     ):
         for _day, _keys in (_source_order_map or {}).items():
             if not _day or not _keys:
@@ -7788,7 +7905,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </style>
     <div class="drp-shell">
       <div class="drp-head">
-        <div><div class="drp-title">Daily Reporting</div><div class="drp-sub">Management view based on <b>Order Date / Order No.</b>, not Dispatch Date. The current-month column automatically extends every day.</div></div>
+        <div><div class="drp-title">Daily Reporting</div><div class="drp-sub">Management view based on <b>Order Date / exact Order No.</b>, not Dispatch Date. Current month shows completed days only (today excluded) and extends automatically each day.</div></div>
         <div class="drp-actions"><button class="drp-btn alt" type="button" onclick="loadDailyReporting(true)">Refresh</button><button class="drp-btn" type="button" onclick="exportDailyReportingExcel()">Export Excel</button></div>
       </div>
       <div class="drp-card">
@@ -21758,6 +21875,9 @@ def _build_daily_reporting():
     order_daily = CACHE.get("daily_reporting_orders", {}) or {}
 
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    # Management report uses completed order days only. On 11-Aug this means
+    # Aug 1-10; on 12-Aug it automatically becomes Aug 1-11.
+    completed_through = today_dt - timedelta(days=1)
     cur_start = today_dt.replace(day=1)
     p1_start, p1_end = _daily_reporting_month_bounds(today_dt, -1)
     p2_start, p2_end = _daily_reporting_month_bounds(today_dt, -2)
@@ -21767,7 +21887,7 @@ def _build_daily_reporting():
     periods = [
         ("prev_month", p1_start, p1_end, p1_start.strftime("%B")),
         ("prev_2_month", p2_start, p2_end, p2_start.strftime("%B")),
-        ("mtd", cur_start, today_dt, f"{today_dt.strftime('%b')} 1-{today_dt.day}"),
+        ("mtd", cur_start, completed_through, f"{today_dt.strftime('%b')} 1-{completed_through.day}"),
         ("last_year_prev", ly1_start, ly1_end, f"Last Year {ly1_start.strftime('%B')}"),
         ("last_year_prev_2", ly2_start, ly2_end, f"Last Year {ly2_start.strftime('%B')}"),
     ]
@@ -21820,10 +21940,10 @@ def _build_daily_reporting():
     built = [_one_period(*p) for p in periods]
     return {
         "periods": built,
-        "as_of": today_dt.strftime("%d-%b-%Y"),
-        "source_note": "Data basis: Order Date / exact Order No. — not Dispatch Date.",
-        "revenue_note": "Daily Reporting only: Website Net Revenue × 1.06 + Return Amount; all other included channels Net Revenue + Return Amount.",
-        "order_note": "Orders use exact Order No. from Website and Amazon, Myntra, Nykaa, Ajio, Tata and Flipkart source sheets; Q-Commerce is included only when an exact Order No. exists in COSA Order Date.",
+        "as_of": completed_through.strftime("%d-%b-%Y"),
+        "source_note": "Data basis: completed Order Date / normalized exact Order No. — not Dispatch Date.",
+        "revenue_note": "Daily Reporting only: every channel = Net Revenue + Return Amount; Website additionally gets 6% on Net Revenue.",
+        "order_note": "Orders are unique normalized exact Order No. values (for example 1427, 1427.0 and 1,427 count once) from Website/marketplace sources with cossa_orderdate exact-order fallback when present.",
     }
 
 
