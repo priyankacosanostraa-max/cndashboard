@@ -1820,7 +1820,13 @@ def _refresh_data():
     website_customer_events = {}
     website_city_events = {}
     website_payment_events = {}
-    website_payment_summary = {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
+    # Compact per-SKU daily Website payment/return counts used by Returns tab.
+    # co/cr = COD orders / COD returned orders; po/pr = Prepaid orders / returned orders.
+    website_return_payment_daily = {}
+    website_payment_summary = {
+        "cod": 0, "prepaid": 0, "total": 0,
+        "cod_returned": 0, "prepaid_returned": 0, "daily": []
+    }
     daily_reporting_website_orders = {}
     try:
         _wstage("fetching", "Downloading Website customer sheet for repeat-rate…")
@@ -1918,6 +1924,11 @@ def _refresh_data():
         _web_city_sums = {}
         _web_payment_sets = {}
         _web_all_payment_orders = {}
+        # Order-level return/payment index. Kept separate from Rakhi's legacy
+        # payment set so Returns can cover every Website SKU without changing
+        # any existing Rakhi calculation.
+        _web_return_payment_orders = {}
+        _web_all_return_payment_orders = {}
         if W_DATE and W_NAME and W_ADDR and W_SKU:
             for web_row_no, r in enumerate(_df_chunks(web_orders)):
                 status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
@@ -1969,6 +1980,35 @@ def _refresh_data():
                         _web_all_payment_orders[order_token] = payment_event
                         if re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
                             _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
+
+                        # Website Returns payment mode: an order is treated as
+                        # returned when this Website source line has Return/RTO
+                        # Qty, a negative quantity adjustment, or an explicit
+                        # return/RTO/refund status. Multiple lines of the same
+                        # order/SKU are OR-ed so an order is counted once.
+                        returned_line = bool(
+                            return_qty_web > 0
+                            or gross_qty_web < 0
+                            or any(k in status for k in ("return", "rto", "refund"))
+                        )
+                        all_ret_ev = _web_all_return_payment_orders.get(order_token)
+                        if all_ret_ev is None:
+                            _web_all_return_payment_orders[order_token] = {
+                                "o": _si(order_token), "p": int(cod_value),
+                                "d": _si(date_iso), "r": 1 if returned_line else 0,
+                            }
+                        elif returned_line:
+                            all_ret_ev["r"] = 1
+
+                        sku_pay_map = _web_return_payment_orders.setdefault(mapped_web_sku, {})
+                        sku_ret_ev = sku_pay_map.get(order_token)
+                        if sku_ret_ev is None:
+                            sku_pay_map[order_token] = {
+                                "o": _si(order_token), "p": int(cod_value),
+                                "d": _si(date_iso), "r": 1 if returned_line else 0,
+                            }
+                        elif returned_line:
+                            sku_ret_ev["r"] = 1
 
                 # Returns remain visible in the separate payment-mix view, but
                 # must not count as sold units, city revenue or repeat sales.
@@ -2031,22 +2071,57 @@ def _refresh_data():
             sku: sorted(events.values(), key=lambda x: (x["d"], x["o"]))
             for sku, events in _web_payment_sets.items()
         }
+
+        # Per-SKU daily counts keep the browser payload small while still
+        # allowing the Returns date filters and exact SKU search to recalculate
+        # COD/Prepaid return rates instantly.
+        website_return_payment_daily = {}
+        for sku, order_map in _web_return_payment_orders.items():
+            day_map = {}
+            for ev in order_map.values():
+                day = str(ev.get("d", "") or "")
+                if not day:
+                    continue
+                b = day_map.setdefault(day, {"d": _si(day), "co": 0, "cr": 0, "po": 0, "pr": 0})
+                payment = int(ev.get("p", 0))
+                returned = bool(int(ev.get("r", 0) or 0))
+                if payment == 1:
+                    b["co"] += 1
+                    if returned:
+                        b["cr"] += 1
+                else:
+                    b["po"] += 1
+                    if returned:
+                        b["pr"] += 1
+            website_return_payment_daily[sku] = [day_map[d] for d in sorted(day_map)]
+
         _payment_daily = {}
-        _all_cod = _all_prepaid = 0
-        for payment_event in _web_all_payment_orders.values():
+        _all_cod = _all_prepaid = _all_cod_returned = _all_prepaid_returned = 0
+        for order_token, payment_event in _web_all_payment_orders.items():
             day = payment_event.get("d", "")
             payment = int(payment_event.get("p", 0))
-            bucket = _payment_daily.setdefault(day, {"d": _si(day), "cod": 0, "prepaid": 0})
+            returned = bool(int((_web_all_return_payment_orders.get(order_token) or {}).get("r", 0) or 0))
+            bucket = _payment_daily.setdefault(
+                day, {"d": _si(day), "cod": 0, "prepaid": 0, "cod_returned": 0, "prepaid_returned": 0}
+            )
             if payment == 1:
                 bucket["cod"] += 1
                 _all_cod += 1
+                if returned:
+                    bucket["cod_returned"] += 1
+                    _all_cod_returned += 1
             else:
                 bucket["prepaid"] += 1
                 _all_prepaid += 1
+                if returned:
+                    bucket["prepaid_returned"] += 1
+                    _all_prepaid_returned += 1
         website_payment_summary = {
             "cod": _all_cod,
             "prepaid": _all_prepaid,
             "total": _all_cod + _all_prepaid,
+            "cod_returned": _all_cod_returned,
+            "prepaid_returned": _all_prepaid_returned,
             "daily": [_payment_daily[d] for d in sorted(_payment_daily)],
         }
         dbg["website_repeat_skus"] = len(website_customer_events)
@@ -2055,13 +2130,18 @@ def _refresh_data():
         dbg["website_city_buckets"] = sum(len(v) for v in website_city_events.values())
         dbg["website_payment_skus"] = len(website_payment_events)
         dbg["website_payment_orders"] = sum(len(v) for v in website_payment_events.values())
+        dbg["website_return_payment_skus"] = len(website_return_payment_daily)
         dbg["website_all_payment_orders"] = website_payment_summary["total"]
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
         website_city_events = {}
         website_payment_events = {}
-        website_payment_summary = {"cod": 0, "prepaid": 0, "total": 0, "daily": []}
+        website_return_payment_daily = {}
+        website_payment_summary = {
+            "cod": 0, "prepaid": 0, "total": 0,
+            "cod_returned": 0, "prepaid_returned": 0, "daily": []
+        }
     finally:
         try:
             del web_orders
@@ -2730,6 +2810,7 @@ def _refresh_data():
             "marketplace_product_price_events": marketplace_product_price_events.get(dedupe_key, []),
             "website_city_events": website_city_events.get(dedupe_key, []),
             "website_payment_events": website_payment_events.get(dedupe_key, []),
+            "website_return_payment_daily": website_return_payment_daily.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -2815,6 +2896,7 @@ def _refresh_data():
             "marketplace_product_price_events": marketplace_product_price_events.get(orphan_key, []),
             "website_city_events": website_city_events.get(orphan_key, []),
             "website_payment_events": website_payment_events.get(orphan_key, []),
+            "website_return_payment_daily": website_return_payment_daily.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -6905,6 +6987,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="returnsSummary" class="small-note" style="margin-top:10px;white-space:normal"></div>
     </div>
 
+    <div id="returnsPaymentBox" class="filter-box" style="margin:14px 0">
+      <label class="fl" style="margin-bottom:6px;display:block">Website Return Rate by Payment Mode</label>
+      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">COD source: Website sheet column M (1 = COD, 0 = Prepaid).</div>
+      <div id="returnsPaymentDonut"></div>
+    </div>
+
     <div id="returnsChartBox" class="filter-box" style="margin:14px 0;display:none">
       <label class="fl" id="returnsChartTitle" style="margin-bottom:10px;display:block">Return Qty Trend</label>
       <div id="returnsTrendChart" style="position:relative"></div>
@@ -8246,7 +8334,7 @@ let currentFY = "", previousFY = "", todayISO = "",
     yesterdayISO = "", currentMonthKey = "";
 let grandNetRevenue = 0, grandFinalQty = 0;
 let marketplaceData = null;
-let websitePaymentSummary = {cod:0, prepaid:0, total:0, daily:[]};
+let websitePaymentSummary = {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
 let bulkFinderImgB64 = null;
@@ -10535,7 +10623,7 @@ function loadData(force){
       grandNetRevenue = parseFloat(d.grand_net_revenue) || 0;
       grandFinalQty   = parseFloat(d.grand_final_qty) || 0;
       periodKpis = d.period_kpis || {total:grandNetRevenue, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
-      websitePaymentSummary = d.website_payment_summary || {cod:0, prepaid:0, total:0, daily:[]};
+      websitePaymentSummary = d.website_payment_summary || {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
 
       // Datalists with thousands of <option> nodes are particularly slow in
       // Chromium. Filtering still accepts any typed customer; this cap only
@@ -17889,6 +17977,7 @@ function renderReturns(){
   const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const summary=document.getElementById('returnsSummary');
   if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b> · showing top ${Math.min(20,rows.length)}.`;
+  renderReturnsPaymentDonut(state);
   renderReturnsChart(events,state);
 }
 const returnsApply_d=_debounce(()=>renderReturns(),180);
@@ -17896,6 +17985,98 @@ function resetReturnsFilters(){
   ['retD1','retD2','retSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const ch=document.getElementById('retChannel');if(ch)ch.value='All';
   renderReturns();
+}
+
+function _returnsCompactSku(v){
+  return String(v==null?'':v).toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function _returnsWebsitePaymentScope(state){
+  const st=state||_returnsFilterState();
+  const ch=_returnsNorm(st.channel||'All');
+  if(ch && !['all','website','dtc','d2c'].includes(ch)){
+    return {hidden:true,reason:'Website COD / Prepaid split is available only for Website (D2C).'};
+  }
+  const inDate=row=>{
+    const d=String(row?.d||'');
+    if(!d)return false;
+    if(st.d1 && d<st.d1)return false;
+    if(st.d2 && d>st.d2)return false;
+    return true;
+  };
+  const q=String(st.search||'').trim();
+  let rows=[],scope='All Website orders';
+  if(q){
+    const compact=_returnsCompactSku(q);
+    let item=(compact&&_roExactSkuLookup&&_roExactSkuLookup[compact])||null;
+    if(!item && compact){
+      item=(master||[]).find(it=>_returnsCompactSku(it?.sku)===compact)||null;
+    }
+    if(!item){
+      // CN-name search can still resolve when it identifies exactly one SKU.
+      const matches=(master||[]).filter(it=>_returnsSearchMatch({sku:it?.sku,cn_name:it?.cn_name,sku_name:it?.sku_name},q));
+      if(matches.length===1)item=matches[0];
+    }
+    if(!item){
+      return {hidden:false,empty:true,reason:'Enter one exact SKU to see its Website COD vs Prepaid return rate.'};
+    }
+    rows=(item.website_return_payment_daily||[]).filter(inDate).map(r=>({
+      d:r.d,cod:Number(r.co)||0,codReturned:Number(r.cr)||0,
+      prepaid:Number(r.po)||0,prepaidReturned:Number(r.pr)||0
+    }));
+    scope=`SKU ${item.sku}`;
+  }else{
+    rows=(websitePaymentSummary?.daily||[]).filter(inDate).map(r=>({
+      d:r.d,cod:Number(r.cod)||0,codReturned:Number(r.cod_returned)||0,
+      prepaid:Number(r.prepaid)||0,prepaidReturned:Number(r.prepaid_returned)||0
+    }));
+  }
+  const totals=rows.reduce((a,r)=>{
+    a.cod+=r.cod;a.codReturned+=r.codReturned;a.prepaid+=r.prepaid;a.prepaidReturned+=r.prepaidReturned;return a;
+  },{cod:0,codReturned:0,prepaid:0,prepaidReturned:0});
+  return {...totals,scope,hidden:false,empty:(totals.cod+totals.prepaid)<=0};
+}
+function renderReturnsPaymentDonut(state){
+  const box=document.getElementById('returnsPaymentBox'),host=document.getElementById('returnsPaymentDonut'),sub=document.getElementById('returnsPaymentSubtitle');
+  if(!box||!host)return;
+  const d=_returnsWebsitePaymentScope(state||_returnsFilterState());
+  if(d.hidden){
+    box.style.display='none';host.innerHTML='';return;
+  }
+  box.style.display='block';
+  if(d.empty){
+    host.innerHTML=`<div class="insight-empty">${escHtml(d.reason||'No Website payment-mode orders match the selected filters.')}</div>`;
+    if(sub)sub.textContent='COD source: Website sheet column M (1 = COD, 0 = Prepaid).';
+    return;
+  }
+  const codRate=d.cod?Math.min(100,Math.max(0,d.codReturned/d.cod*100)):0;
+  const prepaidRate=d.prepaid?Math.min(100,Math.max(0,d.prepaidReturned/d.prepaid*100)):0;
+  const R1=58,R2=40,C1=2*Math.PI*R1,C2=2*Math.PI*R2;
+  const codDash=(C1*codRate/100).toFixed(2),preDash=(C2*prepaidRate/100).toFixed(2);
+  const totalReturned=d.codReturned+d.prepaidReturned;
+  const scope=escHtml(d.scope||'All Website orders');
+  if(sub)sub.textContent=`${d.scope||'All Website orders'} · COD source: Website sheet column M (1 = COD, 0 = Prepaid) · return status from Website Return/RTO Qty/status.`;
+  host.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:4px 0 2px">
+    <div style="width:210px;height:210px;position:relative;flex:0 0 210px">
+      <svg viewBox="0 0 180 180" style="width:210px;height:210px;display:block" role="img" aria-label="Website COD and prepaid return rates">
+        <circle cx="90" cy="90" r="${R1}" fill="none" stroke="#eee8dc" stroke-width="15"></circle>
+        <circle cx="90" cy="90" r="${R1}" fill="none" stroke="#b56c18" stroke-width="15" stroke-linecap="round" transform="rotate(-90 90 90)" stroke-dasharray="${codDash} ${C1.toFixed(2)}"><title>COD return rate ${codRate.toFixed(1)}% — ${d.codReturned} returned of ${d.cod} COD orders</title></circle>
+        <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#eee8dc" stroke-width="13"></circle>
+        <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#17895e" stroke-width="13" stroke-linecap="round" transform="rotate(-90 90 90)" stroke-dasharray="${preDash} ${C2.toFixed(2)}"><title>Prepaid return rate ${prepaidRate.toFixed(1)}% — ${d.prepaidReturned} returned of ${d.prepaid} Prepaid orders</title></circle>
+        <text x="90" y="84" text-anchor="middle" font-size="11" font-weight="800" fill="#766746">WEBSITE</text>
+        <text x="90" y="103" text-anchor="middle" font-size="18" font-weight="900" fill="#1f2430">${totalReturned.toLocaleString('en-IN')}</text>
+        <text x="90" y="117" text-anchor="middle" font-size="9" font-weight="700" fill="#8c7a42">RETURNED ORDERS</text>
+      </svg>
+    </div>
+    <div style="min-width:270px;max-width:560px;display:grid;gap:10px;flex:1">
+      <div style="font-weight:900;font-size:.9rem;color:#1f2430">${scope}</div>
+      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(181,108,24,.18);border-radius:12px;background:#fffaf1">
+        <span style="width:11px;height:11px;border-radius:50%;background:#b56c18"></span><div><b>COD Return Rate</b><div class="small-note">${d.codReturned.toLocaleString('en-IN')} returned / ${d.cod.toLocaleString('en-IN')} COD orders</div></div><b style="font-size:1.18rem;color:#b56c18">${codRate.toFixed(1)}%</b>
+      </div>
+      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(23,137,94,.18);border-radius:12px;background:#f5fbf8">
+        <span style="width:11px;height:11px;border-radius:50%;background:#17895e"></span><div><b>Prepaid Return Rate</b><div class="small-note">${d.prepaidReturned.toLocaleString('en-IN')} returned / ${d.prepaid.toLocaleString('en-IN')} Prepaid orders</div></div><b style="font-size:1.18rem;color:#17895e">${prepaidRate.toFixed(1)}%</b>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderReturnsChart(events,state){
@@ -17940,7 +18121,7 @@ function exportReturnsExcel(){
   const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif}th,td{border:1px solid #bbb;padding:7px 9px}th{background:#f4ead1;font-weight:700}</style></head><body><table><tr>'+headers.map(h=>`<th>${hEsc(h)}</th>`).join('')+'</tr>'+vals.map(r=>'<tr>'+r.map(v=>`<td>${hEsc(v)}</td>`).join('')+'</tr>').join('')+'</table></body></html>';
   const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='returns_top20_filtered.xls';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
 }
-window.loadReturns=loadReturns;window.renderReturns=renderReturns;window.resetReturnsFilters=resetReturnsFilters;window.returnsApply_d=returnsApply_d;window.returnsPointHover=returnsPointHover;window.returnsPointLeave=returnsPointLeave;window.exportReturnsExcel=exportReturnsExcel;
+window.loadReturns=loadReturns;window.renderReturns=renderReturns;window.resetReturnsFilters=resetReturnsFilters;window.returnsApply_d=returnsApply_d;window.renderReturnsPaymentDonut=renderReturnsPaymentDonut;window.returnsPointHover=returnsPointHover;window.returnsPointLeave=returnsPointLeave;window.exportReturnsExcel=exportReturnsExcel;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
