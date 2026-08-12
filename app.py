@@ -7556,6 +7556,9 @@ select.lg-in option{background:#fff;color:#1a1610}
         </div>
         <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('janmashtami')">Export Excel</button>
       </div>
+      <div class="ops-filters" style="margin:0 0 10px">
+        <div class="fc" style="min-width:220px"><label class="fl">Channel</label><select class="fs" id="festivalJanmashtamiChannel" onchange="renderFestivalTable('janmashtami')"><option value="All">All Channels</option></select></div>
+      </div>
       <div id="festivalJanmashtamiNote" class="small-note" style="margin:0 0 8px"></div>
       <div id="festivalJanmashtamiTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
     </div>
@@ -7564,9 +7567,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-section-head">
         <div>
           <div class="ops-section-title">Last Ganesh Chaturthi</div>
-          <div class="festival-period">17-Jul-2025 to 17-Aug-2025</div>
+          <div class="festival-period">27-Jul-2025 to 27-Aug-2025</div>
         </div>
         <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('ganesh')">Export Excel</button>
+      </div>
+      <div class="ops-filters" style="margin:0 0 10px">
+        <div class="fc" style="min-width:220px"><label class="fl">Channel</label><select class="fs" id="festivalGaneshChannel" onchange="renderFestivalTable('ganesh')"><option value="All">All Channels</option></select></div>
       </div>
       <div id="festivalGaneshNote" class="small-note" style="margin:0 0 8px"></div>
       <div id="festivalGaneshTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
@@ -18501,8 +18507,8 @@ window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=rend
 
 
 const FESTIVAL_REPORT_CONFIG = {
-  janmashtami:{title:'Last Year Janmashtami',from:'2025-07-16',to:'2025-08-16',host:'festivalJanmashtamiTable',note:'festivalJanmashtamiNote'},
-  ganesh:{title:'Last Ganesh Chaturthi',from:'2025-07-17',to:'2025-08-17',host:'festivalGaneshTable',note:'festivalGaneshNote'}
+  janmashtami:{title:'Last Year Janmashtami',from:'2025-07-16',to:'2025-08-16',host:'festivalJanmashtamiTable',note:'festivalJanmashtamiNote',channel:'festivalJanmashtamiChannel'},
+  ganesh:{title:'Last Ganesh Chaturthi',from:'2025-07-27',to:'2025-08-27',host:'festivalGaneshTable',note:'festivalGaneshNote',channel:'festivalGaneshChannel'}
 };
 let _festivalCityRows = null;
 let _festivalCityPromise = null;
@@ -18526,10 +18532,12 @@ function _festivalWhereLabel(e){
   else if(/^Tata CLiQ$/i.test(label))label='Tata';
   return label;
 }
-function _festivalCityAgg(cfg){
+function _festivalCityAgg(cfg,selectedChannel='All'){
   const bySku=new Map();
   (_festivalCityRows||[]).forEach(r=>{
     if(!_festivalInRange(r?.date,cfg.from,cfg.to))return;
+    const sourceLabel=_festivalWhereLabel({sub_channel:r?.source||'',channel:r?.channel||'',type:r?.type||''});
+    if(selectedChannel!=='All'&&sourceLabel!==selectedChannel)return;
     const key=_festivalSkuKey(r?.sku);if(!key)return;
     const qty=Math.max(0,_festivalNum(r?.qty));if(qty<=0)return;
     const city=String(r?.city||'').trim()||'Unknown City';
@@ -18542,9 +18550,31 @@ function _festivalCityAgg(cfg){
   bySku.forEach((m,key)=>out.set(key,[...m.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))));
   return out;
 }
+function _festivalSyncChannelFilter(kind){
+  const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return 'All';
+  const el=document.getElementById(cfg.channel);if(!el)return 'All';
+  const previous=el.value||'All', labels=new Set();
+  (master||[]).forEach(item=>{
+    const entries=Array.isArray(item?.orderdate_sales_entries)?item.orderdate_sales_entries:[];
+    entries.forEach(e=>{
+      const d=e?.order_date||e?.date||'';if(!_festivalInRange(d,cfg.from,cfg.to))return;
+      const q=_festivalNum(e?.qty),r=_festivalNum(e?.rev);if(q===0&&r===0)return;
+      labels.add(_festivalWhereLabel(e));
+    });
+  });
+  const opts=['All',...[...labels].filter(Boolean).sort((a,b)=>a.localeCompare(b))];
+  el.innerHTML=opts.map(v=>`<option value="${escHtml(v)}">${v==='All'?'All Channels':escHtml(v)}</option>`).join('');
+  el.value=opts.includes(previous)?previous:'All';
+  return el.value||'All';
+}
+function _festivalSelectedChannel(kind){
+  const cfg=FESTIVAL_REPORT_CONFIG[kind],el=cfg?document.getElementById(cfg.channel):null;
+  return el&&el.value?el.value:'All';
+}
 function _festivalBuildRows(kind){
   const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return[];
-  const cityAgg=_festivalCityAgg(cfg), rows=[];
+  const selectedChannel=_festivalSelectedChannel(kind);
+  const cityAgg=_festivalCityAgg(cfg,selectedChannel), rows=[];
   (master||[]).forEach(item=>{
     const entries=Array.isArray(item?.orderdate_sales_entries)?item.orderdate_sales_entries:[];
     let sold=0,rev=0,lineCount=0;const where=new Map();
@@ -18552,8 +18582,10 @@ function _festivalBuildRows(kind){
       const d=e?.order_date||e?.date||'';if(!_festivalInRange(d,cfg.from,cfg.to))return;
       const q=_festivalNum(e?.qty),r=_festivalNum(e?.rev);
       if(q===0&&r===0)return;
+      const label=_festivalWhereLabel(e);
+      if(selectedChannel!=='All'&&label!==selectedChannel)return;
       sold+=q;rev+=r;lineCount++;
-      const label=_festivalWhereLabel(e);const slot=where.get(label)||{qty:0,rev:0,lines:0};
+      const slot=where.get(label)||{qty:0,rev:0,lines:0};
       slot.qty+=Math.max(0,q);slot.rev+=Math.max(0,r);slot.lines++;where.set(label,slot);
     });
     if(lineCount===0)return;
@@ -18580,8 +18612,9 @@ function _festivalPhotoHtml(row){
 function renderFestivalTable(kind){
   const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return;
   const host=document.getElementById(cfg.host),note=document.getElementById(cfg.note);if(!host)return;
+  const selectedChannel=_festivalSyncChannelFilter(kind);
   const rows=_festivalBuildRows(kind),admin=LOGIN_ROLE!=='employee';
-  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Top cities use Website, Myntra, Amazon, Flipkart, Nykaa and Tata city feeds where city/PIN is available.`;
+  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Channel: ${selectedChannel==='All'?'All Channels':selectedChannel} | Top cities use matching Website, Myntra, Amazon, Flipkart, Nykaa and Tata city feeds where city/PIN is available.`;
   if(!rows.length){host.innerHTML='<div class="ops-empty" style="padding:28px">No product sales found in this period.</div>';return;}
   const revenueHead=admin?'<th>Net Revenue</th>':'';
   const body=rows.map((r,i)=>`<tr>
@@ -18613,7 +18646,7 @@ async function exportFestivalExcel(kind){
   const rows=_festivalRowsCache[kind]||_festivalBuildRows(kind);
   if(!rows.length){alert('No product sales to export for this period.');return;}
   try{
-    const resp=await fetch('/api/festival-sales/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({festival:kind,rows:rows.map((r,i)=>({rank:i+1,sku:r.sku,sku_name:r.sku_name,sold_qty:r.sold_qty,net_revenue:r.net_revenue,where_sold:r.where_sold.join('\n'),top_cities:r.top_cities.map((c,j)=>`${j+1}. ${c.name} (${Math.round(c.qty)})`).join('\n'),image_url:r.image_url}))})});
+    const resp=await fetch('/api/festival-sales/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({festival:kind,channel:_festivalSelectedChannel(kind),rows:rows.map((r,i)=>({rank:i+1,sku:r.sku,sku_name:r.sku_name,sold_qty:r.sold_qty,net_revenue:r.net_revenue,where_sold:r.where_sold.join('\n'),top_cities:r.top_cities.map((c,j)=>`${j+1}. ${c.name} (${Math.round(c.qty)})`).join('\n'),image_url:r.image_url}))})});
     if(!resp.ok){let msg=`HTTP ${resp.status}`;try{const d=await resp.json();msg=d?.error||msg;}catch(_e){}throw new Error(msg);}
     const blob=await resp.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${kind}_last_year_product_sales.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
   }catch(e){alert('Excel export failed: '+(e?.message||e));}
@@ -22267,11 +22300,12 @@ def api_festival_sales_export_xlsx():
         festival = re.sub(r"[^a-z]", "", str(payload.get("festival", "")).casefold())
         configs = {
             "janmashtami": ("Last Year Janmashtami", "16-Jul-2025", "16-Aug-2025", "janmashtami_last_year_product_sales.xlsx"),
-            "ganesh": ("Last Ganesh Chaturthi", "17-Jul-2025", "17-Aug-2025", "ganesh_chaturthi_last_year_product_sales.xlsx"),
+            "ganesh": ("Last Ganesh Chaturthi", "27-Jul-2025", "27-Aug-2025", "ganesh_chaturthi_last_year_product_sales.xlsx"),
         }
         if festival not in configs:
             return jsonify({"error": "invalid festival"}), 400
         title, date_from, date_to, filename = configs[festival]
+        channel_filter = str(payload.get("channel", "All") or "All").strip() or "All"
         rows = payload.get("rows") or []
         if not isinstance(rows, list) or not rows:
             return jsonify({"error": "no rows to export"}), 400
@@ -22308,7 +22342,8 @@ def api_festival_sales_export_xlsx():
         for col in range(1, max_col + 1):
             ws.cell(1, col).fill = title_fill
         ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max_col)
-        c = ws.cell(2, 1, f"Order Date: {date_from} to {date_to}")
+        channel_note = "All Channels" if channel_filter.casefold() == "all" else channel_filter
+        c = ws.cell(2, 1, f"Order Date: {date_from} to {date_to} | Channel: {channel_note}")
         c.fill = sub_fill; c.font = Font(bold=True, color="6F4D10", size=10); c.alignment = center
         for col in range(1, max_col + 1):
             ws.cell(2, col).fill = sub_fill
