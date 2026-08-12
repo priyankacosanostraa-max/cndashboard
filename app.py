@@ -7003,7 +7003,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <table class="ops-table" id="returnsTable">
         <thead><tr>
           <th>#</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Where Returned</th>
-          <th>Return Qty</th><th class="rev-only">Avg Selling Price</th><th class="rev-only">Return Amount (Selling Price Basis)</th>
+          <th>Return Qty</th><th class="rev-only">Return Amount (Selling Price Basis)</th>
         </tr></thead>
         <tbody id="returnsBody"></tbody>
       </table>
@@ -17967,11 +17967,11 @@ function renderReturns(){
   _returnsExportRows=rows;
   const body=document.getElementById('returnsBody');
   if(body){
-    if(!rows.length){body.innerHTML='<tr><td colspan="8" class="ops-empty">No return records match the selected filters.</td></tr>';}
+    if(!rows.length){body.innerHTML='<tr><td colspan="7" class="ops-empty">No return records match the selected filters.</td></tr>';}
     else body.innerHTML=rows.map((r,i)=>{
       const skuEsc=String(r.sku).replace(/'/g,"\\'");
       const photo=r.image_url?`<img src="${escHtml(r.image_url)}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:9px;border:1px solid rgba(124,91,30,.12);background:#fff" onerror="this.style.display='none'">`:'<div class="ops-photo-ph">—</div>';
-      return `<tr><td class="ops-num">${i+1}</td><td>${photo}</td><td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td><td>${escHtml(r.cn_name||r.sku_name||'—')}</td><td>${escHtml(r.where_returned||'—')}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${Math.round(r.qty).toLocaleString('en-IN')}</td><td class="ops-num rev-only">${fmt(r.avg_sp)}</td><td class="ops-num rev-only" style="font-weight:900">${fmt(r.amount)}</td></tr>`;
+      return `<tr><td class="ops-num">${i+1}</td><td>${photo}</td><td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td><td>${escHtml(r.cn_name||r.sku_name||'—')}</td><td>${escHtml(r.where_returned||'—')}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${Math.round(r.qty).toLocaleString('en-IN')}</td><td class="ops-num rev-only" style="font-weight:900">${fmt(r.amount)}</td></tr>`;
     }).join('');
   }
   const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
@@ -18115,8 +18115,8 @@ function returnsPointLeave(){const t=document.getElementById('returnsTrendToolti
 function exportReturnsExcel(){
   const rows=_returnsExportRows||[];if(!rows.length){alert('No return rows to export.');return;}
   const emp=LOGIN_ROLE==='employee',st=_returnsFilterState();
-  const headers=['Rank','SKU','SKU Name','CN Name','Return Qty',...(emp?[]:['Avg Selling Price','Return Amount (Qty x Selling Price)']),'Where Returned','Image Link','From Date','To Date','Channel Filter'];
-  const vals=rows.map((r,i)=>[i+1,r.sku,exportSkuName(r.sku,r.sku_name),r.cn_name||'',Number(r.qty.toFixed(2)),...(emp?[]:[Number(r.avg_sp.toFixed(2)),Number(r.amount.toFixed(2))]),r.where_returned||'',r.image_url||'',st.d1||'',st.d2||'',st.channel||'All']);
+  const headers=['Rank','SKU','SKU Name','CN Name','Return Qty',...(emp?[]:['Return Amount (Qty x Selling Price)']),'Where Returned','Image Link','From Date','To Date','Channel Filter'];
+  const vals=rows.map((r,i)=>[i+1,r.sku,exportSkuName(r.sku,r.sku_name),r.cn_name||'',Number(r.qty.toFixed(2)),...(emp?[]:[Number(r.amount.toFixed(2))]),r.where_returned||'',r.image_url||'',st.d1||'',st.d2||'',st.channel||'All']);
   const hEsc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif}th,td{border:1px solid #bbb;padding:7px 9px}th{background:#f4ead1;font-weight:700}</style></head><body><table><tr>'+headers.map(h=>`<th>${hEsc(h)}</th>`).join('')+'</tr>'+vals.map(r=>'<tr>'+r.map(v=>`<td>${hEsc(v)}</td>`).join('')+'</tr>').join('')+'</table></body></html>';
   const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='returns_top20_filtered.xls';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
