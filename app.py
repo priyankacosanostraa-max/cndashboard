@@ -1724,8 +1724,12 @@ def _refresh_data():
                            "Dispatch Date", "date") or _wat(1))
         W_NAME = (find_col(web_orders.columns, "Billing Address Name",
                            "Billing Name", "Customer Name", "customer name") or _wat(3))
-        W_ADDR = (find_col(web_orders.columns, "Final Billing Address",
-                           "Billing Address", "final address", "address") or _wat(4))
+        # Website city source is the physical E column (index 4) exactly, as
+        # maintained in the Website sheet.  Header matching is only a fallback
+        # for malformed/short exports; this prevents another address-like
+        # column from being selected when headers/case/spacing change.
+        W_ADDR = (_wat(4) or find_col(web_orders.columns, "Final Billing Address",
+                                      "Billing Address", "final address", "address"))
         W_SKU = (find_col(web_orders.columns, "New SKU", "SKU", "sku code",
                           "product sku", "item sku") or _wat(7))
         _website_qty_keys = {
@@ -18645,7 +18649,7 @@ function renderFestivalTable(kind){
   const host=document.getElementById(cfg.host),note=document.getElementById(cfg.note);if(!host)return;
   const selectedChannel=_festivalSyncChannelFilter(kind);
   const rows=_festivalBuildRows(kind),admin=LOGIN_ROLE!=='employee';
-  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Channel: ${selectedChannel==='All'?'All Channels':selectedChannel} | Website cities come directly from the Website sheet; Myntra, Amazon, Flipkart, Nykaa and Tata use their matching city feeds where city/PIN is available.`;
+  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Channel: ${selectedChannel==='All'?'All Channels':selectedChannel} | Website cities come from Website sheet column E (Final Billing Address); Myntra, Amazon, Flipkart, Nykaa and Tata use their matching city feeds where city/PIN is available.`;
   if(!rows.length){host.innerHTML='<div class="ops-empty" style="padding:28px">No product sales found in this period.</div>';return;}
   const revenueHead=admin?'<th>Net Revenue</th>':'';
   const body=rows.map((r,i)=>`<tr>
@@ -23061,58 +23065,87 @@ def _pincode_city_hint(pin, state):
 
 
 def _extract_city_pin_from_address(addr):
-    """Extract city and the final 6-digit PIN from free-form billing address.
+    """Extract city + PIN from Website column E (Final Billing Address).
 
-    Supports `CITY-PIN`, `CITY, STATE - PIN`, line breaks and trailing India.
-    The final PIN is treated as authoritative; city/state consistency is
-    handled by `_normalize_city_for_state`.
+    The Website source is free-form text.  Prefer the city immediately before
+    the final Indian PIN (for example ``MUMBAI-400071``), then fall back to a
+    known city alias or the last meaningful comma-delimited address token when
+    a PIN is missing.  This keeps festival city reporting usable across
+    uppercase/lowercase/mixed text, line breaks and minor punctuation changes.
     """
-    s = str(addr or "").strip()
+    s = str(addr or "")
+    try:
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s)
+    except Exception:
+        pass
+    s = s.replace("\u00a0", " ").strip()
     if not s:
         return "", ""
+
     matches = list(re.finditer(r"(?<!\d)([1-8]\d{5})(?!\d)", s))
-    if not matches:
-        return "", ""
-    m = matches[-1]
-    pin = m.group(1)
-    prefix = s[:m.start()].strip(" \t\r\n,;:-–—/")
-    if not prefix:
-        return "", pin
+    pin = matches[-1].group(1) if matches else ""
+    prefix = s[:matches[-1].start()] if matches else s
+    prefix = prefix.strip(" \t\r\n,;:-–—/")
+
+    # Strongest Website pattern: the city is written directly before the PIN,
+    # e.g. MUMBAI-400071 / PUNE 411006 / BANGALORE-560033.
+    if pin:
+        tail_match = re.search(
+            r"(?:^|[,;\n])\s*([A-Za-z][A-Za-z .&'()/-]{1,60}?)\s*[-–— ]\s*$",
+            prefix, re.I
+        )
+        if tail_match:
+            candidate = re.sub(r"\s+", " ", tail_match.group(1)).strip(" .,-–—/")
+            # If the captured tail contains a state token after the city, the
+            # generic cleanup below will reduce it safely.
+            if candidate:
+                prefix = prefix[:tail_match.start(1)] + candidate
 
     parts = [re.sub(r"\s+", " ", p).strip(" .;:-–—/")
-             for p in re.split(r"[,\n]+", prefix)]
+             for p in re.split(r"[,;\n]+", prefix)]
     parts = [p for p in parts if p]
-    if not parts:
-        return "", pin
 
-    # Drop trailing country/state-only segments, then use the nearest city
-    # segment before the PIN.
+    pin_state = _pincode_to_state(pin) if pin else ""
     while parts and _geo_key(parts[-1]) in {"india", "bharat"}:
         parts.pop()
-    pin_state = _pincode_to_state(pin)
     while len(parts) > 1 and _geo_key(parts[-1]) in _STATE_KEY_TO_NAME:
         tail_key = _geo_key(parts[-1])
         city_alias = _CITY_STATE_ALIASES.get(tail_key)
-        # Puducherry/Delhi/Chandigarh can be both State/UT and city names.
-        # Keep the token when it is a valid city for the PIN-derived State.
-        if city_alias and city_alias[0] == pin_state:
+        if city_alias and (not pin_state or city_alias[0] == pin_state):
             break
         parts.pop()
-    if not parts:
-        return "", pin
-    city = parts[-1]
 
-    # Tail may be `Jaipur - Rajasthan`; remove a trailing State token.
-    chunks = [c.strip() for c in re.split(r"\s*[-–—/]\s*", city) if c.strip()]
-    while len(chunks) > 1 and _geo_key(chunks[-1]) in _STATE_KEY_TO_NAME:
-        tail_key = _geo_key(chunks[-1])
-        city_alias = _CITY_STATE_ALIASES.get(tail_key)
-        if city_alias and city_alias[0] == pin_state:
-            break
-        chunks.pop()
-    city = chunks[-1] if chunks else city
-    city = re.sub(r"\s+", " ", city).strip(" .,-")
-    return city.title(), pin
+    city = parts[-1] if parts else ""
+    if city:
+        chunks = [c.strip() for c in re.split(r"\s*[-–—/]\s*", city) if c.strip()]
+        while len(chunks) > 1 and _geo_key(chunks[-1]) in _STATE_KEY_TO_NAME:
+            tail_key = _geo_key(chunks[-1])
+            city_alias = _CITY_STATE_ALIASES.get(tail_key)
+            if city_alias and (not pin_state or city_alias[0] == pin_state):
+                break
+            chunks.pop()
+        city = chunks[-1] if chunks else city
+        city = re.sub(r"\b(?:district|dist\.?|near)\b.*$", "", city, flags=re.I)
+        city = re.sub(r"\s+", " ", city).strip(" .,-")
+
+    # PIN-less fallback: scan the full address for the last known city alias.
+    # Prefer that alias even when the last comma token also contains a State
+    # name (for example "Bangalore Karnataka").  When a PIN exists, PIN/state
+    # validation remains authoritative.
+    if not pin:
+        hay = _geo_key(s)
+        best = None
+        for alias_key, (alias_state, canonical) in _CITY_STATE_ALIASES.items():
+            m = list(re.finditer(r"(?:^| )" + re.escape(alias_key) + r"(?: |$)", hay))
+            if m:
+                pos = m[-1].start()
+                if best is None or pos > best[0]:
+                    best = (pos, alias_state, canonical)
+        if best:
+            city = best[2]
+
+    return (city.title() if city else ""), pin
 
 
 def _extract_pin_from_address(addr):
@@ -23186,8 +23219,11 @@ def _fetch_rkh_sku_city_rows(force=False):
             "orderqty", "orderedqty", "totalqty", "quantity", "qty"
         }
         C_QTY = next((c for c in cols if re.sub(r"[^a-z0-9]", "", c.lower()) in qty_keys), None)
-        C_ADDR = find_col(cols, "Final Billing Address", "billing address", "final address", "address") \
-                 or (cols[4] if len(cols) > 4 else None)
+        # Website city/address source is the physical E column.  Keep header
+        # matching only as fallback for short/malformed exports.
+        C_ADDR = ((cols[4] if len(cols) > 4 else None)
+                  or find_col(cols, "Final Billing Address", "billing address",
+                              "final address", "address"))
         C_STATUS = find_col(cols, "Sale Order Status", "Order Status", "status")
         C_DATE = find_col(cols, "Order_Date", "Order Date", "Display Order Date",
                           "Created", "Created At", "Dispatch Date", "Date")
