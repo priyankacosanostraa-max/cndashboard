@@ -6119,19 +6119,7 @@ table thead th:not([data-sort-disabled]):hover{background:#efe4c8!important;colo
 @keyframes cnxModuleIn{from{opacity:0;transform:translateY(12px) scale(.995)}to{opacity:1;transform:none}}
 @media(max-width:720px){.menu-btn{min-width:46px!important;width:46px!important;padding:0!important}.menu-btn .menu-btn-label{display:none}.app-bar{padding:0 12px!important}.wrap>[id^="v"]{padding-top:10px}.matrix-page-title,.insights-head,.ops-page .ops-head,.smart-hero{padding:17px!important;border-radius:19px!important}.fg .fc,.ops-page .ops-filters .fc{min-height:0!important}}
 
-/* Professional Sawan Shivratri greeting shown after every successful login. */
-.cnx-sawan-wish{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:22px;background:rgba(27,20,10,.48);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .32s ease,visibility .32s ease}
-.cnx-sawan-wish.is-open{opacity:1;visibility:visible;pointer-events:auto}
-.cnx-sawan-card{position:relative;width:min(500px,94vw);overflow:hidden;padding:46px 42px 38px;border:1px solid rgba(168,121,32,.28);border-radius:30px;text-align:center;background:radial-gradient(circle at 50% -8%,rgba(232,204,132,.4),transparent 38%),linear-gradient(145deg,#fffefb 0%,#fbf3e4 66%,#ead8b8 100%);box-shadow:0 45px 110px rgba(39,28,10,.32),0 2px 0 rgba(255,255,255,.9) inset;transform:perspective(900px) translateY(30px) rotateX(8deg) scale(.94);transition:transform .5s cubic-bezier(.18,.85,.24,1.12)}
-.cnx-sawan-wish.is-open .cnx-sawan-card{transform:perspective(900px) translateY(0) rotateX(0) scale(1)}
-.cnx-sawan-card:before,.cnx-sawan-card:after{content:"";position:absolute;border-radius:50%;pointer-events:none}.cnx-sawan-card:before{width:240px;height:240px;right:-115px;top:-130px;border:1px solid rgba(168,121,32,.12);box-shadow:0 0 0 24px rgba(168,121,32,.045),0 0 0 48px rgba(168,121,32,.028)}.cnx-sawan-card:after{width:180px;height:180px;left:-105px;bottom:-115px;background:radial-gradient(circle,rgba(216,183,95,.22),transparent 68%)}
-.cnx-sawan-close{position:absolute;right:17px;top:17px;z-index:2;width:36px;height:36px;display:grid;place-items:center;border:1px solid rgba(123,91,33,.15);border-radius:11px;background:rgba(255,254,251,.74);color:#765317;font-size:22px;line-height:1;cursor:pointer;transition:transform .2s,background .2s}.cnx-sawan-close:hover{transform:rotate(6deg);background:#fff}
-.cnx-sawan-icon{position:relative;width:78px;height:78px;display:grid;place-items:center;margin:0 auto 20px;border:1px solid rgba(168,121,32,.3);border-radius:25px;background:linear-gradient(145deg,#fffdf7,#ead39d);color:#7b5414;font-family:Georgia,serif;font-size:36px;box-shadow:0 18px 35px rgba(124,86,21,.17),inset 0 1px rgba(255,255,255,.9);animation:cnxSawanFloat 3.8s ease-in-out infinite}
-.cnx-sawan-kicker{position:relative;color:#9a6b18;font-size:9px;font-weight:950;letter-spacing:2.4px;text-transform:uppercase}.cnx-sawan-title{position:relative;margin:11px 0 9px;color:#201a12;font-family:'Nirmala UI','Mangal','Noto Sans Devanagari',sans-serif;font-size:clamp(35px,7vw,48px);line-height:1.14;font-weight:800;letter-spacing:-.5px}.cnx-sawan-copy{position:relative;max-width:390px;margin:0 auto;color:#706553;font-size:12px;font-weight:650;line-height:1.7}
-.cnx-sawan-cta{position:relative;min-width:170px;height:48px;margin-top:26px;padding:0 22px;border:0;border-radius:13px;background:linear-gradient(145deg,#e9cc82,#a87920);color:#201708;box-shadow:0 14px 30px rgba(168,121,32,.22),inset 0 1px rgba(255,255,255,.6);font-size:9px;font-weight:950;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:transform .2s,box-shadow .2s}.cnx-sawan-cta:hover{transform:translateY(-2px);box-shadow:0 19px 36px rgba(168,121,32,.28)}
-@keyframes cnxSawanFloat{50%{transform:translateY(-6px) rotate(2deg)}}
-@media(max-width:560px){.cnx-sawan-card{padding:42px 24px 30px;border-radius:24px}.cnx-sawan-icon{width:68px;height:68px;border-radius:21px;font-size:32px}.cnx-sawan-copy{font-size:11px}}
-@media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu,.cnx-sawan-icon{animation:none!important;transition:none!important}.cnx-sawan-card{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.cnx-home,.cnx-kpi,.cnx-panel,.cnx-ring,#navMenu{animation:none!important;transition:none!important}}
 
 /* Large-data smooth mode. Premium styling remains, while expensive repeated
    transforms, blur layers and entry animations are reduced once live catalog
@@ -6280,17 +6268,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 </div>
 
-<div id="cnxSawanWish" class="cnx-sawan-wish" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="cnxSawanTitle" onclick="if(event.target===this)closeSawanSomvaarWish()">
-  <div class="cnx-sawan-card">
-    <button class="cnx-sawan-close" type="button" aria-label="Close greeting" onclick="closeSawanSomvaarWish()">&times;</button>
-    <div class="cnx-sawan-icon" aria-hidden="true">ॐ</div>
-    <div class="cnx-sawan-kicker">Happy Sawan Shivratri</div>
-    <div class="cnx-sawan-title" id="cnxSawanTitle">हर हर महादेव</div>
-    <p class="cnx-sawan-copy">Warm wishes on the auspicious occasion of Sawan Shivratri. May Lord Shiva bless you with strength, clarity, peace, and prosperity in every endeavour.</p>
-    <button class="cnx-sawan-cta" id="cnxSawanClose" type="button" onclick="closeSawanSomvaarWish()">हर हर महादेव</button>
-  </div>
-</div>
-
 <div id="appRoot" style="display:none">
 
 <div class="app-bar" id="appBar">
@@ -6331,6 +6308,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')"><span class="cn-menu-icon cn-rakhi-icon"></span><span>Rakhi</span></button>
+  <button class="menu-item" id="m34" onclick="showTab('janmastmi')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="7"/><path d="m8.5 8.5 7 7M15.5 8.5l-7 7"/></svg></span><span>Janmastmi</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m31" onclick="showTab('salescomparison')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V5h4v15M16 20v-6h4v6M3 20h18"/><path d="m5 8 5-4 4 3 5-5"/></svg></span><span>Sales Comparison</span></button>
   <button class="menu-item" id="m21" onclick="showTab('bulk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span><span>Bulk</span></button>
   <button class="menu-item" id="m22" onclick="showTab('oos')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 4l16 16M6 9V5h12v10M6 15v4h8"/><path d="M9 8h6"/></svg></span><span>OOS</span></button>
@@ -7547,6 +7525,52 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   <div class="small-note" style="margin:6px 0 14px">Return Rate = Returned Qty ÷ (Sold Qty + Returned Qty), channel-wise, FY 2026-27 Rakhi orders only.</div>
   <div id="rakhiReturnsContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  </div>
+
+
+  <style>
+    #vJanmastmi .festival-table{width:100%;min-width:1120px}
+    #vJanmastmi .festival-table th{position:sticky;top:0;z-index:3;white-space:nowrap}
+    #vJanmastmi .festival-table td{vertical-align:middle}
+    #vJanmastmi .festival-photo{width:46px;height:46px;object-fit:contain;border:1px solid #e5dcc8;border-radius:9px;background:#fff;padding:3px;box-sizing:border-box;display:block;margin:auto}
+    #vJanmastmi .festival-photo-ph{width:46px;height:46px;display:grid;place-items:center;margin:auto;border:1px solid #e5dcc8;border-radius:9px;background:#fff;color:#aa955c;font-size:17px}
+    #vJanmastmi .festival-multiline{white-space:pre-line;line-height:1.45;min-width:180px}
+    #vJanmastmi .festival-city-cell{white-space:normal;line-height:1.45;min-width:220px}
+    #vJanmastmi .festival-scroll{max-height:58vh;overflow:auto}
+    #vJanmastmi .festival-period{font-weight:800;color:#765317;margin-top:3px}
+    @media(max-width:760px){#vJanmastmi .festival-scroll{max-height:52vh}}
+  </style>
+  <div id="vJanmastmi" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Janmashtami &amp; Ganesh Chaturthi - Last Year Product Sales</div>
+        <div class="ops-sub">Order Date basis. Each table shows SKU, photo, pieces sold, where the SKU was sold and its top 3 cities from the available city feeds. Net Revenue is shown for Admin access.</div>
+      </div>
+    </div>
+
+    <div class="ops-section">
+      <div class="ops-section-head">
+        <div>
+          <div class="ops-section-title">Last Year Janmashtami</div>
+          <div class="festival-period">16-Jul-2025 to 16-Aug-2025</div>
+        </div>
+        <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('janmashtami')">Export Excel</button>
+      </div>
+      <div id="festivalJanmashtamiNote" class="small-note" style="margin:0 0 8px"></div>
+      <div id="festivalJanmashtamiTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
+    </div>
+
+    <div class="ops-section" style="margin-top:22px">
+      <div class="ops-section-head">
+        <div>
+          <div class="ops-section-title">Last Ganesh Chaturthi</div>
+          <div class="festival-period">17-Jul-2025 to 17-Aug-2025</div>
+        </div>
+        <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('ganesh')">Export Excel</button>
+      </div>
+      <div id="festivalGaneshNote" class="small-note" style="margin:0 0 8px"></div>
+      <div id="festivalGaneshTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
+    </div>
   </div>
 
 
@@ -8909,6 +8933,7 @@ const MENU_TAB_META = {
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
   m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
+  m34: {name:"Janmastmi",        desc:"Last-year Janmashtami and Ganesh Chaturthi product sales."},
   m31: {name:"Sales Comparison", desc:"Rel/Non-Rel, Top 20 products and channel-wise AOV drivers."},
   m21: {name:"Bulk",             desc:"Build combo quotations and export them."},
   m22: {name:"Stockout",         desc:"Low-stock SKUs and stockout risk."},
@@ -11781,24 +11806,6 @@ function cnxIstDateKey(at){
   }
 }
 
-function showSawanSomvaarWish(at){
-  const wish = document.getElementById('cnxSawanWish');
-  if (!wish) return false;
-  wish.classList.add('is-open');
-  wish.setAttribute('aria-hidden', 'false');
-  requestAnimationFrame(() => document.getElementById('cnxSawanClose')?.focus());
-  return true;
-}
-
-function closeSawanSomvaarWish(){
-  const wish = document.getElementById('cnxSawanWish');
-  if (!wish) return;
-  wish.classList.remove('is-open');
-  wish.setAttribute('aria-hidden', 'true');
-}
-
-window.showSawanSomvaarWish = showSawanSomvaarWish;
-window.closeSawanSomvaarWish = closeSawanSomvaarWish;
 
 function setLoginRoleChoice(role){
   const chosen = role === 'employee' ? 'employee' : 'admin';
@@ -11874,8 +11881,6 @@ async function doLogin(){
     if (submitText) submitText.textContent = 'Access verified';
     playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
-    // Common success path: Admin and Employee both receive the Sawan Shivratri greeting.
-    setTimeout(() => showSawanSomvaarWish(), 220);
   } else {
     if (err) err.textContent = 'Invalid username or password.';
     if (submit) { submit.disabled = false; submit.classList.remove('is-loading'); }
@@ -11912,11 +11917,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const u = document.getElementById('lgUser'); if (u) u.focus();
 
   window.addEventListener('paste', handleFinderPaste);
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && document.getElementById('cnxSawanWish')?.classList.contains('is-open')) {
-      closeSawanSomvaarWish();
-    }
-  });
 });
 
 /* ===== Premium UI enhancements ===== */
@@ -18500,6 +18500,127 @@ function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison(
 window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window._scOrderSearchChanged=_scOrderSearchChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
 
+const FESTIVAL_REPORT_CONFIG = {
+  janmashtami:{title:'Last Year Janmashtami',from:'2025-07-16',to:'2025-08-16',host:'festivalJanmashtamiTable',note:'festivalJanmashtamiNote'},
+  ganesh:{title:'Last Ganesh Chaturthi',from:'2025-07-17',to:'2025-08-17',host:'festivalGaneshTable',note:'festivalGaneshNote'}
+};
+let _festivalCityRows = null;
+let _festivalCityPromise = null;
+let _festivalRowsCache = {};
+
+function _festivalSkuKey(v){
+  let s=(v===null||v===undefined)?'':String(v);
+  try{s=s.normalize('NFKC');}catch(_e){}
+  return s.toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function _festivalNum(v){const n=Number(String(v??'').replace(/,/g,'').trim());return Number.isFinite(n)?n:0;}
+function _festivalInRange(d,from,to){const s=String(d||'').slice(0,10);return !!s && s>=from && s<=to;}
+function _festivalWhereLabel(e){
+  const sub=String(e?.sub_channel||'').trim();
+  const channel=String(e?.channel||'').trim();
+  const type=String(e?.type||'').trim();
+  let label=sub||channel||type||'Other';
+  if(/^D2C$/i.test(label))label='Website';
+  else if(/^B2B$/i.test(label))label='Purchase / B2B';
+  else if(/^AJIO$/i.test(label))label='Ajio';
+  else if(/^Tata CLiQ$/i.test(label))label='Tata';
+  return label;
+}
+function _festivalCityAgg(cfg){
+  const bySku=new Map();
+  (_festivalCityRows||[]).forEach(r=>{
+    if(!_festivalInRange(r?.date,cfg.from,cfg.to))return;
+    const key=_festivalSkuKey(r?.sku);if(!key)return;
+    const qty=Math.max(0,_festivalNum(r?.qty));if(qty<=0)return;
+    const city=String(r?.city||'').trim()||'Unknown City';
+    const state=String(r?.state||'').trim();
+    const label=state&&city.toLowerCase()!==state.toLowerCase()?`${city}, ${state}`:city;
+    let cityMap=bySku.get(key);if(!cityMap){cityMap=new Map();bySku.set(key,cityMap);}
+    cityMap.set(label,(cityMap.get(label)||0)+qty);
+  });
+  const out=new Map();
+  bySku.forEach((m,key)=>out.set(key,[...m.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))));
+  return out;
+}
+function _festivalBuildRows(kind){
+  const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return[];
+  const cityAgg=_festivalCityAgg(cfg), rows=[];
+  (master||[]).forEach(item=>{
+    const entries=Array.isArray(item?.orderdate_sales_entries)?item.orderdate_sales_entries:[];
+    let sold=0,rev=0,lineCount=0;const where=new Map();
+    entries.forEach(e=>{
+      const d=e?.order_date||e?.date||'';if(!_festivalInRange(d,cfg.from,cfg.to))return;
+      const q=_festivalNum(e?.qty),r=_festivalNum(e?.rev);
+      if(q===0&&r===0)return;
+      sold+=q;rev+=r;lineCount++;
+      const label=_festivalWhereLabel(e);const slot=where.get(label)||{qty:0,rev:0,lines:0};
+      slot.qty+=Math.max(0,q);slot.rev+=Math.max(0,r);slot.lines++;where.set(label,slot);
+    });
+    if(lineCount===0)return;
+    const whereSold=[...where.entries()].sort((a,b)=>b[1].qty-a[1].qty||b[1].rev-a[1].rev||a[0].localeCompare(b[0])).map(([label,s])=>s.qty>0?`${label} (${Math.round(s.qty).toLocaleString('en-IN')})`:label);
+    const cities=(cityAgg.get(_festivalSkuKey(item?.sku))||[]).slice(0,3).map(([name,qty])=>({name,qty}));
+    rows.push({
+      sku:String(item?.sku||''),sku_name:String(item?.sku_name||item?.cn_name||''),image_url:String(item?.image_url||''),
+      sold_qty:sold,net_revenue:rev,where_sold:whereSold,top_cities:cities,line_count:lineCount
+    });
+  });
+  rows.sort((a,b)=>b.sold_qty-a.sold_qty||b.net_revenue-a.net_revenue||a.sku.localeCompare(b.sku));
+  _festivalRowsCache[kind]=rows;
+  return rows;
+}
+function _festivalCityHtml(row){
+  if(!_festivalCityRows)return '<span class="small-note">Loading city data...</span>';
+  if(!row.top_cities.length)return '<span class="small-note">No city data available</span>';
+  return row.top_cities.map((c,i)=>`<div><b>${i+1}.</b> ${escHtml(c.name)} <span class="small-note">(${Math.round(c.qty).toLocaleString('en-IN')})</span></div>`).join('');
+}
+function _festivalPhotoHtml(row){
+  const url=String(row.image_url||'').trim();
+  return url?`<img class="festival-photo" src="${escHtml(url)}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=&quot;festival-photo-ph&quot;>Product</div>'">`:'<div class="festival-photo-ph">Product</div>';
+}
+function renderFestivalTable(kind){
+  const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return;
+  const host=document.getElementById(cfg.host),note=document.getElementById(cfg.note);if(!host)return;
+  const rows=_festivalBuildRows(kind),admin=LOGIN_ROLE!=='employee';
+  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Top cities use Website, Myntra, Amazon, Flipkart, Nykaa and Tata city feeds where city/PIN is available.`;
+  if(!rows.length){host.innerHTML='<div class="ops-empty" style="padding:28px">No product sales found in this period.</div>';return;}
+  const revenueHead=admin?'<th>Net Revenue</th>':'';
+  const body=rows.map((r,i)=>`<tr>
+    <td class="ops-num">${i+1}</td>
+    <td>${_festivalPhotoHtml(r)}</td>
+    <td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(r.sku)}</button>${r.sku_name&&r.sku_name!==r.sku?`<div class="small-note">${escHtml(r.sku_name)}</div>`:''}</td>
+    <td class="ops-num"><b>${Math.round(r.sold_qty).toLocaleString('en-IN')}</b></td>
+    ${admin?`<td class="ops-num"><b>${fmt(r.net_revenue)}</b></td>`:''}
+    <td class="festival-multiline">${r.where_sold.length?r.where_sold.map(escHtml).join('<br>'):'-'}</td>
+    <td class="festival-city-cell">${_festivalCityHtml(r)}</td>
+  </tr>`).join('');
+  host.innerHTML=`<table class="ro festival-table"><thead><tr><th>#</th><th>Photo</th><th>SKU / Product</th><th>Sold Qty</th>${revenueHead}<th>Where Sold</th><th>Top 3 Cities</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function renderFestivalSales(){renderFestivalTable('janmashtami');renderFestivalTable('ganesh');}
+async function _festivalLoadCities(force=false){
+  if(_festivalCityRows&&!force)return _festivalCityRows;
+  if(_festivalCityPromise&&!force)return _festivalCityPromise;
+  const suffix=force?'?force=1':'';
+  _festivalCityPromise=fetch('/api/rakhi-cities'+suffix,{headers:{'ngrok-skip-browser-warning':'true'}}).then(async r=>{const d=await r.json();if(!r.ok||d?.error)throw new Error(d?.error||`HTTP ${r.status}`);_festivalCityRows=Array.isArray(d?.rows)?d.rows:[];return _festivalCityRows;}).catch(e=>{console.error('Festival city data:',e);_festivalCityRows=[];return _festivalCityRows;}).finally(()=>{_festivalCityPromise=null;});
+  return _festivalCityPromise;
+}
+function loadFestivalSales(force=false){
+  renderFestivalSales();
+  _festivalLoadCities(force).then(()=>renderFestivalSales());
+}
+async function exportFestivalExcel(kind){
+  const cfg=FESTIVAL_REPORT_CONFIG[kind];if(!cfg)return;
+  await _festivalLoadCities(false);renderFestivalTable(kind);
+  const rows=_festivalRowsCache[kind]||_festivalBuildRows(kind);
+  if(!rows.length){alert('No product sales to export for this period.');return;}
+  try{
+    const resp=await fetch('/api/festival-sales/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({festival:kind,rows:rows.map((r,i)=>({rank:i+1,sku:r.sku,sku_name:r.sku_name,sold_qty:r.sold_qty,net_revenue:r.net_revenue,where_sold:r.where_sold.join('\n'),top_cities:r.top_cities.map((c,j)=>`${j+1}. ${c.name} (${Math.round(c.qty)})`).join('\n'),image_url:r.image_url}))})});
+    if(!resp.ok){let msg=`HTTP ${resp.status}`;try{const d=await resp.json();msg=d?.error||msg;}catch(_e){}throw new Error(msg);}
+    const blob=await resp.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${kind}_last_year_product_sales.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+  }catch(e){alert('Excel export failed: '+(e?.message||e));}
+}
+window.loadFestivalSales=loadFestivalSales;window.renderFestivalSales=renderFestivalSales;window.exportFestivalExcel=exportFestivalExcel;
+
+
 function renderProUI(){
   // Header metrics do not change when Matrix/Repeat client-side filters run.
   // Recomputing six full-catalog passes after every keystroke was wasted work.
@@ -18532,6 +18653,7 @@ showTab = function(t){
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
     rakhi: {id: 'vRakhi', btn: 'm20'},
+    janmastmi: {id: 'vJanmastmi', btn: 'm34'},
     salescomparison: {id: 'vSalesComparison', btn: 'm31'},
     bulk: {id: 'vBulk', btn: 'm21'},
     oos: {id: 'vOos', btn: 'm22'},
@@ -18587,6 +18709,7 @@ showTab = function(t){
       taxon: 'CATEGORIES',
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
+      janmastmi: 'JANMASTMI',
       salescomparison: 'SALES COMPARISON',
       bulk: 'BULK — MAKE COMBO',
       oos: 'STOCKOUT',
@@ -18625,6 +18748,7 @@ showTab = function(t){
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
+  if (t === 'janmastmi') setTimeout(()=>{ try{ loadFestivalSales(false); }catch(e){console.error(e);} }, 0);
   if (t === 'salescomparison') setTimeout(()=>{ try{ loadSalesComparison(); }catch(e){console.error(e);} }, 0);
   if (t === 'bulk') setTimeout(()=>{ try{ bulkRenderCombo(); }catch(e){console.error(e);} }, 0);
   if (t === 'oos') setTimeout(()=>{ try{ loadOOS(); }catch(e){console.error(e);} }, 0);
@@ -22132,6 +22256,122 @@ _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
 # yeh ek feature Order Date wali sheet use karta hai.
 # COSA_ORDERDATE_URL is configured with the main sheet URLs near the top so
 # Rakhi and Daily Revenue Glimpse share the same dedicated Order Date source.
+
+@app.route("/api/festival-sales/export.xlsx", methods=["POST"])
+def api_festival_sales_export_xlsx():
+    role = session.get("role")
+    if role not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        payload = request.get_json(silent=True) or {}
+        festival = re.sub(r"[^a-z]", "", str(payload.get("festival", "")).casefold())
+        configs = {
+            "janmashtami": ("Last Year Janmashtami", "16-Jul-2025", "16-Aug-2025", "janmashtami_last_year_product_sales.xlsx"),
+            "ganesh": ("Last Ganesh Chaturthi", "17-Jul-2025", "17-Aug-2025", "ganesh_chaturthi_last_year_product_sales.xlsx"),
+        }
+        if festival not in configs:
+            return jsonify({"error": "invalid festival"}), 400
+        title, date_from, date_to, filename = configs[festival]
+        rows = payload.get("rows") or []
+        if not isinstance(rows, list) or not rows:
+            return jsonify({"error": "no rows to export"}), 400
+        if len(rows) > 25000:
+            return jsonify({"error": "too many rows"}), 400
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Janmashtami" if festival == "janmashtami" else "Ganesh Chaturthi"
+        include_revenue = role == "admin"
+        headers = ["Rank", "SKU", "Product Name", "Sold Qty"]
+        if include_revenue:
+            headers.append("Net Revenue")
+        headers += ["Where Sold", "Top 3 Cities", "Image Link"]
+        max_col = len(headers)
+
+        title_fill = PatternFill("solid", fgColor="1D1D26")
+        title_font = Font(bold=True, color="FFFFFF", size=14)
+        sub_fill = PatternFill("solid", fgColor="F5E9CC")
+        head_fill = PatternFill("solid", fgColor="E7D19A")
+        head_font = Font(bold=True, color="2B2419", size=10)
+        thin = Side(style="thin", color="D9D2C4")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_col)
+        c = ws.cell(1, 1, title)
+        c.fill = title_fill; c.font = title_font; c.alignment = center
+        for col in range(1, max_col + 1):
+            ws.cell(1, col).fill = title_fill
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max_col)
+        c = ws.cell(2, 1, f"Order Date: {date_from} to {date_to}")
+        c.fill = sub_fill; c.font = Font(bold=True, color="6F4D10", size=10); c.alignment = center
+        for col in range(1, max_col + 1):
+            ws.cell(2, col).fill = sub_fill
+
+        for col, header in enumerate(headers, 1):
+            c = ws.cell(4, col, header)
+            c.fill = head_fill; c.font = head_font; c.alignment = center; c.border = border
+
+        row_no = 5
+        for idx, row in enumerate(rows, 1):
+            values = [
+                int(to_num(row.get("rank", idx))) or idx,
+                str(row.get("sku", "") or ""),
+                str(row.get("sku_name", "") or ""),
+                float(to_num(row.get("sold_qty", 0))),
+            ]
+            if include_revenue:
+                values.append(float(to_num(row.get("net_revenue", 0))))
+            values += [
+                str(row.get("where_sold", "") or ""),
+                str(row.get("top_cities", "") or ""),
+                str(row.get("image_url", "") or ""),
+            ]
+            for col, value in enumerate(values, 1):
+                c = ws.cell(row_no, col, value)
+                c.border = border
+                c.alignment = center if col in (1, 4) else left
+            ws.cell(row_no, 4).number_format = '#,##0.00'
+            if include_revenue:
+                ws.cell(row_no, 5).number_format = 'Rs #,##0.00'
+                image_col = 8
+            else:
+                image_col = 7
+            img_cell = ws.cell(row_no, image_col)
+            if str(img_cell.value or "").startswith(("http://", "https://")):
+                img_cell.hyperlink = str(img_cell.value)
+                img_cell.style = "Hyperlink"
+            ws.row_dimensions[row_no].height = 34
+            row_no += 1
+
+        ws.freeze_panes = "A5"
+        ws.auto_filter.ref = f"A4:{get_column_letter(max_col)}{row_no-1}"
+        widths = [8, 18, 42, 14]
+        if include_revenue:
+            widths.append(18)
+        widths += [32, 38, 50]
+        for col, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.row_dimensions[1].height = 28
+        ws.row_dimensions[2].height = 22
+        ws.row_dimensions[4].height = 28
+
+        bio = io.BytesIO()
+        wb.save(bio); bio.seek(0)
+        resp = app.response_class(
+            bio.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"festival sales excel export failed: {e}"}), 500
+
 _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 
 def _fetch_drg_source_rows():
