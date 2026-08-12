@@ -1198,6 +1198,58 @@ def _daily_reporting_group(channel, sub_channel, typ, customer=""):
         return "qcommerce"
     return ""
 
+# SKU Details marketplace discount must represent the PRODUCT markdown only.
+# Marketplace commissions/fees/settlements are deliberately excluded: the
+# source selling/offer price (or an explicit product-discount %) is read from
+# the native marketplace sheets and compared with All Product MRP in the UI.
+_MP_PRODUCT_PRICE_NAMES = (
+    "Selling Price", "Sale Price", "Sales Price", "Product Selling Price",
+    "Item Selling Price", "Unit Selling Price", "Final Selling Price",
+    "Effective Selling Price", "Customer Paid Price", "Customer Price",
+    "Offer Price", "Deal Price", "Seller Price", "Item Price",
+    "Selling Price Incl Tax", "Selling Price Including Tax",
+    "Gross Selling Price",
+)
+_MP_PRODUCT_MRP_NAMES = (
+    "MRP", "M.R.P", "Item MRP", "Product MRP", "Unit MRP",
+    "Maximum Retail Price", "Max Retail Price",
+)
+_MP_PRODUCT_DISCOUNT_PCT_NAMES = (
+    "Product Discount %", "Product Discount Percentage",
+    "Item Discount %", "Item Discount Percentage",
+    "Discount %", "Discount Percentage", "Discount Percent",
+    "Seller Discount %", "Seller Discount Percentage",
+)
+_MP_PRICE_BANNED_TOKENS = (
+    "commission", "commision", "platformfee", "marketplacefee", "fee",
+    "settlement", "payout", "receivable", "tds", "tcs", "shipping",
+    "logistics", "gateway", "paymentfee", "channelcommission",
+)
+
+def _mp_col_key(value):
+    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+
+def _mp_safe_product_col(cols, candidates):
+    """Resolve only product-price/discount fields, never commission fields."""
+    usable = []
+    for col in cols:
+        key = _mp_col_key(col)
+        if not key or any(tok in key for tok in _MP_PRICE_BANNED_TOKENS):
+            continue
+        usable.append((key, col))
+    cand_keys = [_mp_col_key(c) for c in candidates]
+    for cand in cand_keys:
+        for key, col in usable:
+            if key == cand:
+                return col
+    for cand in cand_keys:
+        if not cand:
+            continue
+        for key, col in usable:
+            if cand in key:
+                return col
+    return None
+
 def _load_channel_order_events(inv_skus_map, dbg):
     """Build a compact SKU/date/channel -> exact-order identity feed.
 
@@ -1289,6 +1341,10 @@ def _load_channel_order_events(inv_skus_map, dbg):
     ]
 
     event_sets = {}
+    # Compact daily SKU/platform product-price feed used ONLY by SKU Details
+    # discount calculations. Values are quantity-weighted source product prices,
+    # never COSA net revenue / settlement after marketplace commission.
+    product_price_sums = {}
     reporting_order_sets = {}
     source_debug = {}
 
@@ -1321,6 +1377,10 @@ def _load_channel_order_events(inv_skus_map, dbg):
         ):
             if quantity_group:
                 select_groups.append(quantity_group)
+        # Fetch likely PRODUCT price/markdown columns as separate groups so a
+        # commission/settlement column can never become the discount source.
+        for _cand in _MP_PRODUCT_PRICE_NAMES + _MP_PRODUCT_MRP_NAMES + _MP_PRODUCT_DISCOUNT_PCT_NAMES:
+            select_groups.append((_cand,))
         select_positions = [spec["order_index"]]
         for _pos_name in ("report_order_index", "platform_index", "report_platform_index"):
             _pos = spec.get(_pos_name)
@@ -1382,6 +1442,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             net_qty_col = find_col(frame.columns, *spec.get("net_qty_names", ()))
             gross_qty_col = find_col(frame.columns, *spec.get("gross_qty_names", ()))
             return_qty_col = find_col(frame.columns, *spec.get("return_qty_names", ()))
+            product_price_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_PRICE_NAMES)
+            product_mrp_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_MRP_NAMES)
+            product_discount_pct_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_DISCOUNT_PCT_NAMES)
 
             resolved = {
                 "rows": len(frame), "order": order_col, "sku": sku_col,
@@ -1390,7 +1453,11 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 "status": status_col, "customer": customer_col,
                 "net_qty": net_qty_col, "gross_qty": gross_qty_col,
                 "return_qty": return_qty_col,
+                "product_price": product_price_col,
+                "product_mrp": product_mrp_col,
+                "product_discount_pct": product_discount_pct_col,
                 "events": 0, "customer_events": 0, "skus": 0,
+                "product_price_rows": 0,
                 "returned_rows_skipped": 0,
             }
             source_debug[spec["key"]] = resolved
@@ -1450,6 +1517,33 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 if sold_qty is not None and sold_qty <= 0:
                     resolved["returned_rows_skipped"] += 1
                     continue
+
+                # PRODUCT discount source for SKU Details. Never use Net Revenue
+                # here because marketplace commission/fees can reduce settlement
+                # and falsely look like a customer-facing product discount.
+                price_qty = float(sold_qty) if sold_qty is not None and sold_qty > 0 else 1.0
+                product_sp = to_num(row.get(product_price_col, 0)) if product_price_col else 0.0
+                source_mrp = to_num(row.get(product_mrp_col, 0)) if product_mrp_col else 0.0
+                pct_raw_present = bool(clean(row.get(product_discount_pct_col, ""))) if product_discount_pct_col else False
+                product_disc_pct = to_num(row.get(product_discount_pct_col, 0)) if pct_raw_present else None
+                if product_disc_pct is not None:
+                    product_disc_pct = max(0.0, min(100.0, float(product_disc_pct)))
+                if product_sp <= 0 and source_mrp > 0 and product_disc_pct is not None:
+                    product_sp = max(0.0, source_mrp * (1.0 - product_disc_pct / 100.0))
+                if product_sp > 0 or product_disc_pct is not None:
+                    bucket = product_price_sums.setdefault(mapped_sku, {}).setdefault(
+                        (date_iso, platform),
+                        {"q": 0.0, "v": 0.0, "vq": 0.0, "dpv": 0.0, "dpq": 0.0},
+                    )
+                    bucket["q"] += price_qty
+                    if product_sp > 0:
+                        bucket["v"] += float(product_sp) * price_qty
+                        bucket["vq"] += price_qty
+                    if product_disc_pct is not None:
+                        bucket["dpv"] += float(product_disc_pct) * price_qty
+                        bucket["dpq"] += price_qty
+                    resolved["product_price_rows"] += 1
+
                 raw_customer = clean(row.get(customer_col, "")) if customer_col else ""
                 customer_token = ""
                 if raw_customer and raw_customer.casefold() not in ("0", "unknown", "na", "n/a"):
@@ -1488,10 +1582,29 @@ def _load_channel_order_events(inv_skus_map, dbg):
         sku: sorted(events.values(), key=lambda event: (event["d"], event["p"], event["o"]))
         for sku, events in event_sets.items()
     }
+    product_price_compact = {}
+    for sku, buckets in product_price_sums.items():
+        rows = []
+        for (day, platform), vals in sorted(buckets.items(), key=lambda x: (x[0][0], x[0][1])):
+            row = {
+                "d": _si(day), "p": _si(platform),
+                "q": round(float(vals.get("q", 0.0)), 4),
+                "v": round(float(vals.get("v", 0.0)), 2),
+                "vq": round(float(vals.get("vq", 0.0)), 4),
+            }
+            dpq = float(vals.get("dpq", 0.0))
+            if dpq > 0:
+                row["dp"] = round(float(vals.get("dpv", 0.0)) / dpq, 4)
+                row["dpq"] = round(dpq, 4)
+            rows.append(row)
+        if rows:
+            product_price_compact[sku] = rows
     dbg["channel_order_sources"] = source_debug
     dbg["channel_order_skus"] = len(compact)
     dbg["channel_order_events"] = sum(len(events) for events in compact.values())
-    return compact, reporting_order_sets
+    dbg["marketplace_product_price_skus"] = len(product_price_compact)
+    dbg["marketplace_product_price_events"] = sum(len(events) for events in product_price_compact.values())
+    return compact, reporting_order_sets, product_price_compact
 
 _DATA_LOCK = threading.Lock()
 _DF_REFS = {}
@@ -1960,7 +2073,7 @@ def _refresh_data():
     # Marketplace AOV must use the actual source Order ID, not a customer-name
     # approximation.  Sources are read sequentially and released immediately
     # so a three-year refresh does not keep five large DataFrames in memory.
-    channel_order_events, daily_reporting_marketplace_orders = _load_channel_order_events(inv_skus_map, dbg)
+    channel_order_events, daily_reporting_marketplace_orders, marketplace_product_price_events = _load_channel_order_events(inv_skus_map, dbg)
 
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
@@ -2614,6 +2727,7 @@ def _refresh_data():
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(dedupe_key, []),
             "channel_order_events": channel_order_events.get(dedupe_key, []),
+            "marketplace_product_price_events": marketplace_product_price_events.get(dedupe_key, []),
             "website_city_events": website_city_events.get(dedupe_key, []),
             "website_payment_events": website_payment_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
@@ -2698,6 +2812,7 @@ def _refresh_data():
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(orphan_key, []),
             "channel_order_events": channel_order_events.get(orphan_key, []),
+            "marketplace_product_price_events": marketplace_product_price_events.get(orphan_key, []),
             "website_city_events": website_city_events.get(orphan_key, []),
             "website_payment_events": website_payment_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
@@ -6312,7 +6427,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')"><span class="cn-menu-icon cn-rakhi-icon"></span><span>Rakhi</span></button>
-  <button class="menu-item" id="m34" onclick="showTab('janmastmi')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="7"/><path d="m8.5 8.5 7 7M15.5 8.5l-7 7"/></svg></span><span>Janmastmi</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m31" onclick="showTab('salescomparison')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V5h4v15M16 20v-6h4v6M3 20h18"/><path d="m5 8 5-4 4 3 5-5"/></svg></span><span>Sales Comparison</span></button>
   <button class="menu-item" id="m21" onclick="showTab('bulk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4Z"/><path d="M4 7v10l8 4 8-4V7M12 11v10"/></svg></span><span>Bulk</span></button>
   <button class="menu-item" id="m22" onclick="showTab('oos')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 4l16 16M6 9V5h12v10M6 15v4h8"/><path d="M9 8h6"/></svg></span><span>OOS</span></button>
@@ -6691,7 +6805,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="sdQty" style="color:#d4af5a">0</div><div class="small-note" id="sdQtyMeta" style="margin-top:4px;white-space:normal">Final Qty by Order Date</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue (COSA)</div><div class="kpi-v" id="sdRev">₹0</div></div>
         <div class="kpi rev-only"><div class="kpi-t">Net Revenue Contribution</div><div class="kpi-v" id="sdRevContribution" style="color:#b68b00">0.00%</div><div class="small-note" id="sdRevContributionMeta" style="margin-top:4px;white-space:normal">SKU share of total net revenue under the active filters</div></div>
-        <div class="kpi rev-only"><div class="kpi-t">Overall Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
+        <div class="kpi rev-only"><div class="kpi-t">Product Discount % (Filtered)</div><div class="kpi-v" id="sdDiscPct" style="color:#c0392b">0%</div></div>
         <div class="kpi"><div class="kpi-t">STR (Sell-Through Rate)</div><div class="kpi-v" id="sdStrPct" style="color:#b68b00">0%</div><div class="small-note" id="sdStrMeta" style="margin-top:4px;white-space:normal">Filtered Sold Qty ÷ (Filtered Sold Qty + Inv Stock)</div></div>
         <div class="kpi"><div class="kpi-t">Return Qty</div><div class="kpi-v" id="sdRetQty" style="color:#c0392b">0</div></div>
         <div class="kpi"><div class="kpi-t">Return %</div><div class="kpi-v" id="sdRetPct" style="color:#c0392b">0%</div><div class="small-note" id="sdRetMeta" style="margin-top:4px;white-space:normal">Filtered Return Qty ÷ (Filtered Final Qty + Return Qty)</div></div>
@@ -7532,59 +7646,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
-  <style>
-    #vJanmastmi .festival-table{width:100%;min-width:1120px}
-    #vJanmastmi .festival-table th{position:sticky;top:0;z-index:3;white-space:nowrap}
-    #vJanmastmi .festival-table td{vertical-align:middle}
-    #vJanmastmi .festival-photo{width:46px;height:46px;object-fit:contain;border:1px solid #e5dcc8;border-radius:9px;background:#fff;padding:3px;box-sizing:border-box;display:block;margin:auto}
-    #vJanmastmi .festival-photo-ph{width:46px;height:46px;display:grid;place-items:center;margin:auto;border:1px solid #e5dcc8;border-radius:9px;background:#fff;color:#aa955c;font-size:17px}
-    #vJanmastmi .festival-multiline{white-space:pre-line;line-height:1.45;min-width:180px}
-    #vJanmastmi .festival-city-cell{white-space:normal;line-height:1.45;min-width:220px}
-    #vJanmastmi .festival-scroll{max-height:58vh;overflow:auto}
-    #vJanmastmi .festival-period{font-weight:800;color:#765317;margin-top:3px}
-    @media(max-width:760px){#vJanmastmi .festival-scroll{max-height:52vh}}
-  </style>
-  <div id="vJanmastmi" class="ops-page" style="display:none">
-    <div class="ops-head">
-      <div>
-        <div class="ops-title">Janmashtami &amp; Ganesh Chaturthi - Last Year Product Sales</div>
-        <div class="ops-sub">Order Date basis. Each table shows SKU, photo, pieces sold, where the SKU was sold and its top 3 cities from the available city feeds. Net Revenue is shown for Admin access.</div>
-      </div>
-    </div>
-
-    <div class="ops-section">
-      <div class="ops-section-head">
-        <div>
-          <div class="ops-section-title">Last Year Janmashtami</div>
-          <div class="festival-period">16-Jul-2025 to 16-Aug-2025</div>
-        </div>
-        <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('janmashtami')">Export Excel</button>
-      </div>
-      <div class="ops-filters" style="margin:0 0 10px">
-        <div class="fc" style="min-width:220px"><label class="fl">Channel</label><select class="fs" id="festivalJanmashtamiChannel" onchange="renderFestivalTable('janmashtami')"><option value="All">All Channels</option></select></div>
-      </div>
-      <div id="festivalJanmashtamiNote" class="small-note" style="margin:0 0 8px"></div>
-      <div id="festivalJanmashtamiTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
-    </div>
-
-    <div class="ops-section" style="margin-top:22px">
-      <div class="ops-section-head">
-        <div>
-          <div class="ops-section-title">Last Ganesh Chaturthi</div>
-          <div class="festival-period">27-Jul-2025 to 27-Aug-2025</div>
-        </div>
-        <button class="go-btn" style="width:auto;padding:9px 14px;background:#2f6f3e" onclick="exportFestivalExcel('ganesh')">Export Excel</button>
-      </div>
-      <div class="ops-filters" style="margin:0 0 10px">
-        <div class="fc" style="min-width:220px"><label class="fl">Channel</label><select class="fs" id="festivalGaneshChannel" onchange="renderFestivalTable('ganesh')"><option value="All">All Channels</option></select></div>
-      </div>
-      <div id="festivalGaneshNote" class="small-note" style="margin:0 0 8px"></div>
-      <div id="festivalGaneshTable" class="ro-table-wrap festival-scroll" style="padding:0"></div>
-    </div>
-  </div>
-
-
-  <div id="vSalesComparison" class="ops-page" style="display:none">
+<div id="vSalesComparison" class="ops-page" style="display:none">
     <div class="ops-head">
       <div><div class="ops-title">Rel vs Non-Rel Sales Comparison</div><div class="ops-sub">Compares All Product AF-column CN classifications against Cosa Nostraa sales. Unclassified names are excluded from the two comparison groups.</div></div>
       <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparison()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparison()">Export CSV</button></div>
@@ -8038,6 +8100,12 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="applyInsights()">Refresh Insights</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportInsights('csv')">Export CSV</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="exportInsights('xls')">Export Excel</button>
+    </div>
+  </div>
+
+  <div class="filter-box" style="margin:10px 0 16px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Channel</label>
+      <select class="fs" id="iChannel" onchange="renderInsights()"><option value="All">All Channels</option></select>
     </div>
   </div>
 
@@ -8943,7 +9011,6 @@ const MENU_TAB_META = {
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
   m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
-  m34: {name:"Janmastmi",        desc:"Last-year Janmashtami and Ganesh Chaturthi product sales."},
   m31: {name:"Sales Comparison", desc:"Rel/Non-Rel, Top 20 products and channel-wise AOV drivers."},
   m21: {name:"Bulk",             desc:"Build combo quotations and export them."},
   m22: {name:"Stockout",         desc:"Low-stock SKUs and stockout risk."},
@@ -9129,6 +9196,63 @@ function _sdSorMarketplace(entry){
   }
   return 'Other SOR';
 }
+const _SD_PRODUCT_DISCOUNT_MARKETPLACES = new Set(['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata']);
+function _sdPickedMarketplaces(){
+  return Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||'').trim()).filter(Boolean);
+}
+function _sdBucketProductDiscount(bucket, mrp){
+  if(!bucket)return null;
+  const saleQty=Number(bucket.vq)||0, saleValue=Number(bucket.v)||0;
+  if(mrp>0 && saleQty>0 && saleValue>0){
+    const avgSp=saleValue/saleQty;
+    const pct=Math.max(0,Math.min(100,(mrp-avgSp)/mrp*100));
+    return {pct:Math.round(pct*10)/10,avgSp,qty:saleQty};
+  }
+  const pctQty=Number(bucket.dpq)||0;
+  if(pctQty>0 && Number.isFinite(Number(bucket.dpv))){
+    const pct=Math.max(0,Math.min(100,Number(bucket.dpv)/pctQty));
+    return {pct:Math.round(pct*10)/10,avgSp:mrp>0?mrp*(1-pct/100):0,qty:pctQty};
+  }
+  return null;
+}
+function _sdMarketplaceProductDiscountContext(item){
+  const picked=_sdPickedMarketplaces();
+  // Only switch to source-sheet pricing when Marketplace filter is actually
+  // active. Other SKU Details views keep their existing calculation.
+  if(!picked.length || picked.some(p=>!_SD_PRODUCT_DISCOUNT_MARKETPLACES.has(p)))return null;
+  const rows=Array.isArray(item?.marketplace_product_price_events)?item.marketplace_product_price_events:[];
+  const d1=document.getElementById('sdD1')?.value||'', d2=document.getElementById('sdD2')?.value||'';
+  const allowed=new Set(picked.map(p=>p.toLowerCase()));
+  const mrp=Math.max(0,parseFloat(item?.mrp)||0);
+  const total={v:0,vq:0,dpv:0,dpq:0};
+  const daily=new Map(), byPlatform=new Map();
+  rows.forEach(ev=>{
+    const p=String(ev?.p||'').trim(), pl=p.toLowerCase(), d=String(ev?.d||'');
+    if(!allowed.has(pl)||!d||(d1&&d<d1)||(d2&&d>d2))return;
+    const v=Math.max(0,Number(ev?.v)||0), vq=Math.max(0,Number(ev?.vq)||0);
+    const dpq=Math.max(0,Number(ev?.dpq)||0), dp=Number(ev?.dp);
+    const add=b=>{
+      if(v>0&&vq>0){b.v+=v;b.vq+=vq;}
+      if(dpq>0&&Number.isFinite(dp)){b.dpv+=dp*dpq;b.dpq+=dpq;}
+    };
+    add(total);
+    const dk=`${p}|${d}`; if(!daily.has(dk))daily.set(dk,{v:0,vq:0,dpv:0,dpq:0}); add(daily.get(dk));
+    if(!byPlatform.has(p))byPlatform.set(p,{v:0,vq:0,dpv:0,dpq:0}); add(byPlatform.get(p));
+  });
+  const overall=_sdBucketProductDiscount(total,mrp);
+  // IMPORTANT: once a supported Marketplace filter is selected, never fall
+  // back to COSA Net Revenue for discount. If source product price is missing,
+  // show N/A instead of accidentally treating marketplace commission as discount.
+  if(!overall)return {active:true,unavailable:true,pct:null,avgSp:0,qty:0,mrp,daily,byPlatform,source:'marketplace-product-price'};
+  return {active:true,unavailable:false,pct:overall.pct,avgSp:overall.avgSp,qty:overall.qty,mrp,daily,byPlatform,source:'marketplace-product-price'};
+}
+function _sdProductDiscountForEntry(item,entry,ctx){
+  if(!ctx)return null;
+  const p=_sdSorMarketplace(entry), d=String(entry?.date||'');
+  if(!p||!d)return null;
+  return _sdBucketProductDiscount(ctx.daily.get(`${p}|${d}`),ctx.mrp) || _sdBucketProductDiscount(ctx.byPlatform.get(p),ctx.mrp);
+}
+
 function _sdDisplayDate(iso){
   if (!iso || iso === 'N/A') return '—';
   const d = new Date(iso + 'T00:00:00');
@@ -9403,7 +9527,7 @@ function _sdWebsiteRepeatStats(item, rawSkus){
   });
 }
 
-function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usageContext){
+function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usageContext, productDiscountContext){
   const emp0 = (LOGIN_ROLE === 'employee');
   const stock = parseFloat(item.inv_stock) || 0;
   const wip = parseFloat(item.inv_wip) || 0;
@@ -9471,7 +9595,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
     if (!emp0){
       rows.splice(6, 0, ['Best Channel Revenue', fmt(bestChannelRevenue)]);
       rows.splice(1, 0, ['AOV / Piece (Filtered)', fmt(aovPerPiece)]);
-      rows.splice(2, 0, ['Discount % (vs MRP)', (overallDiscPct||0) + '%']);
+      rows.splice(2, 0, ['Discount % (vs MRP)', overallDiscPct===null ? '—' : overallDiscPct + '%']);
     }
     const websiteRepeat = _sdWebsiteRepeatStats(item, usage.skus);
     if (websiteRepeat.show){
@@ -9490,7 +9614,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
       best_marketplace: bestMarketplace,
       status: filteredStatus,
       aov_per_piece: aovPerPiece,
-      discount_pct: overallDiscPct,
+      discount_pct: Number.isFinite(overallDiscPct) ? overallDiscPct : 0,
       _aov_is_order: false,
       _avg_sp_for_discount: overallAvgSp,
     });
@@ -9513,13 +9637,14 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
     bd.innerHTML = types.length ? types.map(t => {
       const v = byType[t];
       const avgSp = v.qty ? (v.rev / v.qty) : 0;
-      const dPct = (mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0;
+      const sourceDiscActive = productDiscountContext?.active && String(t||'').trim().toLowerCase()==='sor';
+      const dPct = sourceDiscActive ? (Number.isFinite(productDiscountContext.pct)?productDiscountContext.pct:null) : ((mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0);
       return `<div class="td-card">
         <div class="td-type">${escHtml(t)}</div>
         <div class="td-row"><span>Sales Lines</span><b>${v.lines}</b></div>
         <div class="td-row"><span>Qty</span><b>${v.qty}</b></div>
         <div class="td-row rev-only"><span>Net Rev</span><b class="green">${fmt(v.rev)}</b></div>
-        <div class="td-row rev-only"><span>Discount %</span><b>${dPct}%</b></div>
+        <div class="td-row rev-only"><span>Discount %</span><b>${dPct===null?'—':dPct+'%'}</b></div>
       </div>`;
     }).join('') : '<span class="small-note">No sales for the selected filters</span>';
   }
@@ -9671,13 +9796,17 @@ function renderSdTable(){
     const sp = parseFloat(e.sp) || (parseFloat(e.qty) ? (parseFloat(e.rev)||0)/parseFloat(e.qty) : 0);
     return s + r * sp;
   }, 0);
-  // Overall Discount % — jo bhi Date/Type filter abhi lage hain, usी filtered
-  // entries (ents) par based hai: MRP vs weighted-avg selling price. Koi filter
-  // na ho to ye poore SKU ka overall discount % hota hai (jaisa maanga gaya).
+  // SKU Details Marketplace filter: PRODUCT discount comes from the native
+  // marketplace sheet's selling/offer price, not Net Revenue after commission.
+  // Without a Marketplace filter the existing SKU Details calculation remains.
   const mrp = parseFloat(item.mrp) || 0;
-  const overallAvgSp = directQty ? (totalRev / directQty) : 0;
-  const overallDiscPct = (mrp > 0 && overallAvgSp > 0 && overallAvgSp < mrp)
-    ? Math.round((mrp - overallAvgSp) / mrp * 100 * 10) / 10 : 0;
+  const productDiscountContext = _sdMarketplaceProductDiscountContext(item);
+  const sourceDiscountActive = !!productDiscountContext?.active;
+  const sourceDiscountAvailable = sourceDiscountActive && Number.isFinite(productDiscountContext?.pct);
+  const fallbackAvgSp = directQty ? (totalRev / directQty) : 0;
+  const overallAvgSp = sourceDiscountAvailable ? productDiscountContext.avgSp : (sourceDiscountActive ? 0 : fallbackAvgSp);
+  const overallDiscPct = sourceDiscountAvailable ? productDiscountContext.pct : (sourceDiscountActive ? null : ((mrp > 0 && fallbackAvgSp > 0 && fallbackAvgSp < mrp)
+    ? Math.round((mrp - fallbackAvgSp) / mrp * 100 * 10) / 10 : 0));
 
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
   setT('sdOrders', orderStats.total.toLocaleString('en-IN'));
@@ -9694,7 +9823,7 @@ function renderSdTable(){
   setT('sdSku', skuLabel(item.sku, item.sku_name));
   setT('sdRevContribution', (revContribution?.pct || 0).toFixed(2) + '%');
   setT('sdRevContributionMeta', `${fmt(totalRev)} of ${fmt(revContribution?.total || 0)} filtered total net revenue`);
-  setT('sdDiscPct', overallDiscPct + '%');
+  setT('sdDiscPct', overallDiscPct===null ? '—' : overallDiscPct + '%');
   setT('sdStrPct', sellThrough.rate.toFixed(1) + '%');
   setT('sdStrMeta', `${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold ÷ (${Math.round(sellThrough.soldQty).toLocaleString('en-IN')} sold + ${Math.round(sellThrough.invStock).toLocaleString('en-IN')} stock)`);
   setT('sdRetQty', Math.round(totalRet).toLocaleString('en-IN'));
@@ -9712,7 +9841,7 @@ function renderSdTable(){
     setT('sdWebsiteRepeatMeta', `${websiteRepeat.repeat.toLocaleString('en-IN')} repeat of ${websiteRepeat.distinct.toLocaleString('en-IN')} identifiable customers · ${covered}${unsupported}`);
   }
 
-  _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage);
+  _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage, productDiscountContext);
 
   renderSdTrend();
   renderSdReturnTrend();
@@ -9723,15 +9852,17 @@ function renderSdTable(){
     body.innerHTML = ents.length ? ents.map(e => {
       const q = parseFloat(e.qty) || 0;
       const rv = parseFloat(e.rev) || 0;
-      const sp = parseFloat(e.sp) || (q ? rv / q : 0);
-      const dPct = (mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0;
+      const sourceDisc = _sdProductDiscountForEntry(item,e,productDiscountContext);
+      const sourceActive = !!productDiscountContext?.active;
+      const sp = sourceDisc?.avgSp || (sourceActive ? 0 : (parseFloat(e.sp) || (q ? rv / q : 0)));
+      const dPct = sourceDisc ? sourceDisc.pct : (sourceActive ? null : ((mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0));
       return `<tr>
       <td class="gold">${e.date === 'N/A' ? '—' : e.date}</td>
       <td>${safeText(e.cust)}</td>
       <td>${safeText(e.type)}</td>
       <td>${safeText(e.channel)}</td>
       <td class="gold">${q}</td>
-      <td class="rev-only">${dPct}%</td>
+      <td class="rev-only">${dPct===null?'—':dPct+'%'}</td>
       <td class="rev-only green">${fmt(rv)}</td>
     </tr>`;
     }).join('')
@@ -9955,6 +10086,7 @@ function renderSdChannel(){
   chans.sort((a,b) => byChan[b].qty - byChan[a].qty);
   const maxQty = Math.max(1, ...chans.map(c => byChan[c].qty));
   const emp0 = (LOGIN_ROLE === 'employee');
+  const productDiscountContext = _sdMarketplaceProductDiscountContext(item);
 
   chartHost.innerHTML = chans.map(c => {
     const v = byChan[c];
@@ -10004,7 +10136,8 @@ function renderSdChannel(){
       const avgSp = v.qty ? (v.rev / v.qty) : 0;
       const aov = avgSp; // per-piece AOV for every channel/type, including Purchase
       const mrp = parseFloat(item.mrp) || 0;
-      const discPct = mrp > 0 ? Math.max(0, Math.round((1 - avgSp/mrp) * 100)) : 0;
+      const sourceDiscActive = productDiscountContext?.active && c==='Ecom';
+      const discPct = sourceDiscActive ? (Number.isFinite(productDiscountContext.pct)?productDiscountContext.pct:null) : (mrp > 0 ? Math.max(0, Math.round((1 - avgSp/mrp) * 100)) : 0);
       return {c, qty:v.qty, rev:v.rev, aov, discPct};
     });
     sumHost.innerHTML =
@@ -10018,7 +10151,7 @@ function renderSdChannel(){
          ${emp0?'':'<td style="font-weight:800;color:var(--cn-dark)">AOV/pc</td><td style="font-weight:800;color:var(--cn-dark)">Discount %</td>'}
        </tr></thead><tbody>
        ${rows.map(r => `<tr><td>${escHtml(r.c)}</td><td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
-         ${emp0?'':`<td>${fmt(r.aov)}</td><td>${r.discPct}%</td>`}</tr>`).join('')}
+         ${emp0?'':`<td>${fmt(r.aov)}</td><td>${r.discPct===null?'—':r.discPct+'%'}</td>`}</tr>`).join('')}
        </tbody></table>`;
   }
 }
@@ -10034,12 +10167,15 @@ function exportSD(fmtType){
   if (!ents.length) { alert('No transactions to export.'); return; }
   const emp0 = LOGIN_ROLE === 'employee';
   const mrp = parseFloat(item.mrp) || 0;
+  const productDiscountContext = _sdMarketplaceProductDiscountContext(item);
   const exportSellThrough = _sdSellThroughStats(item, ents);
   const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Sold Qty','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
-    const sp = parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0);
-    const discPct = (mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0;
+    const sourceDisc = _sdProductDiscountForEntry(item,e,productDiscountContext);
+    const sourceActive = !!productDiscountContext?.active;
+    const sp = sourceDisc?.avgSp || (sourceActive ? 0 : (parseFloat(e.sp) || (q ? (parseFloat(e.rev)||0) / q : 0)));
+    const discPct = sourceDisc ? sourceDisc.pct : (sourceActive ? null : ((mrp > 0 && sp > 0 && sp < mrp) ? Math.round((mrp - sp) / mrp * 100 * 10) / 10 : 0));
     return {
       'Dispatch Date': e.date === 'N/A' ? '' : e.date,
       SKU: item.sku,
@@ -10054,7 +10190,7 @@ function exportSD(fmtType){
       'Sold Qty': q,
       'Filtered STR': exportSellThrough.rate.toFixed(1) + '%',
       'MRP': mrp,
-      ...(emp0 ? {} : {'Selling Price': sp, 'Discount %': discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
+      ...(emp0 ? {} : {'Selling Price': sourceActive && !sourceDisc ? '' : sp, 'Discount %': discPct===null ? '' : discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
       'Image Link': item.image_url || '',
     };
   });
@@ -15115,9 +15251,10 @@ function renderRakhiProduction(){
   const shortDate=v=>{const s=String(v||'');if(!s)return '';const m=s.match(/^(\d{2})-([A-Za-z]{3})-/);return m?`${m[1]}-${m[2]}`:s;};
   const todayLabel=shortDate(meta.today_display),yesterdayLabel=shortDate(meta.yesterday_display),dayBeforeLabel=shortDate(meta.day_before_display);
 
-  // Production pace KPIs. Required Run Rate is the actual inward pace since
-  // 06-Aug: live received quantity divided by inclusive calendar days from
-  // 06-Aug through today. Both numerator and denominator update automatically.
+  // Production pace KPIs:
+  // CRR = actual inward pace since 06-Aug (received qty / elapsed inclusive days).
+  // NRR = balance still due for rows that HAVE a Need By date / days left until 31-Aug.
+  // Both change automatically with the live inward data and current date.
   const DAY_MS=86400000;
   const isoDate=v=>{
     const s=String(v||'').trim();
@@ -15129,19 +15266,27 @@ function renderRakhiProduction(){
   const baselineDate=isoDate(meta.baseline_date)||new Date('2026-08-06T00:00:00Z');
   const elapsedDays=Math.max(1,Math.floor((Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate())-Date.UTC(baselineDate.getUTCFullYear(),baselineDate.getUTCMonth(),baselineDate.getUTCDate()))/DAY_MS)+1);
 
-  // Current Run Rate = rolling 3-day inward average (Today + Yesterday + Day Before).
-  const recent3Qty=rows.reduce((s,r)=>s+(Number(r.received_today)||0)+(Number(r.received_yesterday)||0)+(Number(r.received_day_before)||0),0);
-  const currentRunRate=recent3Qty/3;
+  // CRR: actual current production/inward pace since 06-Aug.
+  // Example: 5,630 received over 6 inclusive days -> ~938 units/day.
+  const currentRunRate=arrived/elapsedDays;
 
-  // Required Run Rate = Received After 06-Aug / inclusive days since 06-Aug.
-  const requiredRunRate=arrived/elapsedDays;
+  // NRR: only rows with a Need By date are part of the required pace. The business
+  // deadline is 31-Aug; "days left" excludes today (11-Aug -> 20 days, 12-Aug -> 19).
+  const datedBalanceQty=rows.reduce((s,r)=>{
+    const hasNeedBy=Boolean(String(r&&r.need_by_iso||'').trim());
+    return s+(hasNeedBy?Math.max(0,Number(r&&r.production_balance_qty)||0):0);
+  },0);
+  const aug31=new Date(Date.UTC(todayDate.getUTCFullYear(),7,31));
+  const todayUtc=Date.UTC(todayDate.getUTCFullYear(),todayDate.getUTCMonth(),todayDate.getUTCDate());
+  const daysToAug31=Math.max(1,Math.ceil((aug31.getTime()-todayUtc)/DAY_MS));
+  const neededRunRate=datedBalanceQty/daysToAug31;
   const rateFmt=v=>`${Math.round(Number(v)||0).toLocaleString('en-IN')} units/day`;
   if(sum)sum.innerHTML=`
     <div class="yoy-card"><div class="yc-label">Balance Qty</div><div class="yc-val">${Math.round(balanceQty).toLocaleString('en-IN')}</div><div class="yc-sub">Current Production Balance Qty</div></div>
     <div class="yoy-card"><div class="yc-label">Received After 06-Aug</div><div class="yc-val">${Math.round(arrived).toLocaleString('en-IN')}</div><div class="yc-sub">Rakhi inward sheet</div></div>
     <div class="yoy-card"><div class="yc-label">SKUs</div><div class="yc-val">${skus.size.toLocaleString('en-IN')}</div><div class="yc-sub">Current filtered view</div></div>
-    <div class="yoy-card"><div class="yc-label">Current Run Rate</div><div class="yc-val">${rateFmt(currentRunRate)}</div><div class="yc-sub">Rolling 3-day inward average</div></div>
-    <div class="yoy-card"><div class="yc-label">Required Run Rate</div><div class="yc-val">${rateFmt(requiredRunRate)}</div><div class="yc-sub">${Math.round(arrived).toLocaleString('en-IN')} received ÷ ${elapsedDays.toLocaleString('en-IN')} day${elapsedDays===1?'':'s'} since 06-Aug (inclusive)</div></div>`;
+    <div class="yoy-card"><div class="yc-label">Current Run Rate (CRR)</div><div class="yc-val">${rateFmt(currentRunRate)}</div><div class="yc-sub">${Math.round(arrived).toLocaleString('en-IN')} received ÷ ${elapsedDays.toLocaleString('en-IN')} day${elapsedDays===1?'':'s'} since 06-Aug</div></div>
+    <div class="yoy-card"><div class="yc-label">Needed Run Rate (NRR)</div><div class="yc-val">${rateFmt(neededRunRate)}</div><div class="yc-sub">${Math.round(datedBalanceQty).toLocaleString('en-IN')} dated balance ÷ ${daysToAug31.toLocaleString('en-IN')} day${daysToAug31===1?'':'s'} left to 31-Aug</div></div>`;
   renderRakhiProductionSkuTable();
   renderRakhiProductionStockoutTables();
   if(!rows.length){host.innerHTML='<div class="home-empty" style="padding:30px">No Rakhi Production rows for this filter.</div>';return;}
@@ -17527,6 +17672,36 @@ setInterval(() => {
 
 
 
+function _insightChannelValues(e){
+  const vals=[];
+  const ch=String(e&&e.channel||'').trim();
+  const sub=String(e&&e.sub_channel||'').trim();
+  if(ch) vals.push(ch);
+  if(sub && !vals.some(v=>v.toLocaleLowerCase('en-US')===sub.toLocaleLowerCase('en-US'))) vals.push(sub);
+  return vals;
+}
+function _fillInsightsChannelFilter(){
+  const el=document.getElementById('iChannel');
+  if(!el)return;
+  const current=String(el.value||'All');
+  const seen=new Map();
+  (master||[]).forEach(i=>(i.sales_entries||[]).forEach(e=>{
+    _insightChannelValues(e).forEach(v=>{
+      const key=v.toLocaleLowerCase('en-US');
+      if(key && !seen.has(key))seen.set(key,v);
+    });
+  }));
+  const preferred=['Website','Purchase','Bulk','Exhibition','Ecom','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Other Marketplace'];
+  const rank=new Map(preferred.map((v,i)=>[v.toLocaleLowerCase('en-US'),i]));
+  const values=Array.from(seen.values()).sort((a,b)=>{
+    const ak=a.toLocaleLowerCase('en-US'),bk=b.toLocaleLowerCase('en-US');
+    const ar=rank.has(ak)?rank.get(ak):999,br=rank.has(bk)?rank.get(bk):999;
+    return ar-br || a.localeCompare(b);
+  });
+  el.innerHTML='<option value="All">All Channels</option>'+values.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  const matched=values.find(v=>v.toLocaleLowerCase('en-US')===current.toLocaleLowerCase('en-US'));
+  el.value=matched||'All';
+}
 function renderInsights(){
   const topRevenueList = document.getElementById('topRevenueList');
   const lowStockList = document.getElementById('lowStockList');
@@ -17540,10 +17715,14 @@ function renderInsights(){
     || document.getElementById('alertOosList') || document.getElementById('alertReplenishList');
   if (!topRevenueList && !lowStockList && !categoryList && !healthList && !customerList && !summaryEl && !returnsList && !alertAny) return;
 
+  _fillInsightsChannelFilter();
   const typeSel = getSelectedTypes('iType');
   const taxonQ = document.getElementById('iTaxon')?.value || 'All';
+  const channelQ = document.getElementById('iChannel')?.value || 'All';
+  const channelKey = String(channelQ).toLocaleLowerCase('en-US');
   const d1 = document.getElementById('iD1')?.value || '';
   const d2 = document.getElementById('iD2')?.value || '';
+  const withinChannel = (e) => channelQ === 'All' || _insightChannelValues(e).some(v=>v.toLocaleLowerCase('en-US')===channelKey);
 
   const withinDate = (e) => {
     if (d1 || d2) {
@@ -17556,11 +17735,11 @@ function renderInsights(){
 
   const items = (master || []).filter(i => {
     if (taxonQ !== 'All' && i.taxon !== taxonQ) return false;
-    const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinDate(e));
-    if (!typeSel.length && !(d1 || d2) && taxonQ === 'All') return true;
+    const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinChannel(e) && withinDate(e));
+    if (!typeSel.length && channelQ === 'All' && !(d1 || d2) && taxonQ === 'All') return true;
     return ents.length > 0;
   }).map(i => {
-    const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinDate(e));
+    const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinChannel(e) && withinDate(e));
     const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
     const totalRet = ents.reduce((s,e) => s + (parseFloat(e.ret) || 0), 0);
@@ -17773,6 +17952,7 @@ function applyInsights(){
 function resetInsights(){
   document.querySelectorAll('#iTypeChecks input:checked').forEach(c => c.checked = false);
   const tx = document.getElementById('iTaxon'); if (tx) tx.value = 'All';
+  const ch = document.getElementById('iChannel'); if (ch) ch.value = 'All';
   const d1 = document.getElementById('iD1'); if (d1) d1.value = '';
   const d2 = document.getElementById('iD2'); if (d2) d2.value = '';
   renderInsights();
@@ -18721,7 +18901,6 @@ showTab = function(t){
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
     rakhi: {id: 'vRakhi', btn: 'm20'},
-    janmastmi: {id: 'vJanmastmi', btn: 'm34'},
     salescomparison: {id: 'vSalesComparison', btn: 'm31'},
     bulk: {id: 'vBulk', btn: 'm21'},
     oos: {id: 'vOos', btn: 'm22'},
@@ -18777,7 +18956,6 @@ showTab = function(t){
       taxon: 'CATEGORIES',
       stockstatus: 'STOCK STATUS',
       rakhi: 'RAKHI',
-      janmastmi: 'JANMASTMI',
       salescomparison: 'SALES COMPARISON',
       bulk: 'BULK — MAKE COMBO',
       oos: 'STOCKOUT',
@@ -18816,7 +18994,6 @@ showTab = function(t){
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhi') setTimeout(()=>{ try{ loadRakhi(); }catch(e){console.error(e);} }, 0);
-  if (t === 'janmastmi') setTimeout(()=>{ try{ loadFestivalSales(false); }catch(e){console.error(e);} }, 0);
   if (t === 'salescomparison') setTimeout(()=>{ try{ loadSalesComparison(); }catch(e){console.error(e);} }, 0);
   if (t === 'bulk') setTimeout(()=>{ try{ bulkRenderCombo(); }catch(e){console.error(e);} }, 0);
   if (t === 'oos') setTimeout(()=>{ try{ loadOOS(); }catch(e){console.error(e);} }, 0);
@@ -19986,7 +20163,8 @@ def _employee_view(comp, period_kpis):
     safe_comp = []
     for i in comp:
         d = {k: (0 if k in REV_ITEM_KEYS else v) for k, v in i.items()
-             if k not in ("sales_entries", "orderdate_sales_entries", "rakhi_sales_entries")}
+             if k not in ("sales_entries", "orderdate_sales_entries", "rakhi_sales_entries", "marketplace_product_price_events")}
+        d["marketplace_product_price_events"] = []
         d["sales_entries"] = [{**e, "rev": 0, "sp": 0, "ret_amt": 0} for e in i.get("sales_entries", [])]
         d["orderdate_sales_entries"] = [
             {**e, "rev": 0, "sp": 0, "ret_amt": 0}
