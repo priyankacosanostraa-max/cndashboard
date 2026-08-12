@@ -18534,17 +18534,48 @@ function _festivalWhereLabel(e){
 }
 function _festivalCityAgg(cfg,selectedChannel='All'){
   const bySku=new Map();
+  const directWebsiteSkus=new Set();
+  const addCity=(key,city,state,qty)=>{
+    key=_festivalSkuKey(key);if(!key)return;
+    qty=Math.max(0,_festivalNum(qty));if(qty<=0)return;
+    city=String(city||'').trim();if(!city)return;
+    state=String(state||'').trim();
+    const label=state&&city.toLowerCase()!==state.toLowerCase()?`${city}, ${state}`:city;
+    let cityMap=bySku.get(key);if(!cityMap){cityMap=new Map();bySku.set(key,cityMap);}
+    cityMap.set(label,(cityMap.get(label)||0)+qty);
+  };
+
+  // Website city data comes directly from the Website sheet already compacted
+  // into each master SKU as website_city_events.  This is the same source used
+  // by the Website/D2C city views, so festival reports do not depend on the
+  // Rakhi-only city endpoint for Website rows.
+  if(selectedChannel==='All'||selectedChannel==='Website'){
+    (master||[]).forEach(item=>{
+      const key=_festivalSkuKey(item?.sku);if(!key)return;
+      let used=false;
+      const events=Array.isArray(item?.website_city_events)?item.website_city_events:[];
+      events.forEach(ev=>{
+        if(!_festivalInRange(ev?.d,cfg.from,cfg.to))return;
+        const qty=Math.max(0,_festivalNum(ev?.q));if(qty<=0)return;
+        const city=String(ev?.c||'').trim();if(!city)return;
+        addCity(key,city,ev?.s||'',qty);used=true;
+      });
+      if(used)directWebsiteSkus.add(key);
+    });
+  }
+
+  // Other channels still use the multi-channel city feed.  Website rows from
+  // that endpoint are only a fallback when a SKU has no direct Website event,
+  // preventing the same Website sale from being counted twice.
   (_festivalCityRows||[]).forEach(r=>{
     if(!_festivalInRange(r?.date,cfg.from,cfg.to))return;
     const sourceLabel=_festivalWhereLabel({sub_channel:r?.source||'',channel:r?.channel||'',type:r?.type||''});
     if(selectedChannel!=='All'&&sourceLabel!==selectedChannel)return;
     const key=_festivalSkuKey(r?.sku);if(!key)return;
+    if(sourceLabel==='Website'&&directWebsiteSkus.has(key))return;
     const qty=Math.max(0,_festivalNum(r?.qty));if(qty<=0)return;
-    const city=String(r?.city||'').trim()||'Unknown City';
-    const state=String(r?.state||'').trim();
-    const label=state&&city.toLowerCase()!==state.toLowerCase()?`${city}, ${state}`:city;
-    let cityMap=bySku.get(key);if(!cityMap){cityMap=new Map();bySku.set(key,cityMap);}
-    cityMap.set(label,(cityMap.get(label)||0)+qty);
+    const city=String(r?.city||'').trim();if(!city)return;
+    addCity(key,city,r?.state||'',qty);
   });
   const out=new Map();
   bySku.forEach((m,key)=>out.set(key,[...m.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))));
@@ -18601,9 +18632,9 @@ function _festivalBuildRows(kind){
   return rows;
 }
 function _festivalCityHtml(row){
+  if(row.top_cities.length)return row.top_cities.map((c,i)=>`<div><b>${i+1}.</b> ${escHtml(c.name)} <span class="small-note">(${Math.round(c.qty).toLocaleString('en-IN')})</span></div>`).join('');
   if(!_festivalCityRows)return '<span class="small-note">Loading city data...</span>';
-  if(!row.top_cities.length)return '<span class="small-note">No city data available</span>';
-  return row.top_cities.map((c,i)=>`<div><b>${i+1}.</b> ${escHtml(c.name)} <span class="small-note">(${Math.round(c.qty).toLocaleString('en-IN')})</span></div>`).join('');
+  return '<span class="small-note">No city data available</span>';
 }
 function _festivalPhotoHtml(row){
   const url=String(row.image_url||'').trim();
@@ -18614,7 +18645,7 @@ function renderFestivalTable(kind){
   const host=document.getElementById(cfg.host),note=document.getElementById(cfg.note);if(!host)return;
   const selectedChannel=_festivalSyncChannelFilter(kind);
   const rows=_festivalBuildRows(kind),admin=LOGIN_ROLE!=='employee';
-  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Channel: ${selectedChannel==='All'?'All Channels':selectedChannel} | Top cities use matching Website, Myntra, Amazon, Flipkart, Nykaa and Tata city feeds where city/PIN is available.`;
+  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} selling SKUs | Order Date ${cfg.from} to ${cfg.to} | Channel: ${selectedChannel==='All'?'All Channels':selectedChannel} | Website cities come directly from the Website sheet; Myntra, Amazon, Flipkart, Nykaa and Tata use their matching city feeds where city/PIN is available.`;
   if(!rows.length){host.innerHTML='<div class="ops-empty" style="padding:28px">No product sales found in this period.</div>';return;}
   const revenueHead=admin?'<th>Net Revenue</th>':'';
   const body=rows.map((r,i)=>`<tr>
