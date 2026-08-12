@@ -5866,6 +5866,13 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 #vBulk .bulk-money{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 #vBulk .bulk-remove{border:1px solid #efcaca;background:#fff5f5;color:#b91c1c;border-radius:9px;padding:8px 11px;font-size:10px;font-weight:850;cursor:pointer}
 #vBulk .bulk-empty{padding:48px 20px;text-align:center;color:#8c7a42;font-size:12px;font-weight:750}
+#vBulk .bulk-finder-panel{background:#fff;border:1px solid var(--cn-line);border-radius:18px;padding:18px 20px;box-shadow:0 10px 28px rgba(15,23,42,.05);margin:18px 0}
+#vBulk .bulk-finder-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+#vBulk .bulk-finder-title{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:700;color:var(--cn-dark);line-height:1.05}
+#vBulk .bulk-finder-sub{font-size:10px;color:#64748b;font-weight:650;margin-top:5px}
+#vBulk .bulk-finder-inner{max-width:620px;margin:0 auto}
+#vBulk #bulkFinderPreview{display:none;margin:14px auto 0;max-width:100%;max-height:220px;border-radius:8px;border:1px solid rgba(212,175,90,.25)}
+#vBulk #bulkFinderResults{margin-top:16px}
 @media(max-width:900px){ #vBulk .bulk-input-grid{grid-template-columns:1fr}#vBulk .bulk-summary{grid-template-columns:repeat(2,minmax(140px,1fr))}}
 @media(max-width:540px){ #vBulk .bulk-summary{grid-template-columns:1fr}#vBulk .bulk-discount-row{grid-template-columns:1fr}}
 
@@ -6419,6 +6426,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m3" onclick="showTab('repeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m17 3 4 4-4 4M21 7H7a4 4 0 0 0-4 4v1M7 21l-4-4 4-4M3 17h14a4 4 0 0 0 4-4v-1"/></svg></span><span>Repeat Orders</span></button>
   <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
+  <button class="menu-item" id="m34" onclick="showTab('returns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M9 7 5 11l4 4"/><path d="M5 11h9a5 5 0 0 1 5 5v2"/><path d="M15 5h4v4"/></svg></span><span>Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
@@ -6874,6 +6882,44 @@ select.lg-in option{background:#fff;color:#1a1610}
         </table>
       </div></div>
     </div>
+  </div>
+
+  <div id="vReturns" class="ops-page" style="display:none">
+    <div class="ops-hero" style="align-items:flex-end">
+      <div>
+        <div class="ops-kicker">SALES RETURN ANALYSIS</div>
+        <div class="ops-title">Returns</div>
+        <div class="ops-sub">Top 20 returned SKUs. Return amount is calculated on the transaction selling price: Return Qty × Selling Price.</div>
+      </div>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportReturnsExcel()">Export Excel</button>
+    </div>
+
+    <div class="filter-box" style="margin:12px 0 14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+        <div class="fc"><label class="fl">From Date</label><input class="fi" id="retD1" type="date" onchange="renderReturns()"></div>
+        <div class="fc"><label class="fl">To Date</label><input class="fi" id="retD2" type="date" onchange="renderReturns()"></div>
+        <div class="fc"><label class="fl">Search SKU / CN Name</label><input class="fi" id="retSearch" type="search" autocomplete="off" placeholder="e.g. BH-1334 or lion" oninput="returnsApply_d()"></div>
+        <div class="fc"><label class="fl">Channel</label><select class="fs" id="retChannel" onchange="renderReturns()"><option value="All">All Channels</option></select></div>
+        <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetReturnsFilters()">Reset</button></div>
+      </div>
+      <div id="returnsSummary" class="small-note" style="margin-top:10px;white-space:normal"></div>
+    </div>
+
+    <div id="returnsChartBox" class="filter-box" style="margin:14px 0;display:none">
+      <label class="fl" id="returnsChartTitle" style="margin-bottom:10px;display:block">Return Qty Trend</label>
+      <div id="returnsTrendChart" style="position:relative"></div>
+    </div>
+
+    <div class="ops-section-head"><div class="ops-section-title">Top 20 Return SKUs</div></div>
+    <div class="ro-wrap"><div class="ro-table-wrap">
+      <table class="ops-table" id="returnsTable">
+        <thead><tr>
+          <th>#</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Where Returned</th>
+          <th>Return Qty</th><th class="rev-only">Avg Selling Price</th><th class="rev-only">Return Amount (Selling Price Basis)</th>
+        </tr></thead>
+        <tbody id="returnsBody"></tbody>
+      </table>
+    </div></div>
   </div>
 </div>
   <div id="vSmart" style="display:none">
@@ -7755,6 +7801,25 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="bulkComboContent" class="bulk-table-wrap">
       <div class="bulk-empty">Paste or upload SKUs, then click <b>Make Combo</b>.</div>
     </div>
+
+    <div class="bulk-finder-panel">
+      <div class="bulk-finder-head">
+        <div>
+          <div class="bulk-finder-title">SKU Finder</div>
+          <div class="bulk-finder-sub">Same image-based SKU Finder is also available here inside Bulk. The original SKU Finder tab remains unchanged.</div>
+        </div>
+      </div>
+      <div class="bulk-finder-inner">
+        <div class="upload-area" id="bulkFinderDrop" tabindex="0" onclick="document.getElementById('bulkFinderFile').click()" ondragover="event.preventDefault()" ondrop="handleBulkFinderDrop(event)">
+          <div style="font-size:34px;margin-bottom:10px">📷</div>
+          <div style="font-size:11px;color:#6a5a2a;text-transform:uppercase;letter-spacing:2px;font-weight:700">Click, paste, or drop product photo</div>
+          <input type="file" id="bulkFinderFile" accept="image/*" style="display:none" onchange="onBulkFinderImg(this)">
+          <img id="bulkFinderPreview">
+        </div>
+        <button class="go-btn" id="bulkFinderGoBtn" onclick="doBulkVision()" disabled>Scan &amp; Find SKU</button>
+      </div>
+      <div class="grid" id="bulkFinderResults"></div>
+    </div>
   </div>
 
 
@@ -7952,6 +8017,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Change Type</label><select class="fs" id="anomType" onchange="renderSalesAnomalies()"><option value="All">All Changes</option><option value="SALE_DROP">Sudden Sale Drop</option><option value="SALE_SPIKE">Unusual Sale Spike</option><option value="RETURN_INCREASE">Unexpected Return Increase</option><option value="STOCK_NO_SALE">Stock Movement Without Sale</option><option value="REVENUE_ISSUE">Negative / Incorrect Revenue</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="anomGroup" onchange="renderSalesAnomalies()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+      <div class="fc"><label class="fl">Channel</label><select class="fs" id="anomChannel" onchange="renderSalesAnomalies()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Category</label><select class="fs" id="anomTaxon" onchange="renderSalesAnomalies()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Comparison Period</label><select class="fs" id="anomWindow" onchange="loadSalesAnomalies(false)"><option value="7">Latest 7D vs Previous 7D</option><option value="15">Latest 15D vs Previous 15D</option><option value="30" selected>Latest 30D vs Previous 30D</option><option value="60">Latest 60D vs Previous 60D</option></select></div>
       <div class="fc"><label class="fl">Severity</label><select class="fs" id="anomSeverity" onchange="renderSalesAnomalies()"><option value="All">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select></div>
@@ -8183,6 +8249,7 @@ let marketplaceData = null;
 let websitePaymentSummary = {cod:0, prepaid:0, total:0, daily:[]};
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
+let bulkFinderImgB64 = null;
 let bulkComboRows = [];
 let bulkMissingSkus = [];
 let _bulkSkuLookup = {};
@@ -9003,6 +9070,7 @@ const MENU_TAB_META = {
   m3:  {name:"Repeat Orders",    desc:"Demand, stock, WIP and repeat-order needs."},
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
+  m34: {name:"Returns",          desc:"Top return SKUs with date, SKU/CN Name and channel filters."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
@@ -11795,6 +11863,72 @@ function doVision(){
     });
 }
 
+function setBulkFinderImage(dataUrl){
+  bulkFinderImgB64 = dataUrl;
+  const p = document.getElementById('bulkFinderPreview');
+  if (p) { p.src = dataUrl; p.style.display='block'; }
+  const g = document.getElementById('bulkFinderGoBtn');
+  if (g) g.disabled = false;
+}
+
+function handleBulkFinderFile(file){
+  if (!file || !String(file.type || '').startsWith('image/')) return false;
+  const r = new FileReader();
+  r.onload = e => setBulkFinderImage(e.target.result);
+  r.readAsDataURL(file);
+  return true;
+}
+
+function handleBulkFinderDrop(ev){
+  ev.preventDefault();
+  const file = ev.dataTransfer && ev.dataTransfer.files ? ev.dataTransfer.files[0] : null;
+  if (file) handleBulkFinderFile(file);
+}
+
+function onBulkFinderImg(inp){
+  if (inp.files && inp.files[0]) handleBulkFinderFile(inp.files[0]);
+}
+
+function handleBulkFinderPaste(ev){
+  if (currentTab !== 'bulk') return;
+  const items = (ev.clipboardData && ev.clipboardData.items) ? Array.from(ev.clipboardData.items) : [];
+  const imgItem = items.find(it => it.kind === 'file' && String(it.type || '').startsWith('image/'));
+  if (!imgItem) return;
+  const file = imgItem.getAsFile();
+  if (file) {
+    ev.preventDefault();
+    handleBulkFinderFile(file);
+  }
+}
+
+function doBulkVision(){
+  if (!bulkFinderImgB64) return;
+  const L = document.getElementById('loader');
+  if (L) { L.innerHTML = '<div class="spin"></div>Scanning AI vision model…'; L.style.display='block'; }
+  const btn = document.getElementById('bulkFinderGoBtn'); if (btn) btn.disabled = true;
+  const out = document.getElementById('bulkFinderResults'); if (out) out.innerHTML = '';
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 75000);
+  fetch('/search', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'}, body: JSON.stringify({image:bulkFinderImgB64}), signal: ctrl.signal})
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) throw new Error(d.error);
+      if (out) out.innerHTML = (d.results || []).map(m => mkCard(m, m.total_net_revenue, m.confidence, false)).join('') || '<div class="no-data">No match found</div>';
+    })
+    .catch(e => {
+      const msg = (e && e.name === 'AbortError')
+        ? 'AI model is taking too long to respond (it may be waking up from sleep — free server). Please try again in a moment.'
+        : e.message;
+      alert('Error: ' + msg);
+    })
+    .finally(() => {
+      clearTimeout(timer);
+      if (L) L.style.display='none';
+      if (btn) btn.disabled = false;
+    });
+}
+
 let LOGIN_ROLE = 'admin';
 let _loggedIn = false;
 
@@ -12063,6 +12197,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const u = document.getElementById('lgUser'); if (u) u.focus();
 
   window.addEventListener('paste', handleFinderPaste);
+  window.addEventListener('paste', handleBulkFinderPaste);
 });
 
 /* ===== Premium UI enhancements ===== */
@@ -16786,13 +16921,60 @@ window.loadOpportunityScore=loadOpportunityScore;window.renderOpportunityScore=r
 
 /* ---- SALES ANOMALY DETECTION -------------------------------- */
 let _anomRows = [];
+let _anomChannelMasterRef = null;
+let _anomChannelOptions = [];
 function _anomSeverityRank(v){ return v==='critical'?0:v==='high'?1:v==='medium'?2:9; }
 function _anomPct(v){ return Number.isFinite(Number(v)) ? Number(v).toFixed(1)+'%' : '-'; }
 function _anomDateAge(dateValue){ return _oppEntryAgeDays(dateValue); }
-function _anomWindowStats(it, win){
+function _anomNorm(v){
+  let s=(v===null||v===undefined)?'':String(v);
+  try{s=s.normalize('NFKC');}catch(_e){}
+  return s.replace(/\u00a0/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+}
+function _anomChannelChoices(){
+  if(_anomChannelMasterRef===master && _anomChannelOptions.length) return _anomChannelOptions;
+  const channels=new Map(), marketplaces=new Map();
+  for(const it of (master||[])){
+    for(const e of (it.sales_entries||[])){
+      const ch=String(e?.channel||'').trim(), sub=String(e?.sub_channel||'').trim();
+      if(ch && !channels.has(_anomNorm(ch))) channels.set(_anomNorm(ch),ch);
+      if(_anomNorm(ch)==='ecom' && sub && _anomNorm(sub)!=='ecom' && !marketplaces.has(_anomNorm(sub))) marketplaces.set(_anomNorm(sub),sub);
+    }
+  }
+  const preferred=['d2c','ecom','b2b','sor','bulk','exhibition'];
+  const chRows=Array.from(channels.entries()).sort((a,b)=>{
+    const ai=preferred.indexOf(a[0]), bi=preferred.indexOf(b[0]);
+    if(ai>=0||bi>=0){if(ai<0)return 1;if(bi<0)return -1;if(ai!==bi)return ai-bi;}
+    return a[1].localeCompare(b[1]);
+  }).map(([norm,label])=>({value:'C|'+norm,label:_anomNorm(label)==='d2c'?'D2C / Website':label}));
+  const mpRows=Array.from(marketplaces.entries()).sort((a,b)=>a[1].localeCompare(b[1])).map(([norm,label])=>({value:'S|'+norm,label:'Ecom — '+label}));
+  _anomChannelOptions=chRows.concat(mpRows); _anomChannelMasterRef=master;
+  return _anomChannelOptions;
+}
+function _anomPopulateChannels(){
+  const sel=document.getElementById('anomChannel'); if(!sel)return;
+  const old=sel.value||'All', opts=_anomChannelChoices();
+  sel.innerHTML='<option value="All">All Channels</option>'+opts.map(o=>`<option value="${escHtml(o.value)}">${escHtml(o.label)}</option>`).join('');
+  sel.value=(old==='All'||opts.some(o=>o.value===old))?old:'All';
+}
+function _anomSelectedChannel(){ return document.getElementById('anomChannel')?.value||'All'; }
+function _anomChannelLabel(value){
+  if(!value||value==='All')return 'All Channels';
+  return _anomChannelChoices().find(o=>o.value===value)?.label||String(value).replace(/^[CS]\|/,'');
+}
+function _anomEntryMatchesChannel(e, selected){
+  if(!selected||selected==='All')return true;
+  const p=String(selected).split('|'), kind=p.shift(), wanted=_anomNorm(p.join('|'));
+  const ch=_anomNorm(e?.channel), sub=_anomNorm(e?.sub_channel);
+  if(kind==='C')return ch===wanted;
+  if(kind==='S')return sub===wanted;
+  return ch===_anomNorm(selected)||sub===_anomNorm(selected);
+}
+function _anomWindowStats(it, win, channelSel){
   let currentQty=0, previousQty=0, currentRet=0, previousRet=0, currentRev=0, previousRev=0;
   const currentEntries=[], previousEntries=[];
   for(const e of (it.sales_entries||[])){
+    if(!_anomEntryMatchesChannel(e,channelSel)) continue;
     const age=_anomDateAge(e.date); if(age===null) continue;
     const q=_opsNum(e.qty), ret=Math.max(0,_opsNum(e.ret)), rev=_opsNum(e.rev);
     if(age<win){ currentQty+=Math.max(0,q); currentRet+=ret; currentRev+=rev; currentEntries.push(e); }
@@ -16809,16 +16991,18 @@ function _anomAdd(rows, base, type, typeLabel, severity, metric, detail){
   rows.push({...base,type,typeLabel,severity,metric,detail});
 }
 function _buildSalesAnomalyRows(){
+  _anomPopulateChannels();
   const win=Math.max(1,parseInt(document.getElementById('anomWindow')?.value||'30'));
   const baseline=Math.max(1,_opsNum(document.getElementById('anomBaseline')?.value||5));
+  const channelSel=_anomSelectedChannel();
   const receiptMap={};
   (_opsSupport.latest_receipts||[]).forEach(x=>{ receiptMap[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||''); });
   const rows=[];
   for(const it of (master||[])){
     const sku=String(it.sku||'').trim(); if(!sku) continue;
-    const st=_anomWindowStats(it,win);
+    const st=_anomWindowStats(it,win,channelSel);
     const stock=Math.max(0,_opsNum(it.inv_stock)), wip=Math.max(0,_opsNum(it.inv_wip));
-    const base={item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,currentSale:st.currentQty,previousSale:st.previousQty,currentRevenue:st.currentRev,previousRevenue:st.previousRev,currentReturnRate:st.currentReturnRate,previousReturnRate:st.previousReturnRate,stock,wip,latestReceipt:receiptMap[_opsSkuKey(sku)]||''};
+    const base={item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,channelFilter:channelSel,channelLabel:_anomChannelLabel(channelSel),currentSale:st.currentQty,previousSale:st.previousQty,currentRevenue:st.currentRev,previousRevenue:st.previousRev,currentReturnRate:st.currentReturnRate,previousReturnRate:st.previousReturnRate,stock,wip,latestReceipt:receiptMap[_opsSkuKey(sku)]||''};
 
     if(st.previousQty>=baseline && st.currentQty<=st.previousQty*0.5){
       const decline=(st.previousQty-st.currentQty)/st.previousQty*100;
@@ -16894,13 +17078,14 @@ function renderSalesAnomalies(){
   const critical=rows.filter(r=>r.severity==='critical').length;
   const sales=rows.filter(r=>r.type==='SALE_DROP'||r.type==='SALE_SPIKE').length;
   const quality=rows.filter(r=>r.type==='RETURN_INCREASE'||r.type==='REVENUE_ISSUE').length;
-  if(sum) sum.innerHTML=_opsKpi('Total Anomalies',rows.length.toLocaleString('en-IN'),'Current filters')+_opsKpi('Affected SKUs',affected.size.toLocaleString('en-IN'),'Unique SKUs')+_opsKpi('Critical Alerts',critical.toLocaleString('en-IN'),'Immediate review')+_opsKpi('Sales / Data Exceptions',(sales+quality).toLocaleString('en-IN'),`${sales} sales pattern, ${quality} return/revenue`);
+  const activeChannel=_anomChannelLabel(_anomSelectedChannel());
+  if(sum) sum.innerHTML=_opsKpi('Total Anomalies',rows.length.toLocaleString('en-IN'),activeChannel)+_opsKpi('Affected SKUs',affected.size.toLocaleString('en-IN'),'Unique SKUs')+_opsKpi('Critical Alerts',critical.toLocaleString('en-IN'),'Immediate review')+_opsKpi('Sales / Data Exceptions',(sales+quality).toLocaleString('en-IN'),`${sales} sales pattern, ${quality} return/revenue`);
   const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button>${r.latestReceipt?`<div class="anom-receipt">Latest receipt: ${escHtml(r.latestReceipt)}</div>`:''}</td><td>${escHtml(r.taxon)}</td><td class="anom-type">${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity.charAt(0).toUpperCase()+r.severity.slice(1))}</td><td class="anom-metric">${escHtml(r.metric)}</td><td class="ops-num">${Math.round(r.currentSale).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.previousSale).toLocaleString('en-IN')}</td><td class="ops-num">${_anomPct(r.currentReturnRate)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="anom-detail">${escHtml(r.detail)}</td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th>Unusual Change</th><th>Priority</th><th>Current Change</th><th>Latest Period Sales</th><th>Previous Period Sales</th><th>Latest Return Rate</th><th>Stock</th><th>WIP</th><th>Why Flagged</th></tr></thead><tbody>${body||'<tr><td colspan="13" class="ops-empty">No unusual sales changes match the current filters.</td></tr>'}</tbody></table>`;
 }
 function exportSalesAnomalies(){
   const rows=_salesAnomalyFiltered(); if(!rows.length){alert('No anomaly rows to export');return;}
-  _dlCsv(['SKU','SKU Name','Category','Product Group','Image Link','Unusual Change','Priority','Period Days','Current Change','Latest Period Sales','Previous Period Sales','Latest Period Revenue','Previous Period Revenue','Latest Return Rate %','Previous Return Rate %','Stock','WIP','Latest Receipt Date','Why Flagged'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.typeLabel,r.severity,r.window,r.metric,Math.round(r.currentSale),Math.round(r.previousSale),Number(r.currentRevenue.toFixed(2)),Number(r.previousRevenue.toFixed(2)),Number(r.currentReturnRate.toFixed(2)),Number(r.previousReturnRate.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.latestReceipt,r.detail]),'unusual_sales_changes');
+  _dlCsv(['SKU','SKU Name','Category','Product Group','Channel Filter','Image Link','Unusual Change','Priority','Period Days','Current Change','Latest Period Sales','Previous Period Sales','Latest Period Revenue','Previous Period Revenue','Latest Return Rate %','Previous Return Rate %','Stock','WIP','Latest Receipt Date','Why Flagged'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.channelLabel||_anomChannelLabel(_anomSelectedChannel()),r.image,r.typeLabel,r.severity,r.window,r.metric,Math.round(r.currentSale),Math.round(r.previousSale),Number(r.currentRevenue.toFixed(2)),Number(r.previousRevenue.toFixed(2)),Number(r.currentReturnRate.toFixed(2)),Number(r.previousReturnRate.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.latestReceipt,r.detail]),'unusual_sales_changes');
 }
 window.loadSalesAnomalies=loadSalesAnomalies;window.renderSalesAnomalies=renderSalesAnomalies;window.exportSalesAnomalies=exportSalesAnomalies;
 
@@ -17598,6 +17783,164 @@ function exportPaymentsPlanning(){
 window.loadPaymentsPlanning = loadPaymentsPlanning; window.renderPaymentsPlanning = renderPaymentsPlanning;
 window.exportPaymentsPlanning = exportPaymentsPlanning;
 
+
+
+/* ── RETURNS TAB ────────────────────────────────────────────────────────────
+   Uses the same COSA transaction rows already loaded into master.sales_entries.
+   Return amount is transaction Return Qty × transaction Selling Price.
+   The table and chart are both driven by the exact same filter state. */
+let _returnsSource = [];
+let _returnsSourceMasterRef = null;
+let _returnsExportRows = [];
+let _returnsChartData = [];
+
+function _returnsNorm(v){
+  let x=(v===null||v===undefined)?'':String(v);
+  try{x=x.normalize('NFKC');}catch(_e){}
+  return x.replace(/\u00a0/g,' ').replace(/[\u2010-\u2014\u2212]/g,'-').trim().toLowerCase();
+}
+function _returnsEntryChannel(e){
+  const ch=String(e?.channel||'').trim();
+  const sub=String(e?.sub_channel||'').trim();
+  if(_returnsNorm(ch)==='ecom' && sub && _returnsNorm(sub)!=='ecom') return sub;
+  return ch || sub || 'Other';
+}
+function _returnsBuildSource(){
+  if(_returnsSourceMasterRef===master && _returnsSource.length) return _returnsSource;
+  const rows=[];
+  (master||[]).forEach(item=>{
+    const sku=String(item?.sku||'').trim(); if(!sku)return;
+    (item.sales_entries||[]).forEach(e=>{
+      const qty=Math.max(0,Number(e?.ret)||0); if(!(qty>0))return;
+      const sp=Math.max(0,Number(e?.sp)||0);
+      const rawAmt=Number(e?.ret_amt);
+      const amount=Number.isFinite(rawAmt)&&rawAmt>0?rawAmt:(qty*sp);
+      rows.push({
+        sku, sku_name:item.sku_name||'', cn_name:item.cn_name||'', image_url:item.image_url||'',
+        date:String(e?.date||''), channel:_returnsEntryChannel(e), qty, sp,
+        amount:Math.max(0,Number(amount)||0)
+      });
+    });
+  });
+  _returnsSource=rows; _returnsSourceMasterRef=master;
+  return rows;
+}
+function _returnsFilterState(){
+  return {
+    d1:document.getElementById('retD1')?.value||'',
+    d2:document.getElementById('retD2')?.value||'',
+    search:(document.getElementById('retSearch')?.value||'').trim(),
+    channel:document.getElementById('retChannel')?.value||'All'
+  };
+}
+function _returnsSearchMatch(r,q){
+  const nq=_returnsNorm(q); if(!nq)return true;
+  const hay=_returnsNorm(`${r.sku||''} ${r.cn_name||''} ${r.sku_name||''}`);
+  if(hay.includes(nq))return true;
+  const compactQ=nq.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const compactSku=String(r.sku||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  return !!(compactQ && compactSku.includes(compactQ));
+}
+function _returnsFilteredEvents(source,state){
+  const st=state||_returnsFilterState();
+  return (source||[]).filter(r=>{
+    if(st.d1 && (!r.date || r.date==='N/A' || r.date<st.d1))return false;
+    if(st.d2 && (!r.date || r.date==='N/A' || r.date>st.d2))return false;
+    if(st.channel && st.channel!=='All' && _returnsNorm(r.channel)!==_returnsNorm(st.channel))return false;
+    if(!_returnsSearchMatch(r,st.search))return false;
+    return true;
+  });
+}
+function _returnsAggregate(events){
+  const map=new Map();
+  (events||[]).forEach(e=>{
+    let r=map.get(e.sku);
+    if(!r){r={sku:e.sku,sku_name:e.sku_name||'',cn_name:e.cn_name||'',image_url:e.image_url||'',qty:0,amount:0,channels:new Set()};map.set(e.sku,r);}
+    r.qty+=Number(e.qty)||0; r.amount+=Number(e.amount)||0; r.channels.add(e.channel||'Other');
+  });
+  return Array.from(map.values()).map(r=>({...r,avg_sp:r.qty>0?r.amount/r.qty:0,where_returned:Array.from(r.channels).sort().join(' | ')}))
+    .sort((a,b)=>(b.qty-a.qty)||(b.amount-a.amount)||String(a.sku).localeCompare(String(b.sku)));
+}
+function _returnsPopulateChannels(){
+  const sel=document.getElementById('retChannel'); if(!sel)return;
+  const old=sel.value||'All';
+  const chans=Array.from(new Set(_returnsBuildSource().map(r=>r.channel).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='<option value="All">All Channels</option>'+chans.map(c=>`<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  sel.value=chans.includes(old)?old:'All';
+}
+function loadReturns(){
+  const oldRef=_returnsSourceMasterRef;
+  _returnsBuildSource();
+  if(oldRef!==master || !document.getElementById('retChannel')?.options?.length || document.getElementById('retChannel')?.options?.length<=1) _returnsPopulateChannels();
+  renderReturns();
+}
+function renderReturns(){
+  const source=_returnsBuildSource(), state=_returnsFilterState(), events=_returnsFilteredEvents(source,state), allRows=_returnsAggregate(events), rows=allRows.slice(0,20);
+  _returnsExportRows=rows;
+  const body=document.getElementById('returnsBody');
+  if(body){
+    if(!rows.length){body.innerHTML='<tr><td colspan="8" class="ops-empty">No return records match the selected filters.</td></tr>';}
+    else body.innerHTML=rows.map((r,i)=>{
+      const skuEsc=String(r.sku).replace(/'/g,"\\'");
+      const photo=r.image_url?`<img src="${escHtml(r.image_url)}" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:9px;border:1px solid rgba(124,91,30,.12);background:#fff" onerror="this.style.display='none'">`:'<div class="ops-photo-ph">—</div>';
+      return `<tr><td class="ops-num">${i+1}</td><td>${photo}</td><td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(r.sku)}</b></button></td><td>${escHtml(r.cn_name||r.sku_name||'—')}</td><td>${escHtml(r.where_returned||'—')}</td><td class="ops-num" style="font-weight:900;color:#b3261e">${Math.round(r.qty).toLocaleString('en-IN')}</td><td class="ops-num rev-only">${fmt(r.avg_sp)}</td><td class="ops-num rev-only" style="font-weight:900">${fmt(r.amount)}</td></tr>`;
+    }).join('');
+  }
+  const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const summary=document.getElementById('returnsSummary');
+  if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b> · showing top ${Math.min(20,rows.length)}.`;
+  renderReturnsChart(events,state);
+}
+const returnsApply_d=_debounce(()=>renderReturns(),180);
+function resetReturnsFilters(){
+  ['retD1','retD2','retSearch'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const ch=document.getElementById('retChannel');if(ch)ch.value='All';
+  renderReturns();
+}
+
+function renderReturnsChart(events,state){
+  const box=document.getElementById('returnsChartBox'),host=document.getElementById('returnsTrendChart'),title=document.getElementById('returnsChartTitle');
+  if(!box||!host)return;
+  const q=String(state?.search||'').trim();
+  if(!q){box.style.display='none';host.innerHTML='';_returnsChartData=[];return;}
+  box.style.display='block';
+  const dated=(events||[]).filter(e=>e.date&&e.date!=='N/A').sort((a,b)=>a.date.localeCompare(b.date));
+  if(title)title.textContent=`Return Qty Trend — ${q}`;
+  if(!dated.length){host.innerHTML='<div class="insight-empty">No dated return records for this search under the active filters.</div>';_returnsChartData=[];return;}
+  const first=dated[0].date,last=dated[dated.length-1].date,span=Math.max(1,Math.round((new Date(last+'T00:00:00')-new Date(first+'T00:00:00'))/86400000));
+  let gran='day';if(span>400)gran='month';else if(span>90)gran='week';
+  const weekStart=d=>{const x=new Date(d+'T00:00:00');const off=(x.getDay()+6)%7;x.setDate(x.getDate()-off);return x.toISOString().slice(0,10);};
+  const keyOf=d=>gran==='month'?d.slice(0,7):(gran==='week'?weekStart(d):d);
+  const labelOf=k=>gran==='month'?new Date(k+'-01T00:00:00').toLocaleDateString('en-GB',{month:'short',year:'numeric'}):new Date(k+'T00:00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'});
+  const buckets={};
+  dated.forEach(e=>{const k=keyOf(e.date),b=buckets[k]||(buckets[k]={qty:0,amount:0});b.qty+=Number(e.qty)||0;b.amount+=Number(e.amount)||0;});
+  const keys=Object.keys(buckets).sort(),vals=keys.map(k=>buckets[k].qty),maxV=Math.max(1,...vals);
+  const W=980,H=270,L=48,R=24,T=32,B=44,pw=W-L-R,ph=H-T-B,step=keys.length>1?pw/(keys.length-1):0;
+  const pts=vals.map((v,i)=>[L+i*step,T+ph-(v/maxV)*ph]);
+  const path=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const area=path+` L${pts[pts.length-1][0].toFixed(1)},${T+ph} L${pts[0][0].toFixed(1)},${T+ph} Z`;
+  const every=Math.max(1,Math.ceil(keys.length/10));
+  const labels=keys.map((k,i)=>(i%every===0||i===keys.length-1)?`<text x="${pts[i][0].toFixed(1)}" y="${H-14}" font-size="11" fill="#8c7a42" text-anchor="middle">${escHtml(labelOf(k))}</text>`:'').join('');
+  _returnsChartData=keys.map((k,i)=>({label:(gran==='week'?'Week of ':'')+labelOf(k),qty:buckets[k].qty,amount:buckets[k].amount,avg_sp:buckets[k].qty?buckets[k].amount/buckets[k].qty:0,x:pts[i][0],y:pts[i][1]}));
+  const dots=_returnsChartData.map((d,i)=>`<circle cx="${d.x.toFixed(1)}" cy="${d.y.toFixed(1)}" r="6" fill="#b3261e" style="cursor:pointer" onmouseenter="returnsPointHover(event,${i})" onmousemove="returnsPointHover(event,${i})" onmouseleave="returnsPointLeave()"><title>${escHtml(d.label)}: ${Math.round(d.qty)} returns</title></circle>`).join('');
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;display:block;margin:0 auto"><line x1="${L}" y1="${T+ph}" x2="${W-R}" y2="${T+ph}" stroke="#d9cfbd"/><path d="${area}" fill="rgba(179,38,30,.09)" stroke="none"></path><path d="${path}" fill="none" stroke="#b3261e" stroke-width="2.5" stroke-linejoin="round"></path>${dots}${labels}<text x="${L}" y="18" font-size="12" fill="#8c7a42">Peak Return Qty: ${Math.max(...vals).toLocaleString('en-IN')} (${gran})</text></svg><div id="returnsTrendTooltip" style="display:none;position:absolute;min-width:180px;background:#1f2430;color:#fff;padding:9px 12px;border-radius:8px;font-size:.76rem;box-shadow:0 8px 20px rgba(0,0,0,.25);z-index:30;pointer-events:none"></div>`;
+}
+function returnsPointHover(ev,index){
+  const host=document.getElementById('returnsTrendChart'),tip=document.getElementById('returnsTrendTooltip'),d=_returnsChartData[index];if(!host||!tip||!d)return;
+  tip.innerHTML=`<b>${escHtml(d.label)}</b><br>Return Qty: <b>${Math.round(d.qty).toLocaleString('en-IN')}</b>${LOGIN_ROLE==='employee'?'':`<br>Return Amount: <b>${fmt(d.amount)}</b><br>Avg Selling Price: <b>${fmt(d.avg_sp)}</b>`}`;
+  tip.style.display='block';const r=host.getBoundingClientRect();tip.style.left=Math.max(6,Math.min(r.width-195,(ev?.clientX||r.left)-r.left+12))+'px';tip.style.top=Math.max(6,Math.min(r.height-105,(ev?.clientY||r.top)-r.top-88))+'px';
+}
+function returnsPointLeave(){const t=document.getElementById('returnsTrendTooltip');if(t)t.style.display='none';}
+function exportReturnsExcel(){
+  const rows=_returnsExportRows||[];if(!rows.length){alert('No return rows to export.');return;}
+  const emp=LOGIN_ROLE==='employee',st=_returnsFilterState();
+  const headers=['Rank','SKU','SKU Name','CN Name','Return Qty',...(emp?[]:['Avg Selling Price','Return Amount (Qty x Selling Price)']),'Where Returned','Image Link','From Date','To Date','Channel Filter'];
+  const vals=rows.map((r,i)=>[i+1,r.sku,exportSkuName(r.sku,r.sku_name),r.cn_name||'',Number(r.qty.toFixed(2)),...(emp?[]:[Number(r.avg_sp.toFixed(2)),Number(r.amount.toFixed(2))]),r.where_returned||'',r.image_url||'',st.d1||'',st.d2||'',st.channel||'All']);
+  const hEsc=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:Arial,sans-serif}th,td{border:1px solid #bbb;padding:7px 9px}th{background:#f4ead1;font-weight:700}</style></head><body><table><tr>'+headers.map(h=>`<th>${hEsc(h)}</th>`).join('')+'</tr>'+vals.map(r=>'<tr>'+r.map(v=>`<td>${hEsc(v)}</td>`).join('')+'</tr>').join('')+'</table></body></html>';
+  const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='returns_top20_filtered.xls';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+window.loadReturns=loadReturns;window.renderReturns=renderReturns;window.resetReturnsFilters=resetReturnsFilters;window.returnsApply_d=returnsApply_d;window.returnsPointHover=returnsPointHover;window.returnsPointLeave=returnsPointLeave;window.exportReturnsExcel=exportReturnsExcel;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -18891,6 +19234,7 @@ showTab = function(t){
     repeat: {id: 'vRepeat', btn: 'm3'},
     finder: {id: 'vFinder', btn: 'm4'},
     skudetails: {id: 'vSkudetails', btn: 'm5'},
+    returns: {id: 'vReturns', btn: 'm34'},
     insights: {id: 'vInsights', btn: 'm6'},
     target: {id: 'vTarget', btn: 'm10'},
     discount: {id: 'vDiscount', btn: 'm12'},
@@ -18946,6 +19290,7 @@ showTab = function(t){
       repeat: 'REPEAT ORDERS',
       finder: 'SKU FINDER',
       skudetails: 'SKU DETAILS',
+      returns: 'RETURNS',
       insights: 'INSIGHTS',
       target: 'TARGET',
       discount: 'DISCOUNTS',
@@ -18983,6 +19328,7 @@ showTab = function(t){
   // Heavy renders ko defer karo — tab turant switch ho jaye (UI block na ho),
   // bhaari kaam agle frame me. Isse page badalne par hang nahi hoga.
   if (t === 'repeat')   setTimeout(()=>{ try{ renderRoSkuChecklist(); applyRO(); }catch(e){console.error(e);} }, 0);
+  if (t === 'returns')  setTimeout(()=>{ try{ loadReturns(); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
