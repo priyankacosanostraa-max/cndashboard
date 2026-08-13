@@ -1830,8 +1830,9 @@ def _refresh_data():
         "cod": 0, "prepaid": 0, "total": 0,
         "cod_returned": 0, "prepaid_returned": 0, "daily": []
     }
-    # Returns-only Website order summary. Unlike the general payment summary
-    # above, this follows the sheet's Invoice Code row count exactly.
+    # Returns-only Website order summary. Website orders are unique by
+    # Order_Date + Invoice Code, so repeated lines of the same invoice on the
+    # same date count as one order.
     website_returns_payment_summary = {
         "cod": 0, "prepaid": 0, "total": 0,
         "cod_returned": 0, "prepaid_returned": 0, "daily": []
@@ -1892,10 +1893,10 @@ def _refresh_data():
             "Shipping Package Code", "Invoice Code", "Order ID", "Order Code",
             "Order Number", "Sale Order Code"
         ) or _wat(8)
-        # Returns tab order count is taken directly from the Website sheet's
-        # Invoice Code column (physical J, zero-based index 9). Each valid
-        # non-empty Invoice Code row is one order for the Returns order/rate
-        # denominator; it is intentionally NOT deduplicated.
+        # Returns tab order identity comes from the Website sheet's Invoice
+        # Code column (physical J, zero-based index 9). The same Invoice Code
+        # repeated on the same Order_Date is one order; the same code on another
+        # date is a separate order.
         W_RET_ORDER = (find_col(
             web_orders.columns, "Invoice Code", "Invoice No", "Invoice Number"
         ) or _wat(9))
@@ -2180,13 +2181,16 @@ def _refresh_data():
             "daily": [_payment_daily[d] for d in sorted(_payment_daily)],
         }
 
-        # RETURNS TAB ONLY: count Website orders exactly from non-empty Invoice
-        # Code cells (one valid sheet row = one order). Do not use the legacy
-        # unique Shipping Package/order-token dedup here. This mirrors the
-        # Website sheet's Invoice Code column count while still applying the
-        # Returns tab's Order_Date, SKU and COD/Prepaid filters.
-        _ret_inv_daily_all = {}
-        _ret_inv_daily_sku = {}
+        # RETURNS TAB ONLY: one Website order = one unique
+        # (Order_Date, Invoice Code). If the same Invoice Code is present on
+        # several rows on the same date (for multiple line-items or duplicate
+        # source rows), it contributes exactly one order to the denominator.
+        # For a SKU-filtered Returns view the same rule is applied within that
+        # SKU: (Order_Date, Invoice Code, SKU) is counted once. Return status is
+        # OR-ed across duplicate lines so one returned line marks that order as
+        # returned, without increasing the order count.
+        _ret_order_all = {}
+        _ret_order_sku = {}
         if W_DATE and W_RET_ORDER and W_COD:
             for _ret_row in _df_chunks(web_orders):
                 _ret_invoice = clean(_ret_row.get(W_RET_ORDER, ""))
@@ -2196,6 +2200,9 @@ def _refresh_data():
                 if _ret_dt is None:
                     continue
                 _ret_day = _ret_dt.strftime("%Y-%m-%d")
+                _ret_invoice_key = str(_ret_invoice).strip().casefold()
+                if not _ret_invoice_key:
+                    continue
 
                 _ret_cod_raw = str(_ret_row.get(W_COD, "") or "").strip().casefold()
                 if _ret_cod_raw in ("1", "1.0", "cod", "cash on delivery", "cash-on-delivery", "true", "yes"):
@@ -2214,29 +2221,62 @@ def _refresh_data():
                     or any(k in _ret_status for k in ("return", "rto", "refund"))
                 )
 
-                _ret_all_b = _ret_inv_daily_all.setdefault(
-                    _ret_day,
-                    {"d": _si(_ret_day), "cod": 0, "prepaid": 0,
-                     "cod_returned": 0, "prepaid_returned": 0}
-                )
-                if _ret_cod == 1:
-                    _ret_all_b["cod"] += 1
-                    if _ret_returned:
-                        _ret_all_b["cod_returned"] += 1
-                else:
-                    _ret_all_b["prepaid"] += 1
-                    if _ret_returned:
-                        _ret_all_b["prepaid_returned"] += 1
+                _ret_order_key = (_ret_day, _ret_invoice_key)
+                _ret_all_ev = _ret_order_all.get(_ret_order_key)
+                if _ret_all_ev is None:
+                    _ret_order_all[_ret_order_key] = {
+                        "d": _ret_day, "p": int(_ret_cod), "r": 1 if _ret_returned else 0
+                    }
+                elif _ret_returned:
+                    _ret_all_ev["r"] = 1
 
                 _ret_raw_sku = clean(_ret_row.get(W_SKU, "")) if W_SKU else ""
                 if not _ret_raw_sku:
                     continue
                 _ret_n_sku = re.sub(r"[^A-Z0-9]", "", _ret_raw_sku.upper())
                 _ret_sku = inv_skus_map.get(_ret_n_sku, _ret_raw_sku.upper())
-                _ret_sku_days = _ret_inv_daily_sku.setdefault(_ret_sku, {})
-                _ret_sku_b = _ret_sku_days.setdefault(
+                _ret_sku_map = _ret_order_sku.setdefault(_ret_sku, {})
+                _ret_sku_ev = _ret_sku_map.get(_ret_order_key)
+                if _ret_sku_ev is None:
+                    _ret_sku_map[_ret_order_key] = {
+                        "d": _ret_day, "p": int(_ret_cod), "r": 1 if _ret_returned else 0
+                    }
+                elif _ret_returned:
+                    _ret_sku_ev["r"] = 1
+
+        _ret_inv_daily_all = {}
+        for _ret_ev in _ret_order_all.values():
+            _ret_day = str(_ret_ev.get("d", "") or "")
+            if not _ret_day:
+                continue
+            _ret_all_b = _ret_inv_daily_all.setdefault(
+                _ret_day,
+                {"d": _si(_ret_day), "cod": 0, "prepaid": 0,
+                 "cod_returned": 0, "prepaid_returned": 0}
+            )
+            _ret_cod = int(_ret_ev.get("p", 0) or 0)
+            _ret_returned = bool(int(_ret_ev.get("r", 0) or 0))
+            if _ret_cod == 1:
+                _ret_all_b["cod"] += 1
+                if _ret_returned:
+                    _ret_all_b["cod_returned"] += 1
+            else:
+                _ret_all_b["prepaid"] += 1
+                if _ret_returned:
+                    _ret_all_b["prepaid_returned"] += 1
+
+        _ret_inv_daily_sku = {}
+        for _ret_sku, _ret_order_map in _ret_order_sku.items():
+            _ret_day_map = {}
+            for _ret_ev in _ret_order_map.values():
+                _ret_day = str(_ret_ev.get("d", "") or "")
+                if not _ret_day:
+                    continue
+                _ret_sku_b = _ret_day_map.setdefault(
                     _ret_day, {"d": _si(_ret_day), "co": 0, "cr": 0, "po": 0, "pr": 0}
                 )
+                _ret_cod = int(_ret_ev.get("p", 0) or 0)
+                _ret_returned = bool(int(_ret_ev.get("r", 0) or 0))
                 if _ret_cod == 1:
                     _ret_sku_b["co"] += 1
                     if _ret_returned:
@@ -2245,9 +2285,10 @@ def _refresh_data():
                     _ret_sku_b["po"] += 1
                     if _ret_returned:
                         _ret_sku_b["pr"] += 1
+            _ret_inv_daily_sku[_ret_sku] = _ret_day_map
 
-        # This per-SKU object is consumed only by the Returns tab, so replacing
-        # the earlier unique-order version cannot change Rakhi/Home metrics.
+        # This per-SKU object is consumed only by the Returns tab; Rakhi/Home
+        # payment metrics keep their existing logic unchanged.
         website_return_payment_daily = {
             sku: [day_map[d] for d in sorted(day_map)]
             for sku, day_map in _ret_inv_daily_sku.items()
@@ -2273,7 +2314,7 @@ def _refresh_data():
         dbg["website_return_payment_skus"] = len(website_return_payment_daily)
         dbg["website_return_event_skus"] = len(website_return_events)
         dbg["website_all_payment_orders"] = website_payment_summary["total"]
-        dbg["website_returns_invoice_rows"] = website_returns_payment_summary["total"]
+        dbg["website_returns_invoice_rows"] = website_returns_payment_summary["total"]  # unique day+Invoice orders
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
