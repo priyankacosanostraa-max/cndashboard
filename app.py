@@ -1823,6 +1823,9 @@ def _refresh_data():
     # Compact per-SKU daily Website payment/return counts used by Returns tab.
     # co/cr = COD orders / COD returned orders; po/pr = Prepaid orders / returned orders.
     website_return_payment_daily = {}
+    # Compact Website/DTC return events keyed by SKU. These use the Website
+    # sheet's physical W Order_Date so Returns date filters never use Dispatch Date.
+    website_return_events = {}
     website_payment_summary = {
         "cod": 0, "prepaid": 0, "total": 0,
         "cod_returned": 0, "prepaid_returned": 0, "daily": []
@@ -1836,11 +1839,14 @@ def _refresh_data():
         wcols = list(web_orders.columns)
         def _wat(i): return wcols[i] if len(wcols) > i else None
 
-        # Customer/address order identity must follow Order Date (order-level
-        # order day), not a later dispatch day.
-        W_DATE = (find_col(web_orders.columns, "Order_Date", "Order Date",
-                           "Display Order Date", "order date", "Created",
-                           "Dispatch Date", "date") or _wat(1))
+        # Returns/DTC Website date source is the physical W column (index 22).
+        # This is the maintained Order_Date column in the Website sheet and must
+        # never silently fall back to Created/Dispatch Date. parse_date_any()
+        # below handles Excel serials, timestamps, strings and mixed date formats.
+        W_DATE = (_wat(22) or find_col(
+            web_orders.columns, "Order_Date", "Order Date",
+            "Display Order Date", "order date", "orderdate"
+        ))
         W_NAME = (find_col(web_orders.columns, "Billing Address Name",
                            "Billing Name", "Customer Name", "customer name") or _wat(3))
         # Website city source is the physical E column (index 4) exactly, as
@@ -1929,7 +1935,8 @@ def _refresh_data():
         # any existing Rakhi calculation.
         _web_return_payment_orders = {}
         _web_all_return_payment_orders = {}
-        if W_DATE and W_NAME and W_ADDR and W_SKU:
+        _web_return_sums = {}
+        if W_DATE and W_SKU:
             for web_row_no, r in enumerate(_df_chunks(web_orders)):
                 status = str(r.get(W_STATUS, "") or "").strip().lower() if W_STATUS else ""
                 if status and any(x in status for x in ("cancel", "void", "failed")):
@@ -2010,6 +2017,30 @@ def _refresh_data():
                         elif returned_line:
                             sku_ret_ev["r"] = 1
 
+                # Website/DTC Returns tab must use Website Order_Date (physical W),
+                # not COSA Dispatch Date. Return Qty comes from Website Return/RTO
+                # Qty when present; negative-qty or explicit return/RTO/refund rows
+                # are normalized as returns as a safe source-format fallback.
+                explicit_return_status = any(k in status for k in ("return", "rto", "refund"))
+                return_qty_event = 0.0
+                if return_qty_web > 0:
+                    return_qty_event = float(return_qty_web)
+                elif gross_qty_web < 0:
+                    return_qty_event = abs(float(gross_qty_web))
+                elif explicit_return_status:
+                    return_qty_event = float(gross_qty_web) if gross_qty_web > 0 else 1.0
+                if return_qty_event > 0:
+                    unit_sp_return = to_num(r.get(W_SP, 0)) if W_SP else 0.0
+                    if unit_sp_return <= 0 and W_REV:
+                        line_rev_return = abs(to_num(r.get(W_REV, 0)))
+                        qty_basis_return = abs(float(gross_qty_web)) if gross_qty_web else return_qty_event
+                        if line_rev_return > 0 and qty_basis_return > 0:
+                            unit_sp_return = line_rev_return / qty_basis_return
+                    ret_key = (mapped_web_sku, date_iso)
+                    ret_bucket = _web_return_sums.setdefault(ret_key, {"q": 0.0, "a": 0.0})
+                    ret_bucket["q"] += float(return_qty_event)
+                    ret_bucket["a"] += float(return_qty_event) * max(0.0, float(unit_sp_return))
+
                 # Returns remain visible in the separate payment-mix view, but
                 # must not count as sold units, city revenue or repeat sales.
                 if not is_sold_web_line:
@@ -2072,6 +2103,16 @@ def _refresh_data():
             for sku, events in _web_payment_sets.items()
         }
 
+        # Compact per-SKU Website return events. These are the authoritative
+        # Website/DTC Returns-tab rows because their date comes from column W.
+        website_return_events = {}
+        for (ret_sku, ret_day), vals in sorted(_web_return_sums.items(), key=lambda x: (x[0][0], x[0][1])):
+            website_return_events.setdefault(ret_sku, []).append({
+                "d": _si(ret_day),
+                "q": round(float(vals.get("q", 0.0)), 4),
+                "a": round(float(vals.get("a", 0.0)), 2),
+            })
+
         # Per-SKU daily counts keep the browser payload small while still
         # allowing the Returns date filters and exact SKU search to recalculate
         # COD/Prepaid return rates instantly.
@@ -2131,6 +2172,7 @@ def _refresh_data():
         dbg["website_payment_skus"] = len(website_payment_events)
         dbg["website_payment_orders"] = sum(len(v) for v in website_payment_events.values())
         dbg["website_return_payment_skus"] = len(website_return_payment_daily)
+        dbg["website_return_event_skus"] = len(website_return_events)
         dbg["website_all_payment_orders"] = website_payment_summary["total"]
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
@@ -2138,6 +2180,7 @@ def _refresh_data():
         website_city_events = {}
         website_payment_events = {}
         website_return_payment_daily = {}
+        website_return_events = {}
         website_payment_summary = {
             "cod": 0, "prepaid": 0, "total": 0,
             "cod_returned": 0, "prepaid_returned": 0, "daily": []
@@ -2811,6 +2854,7 @@ def _refresh_data():
             "website_city_events": website_city_events.get(dedupe_key, []),
             "website_payment_events": website_payment_events.get(dedupe_key, []),
             "website_return_payment_daily": website_return_payment_daily.get(dedupe_key, []),
+            "website_return_events": website_return_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
             "return_qty":   A["tot_ret"],
@@ -2897,6 +2941,7 @@ def _refresh_data():
             "website_city_events": website_city_events.get(orphan_key, []),
             "website_payment_events": website_payment_events.get(orphan_key, []),
             "website_return_payment_daily": website_return_payment_daily.get(orphan_key, []),
+            "website_return_events": website_return_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
             "customer_count": A["ncust"],
@@ -6989,7 +7034,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="returnsPaymentBox" class="filter-box" style="margin:14px 0">
       <label class="fl" style="margin-bottom:6px;display:block">Website Return Rate by Payment Mode</label>
-      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">COD source: Website sheet column M (1 = COD, 0 = Prepaid).</div>
+      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Website Order Date source: column W (Order_Date). COD source: column M (1 = COD, 0 = Prepaid).</div>
       <div id="returnsPaymentDonut"></div>
     </div>
 
@@ -17874,9 +17919,9 @@ window.exportPaymentsPlanning = exportPaymentsPlanning;
 
 
 /* ── RETURNS TAB ────────────────────────────────────────────────────────────
-   Uses the same COSA transaction rows already loaded into master.sales_entries.
-   Return amount is transaction Return Qty × transaction Selling Price.
-   The table and chart are both driven by the exact same filter state. */
+   Non-DTC channels use COSA return rows. Website/DTC returns use the Website
+   sheet's physical W Order_Date and Website return/RTO qty so date filtering
+   never falls back to Dispatch Date. The table/chart share one filter state. */
 let _returnsSource = [];
 let _returnsSourceMasterRef = null;
 let _returnsExportRows = [];
@@ -17896,17 +17941,31 @@ function _returnsEntryChannel(e){
 function _returnsBuildSource(){
   if(_returnsSourceMasterRef===master && _returnsSource.length) return _returnsSource;
   const rows=[];
+  const isWebsiteChannel=v=>['website','dtc','d2c'].includes(_returnsNorm(v));
   (master||[]).forEach(item=>{
     const sku=String(item?.sku||'').trim(); if(!sku)return;
+    // Non-Website channels keep the existing COSA return source. Website/DTC
+    // is intentionally excluded here because its authoritative Returns date
+    // comes from Website sheet physical column W (Order_Date).
     (item.sales_entries||[]).forEach(e=>{
+      const entryChannel=_returnsEntryChannel(e);
+      if(isWebsiteChannel(entryChannel))return;
       const qty=Math.max(0,Number(e?.ret)||0); if(!(qty>0))return;
       const sp=Math.max(0,Number(e?.sp)||0);
       const rawAmt=Number(e?.ret_amt);
       const amount=Number.isFinite(rawAmt)&&rawAmt>0?rawAmt:(qty*sp);
       rows.push({
         sku, sku_name:item.sku_name||'', cn_name:item.cn_name||'', image_url:item.image_url||'',
-        date:String(e?.date||''), channel:_returnsEntryChannel(e), qty, sp,
+        date:String(e?.date||''), channel:entryChannel, qty, sp,
         amount:Math.max(0,Number(amount)||0)
+      });
+    });
+    (item.website_return_events||[]).forEach(ev=>{
+      const qty=Math.max(0,Number(ev?.q)||0); if(!(qty>0))return;
+      const amount=Math.max(0,Number(ev?.a)||0);
+      rows.push({
+        sku, sku_name:item.sku_name||'', cn_name:item.cn_name||'', image_url:item.image_url||'',
+        date:String(ev?.d||''), channel:'D2C', qty, sp:qty>0?amount/qty:0, amount
       });
     });
   });
@@ -17976,7 +18035,9 @@ function renderReturns(){
   }
   const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const summary=document.getElementById('returnsSummary');
-  if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b> · showing top ${Math.min(20,rows.length)}.`;
+  const websiteOrders=_returnsWebsitePaymentScope(state);
+  const websiteOrderText=(!websiteOrders.hidden&&!websiteOrders.empty)?` · Total Website Orders: <b>${Number(websiteOrders.totalOrders||0).toLocaleString('en-IN')}</b>`:'';
+  if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b>${websiteOrderText} · showing top ${Math.min(20,rows.length)}.`;
   renderReturnsPaymentDonut(state);
   renderReturnsChart(events,state);
 }
@@ -18033,7 +18094,9 @@ function _returnsWebsitePaymentScope(state){
   const totals=rows.reduce((a,r)=>{
     a.cod+=r.cod;a.codReturned+=r.codReturned;a.prepaid+=r.prepaid;a.prepaidReturned+=r.prepaidReturned;return a;
   },{cod:0,codReturned:0,prepaid:0,prepaidReturned:0});
-  return {...totals,scope,hidden:false,empty:(totals.cod+totals.prepaid)<=0};
+  const totalOrders=totals.cod+totals.prepaid;
+  const totalReturned=totals.codReturned+totals.prepaidReturned;
+  return {...totals,totalOrders,totalReturned,scope,hidden:false,empty:totalOrders<=0};
 }
 function renderReturnsPaymentDonut(state){
   const box=document.getElementById('returnsPaymentBox'),host=document.getElementById('returnsPaymentDonut'),sub=document.getElementById('returnsPaymentSubtitle');
@@ -18045,16 +18108,17 @@ function renderReturnsPaymentDonut(state){
   box.style.display='block';
   if(d.empty){
     host.innerHTML=`<div class="insight-empty">${escHtml(d.reason||'No Website payment-mode orders match the selected filters.')}</div>`;
-    if(sub)sub.textContent='COD source: Website sheet column M (1 = COD, 0 = Prepaid).';
+    if(sub)sub.textContent='Website Order Date source: column W (Order_Date). COD source: column M (1 = COD, 0 = Prepaid).';
     return;
   }
   const codRate=d.cod?Math.min(100,Math.max(0,d.codReturned/d.cod*100)):0;
   const prepaidRate=d.prepaid?Math.min(100,Math.max(0,d.prepaidReturned/d.prepaid*100)):0;
   const R1=58,R2=40,C1=2*Math.PI*R1,C2=2*Math.PI*R2;
   const codDash=(C1*codRate/100).toFixed(2),preDash=(C2*prepaidRate/100).toFixed(2);
-  const totalReturned=d.codReturned+d.prepaidReturned;
+  const totalOrders=Number(d.totalOrders)||(d.cod+d.prepaid);
+  const totalReturned=Number(d.totalReturned)||(d.codReturned+d.prepaidReturned);
   const scope=escHtml(d.scope||'All Website orders');
-  if(sub)sub.textContent=`${d.scope||'All Website orders'} · COD source: Website sheet column M (1 = COD, 0 = Prepaid) · return status from Website Return/RTO Qty/status.`;
+  if(sub)sub.textContent=`${d.scope||'All Website orders'} · Order Date: Website column W (Order_Date) · COD: column M (1 = COD, 0 = Prepaid) · all active Date/SKU filters applied.`;
   host.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:4px 0 2px">
     <div style="width:210px;height:210px;position:relative;flex:0 0 210px">
       <svg viewBox="0 0 180 180" style="width:210px;height:210px;display:block" role="img" aria-label="Website COD and prepaid return rates">
@@ -18063,12 +18127,16 @@ function renderReturnsPaymentDonut(state){
         <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#eee8dc" stroke-width="13"></circle>
         <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#17895e" stroke-width="13" stroke-linecap="round" transform="rotate(-90 90 90)" stroke-dasharray="${preDash} ${C2.toFixed(2)}"><title>Prepaid return rate ${prepaidRate.toFixed(1)}% — ${d.prepaidReturned} returned of ${d.prepaid} Prepaid orders</title></circle>
         <text x="90" y="84" text-anchor="middle" font-size="11" font-weight="800" fill="#766746">WEBSITE</text>
-        <text x="90" y="103" text-anchor="middle" font-size="18" font-weight="900" fill="#1f2430">${totalReturned.toLocaleString('en-IN')}</text>
-        <text x="90" y="117" text-anchor="middle" font-size="9" font-weight="700" fill="#8c7a42">RETURNED ORDERS</text>
+        <text x="90" y="103" text-anchor="middle" font-size="18" font-weight="900" fill="#1f2430">${totalOrders.toLocaleString('en-IN')}</text>
+        <text x="90" y="117" text-anchor="middle" font-size="9" font-weight="700" fill="#8c7a42">TOTAL ORDERS</text>
       </svg>
     </div>
     <div style="min-width:270px;max-width:560px;display:grid;gap:10px;flex:1">
       <div style="font-weight:900;font-size:.9rem;color:#1f2430">${scope}</div>
+      <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;padding:10px 12px;border:1px solid rgba(31,36,48,.10);border-radius:12px;background:#fff">
+        <div><b>Total Website Orders</b><div class="small-note">Unique Website orders in the active Order Date / SKU filter</div></div>
+        <div style="text-align:right"><b style="font-size:1.18rem;color:#1f2430">${totalOrders.toLocaleString('en-IN')}</b><div class="small-note">${totalReturned.toLocaleString('en-IN')} returned</div></div>
+      </div>
       <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(181,108,24,.18);border-radius:12px;background:#fffaf1">
         <span style="width:11px;height:11px;border-radius:50%;background:#b56c18"></span><div><b>COD Return Rate</b><div class="small-note">${d.codReturned.toLocaleString('en-IN')} returned / ${d.cod.toLocaleString('en-IN')} COD orders</div></div><b style="font-size:1.18rem;color:#b56c18">${codRate.toFixed(1)}%</b>
       </div>
