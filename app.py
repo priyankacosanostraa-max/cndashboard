@@ -292,7 +292,7 @@ AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https:/
 NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
 TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
 AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
-# Production / PPC-WIP sheet (A=Date, B=Order No, E=SKU, G=Channel, I=Order Qty,
+# Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
 
@@ -818,15 +818,17 @@ def find_col(cols, *cands):
     return None
 
 def classify_status(item, current_month_key=""):
-    # Koi dispatch hi nahi hui (COSA me record nahi) → "No Record"
-    if item["dispatch_count"] == 0:
+    # Movement status follows physical SKU demand: standalone sales + quantities
+    # consumed through every unique parent CMB.  A combo-only child therefore is
+    # not labelled "No Record"/"Slow" while its inventory is actually moving.
+    combo_30d = max(0, to_num(item.get("combo_qty_1m", 0)))
+    combo_all = max(0, to_num(item.get("combo_final_qty", 0)))
+    if item["dispatch_count"] == 0 and combo_all <= 0:
         return "No Record"
     # "New Launch" = sirf wahi jo IS MAHINE launch hua (launch date se).
     if current_month_key and item.get("launch_key") == current_month_key:
         return "New Launch"
-    # Running status is SALES-ONLY. Stock/WIP never changes Good vs Slow.
-    # qty_1m is the dashboard's rolling latest-30-calendar-day sold quantity.
-    recent_30d = max(0, to_num(item.get("qty_1m", 0)))
+    recent_30d = max(0, to_num(item.get("qty_1m", 0))) + combo_30d
     return "Good Running" if recent_30d > 0 else "Slow Movers"
 
 
@@ -845,22 +847,33 @@ def _compute_alerts_and_channel(item, today):
     stock = item.get("inv_stock") or 0
     wip = item.get("inv_wip") or 0
     total_avail = stock + wip
-    q30 = item.get("qty_1m") or 0
-    q90 = item.get("qty_3m") or 0
+    q30_direct = max(0, to_num(item.get("qty_1m", 0)))
+    q90_direct = max(0, to_num(item.get("qty_3m", 0)))
+    combo_q30 = max(0, to_num(item.get("combo_qty_1m", 0)))
+    combo_q90 = max(0, to_num(item.get("combo_qty_3m", 0)))
+    demand30 = q30_direct + combo_q30
+    demand90 = q90_direct + combo_q90
     q6m = item.get("qty_6m") or 0
     dispatch_count = item.get("dispatch_count") or 0
-    last_dt_s = item.get("last_dispatch_date") or "N/A"
+    combo_all = max(0, to_num(item.get("combo_final_qty", 0)))
+    direct_last = item.get("last_dispatch_date") or ""
+    combo_last = item.get("combo_last_dispatch_date") or ""
+    # Movement recency is physical SKU demand recency: direct sale OR use in a
+    # parent CMB. ISO dates sort lexicographically, so max() is the latest.
+    _last_candidates = [d for d in (direct_last, combo_last) if d and d != "N/A"]
+    last_dt_s = max(_last_candidates) if _last_candidates else "N/A"
+    has_movement = dispatch_count > 0 or combo_all > 0
 
     # --- High Sale + Low Stock (stockout risk) ---
     # 30-din me achhi bikri (>=5 units) par available stock+wip usse kam
-    if q30 >= 5 and total_avail < q30:
+    if demand30 >= 5 and total_avail < demand30:
         flags.append({"code": "low_stock_high_sale", "label": "⚠️ High Sale, Low Stock",
-                       "detail": f"30D sale {int(q30)} units, but only {int(total_avail)} available (stock+WIP)."})
+                       "detail": f"30D demand {int(demand30)} units ({int(q30_direct)} individual + {int(combo_q30)} in CMBs), but only {int(total_avail)} available (stock+WIP)."})
 
-    # --- High Stock + Low Sale (overstock / slow mover) ---
-    if total_avail >= 20 and q90 <= 1:
+    # --- High Stock + Low Demand (overstock / slow mover) ---
+    if total_avail >= 20 and demand90 <= 1:
         flags.append({"code": "high_stock_low_sale", "label": "📦 High Stock, Low Sale",
-                       "detail": f"{int(total_avail)} units available (stock+WIP), only {int(q90)} sold in last 90 days."})
+                       "detail": f"{int(total_avail)} units available (stock+WIP), only {int(demand90)} units of total demand in last 90 days."})
 
     # --- Dormant: active product (has stock) but zero sale in 30/90 days ---
     days_since_last = None
@@ -869,38 +882,40 @@ def _compute_alerts_and_channel(item, today):
             days_since_last = (today - datetime.strptime(last_dt_s, "%Y-%m-%d").date()).days
         except Exception:
             days_since_last = None
-    if dispatch_count > 0 and total_avail > 0:
-        if q90 == 0 and (days_since_last is None or days_since_last >= 90):
+    if has_movement and total_avail > 0:
+        if demand90 == 0 and (days_since_last is None or days_since_last >= 90):
             flags.append({"code": "dormant_90d", "label": "💤 Zero Sale (90+ days)",
-                           "detail": f"No sale in last 90 days despite {int(total_avail)} units available."})
-        elif q30 == 0 and (days_since_last is None or days_since_last >= 30):
+                           "detail": f"No individual or CMB demand in last 90 days despite {int(total_avail)} units available."})
+        elif demand30 == 0 and (days_since_last is None or days_since_last >= 30):
             flags.append({"code": "dormant_30d", "label": "💤 Zero Sale (30+ days)",
-                           "detail": f"No sale in last 30 days despite {int(total_avail)} units available."})
+                           "detail": f"No individual or CMB demand in last 30 days despite {int(total_avail)} units available."})
 
     # --- OOS (Out of Stock) — koi stock/WIP nahi ---
     if total_avail <= 0:
         flags.append({"code": "oos", "label": "🔴 Currently OOS",
                        "detail": "Inventory stock and WIP are both 0 — replenishment required."})
-    elif total_avail > 0 and item.get("reorder_qty", 0) > 0 and q30 >= 3:
+    elif total_avail > 0 and item.get("reorder_qty", 0) > 0 and demand30 >= 3:
         flags.append({"code": "replenish_soon", "label": "🟠 Replenish Soon",
                        "detail": f"Stock+WIP {int(total_avail)} units, expected demand exceeds this — reorder {int(item.get('reorder_qty',0))} units."})
 
     # --- Growing / Declining trend: last 30d rate vs prior 90d avg rate ---
-    q90_rate30 = (q90 / 3.0) if q90 else 0.0     # per-30d average over last 90 days
+    # Direct-SKU trend is intentionally kept separate from CMB consumption;
+    # stock-risk flags above are the combo-aware inventory-demand view.
+    q90_rate30 = (q90_direct / 3.0) if q90_direct else 0.0
     trend = None
-    if q90_rate30 >= 2 or q30 >= 2:
+    if q90_rate30 >= 2 or q30_direct >= 2:
         if q90_rate30 > 0:
-            change_pct = round(((q30 - q90_rate30) / q90_rate30) * 100)
+            change_pct = round(((q30_direct - q90_rate30) / q90_rate30) * 100)
         else:
-            change_pct = 100 if q30 > 0 else 0
+            change_pct = 100 if q30_direct > 0 else 0
         if change_pct >= 20:
             trend = "growing"
             flags.append({"code": "growing", "label": f"📈 Growing (+{change_pct}%)",
-                           "detail": f"Last 30D sale {int(q30)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
+                           "detail": f"Last 30D individual sale {int(q30_direct)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
         elif change_pct <= -20:
             trend = "declining"
             flags.append({"code": "declining", "label": f"📉 Declining ({change_pct}%)",
-                           "detail": f"Last 30D sale {int(q30)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
+                           "detail": f"Last 30D individual sale {int(q30_direct)} vs {round(q90_rate30,1)} avg/30D over last 90 days."})
 
     # --- Sudden Sales Drop: last 30d vs prior 30d (30-60 days ago) ---
     ents = item.get("sales_entries") or []
@@ -914,12 +929,12 @@ def _compute_alerts_and_channel(item, today):
         except Exception:
             continue
         delta = (today - d).days
-        if 30 < delta <= 60:
+        if 30 <= delta < 60:
             prior_30_60 += float(e.get("qty") or 0)
-    if prior_30_60 >= 5 and q30 <= prior_30_60 * 0.4:
-        drop_pct = round((1 - (q30 / prior_30_60)) * 100) if prior_30_60 else 0
+    if prior_30_60 >= 5 and q30_direct <= prior_30_60 * 0.4:
+        drop_pct = round((1 - (q30_direct / prior_30_60)) * 100) if prior_30_60 else 0
         flags.append({"code": "sales_drop", "label": f"📉 Sudden Sales Drop ({drop_pct}%)",
-                       "detail": f"Sold {int(prior_30_60)} units in the previous 30 days, only {int(q30)} in the last 30 days."})
+                       "detail": f"Sold {int(prior_30_60)} individual units in the previous 30 days, only {int(q30_direct)} in the last 30 days."})
 
     # --- Best Channel (highest revenue channel for this SKU) ---
     chan_rev = {}
@@ -978,8 +993,8 @@ def simple_forecast(entries, days_ahead=30):
             continue
         age = (today - dd).days
         q_all += qty
-        if age <= 60:  q60  += qty
-        if age <= 180: q180 += qty
+        if age < 60:  q60  += qty
+        if age < 180: q180 += qty
         if first is None or dd < first:
             first = dd
 
@@ -989,7 +1004,7 @@ def simple_forecast(entries, days_ahead=30):
     if q60 > 0 or q180 > 0:
         daily = 0.70 * rate60 + 0.30 * rate180
     else:
-        span_days = max(1, (today - first).days) if first else 1
+        span_days = max(1, (today - first).days + 1) if first else 1
         daily = q_all / span_days
 
     base = daily * days_ahead
@@ -1695,9 +1710,13 @@ def _refresh_data():
     dbg["cosa_cols"] = list(cosa.columns)
 
     # ── Inventory columns ────────────────────────────────────
-    I_SKU = find_col(inv.columns, "SKU") or inv.columns[0]
-    I_IMG = find_col(inv.columns, "Image Link","imagelink") or find_col(inv.columns,"image","img")
-    I_MRP  = find_col(inv.columns, "MRP", "mrp", "m.r.p")
+    # Live All Product source-of-truth layout: B=SKU, E=Image Link, N=MRP.
+    # Header matching is primary; physical fallbacks prevent a harmless header
+    # spelling change from silently selecting S.No/Image or returning zeros.
+    I_SKU = find_col(inv.columns, "SKU") or (inv.columns[1] if len(inv.columns) > 1 else inv.columns[0])
+    I_IMG = (find_col(inv.columns, "Image Link","imagelink") or find_col(inv.columns,"image","img")
+             or (inv.columns[4] if len(inv.columns) > 4 else None))
+    I_MRP  = find_col(inv.columns, "MRP", "mrp", "m.r.p") or (inv.columns[13] if len(inv.columns) > 13 else None)
     # Bulk tab has an explicit source-of-truth requirement: physical column N
     # (zero-based index 13) from All Product, regardless of header spelling or
     # any other MRP-looking column. Keep global I_MRP unchanged for other tabs.
@@ -1814,9 +1833,9 @@ def _refresh_data():
 
     # ── Website repeat-customer identity index ─────────────────────────
     # Billing Address Name + Final Billing Address together identify one
-    # Website customer. Multiple order-lines/orders for the same customer
-    # on the same date are collapsed into one customer-session. Only a short
-    # SHA-1 token is sent to the browser; names/addresses themselves are not.
+    # Website customer, while Order_Date + Invoice Code identifies each order.
+    # Duplicate lines of one invoice collapse; two invoices by the same customer
+    # on the same day stay distinct. Only short SHA-1 tokens reach the browser.
     website_customer_events = {}
     website_city_events = {}
     website_payment_events = {}
@@ -1888,24 +1907,16 @@ def _refresh_data():
         # Header match is preferred; fixed M-column fallback protects against
         # harmless header spelling/spacing changes in the source sheet.
         W_COD = find_col(web_orders.columns, "COD", "Cash On Delivery", "Cash on Delivery") or _wat(12)
-        W_ORDER = find_col(
-            web_orders.columns,
-            "Shipping Package Code", "Invoice Code", "Order ID", "Order Code",
-            "Order Number", "Sale Order Code"
-        ) or _wat(8)
-        # Returns tab order identity comes from the Website sheet's Invoice
-        # Code column (physical J, zero-based index 9). The same Invoice Code
-        # repeated on the same Order_Date is one order; the same code on another
-        # date is a separate order.
+        # Website order identity is authoritative from Invoice Code (physical J).
+        # Across Home / Daily Reporting / Rakhi payment mix / Returns, the same
+        # Invoice Code on the same Order_Date is one order; the same code on a
+        # different Order_Date is a separate order. Using one identity rule
+        # prevents different dashboard cards from disagreeing.
         W_RET_ORDER = (find_col(
             web_orders.columns, "Invoice Code", "Invoice No", "Invoice Number"
         ) or _wat(9))
-        # Daily Reporting explicitly needs Order No. basis. Prefer a true order
-        # number/id header before the package/invoice fallbacks used elsewhere.
-        W_REPORT_ORDER = (find_col(
-            web_orders.columns, "Order No", "Order No.", "Order Number",
-            "Order ID", "OrderId", "Sale Order Code", "Order Code"
-        ) or W_ORDER)
+        W_ORDER = W_RET_ORDER
+        W_REPORT_ORDER = W_RET_ORDER
 
         dbg["website_repeat_cols"] = wcols
         dbg["website_repeat_resolved"] = {
@@ -1929,13 +1940,15 @@ def _refresh_data():
                 _dr_dt = parse_date_any(_dr_web_row.get(W_DATE, ""))
                 if _dr_dt is None:
                     continue
+                _dr_day = _dr_dt.strftime("%Y-%m-%d")
+                _dr_invoice = clean(_dr_web_row.get(W_REPORT_ORDER, ""))
+                # Include date in the token because the same Invoice Code may
+                # legitimately recur on another day and must count again there.
                 _dr_token = _daily_reporting_order_token(
-                    "Website", _dr_web_row.get(W_REPORT_ORDER, "")
+                    "Website", f"{_dr_day}|{_dr_invoice}" if _dr_invoice else ""
                 )
                 if _dr_token:
-                    daily_reporting_website_orders.setdefault(
-                        _dr_dt.strftime("%Y-%m-%d"), set()
-                    ).add(_dr_token)
+                    daily_reporting_website_orders.setdefault(_dr_day, set()).add(_dr_token)
 
         # Repeat-rate sessions and Website/D2C city sales are built from the
         # same Website order source. City rows are compacted by SKU + date +
@@ -1969,6 +1982,15 @@ def _refresh_data():
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
 
+                # One Website order identity everywhere: Order_Date + Invoice Code.
+                # Keep a row fallback only for malformed source rows with no invoice.
+                raw_order = clean(r.get(W_ORDER, "")) if W_ORDER else ""
+                if not raw_order:
+                    raw_order = f"ROW:{date_iso}:{mapped_web_sku}:{web_row_no}"
+                order_token = hashlib.sha1(
+                    f"{date_iso}|{raw_order.casefold()}".encode("utf-8", errors="ignore")
+                ).hexdigest()[:16]
+
                 # If an explicit Qty column exists, zero/negative rows are not
                 # sales (often returns/adjustments) and must not affect city or
                 # repeat metrics. Without a Qty column, one order-line = one unit.
@@ -1990,18 +2012,14 @@ def _refresh_data():
                     elif raw_cod in ("0", "0.0", "prepaid", "pre-paid", "false", "no"):
                         cod_value = 0
                     if cod_value is not None:
-                        raw_order = clean(r.get(W_ORDER, "")) if W_ORDER else ""
-                        if not raw_order:
-                            raw_order = f"ROW:{date_iso}:{mapped_web_sku}:{web_row_no}"
-                        order_token = hashlib.sha1(
-                            raw_order.casefold().encode("utf-8", errors="ignore")
-                        ).hexdigest()[:16]
                         payment_event = {
                             "o": _si(order_token), "p": int(cod_value), "d": _si(date_iso)
                         }
                         _web_all_payment_orders[order_token] = payment_event
-                        if re.match(r"^(RKH|CMB)", str(mapped_web_sku or "").strip(), re.I):
-                            _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
+                        # Keep per-SKU order events for every Website SKU so SKU
+                        # Details, Sales Comparison, Rakhi and exports all use the
+                        # same exact invoice identity instead of customer-date proxies.
+                        _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
 
                         # Website Returns payment mode: an order is treated as
                         # returned when this Website source line has Return/RTO
@@ -2090,10 +2108,12 @@ def _refresh_data():
                     continue
                 identity = name_norm + "|" + addr_norm
                 customer_token = hashlib.sha1(identity.encode("utf-8", errors="ignore")).hexdigest()[:16]
-                event_key = (customer_token, date_iso)
+                # Repeat-customer events are order-level too. Same customer can
+                # place multiple invoices on one date; those must remain distinct.
+                event_key = (customer_token, date_iso, order_token)
                 _web_event_sets.setdefault(mapped_web_sku, {})[event_key] = {
                     "c": _si(customer_token), "d": _si(date_iso),
-                    "s": _si(customer_token + "|" + date_iso),
+                    "s": _si(order_token),
                 }
 
         website_customer_events = {
@@ -2781,12 +2801,15 @@ def _refresh_data():
     sku_list  = []
     taxons, platings = set(), set()
     today = now_ist()
-    d7   = today - timedelta(days=7)
-    d15  = today - timedelta(days=15)
-    d30  = today - timedelta(days=30)
-    d90  = today - timedelta(days=90)
-    d180 = today - timedelta(days=180)
-    d365 = today - timedelta(days=365)
+    # Rolling windows are inclusive of today: 7D means today + previous 6
+    # calendar dates (not 8 dates). Keep every dashboard/export on this rule.
+    today_day = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    d7   = today_day - timedelta(days=6)
+    d15  = today_day - timedelta(days=14)
+    d30  = today_day - timedelta(days=29)
+    d90  = today_day - timedelta(days=89)
+    d180 = today_day - timedelta(days=179)
+    d365 = today_day - timedelta(days=364)
 
     def qty_since(entries, dt_cutoff):
         total = 0.0
@@ -3183,6 +3206,85 @@ def _refresh_data():
                 "found":     info is not None,
             })
 
+    # ── PHYSICAL SKU DEMAND ROLL-UP (Individual + In CMBs) ──
+    # A child SKU consumes one inventory unit whenever a unique parent CMB is
+    # sold.  Forecast/reorder and inventory-risk status therefore use the child's
+    # own forecast plus every parent CMB's forecast.  Direct sold fields are kept
+    # untouched so Individual Sold and In CMBs Sold remain separately auditable.
+    _direct_fc30 = {}
+    _direct_fc60 = {}
+    _direct_q7 = {}
+    _direct_q15 = {}
+    _direct_q30 = {}
+    _direct_q90 = {}
+    _direct_all = {}
+    _direct_last = {}
+    _combo_parent_map = {}
+    for _it in compiled:
+        _ku = str(_it.get("sku") or "").strip().upper()
+        if not _ku:
+            continue
+        _direct_fc30[_ku] = max(0.0, to_num(_it.get("forecast_30d", 0)))
+        _direct_fc60[_ku] = max(0.0, to_num(_it.get("forecast_60d", 0)))
+        _direct_q7[_ku] = max(0.0, to_num(_it.get("qty_7d", 0)))
+        _direct_q15[_ku] = max(0.0, to_num(_it.get("qty_15d", 0)))
+        _direct_q30[_ku] = max(0.0, to_num(_it.get("qty_1m", 0)))
+        _direct_q90[_ku] = max(0.0, to_num(_it.get("qty_3m", 0)))
+        _direct_all[_ku] = max(0.0, to_num(_it.get("final_qty", 0)))
+        _direct_last[_ku] = str(_it.get("last_dispatch_date") or "")
+        for _child in (_it.get("combo_details") or []):
+            _ck = str((_child or {}).get("sku") or "").strip().upper()
+            if not _ck or _ck == _ku:
+                continue
+            _combo_parent_map.setdefault(_ck, {})[_ku] = _it
+
+    for _it in compiled:
+        _ku = str(_it.get("sku") or "").strip().upper()
+        if not _ku:
+            continue
+        _parents = list((_combo_parent_map.get(_ku) or {}).keys())
+        _combo_fc30 = sum(_direct_fc30.get(_pk, 0.0) for _pk in _parents)
+        _combo_fc60 = sum(_direct_fc60.get(_pk, 0.0) for _pk in _parents)
+        _combo_q7 = sum(_direct_q7.get(_pk, 0.0) for _pk in _parents)
+        _combo_q15 = sum(_direct_q15.get(_pk, 0.0) for _pk in _parents)
+        _combo_q30 = sum(_direct_q30.get(_pk, 0.0) for _pk in _parents)
+        _combo_q90 = sum(_direct_q90.get(_pk, 0.0) for _pk in _parents)
+        _combo_all = sum(_direct_all.get(_pk, 0.0) for _pk in _parents)
+        _combo_last = max((_direct_last.get(_pk, "") for _pk in _parents), default="")
+        _it["individual_forecast_30d"] = _direct_fc30.get(_ku, 0.0)
+        _it["combo_forecast_30d"] = _combo_fc30
+        _it["forecast_30d"] = int(round(_direct_fc30.get(_ku, 0.0) + _combo_fc30))
+        _it["individual_forecast_60d"] = _direct_fc60.get(_ku, 0.0)
+        _it["combo_forecast_60d"] = _combo_fc60
+        _it["forecast_60d"] = int(round(_direct_fc60.get(_ku, 0.0) + _combo_fc60))
+        _it["combo_qty_7d"] = _combo_q7
+        _it["combo_qty_15d"] = _combo_q15
+        _it["combo_qty_1m"] = _combo_q30
+        _it["combo_qty_3m"] = _combo_q90
+        _it["combo_final_qty"] = _combo_all
+        _it["combo_last_dispatch_date"] = _combo_last
+        _avail = max(0.0, to_num(_it.get("inv_stock", 0))) + max(0.0, to_num(_it.get("inv_wip", 0)))
+        _it["reorder_qty"] = max(0, int(round(_it["forecast_60d"] - _avail)))
+        _it["status"] = classify_status(_it, month_s)
+        _flags, _best_chan, _best_chan_rev, _days_since, _best_mkt, _best_mkt_rev, _trend = _compute_alerts_and_channel(_it, today)
+        _it["alert_flags"] = _flags
+        _it["best_channel"] = _si(_best_chan)
+        _it["best_channel_revenue"] = round(_best_chan_rev, 0)
+        _it["best_marketplace"] = _si(_best_mkt)
+        _it["best_marketplace_revenue"] = round(_best_mkt_rev, 0)
+        _it["trend"] = _trend or ""
+        _it["days_since_last_sale"] = _days_since if _days_since is not None else -1
+
+    # combo_details contains copied child metrics; sync forecast/reorder after the
+    # roll-up so parent drill-down/export cannot show stale pre-roll-up values.
+    for _parent in compiled:
+        for _child in (_parent.get("combo_details") or []):
+            _ck = str((_child or {}).get("sku") or "").strip().upper()
+            _ci = _item_map.get(_ck)
+            if _ci:
+                _child["forecast_60d"] = _ci.get("forecast_60d", 0)
+                _child["reorder_qty"] = _ci.get("reorder_qty", 0)
+
     CACHE["data"] = (
         compiled,
         sorted(taxons),
@@ -3206,6 +3308,12 @@ def _refresh_data():
     CACHE["website_returns_payment_summary"] = website_returns_payment_summary
     CACHE["daily_reporting_daily"] = daily_reporting_daily
     CACHE["daily_reporting_orders"] = daily_reporting_orders
+    # Keep source-specific exact-order maps too. Daily Reporting AOV uses only
+    # revenue from source-days where an exact order identity is available, so
+    # revenue and denominator can never refer to different populations.
+    CACHE["daily_reporting_website_orders"] = daily_reporting_website_orders
+    CACHE["daily_reporting_marketplace_orders"] = daily_reporting_marketplace_orders
+    CACHE["daily_reporting_qcommerce_orders"] = daily_reporting_cosa_orders
     CACHE["orderdate_customer_activity"] = orderdate_customer_activity
     CACHE["orderdate_customer_activity_ts"] = orderdate_customer_activity_ts
     CACHE["ts"]    = time.time()
@@ -6817,7 +6925,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="filter-box" style="margin-top:-10px">
-      <span class="small-note"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days &nbsp;|&nbsp; <b>Slow Movers</b> = 0 positive units sold in the latest 30 calendar days &nbsp;|&nbsp; Stock/WIP does not affect Good/Slow status &nbsp;|&nbsp; <b>New Launch</b> = launched this month &nbsp;|&nbsp; <b>No Record</b> = no dispatch in COSA</span>
+      <span class="small-note"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days &nbsp;|&nbsp; <b>Slow Movers</b> = 0 positive units sold in the latest 30 calendar days &nbsp;|&nbsp; Stock/WIP does not affect Good/Slow status &nbsp;|&nbsp; <b>New Launch</b> = launched this month &nbsp;|&nbsp; <b>No Record</b> = no individual sale or CMB demand record</span>
     </div>
     <div class="grid" id="gMatrix"></div>
   </div>
@@ -7034,7 +7142,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div id="vSkudetails" style="display:none">
     <div class="filter-box" style="margin:8px 0 10px;padding:10px 14px">
-      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days under the active SKU Details filters. <b>Slow Movers</b> = 0 positive units sold in that same 30-day window. <b>Stock/WIP is not used</b> to decide Good vs Slow; New Launch and No Record remain separate statuses.</div>
+      <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days under the active SKU Details filters. <b>Slow Movers</b> = 0 positive units sold in that same 30-day window. <b>Stock/WIP is not used</b> to decide Good vs Slow; New Launch and No Record remain separate statuses; CMB-only demand counts as a valid movement record.</div>
     </div>
     <div class="filter-box" style="margin:8px 0 16px">
       <label class="fl" style="margin-bottom:8px;display:block">Search SKU / CN Name</label>
@@ -8010,7 +8118,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="ops-section" style="margin-top:22px">
       <div class="ops-head" style="margin-bottom:12px">
-        <div><div class="ops-title" style="font-size:26px">AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. For Website, the same date + same customer + same billing address is counted as one order even when that order contains multiple SKUs.</div></div>
+        <div><div class="ops-title" style="font-size:26px">AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. Website order identity = Order_Date + Invoice Code, so repeated SKU/line rows of the same invoice count once.</div></div>
         <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonOrders()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonOrders()">Export CSV</button></div>
       </div>
       <div class="ops-filters">
@@ -8133,7 +8241,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="oosSummary" class="oos-summary"></div>
     <div id="oosContent" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:70vh"></div>
-    <div class="small-note" style="margin-top:9px">Risk rule: latest 30-day sold qty must be above 0 and inventory-stock cover must be 30 days or less. WIP is not treated as immediately sellable stock.</div>
+    <div class="small-note" style="margin-top:9px">Risk rule: latest 30-day total demand (Individual + CMB) must be above 0 and inventory-stock cover must be 30 days or less. WIP is not treated as immediately sellable stock.</div>
   </div>
 
 
@@ -8160,7 +8268,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="rpSummary" class="ops-kpis"></div>
     <div id="rpContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Inv WIP is taken from the current Inventory sheet. Window Sale is the total sold quantity inside the selected Sales Velocity period. This is a planning recommendation; MOQ, vendor capacity, cancellations and production lead-time variability should be reviewed before placing the order.</div>
+    <div class="ops-note">Inv WIP is taken from the current Inventory sheet. Window Demand is Individual Sold + In CMBs Sold inside the selected Sales Velocity period. This is a planning recommendation; MOQ, vendor capacity, cancellations and production lead-time variability should be reviewed before placing the order.</div>
   </div>
 
   <div id="vComboRisk" class="ops-page" style="display:none">
@@ -8567,8 +8675,8 @@ function giftSetStoneDetails(sku){
   return _giftSetStoneMap[String(sku || '').trim().toUpperCase()] || '';
 }
 function skuHealthMeta(itemOrSku){
-  // Good/Slow is SALES-ONLY. Inventory can add an OOS risk annotation, but it
-  // can never switch a SKU between Good Running and Slow Movers.
+  // Good/Slow follows physical SKU demand: standalone sale + all unique parent
+  // CMB usage. Inventory only adds the OOS-risk annotation.
   let item = itemOrSku;
   if (!item || typeof item !== 'object') {
     const key = String(itemOrSku || '').trim().toUpperCase();
@@ -8578,10 +8686,12 @@ function skuHealthMeta(itemOrSku){
 
   const stock = Math.max(0, Number(item.inv_stock) || 0);
   const wip = Math.max(0, Number(item.inv_wip) || 0);
-  const sale30 = Math.max(0, Number(item.qty_1m) || 0);
+  const individual30 = Math.max(0, Number(item.qty_1m) || 0);
+  const cmb30 = Math.max(0, Number(item.combo_qty_1m) || 0);
+  const sale30 = individual30 + cmb30;
   const existingStatus = String(item.status || '').trim().toLowerCase();
 
-  if (existingStatus === 'no record') return {key:'none', label:'⚪ NO RECORD', title:'No dispatch record in COSA'};
+  if (existingStatus === 'no record') return {key:'none', label:'⚪ NO RECORD', title:'No individual sale or CMB demand record'};
   if (existingStatus === 'new launch') return {key:'new', label:'🔵 NEW LAUNCH', title:'Launched in the current month'};
 
   let stockRisk = '';
@@ -8599,9 +8709,9 @@ function skuHealthMeta(itemOrSku){
   }
 
   if (sale30 > 0) {
-    return {key:'good', label:`🟢 GOOD RUNNING${stockRisk}`, title:`${Math.round(sale30)} units sold in the latest 30 days${stockRiskTitle}`};
+    return {key:'good', label:`🟢 GOOD RUNNING${stockRisk}`, title:`${Math.round(sale30)} units of 30D demand (${Math.round(individual30)} individual + ${Math.round(cmb30)} in CMBs)${stockRiskTitle}`};
   }
-  return {key:'slow', label:`⚪ SLOW / NO 30D SALE${stockRisk}`, title:`No positive sale in the latest 30 days${stockRiskTitle}`};
+  return {key:'slow', label:`⚪ SLOW / NO 30D DEMAND${stockRisk}`, title:`No individual/CMB demand in the latest 30 days${stockRiskTitle}`};
 }
 
 function skuHealthFlagText(itemOrSku){
@@ -8894,7 +9004,7 @@ function roSaleTotalsForItem(rawItem, saleCtx){
     return true;
   });
   const now = _bizIso(todayISO) || new Date().toISOString().slice(0,10);
-  const D7 = _bizShift(now,-7), D15 = _bizShift(now,-15), D30 = _bizShift(now,-30);
+  const D7 = _bizShift(now,-6), D15 = _bizShift(now,-14), D30 = _bizShift(now,-29);
   const win = since => entries.reduce((sum,e) => {
     const date = _bizEntryDate(e);
     return sum + (date && date >= since ? (Number(e.qty) || 0) : 0);
@@ -8991,7 +9101,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
     return true;
   });
   const now = String(todayISO || new Date().toISOString().slice(0,10));
-  const ago = n => new Date(new Date(now + 'T00:00:00Z').getTime() - n*86400000).toISOString().slice(0,10);
+  const ago = n => new Date(new Date(now + 'T00:00:00Z').getTime() - Math.max(0,n-1)*86400000).toISOString().slice(0,10);
   const D7=ago(7), D15=ago(15), D30=ago(30);
   const win = since => kept.reduce((sum,e) => {
     const d=cnxSaleEntryDate(e,ctx),q=Number(e && e.qty)||0;
@@ -9839,7 +9949,7 @@ function _sdFilteredStatus(item, ents){
   let anchor = selectedTo ? new Date(selectedTo + 'T23:59:59') : now;
   if (Number.isNaN(anchor.getTime())) anchor = now;
 
-  if ((Number(item?.dispatch_count) || 0) <= 0) return 'No Record';
+  if ((Number(item?.dispatch_count) || 0) <= 0 && (Number(item?.combo_final_qty) || 0) <= 0) return 'No Record';
   const anchorMonthKey = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}`;
   if (item?.launch_key && item.launch_key === anchorMonthKey) return 'New Launch';
 
@@ -9927,10 +10037,10 @@ function _sdUsageContext(item){
   };
 }
 
-/* Count the selected SKU's real orders, not its transaction lines. Website
-   uses the customer+address session feed; marketplaces use source Order IDs;
-   Purchase uses Order Date + Customer Name. A deterministic row fallback is
-   retained only where the source does not provide usable order identity. */
+/* Count the selected SKU's real orders, not transaction lines. Website uses
+   exact Order_Date + Invoice Code tokens; marketplaces use native source Order
+   IDs. Purchase has no source order ID here, so it uses Order Date + Customer.
+   A deterministic row fallback is retained only where identity is unavailable. */
 function _sdOrderStats(usage){
   const websiteIndex = _scOrderSessionIndex();
   const marketplaceIndex = _scChannelOrderSessionIndex();
@@ -11085,7 +11195,7 @@ function applyF(){
   const _overallDaysAgoIso = days => {
     const base = /^\d{4}-\d{2}-\d{2}$/.test(String(todayISO||''))
       ? new Date(String(todayISO) + 'T00:00:00Z') : new Date();
-    base.setUTCDate(base.getUTCDate() - days);
+    base.setUTCDate(base.getUTCDate() - Math.max(0, days - 1));
     return base.toISOString().slice(0,10);
   };
   const _overallQtyCut = {m1:_overallDaysAgoIso(30),m3:_overallDaysAgoIso(90),m6:_overallDaysAgoIso(180),y1:_overallDaysAgoIso(365)};
@@ -11466,6 +11576,7 @@ function applyRO(){
   const ticked = Array.from(selectedSkuSet);
   const packSel = getSelectedPacks();
   const hasEntryFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || d1 || d2);
+  const roSaleCtx = {types:typeSel, channels:chanSel, subChannels:subChanSel, customer:custQ, d1, d2};
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
@@ -11539,7 +11650,7 @@ function applyRO(){
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
   const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
-  const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - n*86400000).toISOString().slice(0,10) : '';
+  const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - Math.max(0,n-1)*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
     // channel-aware WIP (ya Anu Ma'am Balance Qty jab uska filter tick ho)
@@ -11549,12 +11660,12 @@ function applyRO(){
     if (key === 'inv_stock'){
       return roInvStock(it, roInvCtx);
     }
-    // channel-aware sale windows + sold qty (jab type filter active ho)
-    if (!roNoFilterSort && typeSel.length > 0 && (key==='qty_7d'||key==='qty_15d'||key==='qty_1m'||key==='final_qty')){
-      const fe = (it._fe && it._fe.length) ? it._fe : (it.sales_entries||[]).filter(e=>typeSel.includes(e.type));
-      if (key === 'final_qty') return Number(it._fQty ?? fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0))||0;
-      const since = key==='qty_7d'?_S7 : key==='qty_15d'?_S15 : _S30;
-      return fe.reduce((s,e)=> s + ((e.date!=='N/A' && since && e.date>=since) ? (parseFloat(e.qty)||0) : 0), 0);
+    // Sales sort uses the same active Type/Channel/Sub-channel/Customer/Date
+    // context as the values rendered in the row.
+    if (hasEntryFilter && (key==='qty_7d'||key==='qty_15d'||key==='qty_1m'||key==='final_qty')){
+      const sv = cnxSaleTotalsForItem(it, roSaleCtx);
+      if (key === 'final_qty') return Number(sv.sold)||0;
+      return Number(key==='qty_7d'?sv.q7:key==='qty_15d'?sv.q15:sv.q30)||0;
     }
     // default: raw field
     const v = it[key];
@@ -11591,31 +11702,14 @@ function applyRO(){
     return s + wipOf(i);
   }, 0);
 
-  // Channel-aware 7d/15d/30d qty: if type filter active, sum only matching entries
+  // 7D/15D/30D KPIs use exactly the same active sales context as rows/sort.
   let wip7d = 0, wip15d = 0, wip30d = 0;
-  if (!roNoFilter && typeSel.length > 0) {
-    filtered.forEach(item => {
-      const fe = (item._fe && item._fe.length) ? item._fe : (item.sales_entries || []).filter(e => typeSel.includes(e.type));
-      // fe is already filtered by entOk (which includes type filter)
-      const s7 = todayISO ? (new Date(todayISO) - 7*86400000) : 0;
-      const s15 = todayISO ? (new Date(todayISO) - 15*86400000) : 0;
-      const s30 = todayISO ? (new Date(todayISO) - 30*86400000) : 0;
-      const iso7  = s7  ? new Date(s7).toISOString().slice(0,10)  : '';
-      const iso15 = s15 ? new Date(s15).toISOString().slice(0,10) : '';
-      const iso30 = s30 ? new Date(s30).toISOString().slice(0,10) : '';
-      fe.forEach(e => {
-        if (e.date === 'N/A') return;
-        const q = parseFloat(e.qty) || 0;
-        if (iso7  && e.date >= iso7)  wip7d  += q;
-        if (iso15 && e.date >= iso15) wip15d += q;
-        if (iso30 && e.date >= iso30) wip30d += q;
-      });
-    });
-  } else {
-    wip7d  = filtered.reduce((s,i) => s + (parseInt(i.qty_7d)  || 0), 0);
-    wip15d = filtered.reduce((s,i) => s + (parseInt(i.qty_15d) || 0), 0);
-    wip30d = filtered.reduce((s,i) => s + (parseInt(i.qty_1m)  || 0), 0);
-  }
+  filtered.forEach(item => {
+    const sv = cnxSaleTotalsForItem(item, roSaleCtx);
+    wip7d += Number(sv.q7)||0;
+    wip15d += Number(sv.q15)||0;
+    wip30d += Number(sv.q30)||0;
+  });
 
   const countEl = document.getElementById('rCount');
   const qtyEl = document.getElementById('rQty');
@@ -11755,23 +11849,10 @@ function applyRO(){
     const stk = roInvStock(item, roInvCtx);
     // Channel-aware WIP per row (ya Anu Ma'am Balance Qty jab uska filter tick ho)
     const wip = wipOf(item);
-    // Channel-aware sale qty per row
-    let q7, q15, q30;
-    if (!roNoFilter && typeSel.length > 0) {
-      const fe = item._fe || [];
-      const now = todayISO || new Date().toISOString().slice(0,10);
-      const d7  = new Date(new Date(now) - 7*86400000).toISOString().slice(0,10);
-      const d15 = new Date(new Date(now) - 15*86400000).toISOString().slice(0,10);
-      const d30 = new Date(new Date(now) - 30*86400000).toISOString().slice(0,10);
-      q7  = fe.filter(e=>e.date!=='N/A'&&e.date>=d7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q15 = fe.filter(e=>e.date!=='N/A'&&e.date>=d15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q30 = fe.filter(e=>e.date!=='N/A'&&e.date>=d30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-    } else {
-      q7  = item.qty_7d  || 0;
-      q15 = item.qty_15d || 0;
-      q30 = item.qty_1m  || 0;
-    }
-    const qty = roNoFilter ? (item.final_qty || 0) : (item._fQty ?? item.final_qty ?? 0);
+    // Row values share the same sales context as KPIs, sorting and export.
+    const saleVals = cnxSaleTotalsForItem(item, roSaleCtx);
+    const q7 = saleVals.q7, q15 = saleVals.q15, q30 = saleVals.q30;
+    const qty = saleVals.sold;
     const cmbSold = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
@@ -11869,12 +11950,18 @@ function applyColFilters(){
   const subChanSelCF = getSelectedSubChannels('rSubChan');
   const roInvCtxCF = roInvContext(typeSelCF, chanSelCF, subChanSelCF);
   const wipOfCF = (it) => roAnuModeCF ? roAnuWipFor(it && it.sku) : roInvWip(it, roInvCtxCF);
+  const cfSaleCtx = {
+    types:typeSelCF, channels:chanSelCF, subChannels:subChanSelCF,
+    customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),
+    d1:document.getElementById('rD1')?.value||'', d2:document.getElementById('rD2')?.value||''
+  };
   if (_cfActive) {
     colFiltered = roFiltered.filter(item => {
-      const q7  = parseInt(item.qty_7d)  || 0;
-      const q15 = parseInt(item.qty_15d) || 0;
-      const q30 = parseInt(item.qty_1m)  || 0;
-      const sold = parseInt(item.final_qty) || 0;
+      const sv = cnxSaleTotalsForItem(item, cfSaleCtx);
+      const q7  = Number(sv.q7) || 0;
+      const q15 = Number(sv.q15) || 0;
+      const q30 = Number(sv.q30) || 0;
+      const sold = Number(sv.sold) || 0;
       const stk  = roInvStock(item, roInvCtxCF);
       const wip  = wipOfCF(item);
       const fc   = parseInt(item.forecast_60d) || 0;
@@ -11893,6 +11980,23 @@ function applyColFilters(){
       return true;
     });
   }
+
+  // Column filters change the visible row-set, so top KPIs must follow that
+  // exact row-set too; otherwise the cards and table can show different totals.
+  const cfTotals = colFiltered.reduce((a,it) => {
+    const sv = cnxSaleTotalsForItem(it, cfSaleCtx);
+    a.sold += Number(sv.sold)||0; a.q7 += Number(sv.q7)||0;
+    a.q15 += Number(sv.q15)||0; a.q30 += Number(sv.q30)||0;
+    a.wip += Number(wipOfCF(it))||0; a.fc += Number(it.forecast_30d)||0;
+    return a;
+  }, {sold:0,q7:0,q15:0,q30:0,wip:0,fc:0});
+  const cfKpis = {
+    rCount: colFiltered.length, rQty: Math.round(cfTotals.sold),
+    rWip: Math.round(cfTotals.wip), rQty7d: Math.round(cfTotals.q7),
+    rQty15d: Math.round(cfTotals.q15), rQty30d: Math.round(cfTotals.q30),
+    rFc: colFiltered.length ? Math.round(cfTotals.fc / colFiltered.length) : 0
+  };
+  Object.entries(cfKpis).forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.textContent=Number(val).toLocaleString('en-IN'); });
 
   const cfRevenueShareMap = new Map(); let cfRevenueShareTotal = 0;
   colFiltered.forEach(it => { const rv=Number(it._fRev ?? it.total_net_revenue ?? 0)||0; cfRevenueShareMap.set(_skuRevenueKey(it.sku),rv); cfRevenueShareTotal+=rv; });
@@ -11918,33 +12022,15 @@ function applyColFilters(){
     return;
   }
 
-  const todayStr = todayISO || new Date().toISOString().slice(0,10);
-  const d7ms  = new Date(todayStr) - 7*86400000;
-  const d15ms = new Date(todayStr) - 15*86400000;
-  const d30ms = new Date(todayStr) - 30*86400000;
-  const iso7  = new Date(d7ms).toISOString().slice(0,10);
-  const iso15 = new Date(d15ms).toISOString().slice(0,10);
-  const iso30 = new Date(d30ms).toISOString().slice(0,10);
-
   tbody.innerHTML = roShown.map(item => {
     const imgTag = (item.image_url && item.image_url !== '' && String(item.image_url).toLowerCase() !== 'nan')
       ? `<img class="sku-thumb ro-thumb-lg" src="${item.image_url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
       : `<div class="sku-thumb ro-thumb-lg" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:34px">💎</div>`;
     const stk = roInvStock(item, roInvCtxCF);
     const wip = wipOfCF(item);
-    let q7, q15, q30;
-    if (!roNoFilter && typeSelCF.length > 0) {
-      const fe = item._fe || [];
-      q7  = fe.filter(e=>e.date!=='N/A'&&e.date>=iso7).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q15 = fe.filter(e=>e.date!=='N/A'&&e.date>=iso15).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-      q30 = fe.filter(e=>e.date!=='N/A'&&e.date>=iso30).reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-    } else {
-      q7  = item.qty_7d  || 0;
-      q15 = item.qty_15d || 0;
-      q30 = item.qty_1m  || 0;
-    }
-    const qty = roNoFilter ? (item.final_qty || 0) : (item._fQty ?? item.final_qty ?? 0);
-    const cmbSold = cnxSoldSplit(item, {types:typeSelCF,channels:chanSelCF,subChannels:subChanSelCF,customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''}, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
+    const sv = cnxSaleTotalsForItem(item, cfSaleCtx);
+    const q7 = sv.q7, q15 = sv.q15, q30 = sv.q30, qty = sv.sold;
+    const cmbSold = cnxSoldSplit(item, cfSaleCtx, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
@@ -12118,7 +12204,7 @@ function exportRO(fmtType){
   };
   const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || custSelX || d1SelX || d2SelX);
   const nowX = todayISO || new Date().toISOString().slice(0,10);
-  const _dAgo = n => new Date(new Date(nowX) - n*86400000).toISOString().slice(0,10);
+  const _dAgo = n => new Date(new Date(nowX) - Math.max(0,n-1)*86400000).toISOString().slice(0,10);
   const D7 = _dAgo(7), D15 = _dAgo(15), D30 = _dAgo(30);
   // entries ko type filter ke hisaab se le aao (filter na ho to saari)
   const filtEnts = (it) => {
@@ -12142,16 +12228,9 @@ function exportRO(fmtType){
   const headers = ['Row Type','SKU','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
-    // Main row: filter ke according 7D/15D/30D/Sold + channel WIP
-    let r7, r15, r30, rSold;
-    if (!roNoFilterX) {
-      const fe = filtEnts(item);
-      r7 = winQty(fe, D7); r15 = winQty(fe, D15); r30 = winQty(fe, D30);
-      rSold = fe.reduce((s,e)=>s+(parseFloat(e.qty)||0),0);
-    } else {
-      r7 = item.qty_7d||0; r15 = item.qty_15d||0; r30 = item.qty_1m||0;
-      rSold = item.final_qty||0;
-    }
+    // Main row uses the same authoritative sales helper as the screen/KPIs.
+    const rsv = cnxSaleTotalsForItem(item, roSaleCtxX);
+    const r7 = rsv.q7, r15 = rsv.q15, r30 = rsv.q30, rSold = rsv.sold;
     const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
@@ -12735,7 +12814,12 @@ function renderProHeader(){
 
   const totalSkus = (master || []).length;
   const lowStock = (master || []).filter(i => (parseFloat(i.total_inv) || 0) <= 10).length;
-  const zeroSales = (master || []).filter(i => (parseFloat(i.final_qty) || 0) === 0).length;
+  // A child SKU used in a sold CMB is not a true no-demand SKU even when it
+  // has never sold standalone. Keep financial Sold Qty direct-only, but make
+  // the operational no-sale count follow total physical demand.
+  const zeroSales = (master || []).filter(i =>
+    (Math.max(0,parseFloat(i.final_qty)||0) + Math.max(0,parseFloat(i.combo_final_qty)||0)) <= 0
+  ).length;
   const launch = (master || []).filter(i => (i.status || '') === 'New Launch').length;
   const totalRevenue = sumBy(master, i => i.total_net_revenue || 0);
   const totalQty = sumBy(master, i => i.final_qty || 0);
@@ -12838,14 +12922,16 @@ function cnxHomeCatalogStats(data){
   let stock=0,fastLow=0,stockout=0,wipOnly=0;
   for (const i of data){
     const invStock=Number(i.inv_stock)||0, invWip=Number(i.inv_wip)||0;
-    const inv=invStock+invWip, q7=Number(i.qty_7d)||0;
+    const inv=invStock+invWip;
+    const q7=(Number(i.qty_7d)||0)+(Number(i.combo_qty_7d)||0);
+    const q30=(Number(i.qty_1m)||0)+(Number(i.combo_qty_1m)||0);
     const forecast=Number(i.forecast_60d)||0;
     const repeat=Math.max(0,Number(i.reorder_qty)||Math.ceil(forecast-inv));
     stock+=invStock;
     if(q7>=10 && inv<q7*2) fastLow+=1;
     if(invStock<=0 && q7>0) stockout+=1;
     if(invStock<=0 && invWip>0) wipOnly+=1;
-    if(repeat>0) actionRows.push({i,inv,forecast,repeat,q30:Number(i.qty_1m)||0});
+    if(repeat>0) actionRows.push({i,inv,forecast,repeat,q30});
   }
   actionRows.sort((a,b)=>b.repeat-a.repeat);
   const urgent=actionRows.reduce((n,x)=>n+(x.inv<=10?1:0),0);
@@ -12926,7 +13012,7 @@ function cnxBuildExecutiveHome(data, isEmp, homeType){
     <div class="cnx-hero"><div><div class="cnx-eyebrow">${escHtml(todayLabel)}${homeType?' · '+escHtml(homeType):''}</div><div class="cnx-title">${greeting}, Mayuresh.</div><div class="cnx-sub">Live management overview from COSA sales, inventory, WIP, target and forecasting data. ${urgent?`<b>${urgent}</b> high-priority SKUs need immediate attention.`:'Operations are currently within the selected planning thresholds.'}</div></div><div class="cnx-home-controls"><div class="cnx-range"><button type="button" onclick="return cnxSetHomeRange(7,event)" class="${!customRange&&periodDays===7?'active':''}">7D</button><button type="button" onclick="return cnxSetHomeRange(30,event)" class="${!customRange&&periodDays===30?'active':''}">30D</button><button type="button" onclick="return cnxSetHomeRange(90,event)" class="${!customRange&&periodDays===90?'active':''}">90D</button><button type="button" onclick="return cnxSetHomeRange(365,event)" class="${!customRange&&periodDays===365?'active':''}">1 YEAR</button></div><div class="cnx-date-filter"><label class="cnx-date-field"><span>From Date</span><input id="cnxDateFrom" type="date" value="${escHtml(_cnxHomeFrom)}" max="${escHtml(nowKey)}"></label><label class="cnx-date-field"><span>To Date</span><input id="cnxDateTo" type="date" value="${escHtml(_cnxHomeTo)}" max="${escHtml(nowKey)}"></label><button type="button" class="cnx-date-apply" onclick="return cnxApplyHomeDateRange(event)">APPLY</button><button type="button" class="cnx-date-reset" onclick="return cnxResetHomeDateRange(event)">RESET</button><div class="cnx-date-error ${customRange?'is-applied':''}" id="cnxDateError">${customRange?'✓ Applied · '+escHtml(startKey)+' to '+escHtml(endKey)+' · '+periodDays+' days':''}</div></div></div></div>
     <div class="cnx-kpis">${revCard}${yesterdayCard}${websitePaymentCards}<article class="cnx-kpi cnx-tilt" style="--glow:rgba(23,137,94,.18)"><div class="cnx-kpi-label">Units Sold</div><div class="cnx-kpi-value">${Math.round(qty).toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span>${orders.toLocaleString('en-IN')} order lines</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(52,111,173,.16)"><div class="cnx-kpi-label">Sell-Through Rate</div><div class="cnx-kpi-value">${str.toFixed(1)}%</div><div class="cnx-kpi-foot"><span class="cnx-pill ${str>=50?'cnx-good':'cnx-risk'}">${str>=50?'HEALTHY':'WATCH'}</span><span>${rangeLabel}</span></div></article><article class="cnx-kpi cnx-tilt" style="--glow:rgba(198,79,79,.16)"><div class="cnx-kpi-label">Action Required</div><div class="cnx-kpi-value">${actionRows.length.toLocaleString('en-IN')}</div><div class="cnx-kpi-foot"><span class="cnx-pill cnx-risk">${urgent} urgent</span><span>${Math.max(0,actionRows.length-urgent)} planned</span></div></article></div>
     <div class="cnx-main-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Revenue Period Comparison</div><div class="cnx-panel-sub">${customRange?'Selected range':'Latest '+escHtml(periodShort)} vs immediately previous ${escHtml(periodShort)} · revenue only</div></div>${isEmp?'':`<div style="font-size:8px;color:var(--cnx-muted)"><span style="color:#b8a784">■</span> Previous &nbsp; <span style="color:#a87920">■</span> Selected</div>`}</div><div class="cnx-chart cnx-period-chart">${compareChart}</div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Monthly Target</div><div class="cnx-panel-sub" id="cnxTargetLabel">Loading live target…</div></div><button class="cnx-link-btn" onclick="showTab('target')">VIEW PLAN ↗</button></div>${targetContent}</article></div>
-    <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Sale</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day sales velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
+    <div class="cnx-bottom-grid"><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Priority Repeat Orders</div><div class="cnx-panel-sub">Highest-impact SKUs requiring replenishment</div></div><button class="cnx-link-btn" onclick="showTab('repeatplanner')">OPEN PLANNER ↗</button></div><div class="cnx-table-wrap"><table class="cnx-table"><thead><tr><th>SKU</th><th>30D Demand</th><th>Stock + WIP</th><th>Forecast 60D</th><th>Repeat Qty</th><th>Status</th></tr></thead><tbody>${topRows||'<tr><td colspan="6">No repeat orders required right now.</td></tr>'}</tbody></table></div></article><article class="cnx-panel"><div class="cnx-panel-head"><div><div class="cnx-panel-title">Intelligence Feed</div><div class="cnx-panel-sub">Live operational signals</div></div><button class="cnx-link-btn" onclick="showTab('smartops')">VIEW ALL</button></div><div class="cnx-alerts"><div class="cnx-alert"><div class="cnx-alert-icon">!</div><div><div class="cnx-alert-title">SKUs may stock out immediately</div><div class="cnx-alert-desc">Positive recent demand with zero current inventory.</div></div><div class="cnx-alert-count">${stockout}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↻</div><div><div class="cnx-alert-title">WIP-only availability</div><div class="cnx-alert-desc">No ready stock; quantity is still in production.</div></div><div class="cnx-alert-count">${wipOnly}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">↗</div><div><div class="cnx-alert-title">Fast-moving, low-cover SKUs</div><div class="cnx-alert-desc">7-day total demand velocity is ahead of available cover.</div></div><div class="cnx-alert-count">${fastLow}</div></div><div class="cnx-alert"><div class="cnx-alert-icon">◇</div><div><div class="cnx-alert-title">Combo production review</div><div class="cnx-alert-desc">Parent combos with repeat demand need child-SKU checks.</div></div><div class="cnx-alert-count">${comboRisk}</div></div></div></article></div>
   </div>`;
 }
 
@@ -13632,23 +13718,12 @@ function _rkhMatchItem(item){
   if (_rkhIsComboSku(sku) && _rkhComboHasRakhi(item)) return true;
   return false;
 }
-/* Rakhi quantity rule:
-   - A normal RKH SKU sold as Qty 1 counts as 1 Rakhi unit.
-   - A CMB/gift-set sold as Qty 1 counts once for every Stone Details child
-     whose Taxon is Rakhi. Example: CMB-0827 with three Rakhi child SKUs =
-     3 Rakhi units sold. RKH-code fallback is used only when Taxon is blank. */
-function _rkhRakhiUnitsPerSoldQty(item){
-  const sku = String((item && item.sku) || '').trim().toUpperCase();
-  if (_rkhIsRakhiSku(sku)) return 1;
-  if (!_rkhIsComboSku(sku)) return 1;
-  const details = Array.isArray(item && item.combo_details) ? item.combo_details : [];
-  const taxonMatches = details.filter(c => /rakhi/i.test(String((c && c.taxon) || ''))).length;
-  if (taxonMatches > 0) return taxonMatches;
-  const rkhCodeMatches = details.filter(c => _rkhIsRakhiSku(c && c.sku)).length;
-  return Math.max(1, rkhCodeMatches);
-}
+/* Rakhi sold-quantity rule: use the source Final Qty exactly. A CMB sold
+   as Qty 1 is one sold CMB, not N units because it has N children. Child SKU
+   consumption is reported separately in the "In CMBs Sold" column, so totals
+   never double/triple count the same commercial sale. */
 function _rkhEffectiveQty(row){
-  return (Number(row && row.qty) || 0) * _rkhRakhiUnitsPerSoldQty(row);
+  return Number(row && row.qty) || 0;
 }
 const RAKHI_DRR_START = '2026-07-22';
 function _rkhDrrDaySpan(){
@@ -13971,7 +14046,7 @@ function renderRakhiRelComparison(){
   const totalQty=list.reduce((s,g)=>s+g.qty,0),totalRev=list.reduce((s,g)=>s+g.rev,0);
   _rakhiRelComparisonExport=list.map(g=>({class:g.cls,sku_count:g.skus.size,orders:g.orders,qty:g.qty,revenue:g.rev,qty_share:totalQty?g.qty/totalQty*100:0,revenue_share:totalRev?g.rev/totalRev*100:0,from:oldFrom,to:oldTo}));
   const emp=LOGIN_ROLE==='employee';
-  const filter=`<div class="rkh-rev-head"><div><div class="rkh-rev-title">Rakhi Sales Comparison — Rel vs Non-Rel</div><div class="rkh-rev-sub">Curated Rakhi SKUs · classification from All Product AF Name · sold quantity follows the Rakhi-unit rule</div></div><div class="rkh-rev-filters"><label class="rkh-rev-filter"><span>From Date</span><input id="rkhCmpFrom" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldFrom)}"></label><label class="rkh-rev-filter"><span>To Date</span><input id="rkhCmpTo" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldTo)}"></label><button class="rkh-rev-btn" onclick="renderRakhiRelComparison()">APPLY</button><button class="rkh-rev-btn alt" onclick="resetRakhiRelComparison()">RESET</button><button class="rkh-rev-btn" style="background:#2f6f3e;color:#fff" onclick="exportRakhiRelComparison()">EXPORT</button></div></div>`;
+  const filter=`<div class="rkh-rev-head"><div><div class="rkh-rev-title">Rakhi Sales Comparison — Rel vs Non-Rel</div><div class="rkh-rev-sub">Curated Rakhi SKUs · classification from All Product AF Name · sold quantity = source Final Qty (CMB parent counted once)</div></div><div class="rkh-rev-filters"><label class="rkh-rev-filter"><span>From Date</span><input id="rkhCmpFrom" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldFrom)}"></label><label class="rkh-rev-filter"><span>To Date</span><input id="rkhCmpTo" type="date" min="2026-04-01" max="${escHtml(maxDate)}" value="${escHtml(oldTo)}"></label><button class="rkh-rev-btn" onclick="renderRakhiRelComparison()">APPLY</button><button class="rkh-rev-btn alt" onclick="resetRakhiRelComparison()">RESET</button><button class="rkh-rev-btn" style="background:#2f6f3e;color:#fff" onclick="exportRakhiRelComparison()">EXPORT</button></div></div>`;
   if(dateError){host.innerHTML=`<section class="rkh-rev-panel">${filter}<div class="rkh-rev-error">${escHtml(dateError)}</div></section>`;return;}
   const kpis=`<div class="rel-compare-kpis">${list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Sold Qty</div><div class="yc-val">${Math.round(g.qty).toLocaleString('en-IN')}</div><div class="yc-sub">${g.orders.toLocaleString('en-IN')} order lines · ${g.skus.size.toLocaleString('en-IN')} SKUs</div></div>`).join('')}${emp?'':list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Net Revenue</div><div class="yc-val">${fmt(g.rev)}</div><div class="yc-sub">${(totalRev?g.rev/totalRev*100:0).toFixed(1)}% comparison share</div></div>`).join('')}</div>`;
   const head=`<tr><th>CN Class</th><th>Distinct SKUs</th><th>Order Lines</th><th>Sold Qty</th><th>Qty Share</th>${emp?'':'<th>Net Revenue</th><th>Revenue Share</th><th>Avg Selling Price</th>'}</tr>`;
@@ -13984,7 +14059,7 @@ window.renderRakhiRelComparison=renderRakhiRelComparison;window.resetRakhiRelCom
 
 /* ── RAKHI — OVERALL SUMMARY ──
    "Saari Rakhi ka status" ek jagah — curated whitelist SKUs ka Total Stock,
-   Total WIP, Total Orders, DRR (daily run rate), Repeat Customers, aur
+   Total WIP, Total Order Lines, DRR (daily run rate), Repeat Customers, aur
    dynamic Actionable Points. Depends on _rakhiRows (renderRakhi() se banta
    hai) — isliye loadRakhi() me renderRakhi() ke turant baad call hota hai. */
 let _rakhiOverallSummaryData = null;
@@ -14004,7 +14079,7 @@ function _rkhWebsitePaymentStatsForSkus(rawSkus){
       if(!order || date<'2026-04-01' || date>'2027-03-31') return;
       if(payment!==0 && payment!==1) return;
       // One Website order may contain several curated Rakhi SKUs. The hashed
-      // Shipping Package/Invoice token prevents that order being double-counted.
+      // Order_Date + Invoice Code token prevents that order being double-counted.
       if(!orders.has(order)) orders.set(order,payment);
     });
   });
@@ -14057,8 +14132,8 @@ function _rkhBuildOverallSummary(){
     }
   });
   const totalOrders = wlRows.length;
-  // Gift sets are expanded into their Rakhi child-SKU quantity for all
-  // overall quantity metrics. Revenue and order-line counts stay unchanged.
+  // Actual sold quantity comes directly from Final Qty for both RKH and CMB.
+  // Child consumption remains a separate In CMBs Sold metric.
   const totalQty = wlRows.reduce((s, r) => s + _rkhEffectiveQty(r), 0);
   const totalRev = wlRows.reduce((s, r) => s + (r.rev || 0), 0);
   // Rakhi DRR starts from the actual season start: 22 July 2026.
@@ -14081,9 +14156,7 @@ function _rkhBuildOverallSummary(){
     if (!sku) return;
     if (!bySku[sku]) bySku[sku] = {rows:[], qty:0, drrQty:0, rev:0, customers:{}};
     const x = bySku[sku];
-    // SKU-wise performance table must show the actual parent SKU sale.
-    // Do NOT multiply a CMB row by its child count here; the child expansion is
-    // reserved for the overall Rakhi quantity KPIs/target pace above.
+    // SKU-wise performance uses the same actual Final Qty as every Rakhi KPI.
     const skuSoldQty = Number(r.qty) || 0;
     x.rows.push(r);
     x.qty += skuSoldQty;
@@ -14099,28 +14172,33 @@ function _rkhBuildOverallSummary(){
     const websiteRepeat = _rkhWebsiteRepeatStatsForSkus([sku]);
     const repeatOrders = websiteRepeat.repeatOrders;
     const skuDaySpan = _rkhDrrDaySpan();
-    const skuDrr = x.drrQty / skuDaySpan;
+    const rt=document.getElementById('rkhTypeFilter')?.value||'All';
+    const saleCtx={sourceField:'rakhi_sales_entries',types:rt&&rt!=='All'?[rt]:[],fy:'FY 2026-27'};
+    const comboSales=Number(cnxSoldSplit(item,saleCtx).inCmb.sold)||0;
+    const comboDrrQty=Number(cnxSoldSplit(item,{...saleCtx,d1:RAKHI_DRR_START,d2:todayISO||new Date().toISOString().slice(0,10)}).inCmb.sold)||0;
+    const totalDemand=x.qty+comboSales;
+    const skuDrr = (x.drrQty + comboDrrQty) / skuDaySpan;
     const stock = Number(item.inv_stock) || 0;
     const wip = Number(item.inv_wip) || 0;
     const whWip = Number(item.wh_wip) || 0;
     const points = [];
-    if (x.qty <= 0) points.push('No sale yet — promote, bundle or review pricing.');
-    else if (skuDrr < 0.5) points.push('Low run-rate — improve visibility and campaign support.');
-    else if (skuDrr >= 2) points.push('Strong run-rate — protect stock availability.');
-    if (stock <= 0 && wip <= 0 && x.qty > 0) points.push('Out of stock and no WIP — replenish urgently.');
-    else if (stock < Math.max(3, skuDrr * 7) && wip <= 0 && x.qty > 0) points.push('Low stock cover — start replenishment.');
+    if (totalDemand <= 0) points.push('No individual/CMB demand yet — promote, bundle or review pricing.');
+    else if (skuDrr < 0.5) points.push('Low total run-rate — improve visibility and campaign support.');
+    else if (skuDrr >= 2) points.push('Strong total run-rate — protect stock availability.');
+    if (stock <= 0 && wip <= 0 && totalDemand > 0) points.push('Out of stock and no WIP — replenish urgently.');
+    else if (stock < Math.max(3, skuDrr * 7) && wip <= 0 && totalDemand > 0) points.push('Low stock cover — start replenishment.');
     if (wip > 0) points.push(`${Math.round(wip).toLocaleString('en-IN')} units in WIP — track completion.`);
     if (repeatOrders > 0) points.push(`${repeatOrders} repeat customer order${repeatOrders === 1 ? '' : 's'} — good customer acceptance.`);
     if (websiteRepeat.rate > 0) points.push(`${websiteRepeat.rate.toFixed(1)}% identifiable-customer repeat rate.`);
     if (!points.length) points.push('Stock and sales are currently balanced.');
     return {
       sku, sku_name:item.sku_name || item.name || '', image_url:item.image_url || '',
-      stock, wip, whWip, sales:x.qty, orders:x.rows.length, repeatOrders,
+      stock, wip, whWip, sales:x.qty, comboSales, totalDemand, orders:x.rows.length, repeatOrders,
       repeatCustomers:websiteRepeat.repeat, distinctCustomers:websiteRepeat.distinct,
       repeatRate:websiteRepeat.rate, revenue:x.rev,
       drr:skuDrr, daySpan:skuDaySpan, points
     };
-  }).sort((a,b) => b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
+  }).sort((a,b) => b.totalDemand - a.totalDemand || b.sales - a.sales || b.revenue - a.revenue || a.sku.localeCompare(b.sku));
 
   return {
     totalStock, totalWip, totalOrders, totalQty, totalRev, daySpan, drrQty, drr,
@@ -14155,7 +14233,7 @@ function renderRakhiOverallSummary(){
   host.innerHTML = `
     <div class="yoy-card"><div class="yc-label">Total Stock</div><div class="yc-val">${s.totalStock.toLocaleString('en-IN')}</div><div class="yc-sub">Curated Rakhi SKUs</div></div>
     <div class="yoy-card"><div class="yc-label">Total WIP</div><div class="yc-val">${s.totalWip.toLocaleString('en-IN')}</div></div>
-    <div class="yoy-card"><div class="yc-label">Total Orders</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
+    <div class="yoy-card"><div class="yc-label">Total Order Lines</div><div class="yc-val">${s.totalOrders.toLocaleString('en-IN')}</div><div class="yc-sub">${Math.round(s.totalQty).toLocaleString('en-IN')} units sold</div></div>
     <div class="yoy-card"><div class="yc-label">DRR (Daily Run Rate)</div><div class="yc-val">${s.drr.toFixed(1)}</div><div class="yc-sub">Rakhi units/day since 22 Jul 2026 (${s.daySpan} days)</div></div>
     <div class="yoy-card"><div class="yc-label">Repeat Customers</div><div class="yc-val">${s.repeatCust.toLocaleString('en-IN')}</div><div class="yc-sub">${s.repeatPct}% of ${s.distinctCust.toLocaleString('en-IN')} identifiable customers · Website, Purchase and customer-ID marketplaces</div></div>
     <div class="yoy-card"><div class="yc-label">Website COD</div><div class="yc-val" style="color:#b56c18">${s.codPct.toFixed(1)}%</div><div class="yc-sub">${s.codOrders.toLocaleString('en-IN')} of ${s.websitePaymentOrders.toLocaleString('en-IN')} Rakhi orders · COD = 1</div></div>
@@ -14281,7 +14359,7 @@ function renderRakhi(){
   const rkhTypeSel = document.getElementById('rkhTypeFilter')?.value || 'All';
   // Type filter ke hisaab se rows narrow — table, summary aur export
   // (exportRakhi) teeno isi filtered list ko follow karte hain.
-  const fRows = ((rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
+  const fRows = ((rkhTypeSel && rkhTypeSel !== 'All') ? rows.filter(r => String(r.type || '') === rkhTypeSel) : rows).filter(r=>_rkhInWhitelist(r.sku) && cnxSkuMatchesGlobalCn(r.sku));
   _rakhiFilteredRows = fRows;
   const rkhRevenueShareMap = new Map(); let rkhRevenueShareTotal = 0;
   fRows.forEach(r => { const key=_skuRevenueKey(r.sku), rv=Number(r.rev)||0; rkhRevenueShareMap.set(key,(rkhRevenueShareMap.get(key)||0)+rv); rkhRevenueShareTotal+=rv; });
@@ -14292,7 +14370,7 @@ function renderRakhi(){
     const totRev = fRows.reduce((s, r) => s + (r.rev || 0), 0);
     const skuSet = new Set(fRows.map(r => String(r.sku || '').toUpperCase()));
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Rakhi Orders</div><div class="yc-val">${fRows.length.toLocaleString('en-IN')}</div><div class="yc-sub">Matching transactions</div></div>
+      <div class="yoy-card"><div class="yc-label">Rakhi Order Lines</div><div class="yc-val">${fRows.length.toLocaleString('en-IN')}</div><div class="yc-sub">Matching source rows</div></div>
       <div class="yoy-card"><div class="yc-label">Distinct SKUs</div><div class="yc-val">${skuSet.size.toLocaleString('en-IN')}</div></div>
       <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(totQty).toLocaleString('en-IN')}</div></div>
       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(totRev)}</div></div>`}
@@ -14388,7 +14466,7 @@ function _rkhBuildPackSummary(){
   const groups=new Map([2,3,5].map(size=>[size,{size,label:`Pack of ${size}`,items:[],qty:0,rev:0,images:[]} ]));
   (master||[]).forEach(item=>{
     const sku=String(item&&item.sku||'').trim().toUpperCase();
-    if(!_rkhIsComboSku(sku)||!(_rkhInWhitelist(sku)||_rkhMatchItem(item)))return;
+    if(!_rkhIsComboSku(sku)||!_rkhInWhitelist(sku))return;
     const size=_rkhExplicitPackSize(item);if(!groups.has(size))return;
     const g=groups.get(size),entries=Array.isArray(item.rakhi_sales_entries)?item.rakhi_sales_entries:[];
     let qty=0,rev=0,lines=0;
@@ -14721,10 +14799,12 @@ window.renderRakhiTopCities = renderRakhiTopCities; window.exportRakhiTopCitiesC
    independent hai — yahan dobara call karne ki zaroorat nahi. */
 function rkhOnTypeFilterChange(){
   renderRakhi();
+  renderRakhiOverallSummary();
   renderRakhiPackSummary();
   renderRakhiPivot();
   renderRakhiTopSkus();
   renderRakhiSlowMovers();
+  renderRakhiReturns();
 }
 window.rkhOnTypeFilterChange = rkhOnTypeFilterChange;
 
@@ -15033,29 +15113,42 @@ window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
 /* ── RAKHI TOP-SELLING SKUs ── */
 let _rakhiTopSkuRows = [];
 function _rkhBuildTopSkus(){
-  // Type filter lga ho to sirf usi ke hisaab se (_rakhiFilteredRows),
-  // warna poora Rakhi data (_rakhiRows).
+  // Keep sales accounting separate from inventory consumption: revenue and the
+  // Individual Sold column stay on the SKU's own transactions; ranking, DRR and
+  // OOS cover use Individual + all unique parent CMB demand.
   const rows = _rakhiFilteredRows || _rakhiRows || [];
   const daySpan = _rkhDrrDaySpan();
-  const map = {};
+  const direct = {};
   rows.forEach(r => {
-    const key = String(r.sku || '').trim();
-    if (!key) return;
-    if (!_rkhInWhitelist(key)) return;   // sirf curated whitelist ke SKUs
-    if (!map[key]) map[key] = {sku: r.sku, sku_name: r.sku_name, image_url: r.image_url, qty: 0, drr_qty: 0, rev: 0, inv_stock: r.inv_stock || 0, inv_wip: r.inv_wip || 0, combo_details: r.combo_details || []};
-    map[key].qty += (r.qty || 0);
-    if (_rkhInDrrWindow(r.date)) map[key].drr_qty += (r.qty || 0);
-    map[key].rev += (r.rev || 0);
+    const key = String(r.sku || '').trim().toUpperCase();
+    if (!key || !_rkhInWhitelist(key)) return;
+    if (!direct[key]) direct[key] = {qty:0,drr_qty:0,rev:0};
+    direct[key].qty += Number(r.qty)||0;
+    if (_rkhInDrrWindow(r.date)) direct[key].drr_qty += Number(r.qty)||0;
+    direct[key].rev += Number(r.rev)||0;
   });
-  return Object.values(map).map(r => {
-    const avg = (Number(r.drr_qty) || 0) / Math.max(1, daySpan);
-    const stock = Number(r.inv_stock) || 0;
-    return Object.assign(r, {
-      daily_avg_sale: avg,
-      est_days_to_oos: stock <= 0 ? 0 : (avg > 0 ? stock / avg : null),
-      velocity_days: daySpan
+  const rt=document.getElementById('rkhTypeFilter')?.value||'All';
+  const saleCtx={sourceField:'rakhi_sales_entries',types:rt&&rt!=='All'?[rt]:[],fy:'FY 2026-27'};
+  const drrCtx={...saleCtx,d1:RAKHI_DRR_START,d2:todayISO||new Date().toISOString().slice(0,10)};
+  const out=[];
+  RAKHI_WHITELIST_SKUS.forEach(rawSku=>{
+    const key=String(rawSku||'').trim().toUpperCase();
+    const item=_masterSkuMap[key]||{};
+    const d=direct[key]||{qty:0,drr_qty:0,rev:0};
+    const cmbSold=Number(cnxSoldSplit(item,saleCtx).inCmb.sold)||0;
+    const cmbDrrQty=Number(cnxSoldSplit(item,drrCtx).inCmb.sold)||0;
+    const totalDemand=d.qty+cmbSold;
+    if(totalDemand<=0)return;
+    const dailyDemand=(d.drr_qty+cmbDrrQty)/Math.max(1,daySpan);
+    const stock=Number(item.inv_stock)||0;
+    out.push({
+      sku:key,sku_name:item.sku_name||'',image_url:item.image_url||'',qty:d.qty,cmbSold,totalDemand,
+      drr_qty:d.drr_qty,cmb_drr_qty:cmbDrrQty,rev:d.rev,inv_stock:stock,inv_wip:Number(item.inv_wip)||0,
+      combo_details:item.combo_details||[],daily_avg_sale:dailyDemand,
+      est_days_to_oos:stock<=0?0:(dailyDemand>0?stock/dailyDemand:null),velocity_days:daySpan
     });
-  }).sort((a, b) => b.qty - a.qty);
+  });
+  return out.sort((a,b)=>b.totalDemand-a.totalDemand||b.qty-a.qty||b.rev-a.rev||a.sku.localeCompare(b.sku));
 }
 function renderRakhiTopSkus(){
   const host = document.getElementById('rakhiTopSkuContent');
@@ -15071,7 +15164,7 @@ function renderRakhiTopSkus(){
     return;
   }
   const emp = LOGIN_ROLE === 'employee';
-  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Daily Avg Sale</th><th>Est. Days to OOS</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
+  const head = `<tr><th>#</th><th>Photo</th><th>SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Daily Avg Demand</th><th>Est. Days to OOS</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = list.map((r, i) => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -15083,7 +15176,7 @@ function renderRakhiTopSkus(){
     const rt=document.getElementById('rkhTypeFilter')?.value||'All';
     const rctx={sourceField:'rakhi_sales_entries',types:rt&&rt!=='All'?[rt]:[],fy:'FY 2026-27'};
     const ri=_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{sku:r.sku};
-    const cmbSold=cnxSoldSplit(ri,rctx).inCmb.sold;
+    const cmbSold=Number(r.cmbSold)||0;
     const avgSale = Number(r.daily_avg_sale) || 0;
     const daysToOos = r.est_days_to_oos == null
       ? '<span class="muted">No current sale pace</span>'
@@ -15110,13 +15203,13 @@ function exportRakhiTopSkusCSV(){
   const list = _rakhiTopSkuRows || [];
   if (!list.length){ alert('No Rakhi SKU data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Individual Sold', 'In CMBs Sold', 'Daily Avg Sale', 'Estimated Days to OOS', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Individual Sold', 'In CMBs Sold', 'Daily Avg Demand', 'Estimated Days to OOS', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = [];
   list.forEach((r, i) => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
       i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
-      Math.round(cnxSoldSplit(_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{sku:r.sku},{sourceField:'rakhi_sales_entries',types:(document.getElementById('rkhTypeFilter')?.value||'All')!=='All'?[document.getElementById('rkhTypeFilter')?.value]:[],fy:'FY 2026-27'}).inCmb.sold),
+      Math.round(Number(r.cmbSold)||0),
       Number(r.daily_avg_sale || 0).toFixed(2),
       r.est_days_to_oos == null ? '' : Math.ceil(r.est_days_to_oos),
       ...(emp ? [] : [Math.round(r.rev)]),
@@ -15143,46 +15236,34 @@ window.renderRakhiTopSkus = renderRakhiTopSkus; window.exportRakhiTopSkusCSV = e
 
 /* ── RAKHI SLOW MOVERS ──
    User ne saaf keh diya: koi criteria mat lagao — curated whitelist me se
-   jo bhi SKU is Rakhi season (FY 2026-27) me EK BHI unit nahi becha, bas
+   jo bhi SKU is Rakhi season (FY 2026-27) me individual ya CMB kisi bhi route se EK BHI unit consume nahi hua, bas
    wahi dikhao. Stock/WIP/age wagera ka koi threshold nahi hai. */
 let _rakhiSlowMoverRows = [];
 function _rkhBuildSlowMovers(){
-  const soldMap = {};
-  // Type filter lga ho to "sold" sirf usi Type ke hisaab se count hota
-  // hai (_rakhiFilteredRows), warna poore Rakhi season ka data (_rakhiRows).
-  (_rakhiFilteredRows || _rakhiRows || []).forEach(r => {
-    const key = String(r.sku || '').trim().toUpperCase();
-    if (!key) return;
-    soldMap[key] = (soldMap[key] || 0) + (r.qty || 0);
-  });
-  const rows = [];
-  RAKHI_WHITELIST_SKUS.forEach(sk => {
-    const sold = soldMap[sk] || 0;
-    if (sold > 0) return;   // jo bik chuka hai wo slow mover nahi
-    const item = _masterSkuMap[sk] || null;
-    const invStock = item ? (Number(item.inv_stock) || 0) : 0;
-    const daySpan = _rkhDrrDaySpan();
-    const drrQty = (_rakhiFilteredRows || _rakhiRows || []).reduce((sum, r) => {
-      const key = String(r.sku || '').trim().toUpperCase();
-      return key === sk && _rkhInDrrWindow(r.date) ? sum + (Number(r.qty) || 0) : sum;
-    }, 0);
-    const dailyAvg = drrQty / Math.max(1, daySpan);
+  const rows=[];
+  const rt=document.getElementById('rkhTypeFilter')?.value||'All';
+  const saleCtx={sourceField:'rakhi_sales_entries',types:rt&&rt!=='All'?[rt]:[],fy:'FY 2026-27'};
+  const drrCtx={...saleCtx,d1:RAKHI_DRR_START,d2:todayISO||new Date().toISOString().slice(0,10)};
+  const daySpan=_rkhDrrDaySpan();
+  RAKHI_WHITELIST_SKUS.forEach(sk=>{
+    const item=_masterSkuMap[sk]||null;
+    const split=cnxSoldSplit(item||{sku:sk},saleCtx);
+    const individual=Number(split.individual.sold)||0;
+    const inCmb=Number(split.inCmb.sold)||0;
+    if(individual+inCmb>0)return;
+    const drrSplit=cnxSoldSplit(item||{sku:sk},drrCtx);
+    const drrQty=(Number(drrSplit.individual.sold)||0)+(Number(drrSplit.inCmb.sold)||0);
+    const invStock=item?(Number(item.inv_stock)||0):0;
+    const dailyAvg=drrQty/Math.max(1,daySpan);
     rows.push({
-      sku: sk,
-      sku_name: item ? (item.sku_name || '') : '',
-      image_url: item ? (item.image_url || '') : '',
-      inv_stock: invStock,
-      inv_wip: item ? (Number(item.inv_wip) || 0) : 0,
-      taxon: item ? (item.taxon || '') : '',
-      days_since_last_sale: item ? item.days_since_last_sale : -1,
-      daily_avg_sale: dailyAvg,
-      est_days_to_oos: invStock <= 0 ? 0 : (dailyAvg > 0 ? invStock / dailyAvg : null),
-      velocity_days: daySpan,
-      found: !!item,
-      combo_details: item ? (item.combo_details || []) : []
+      sku:sk,sku_name:item?(item.sku_name||''):'',image_url:item?(item.image_url||''):'',
+      inv_stock:invStock,inv_wip:item?(Number(item.inv_wip)||0):0,taxon:item?(item.taxon||''):'',
+      days_since_last_sale:item?item.days_since_last_sale:-1,daily_avg_sale:dailyAvg,
+      est_days_to_oos:invStock<=0?0:(dailyAvg>0?invStock/dailyAvg:null),velocity_days:daySpan,
+      found:!!item,combo_details:item?(item.combo_details||[]):[],individual_sold:individual,in_cmb_sold:inCmb
     });
   });
-  rows.sort((a, b) => (b.inv_stock + b.inv_wip) - (a.inv_stock + a.inv_wip));
+  rows.sort((a,b)=>(b.inv_stock+b.inv_wip)-(a.inv_stock+a.inv_wip));
   return rows;
 }
 function renderRakhiSlowMovers(){
@@ -15195,10 +15276,10 @@ function renderRakhiSlowMovers(){
   const list = _rkhBuildSlowMovers();
   _rakhiSlowMoverRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">Every SKU in the curated Rakhi list has sold at least 1 unit this season.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">Every SKU in the curated Rakhi list has at least 1 unit of individual or CMB demand this season.</div>';
     return;
   }
-  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Daily Avg Sale</th><th>Est. Days to OOS</th><th>Inv Stock</th><th>Inv WIP</th><th>Days Since Last Sale (any channel)</th></tr>`;
+  const head = `<tr><th>Photo</th><th>SKU</th><th>Taxon</th><th>Daily Avg Demand</th><th>Est. Days to OOS</th><th>Inv Stock</th><th>Inv WIP</th><th>Days Since Last Demand (any route)</th></tr>`;
   const body = list.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -15230,7 +15311,7 @@ function renderRakhiSlowMovers(){
 function exportRakhiSlowMoversCSV(){
   const list = _rakhiSlowMoverRows || [];
   if (!list.length){ alert('No Slow Movers data to export.'); return; }
-  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Daily Avg Sale', 'Estimated Days to OOS', 'Inv Stock', 'Inv WIP', 'Days Since Last Sale', 'Image Link'];
+  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Daily Avg Demand', 'Estimated Days to OOS', 'Inv Stock', 'Inv WIP', 'Days Since Last Demand', 'Image Link'];
   const data = [];
   list.forEach(r => {
     data.push([
@@ -15261,7 +15342,7 @@ window.renderRakhiSlowMovers = renderRakhiSlowMovers; window.exportRakhiSlowMove
 /* ── RAKHI RETURN RATE BY CHANNEL ── */
 let _rakhiReturnRows = [];
 function _rkhBuildReturns(){
-  const rows = _rakhiRows || [];
+  const rows = (_rakhiFilteredRows || _rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
   const map = {};
   RAKHI_CHANNEL_ORDER.forEach(ch => { map[ch] = {channel: ch, qty: 0, rev: 0, ret: 0, retAmt: 0}; });
   rows.forEach(r => {
@@ -15429,13 +15510,16 @@ function renderProduction(){
   }
   const rows=(d.rows||[]).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   if (sumHost){
-    const orderQty=rows.reduce((s,r)=>s+(Number(r.order_qty)||0),0), recvQty=rows.reduce((s,r)=>s+(Number(r.recv_qty)||0),0), balQty=rows.reduce((s,r)=>s+(Number(r.bal_qty)||0),0);
-    const orders=new Set(rows.map(r=>String(r.order_no||'')).filter(Boolean)), skus=new Set(rows.map(r=>String(r.sku||'')).filter(Boolean));
+    // API totals are calculated from ALL filtered Production source rows before
+    // the 1,000-row display cap, so screen KPIs exactly match full exports.
+    const orderQty=Number(d.total_order_qty)||0, recvQty=Number(d.total_recv_qty)||0, balQty=Number(d.total_bal_qty)||0;
+    const sourceRows=Number(d.filtered_source_rows ?? d.count ?? rows.length)||0;
+    const orders=Number(d.unique_orders)||0, skus=Number(d.unique_skus)||0, pendingRows=Number(d.pending_rows)||0;
     sumHost.style.gridTemplateColumns = 'repeat(3,1fr)';
     sumHost.innerHTML = `
-      <div class="yoy-card"><div class="yc-label">Total Order Qty</div><div class="yc-val">${Math.round(orderQty).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.length.toLocaleString('en-IN')} rows • ${orders.size.toLocaleString('en-IN')} orders</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Received Qty</div><div class="yc-val">${Math.round(recvQty).toLocaleString('en-IN')}</div><div class="yc-sub">${skus.size.toLocaleString('en-IN')} unique SKUs</div></div>
-      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${Math.round(balQty).toLocaleString('en-IN')}</div><div class="yc-sub">${rows.filter(r=>(Number(r.bal_qty)||0)!==0).length.toLocaleString('en-IN')} rows with balance</div></div>`;
+      <div class="yoy-card"><div class="yc-label">Total Order Qty</div><div class="yc-val">${Math.round(orderQty).toLocaleString('en-IN')}</div><div class="yc-sub">${sourceRows.toLocaleString('en-IN')} source rows • ${orders.toLocaleString('en-IN')} orders</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Received Qty</div><div class="yc-val">${Math.round(recvQty).toLocaleString('en-IN')}</div><div class="yc-sub">${skus.toLocaleString('en-IN')} unique SKUs</div></div>
+      <div class="yoy-card"><div class="yc-label">Total Balance Qty</div><div class="yc-val">${Math.round(balQty).toLocaleString('en-IN')}</div><div class="yc-sub">${pendingRows.toLocaleString('en-IN')} source rows with balance</div></div>`;
   }
   if (!rows.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No production rows for this filter.</div>';
@@ -15478,6 +15562,7 @@ function renderProduction(){
     <th class="sort-arrow" onclick="sortProd('delivery_iso')">Delivery Date ⇅</th>
     <th>Receiving Date</th></tr>`;
   const visibleProdRows = rows.slice(0, 150);
+  const totalDisplayRows = Number(d.count)||rows.length;
   const body = visibleProdRows.map(r => {
     const hasImg = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan');
     const img = hasImg
@@ -15504,8 +15589,8 @@ function renderProduction(){
       <td>${escHtml(r.delivery_date || '—')}</td>
       <td>${escHtml(r.receiving_date || '—')}</td>
     </tr>`;
-  }).join('') + (rows.length > visibleProdRows.length
-    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${visibleProdRows.length} of ${rows.length.toLocaleString('en-IN')} — narrow with filters. CSV and Excel include all filtered rows.</td></tr>`
+  }).join('') + (totalDisplayRows > visibleProdRows.length
+    ? `<tr><td colspan="${empProd?15:17}" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${visibleProdRows.length} of ${totalDisplayRows.toLocaleString('en-IN')} table rows. CSV and Excel include the full filtered result.</td></tr>`
     : '');
   host.innerHTML = `<table class="ro prod-table">${colgroup}<thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
@@ -16258,7 +16343,7 @@ function renderAtRisk(){
     return;
   }
   const head = `<tr>
-    <th>Customer</th><th>Type</th><th>Orders</th><th>First Order</th><th>Last Order</th>
+    <th>Customer</th><th>Type</th><th>Distinct Order Dates</th><th>First Order</th><th>Last Order</th>
     <th>Days Since</th><th>Avg Gap</th><th>Total Qty</th>${emp ? '' : '<th>Total Revenue</th>'}</tr>`;
   const AT_RISK_RENDER_CAP = 200;
   const visibleRows = d.rows.slice(0, AT_RISK_RENDER_CAP);
@@ -16273,12 +16358,12 @@ function renderAtRisk(){
       <td style="text-align:center">${(r.total_qty||0).toLocaleString('en-IN')}</td>
       ${emp ? '' : `<td style="font-weight:700">${fmt(r.total_rev)}</td>`}
     </tr>`).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > AT_RISK_RENDER_CAP ? `<div class="ops-note">Showing first ${AT_RISK_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} customers. Export includes all rows.</div>` : ''}`;
+  host.innerHTML = `<table class="ro" style="width:100%;min-width:760px"><thead>${head}</thead><tbody>${body}</tbody></table>${d.rows.length > AT_RISK_RENDER_CAP ? `<div class="ops-note">Showing first ${AT_RISK_RENDER_CAP} of ${d.rows.length.toLocaleString('en-IN')} customers. Export includes all rows.</div>` : ''}`;
 }
 function exportAtRisk(){
   const d = _arData; if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
   const emp = (LOGIN_ROLE === 'employee');
-  const headers = ['Customer','Type','Orders','First Order','Last Order','Days Since','Avg Gap (days)','Total Qty'].concat(emp ? [] : ['Total Revenue']);
+  const headers = ['Customer','Type','Distinct Order Dates','First Order','Last Order','Days Since','Avg Gap (days)','Total Qty'].concat(emp ? [] : ['Total Revenue']);
   const rows = d.rows.map(r => [r.customer, r.type, r.orders, r.first_order, r.last_order, r.days_since, r.avg_gap_days, r.total_qty].concat(emp ? [] : [Math.round(r.total_rev)]));
   _dlCsv(headers, rows, 'at_risk_customers');
 }
@@ -16335,13 +16420,12 @@ function renderTaxon(){
   const rows = d.rows || [];
   const sumHost = document.getElementById('txSummary');
   if (sumHost){
-    // KPI cards ab EXACT overall totals dikhate hain (Overall Details page jaise
-    // hi values — allTaxons/grandFinalQty/grandNetRevenue) — filter se independent,
-    // taaki filtered vs unfiltered confusion na ho. Neeche table filter se update hoti hai.
+    // Summary and table/footer share the SAME filtered payload. Date/Type filters
+    // therefore cannot produce different totals in the same Taxon view.
     sumHost.innerHTML =
-      `<div class="yoy-card"><div class="yc-label">Total Taxons</div><div class="yc-val">${(allTaxons||[]).length}</div></div>
-       <div class="yoy-card"><div class="yc-label">Total Sold Qty</div><div class="yc-val">${Math.round(grandFinalQty||0).toLocaleString('en-IN')}</div></div>
-       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Total Net Revenue</div><div class="yc-val">${fmt(grandNetRevenue)}</div></div>`}`;
+      `<div class="yoy-card"><div class="yc-label">Taxons in Filter</div><div class="yc-val">${rows.length.toLocaleString('en-IN')}</div></div>
+       <div class="yoy-card"><div class="yc-label">Filtered Sold Qty</div><div class="yc-val">${Math.round(d.total_qty||0).toLocaleString('en-IN')}</div></div>
+       ${emp ? '' : `<div class="yoy-card"><div class="yc-label">Filtered Net Revenue</div><div class="yc-val">${fmt(d.total_rev||0)}</div></div>`}`;
   }
   const host = document.getElementById('txContent');
   if (host){
@@ -16507,11 +16591,12 @@ function _oosBuildRows(){
   _oosRows = (master || []).map(it => {
     const sale30 = Math.max(0, _oosNum(it && it.qty_1m));
     const cmbSale30 = Math.max(0, Number(cnxSoldSplit(it,{}).inCmb.q30)||0);
-    if (sale30 <= 0) return null;
+    const demand30 = sale30 + cmbSale30;
+    if (demand30 <= 0) return null;
 
     const stock = Math.max(0, _oosNum(it && it.inv_stock));
     const wip = Math.max(0, _oosNum(it && it.inv_wip));
-    const drr = sale30 / 30;
+    const drr = demand30 / 30;
     if (drr <= 0) return null;
 
     const stockCover = stock / drr;
@@ -16528,6 +16613,7 @@ function _oosBuildRows(){
       taxon: String((it && it.taxon) || 'General').trim() || 'General',
       sale30,
       cmbSale30,
+      demand30,
       drr,
       stock,
       wip,
@@ -16538,7 +16624,7 @@ function _oosBuildRows(){
   }).filter(Boolean).sort((a,b) => {
     if (a.risk.rank !== b.risk.rank) return a.risk.rank - b.risk.rank;
     if (a.stockCover !== b.stockCover) return a.stockCover - b.stockCover;
-    return b.sale30 - a.sale30;
+    return b.demand30 - a.demand30;
   });
   return _oosRows;
 }
@@ -16594,7 +16680,7 @@ function renderOOS(){
 
   const oosCount = rows.filter(r => r.risk.key === 'oos').length;
   const criticalCount = rows.filter(r => r.risk.key === 'critical').length;
-  const sale30Total = rows.reduce((s,r) => s + r.sale30, 0);
+  const demand30Total = rows.reduce((s,r) => s + r.demand30, 0);
   const finiteCovers = rows.map(r => r.stockCover).filter(Number.isFinite);
   const avgCover = finiteCovers.length ? finiteCovers.reduce((s,v)=>s+v,0) / finiteCovers.length : 0;
 
@@ -16602,7 +16688,7 @@ function renderOOS(){
     <div class="oos-card"><div class="oos-card-label">At-Risk SKUs</div><div class="oos-card-value">${rows.length.toLocaleString('en-IN')}</div><div class="oos-card-sub">30 days or less inventory-stock cover</div></div>
     <div class="oos-card"><div class="oos-card-label">Currently OOS</div><div class="oos-card-value">${oosCount.toLocaleString('en-IN')}</div><div class="oos-card-sub">Inventory stock is zero</div></div>
     <div class="oos-card"><div class="oos-card-label">Critical ≤7 Days</div><div class="oos-card-value">${criticalCount.toLocaleString('en-IN')}</div><div class="oos-card-sub">Positive stock but very low cover</div></div>
-    <div class="oos-card"><div class="oos-card-label">30D Demand</div><div class="oos-card-value">${Math.round(sale30Total).toLocaleString('en-IN')}</div><div class="oos-card-sub">Avg stock cover ${avgCover.toFixed(1)} days</div></div>`;
+    <div class="oos-card"><div class="oos-card-label">30D Demand</div><div class="oos-card-value">${Math.round(demand30Total).toLocaleString('en-IN')}</div><div class="oos-card-sub">Individual + all parent CMB usage · Avg stock cover ${avgCover.toFixed(1)} days</div></div>`;
 
   const body = rows.map((r, idx) => {
     const it = r.item || {};
@@ -16626,7 +16712,7 @@ function renderOOS(){
   host.innerHTML = `<table class="ro" style="width:100%;min-width:1080px">
     <thead><tr>
       <th style="text-align:center">#</th><th>Photo</th><th>SKU</th><th>Group</th>
-      <th style="text-align:right">Individual Sold (30D)</th><th style="text-align:right">In CMBs Sold (30D)</th><th style="text-align:right">Daily Sales Rate</th>
+      <th style="text-align:right">Individual Sold (30D)</th><th style="text-align:right">In CMBs Sold (30D)</th><th style="text-align:right" title="(Individual Sold + In CMBs Sold) ÷ 30">Daily Demand Rate</th>
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:right">Stock Cover (Days)</th><th style="text-align:right">Stock + WIP Cover (Days)</th><th style="text-align:center">Risk</th>
     </tr></thead>
@@ -16637,7 +16723,7 @@ function renderOOS(){
 function exportOOS(){
   const rows = _oosFilteredRows();
   if (!rows.length){ alert('No OOS risk rows to export'); return; }
-  const headers = ['SKU','SKU Name','Product Group','Image Link','Individual Sold (30D)','In CMBs Sold (30D)','Daily Sales Rate','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Risk'];
+  const headers = ['SKU','SKU Name','Product Group','Image Link','Individual Sold (30D)','In CMBs Sold (30D)','Daily Demand Rate','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Risk'];
   const data = rows.map(r => [
     r.sku,
     exportSkuName(r.sku, r.skuName),
@@ -16731,7 +16817,8 @@ function _buildRepeatPlannerRows(){
   _rpRows = (master||[]).map(it=>{
     const sold = Math.max(0,_opsQtyForWindow(it,win));
     const cmbSold=(cnxComboParentIndex().get(String(it.sku||'').trim().toUpperCase())||[]).reduce((sum,parent)=>sum+Math.max(0,_opsQtyForWindow(parent,win)),0);
-    const drr = sold/win;
+    const totalSold = sold + cmbSold;
+    const drr = totalSold/win;
     const stock = Math.max(0,_opsNum(it.inv_stock));
     const wip = Math.max(0,_opsNum(it.inv_wip));
     const leadDemand = drr*lead;
@@ -16740,7 +16827,7 @@ function _buildRepeatPlannerRows(){
     const rec = Math.max(0,Math.ceil(raw));
     const cover = drr>0 ? stock/drr : null;
     const risk = stock<=0 && drr>0 ? {key:'critical',label:'OOS — Order Now'} : rec>0 && cover!==null && cover<=lead ? {key:'high',label:'Below Lead-Time Cover'} : rec>0 ? {key:'medium',label:'Repeat Required'} : {key:'good',label:'Covered'};
-    return {item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),sold,cmbSold,drr,stock,wip,leadDemand,safetyStock,recommended:rec,cover,risk};
+    return {item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),sold,cmbSold,totalSold,drr,stock,wip,leadDemand,safetyStock,recommended:rec,cover,risk};
   }).filter(r=>r.sku && r.drr>0).sort((a,b)=>b.recommended-a.recommended || (a.cover??1e9)-(b.cover??1e9));
   _opsFillTaxon('rpTaxon',_rpRows,r=>r.taxon);
   return _rpRows;
@@ -16759,9 +16846,9 @@ function renderRepeatPlanner(){
   _rpRows=[]; _buildRepeatPlannerRows();
   const rows=_repeatPlannerFiltered(); const win=Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30')); const sum=document.getElementById('rpSummary'); const host=document.getElementById('rpContent'); if(!host)return;
   const recQty=rows.reduce((s,r)=>s+r.recommended,0); const leadDemand=rows.reduce((s,r)=>s+r.leadDemand,0); const avail=rows.reduce((s,r)=>s+r.stock+r.wip,0); const urgent=rows.filter(r=>r.risk.key==='critical'||r.risk.key==='high').length;
-  if(sum) sum.innerHTML=_opsKpi('Products Needing Repeat',rows.filter(r=>r.recommended>0).length.toLocaleString('en-IN'),'Current filter')+_opsKpi('Suggested Repeat Qty',Math.round(recQty).toLocaleString('en-IN'),'Rounded up by SKU')+_opsKpi('Expected Sales During Lead Time',Math.round(leadDemand).toLocaleString('en-IN'),'Selected daily sales × lead days')+_opsKpi('Urgent Products',urgent.toLocaleString('en-IN'),`Available stock/WIP ${Math.round(avail).toLocaleString('en-IN')}`);
+  if(sum) sum.innerHTML=_opsKpi('Products Needing Repeat',rows.filter(r=>r.recommended>0).length.toLocaleString('en-IN'),'Current filter')+_opsKpi('Suggested Repeat Qty',Math.round(recQty).toLocaleString('en-IN'),'Rounded up by SKU')+_opsKpi('Expected Sales During Lead Time',Math.round(leadDemand).toLocaleString('en-IN'),'Daily demand (Individual + CMB) × lead days')+_opsKpi('Urgent Products',urgent.toLocaleString('en-IN'),`Available stock/WIP ${Math.round(avail).toLocaleString('en-IN')}`);
   const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.sold).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.cmbSold||0).toLocaleString('en-IN')}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.leadDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.safetyStock).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.recommended>0?'#b3261e':'#15803d'}">${r.recommended.toLocaleString('en-IN')}</td><td class="ops-num">${r.cover===null?'—':_oosDaysText(r.cover)}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th title="Standalone SKU sales inside the selected sales period">Individual Sold (${win}D)</th><th title="Sales of all parent CMBs using this SKU inside the same period">In CMBs Sold (${win}D)</th><th>Daily Sales Rate</th><th>Stock</th><th>WIP</th><th>Expected Sales During Lead Time</th><th>Extra Safety Stock</th><th>Suggested Repeat Qty</th><th>Stock Cover (Days)</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No products match the current planning filters.</td></tr>'}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th title="Standalone SKU sales inside the selected sales period">Individual Sold (${win}D)</th><th title="Sales of all parent CMBs using this SKU inside the same period">In CMBs Sold (${win}D)</th><th title="(Individual Sold + In CMBs Sold) ÷ selected days">Daily Demand Rate</th><th>Stock</th><th>WIP</th><th>Expected Sales During Lead Time</th><th>Extra Safety Stock</th><th>Suggested Repeat Qty</th><th>Stock Cover (Days)</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No products match the current planning filters.</td></tr>'}</tbody></table>`;
 }
 function exportRepeatPlanner(){
   const rows=_repeatPlannerFiltered(); if(!rows.length){alert('No repeat-planner rows to export');return;}
@@ -16777,7 +16864,7 @@ function exportRepeatPlanner(){
       out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
     });
   });
-  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','Category','Image Link','Individual Sold','In CMBs Sold','Daily Sales Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
+  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','Category','Image Link','Individual Sold','In CMBs Sold','Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
 }
 
 function _buildComboRiskRows(){
@@ -17289,9 +17376,9 @@ function loadSmartOps(fresh){
 function _buildSmartAlertRows(){
   const rows=[];
   (master||[]).forEach(it=>{
-    const sku=String(it.sku||''); if(!sku)return; const name=String(it.sku_name||''); const image=String(it.image_url||''); const group=_opsGroup(it); const taxon=String(it.taxon||'General'); const sale30=Math.max(0,_opsNum(it.qty_1m)); const drr=sale30/30; const stock=Math.max(0,_opsNum(it.inv_stock)); const wip=Math.max(0,_opsNum(it.inv_wip)); const cover=drr>0?stock/drr:null;
-    if(drr>0&&cover!==null&&cover<=7) rows.push({type:'OOS_7',typeLabel:'OOS within 7 Days',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:stock<=0?'critical':'high',metric:stock<=0?'OOS':_oosDaysText(cover),detail:`30D sale ${Math.round(sale30)}, DRR ${drr.toFixed(2)}, Inv Stock ${Math.round(stock)}, WIP ${Math.round(wip)}`});
-    const sevenDayNeed=drr*7; if(sale30>=10&&wip<sevenDayNeed) rows.push({type:'HIGH_SALE_LOW_WIP',typeLabel:'High Sale, Low WIP',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:wip<=0?'high':'medium',metric:`${Math.round(wip)} WIP`,detail:`30D sale ${Math.round(sale30)}; seven-day demand ${Math.ceil(sevenDayNeed)}; stock ${Math.round(stock)}`});
+    const sku=String(it.sku||''); if(!sku)return; const name=String(it.sku_name||''); const image=String(it.image_url||''); const group=_opsGroup(it); const taxon=String(it.taxon||'General'); const sale30=Math.max(0,_opsNum(it.qty_1m)); const cmbSale30=Math.max(0,Number(cnxSoldSplit(it,{}).inCmb.q30)||0); const demand30=sale30+cmbSale30; const drr=demand30/30; const stock=Math.max(0,_opsNum(it.inv_stock)); const wip=Math.max(0,_opsNum(it.inv_wip)); const cover=drr>0?stock/drr:null;
+    if(drr>0&&cover!==null&&cover<=7) rows.push({type:'OOS_7',typeLabel:'OOS within 7 Days',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:stock<=0?'critical':'high',metric:stock<=0?'OOS':_oosDaysText(cover),detail:`30D demand ${Math.round(demand30)} (${Math.round(sale30)} individual + ${Math.round(cmbSale30)} in CMBs), DRR ${drr.toFixed(2)}, Inv Stock ${Math.round(stock)}, WIP ${Math.round(wip)}`});
+    const sevenDayNeed=drr*7; if(demand30>=10&&wip<sevenDayNeed) rows.push({type:'HIGH_SALE_LOW_WIP',typeLabel:'High Sale, Low WIP',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:wip<=0?'high':'medium',metric:`${Math.round(wip)} WIP`,detail:`30D demand ${Math.round(demand30)} (${Math.round(sale30)} individual + ${Math.round(cmbSale30)} in CMBs); seven-day demand ${Math.ceil(sevenDayNeed)}; stock ${Math.round(stock)}`});
     const ret=Math.max(0,_opsNum(it.return_qty)); const sold=Math.max(0,_opsNum(it.final_qty)); const retPct=(sold+ret)>0?ret/(sold+ret)*100:0; const threshold=10; if((sold+ret)>=5&&retPct>=threshold) rows.push({type:'HIGH_RETURN',typeLabel:'High Return Rate',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:retPct>=20?'critical':'medium',metric:`${retPct.toFixed(1)}%`,detail:`Return Qty ${Math.round(ret)} of ${Math.round(sold+ret)} gross units`});
   });
   const wipDays=Math.max(1,_opsNum(document.getElementById('saWipDays')?.value||30));
@@ -17317,18 +17404,18 @@ function _ageBucket(days){if(days===null)return'Unknown';if(days<=30)return'0-30
 function _iaLatestSaleDate(it){
   const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
   let latest='';
-  for(const e of ((it&&it.sales_entries)||[])){
-    if(_opsNum(e&&e.qty)<=0)continue;
-    const d=_bizEntryDate(e);
-    if(d&&d<=end&&(!latest||d>latest))latest=d;
-  }
+  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(d&&d<=end&&(!latest||d>latest))latest=d;}};
+  addEntries((it&&it.sales_entries)||[]);
+  const key=String(it&&it.sku||'').trim().toUpperCase();
+  const seen=new Set();
+  (cnxComboParentIndex().get(key)||[]).forEach(parent=>{const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);addEntries((parent&&parent.sales_entries)||[]);});
   const fallback=_bizIso(it&&it.last_dispatch_date);
   if(fallback&&fallback<=end&&(!latest||fallback>latest))latest=fallback;
   return latest;
 }
 function _buildInventoryAgeRows(){
   const receipts={};(_opsSupport.latest_receipts||[]).forEach(x=>{receipts[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||'');});
-  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Sale Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,sale30:Math.max(0,_opsNum(it.qty_1m)),cmbSale30:Math.max(0,Number(cnxSoldSplit(it,{}).inCmb.q30)||0),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
+  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Demand Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,sale30:Math.max(0,_opsNum(it.qty_1m)),cmbSale30:Math.max(0,Number(cnxSoldSplit(it,{}).inCmb.q30)||0),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>(b.age??-1)-(a.age??-1)||b.value-a.value);
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
@@ -17337,9 +17424,9 @@ function _inventoryAgeFiltered(){
 function renderInventoryAgeing(){
   _inventoryAgeRows=[];_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
   const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${fmt(r.unitValue)}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td class="ops-num">${Math.round(r.sale30).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.cmbSale30||0).toLocaleString('en-IN')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td class="ops-num">${r.daysSinceSale===null?'Never':r.daysSinceSale.toLocaleString('en-IN')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Value per Unit</th><th>Stock Value</th><th>Individual Sold (30D)</th><th>In CMBs Sold (30D)</th><th>Last Sale</th><th>Days Since Last Sale</th></tr></thead><tbody>${body||'<tr><td colspan="16" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Value per Unit</th><th>Stock Value</th><th>Individual Sold (30D)</th><th>In CMBs Sold (30D)</th><th>Last Demand</th><th>Days Since Demand</th></tr></thead><tbody>${body||'<tr><td colspan="16" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
 }
-function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Value per Unit (Cost/MRP)','Stock Value','Individual Sold (30D)','In CMBs Sold (30D)','Last Sale','Days Since Last Sale'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.unitValue),Math.round(r.value),Math.round(r.sale30),Math.round(r.cmbSale30||0),r.lastSale||'Never Sold',r.daysSinceSale===null?'Never':r.daysSinceSale]),'stock_age');}
+function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Value per Unit (Cost/MRP)','Stock Value','Individual Sold (30D)','In CMBs Sold (30D)','Last Demand','Days Since Demand'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.unitValue),Math.round(r.value),Math.round(r.sale30),Math.round(r.cmbSale30||0),r.lastSale||'Never Sold',r.daysSinceSale===null?'Never':r.daysSinceSale]),'stock_age');}
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
@@ -17379,8 +17466,8 @@ function _oppComboWindowStats(rawSku,win){
 function _oppScoreClass(score){ return score>=75?'high':score>=55?'mid':score>=35?'watch':'low'; }
 function _oppScoreHtml(score){ return `<span class="opp-score opp-score-${_oppScoreClass(score)}">${Math.round(score)}</span>`; }
 function _oppGrowthText(r){
-  if(r.currentSale<=0 && r.previousSale<=0) return '<span class="opp-growth-flat">No sales</span>';
-  if(r.previousSale<=0 && r.currentSale>0) return '<span class="opp-growth-up">New ↑</span>';
+  if(r.currentDemand<=0 && r.previousDemand<=0) return '<span class="opp-growth-flat">No demand</span>';
+  if(r.previousDemand<=0 && r.currentDemand>0) return '<span class="opp-growth-up">New ↑</span>';
   const cls=r.growthPct>0?'opp-growth-up':r.growthPct<0?'opp-growth-down':'opp-growth-flat';
   const sign=r.growthPct>0?'+':'';
   return `<span class="${cls}">${sign}${r.growthPct.toFixed(1)}%</span>`;
@@ -17400,22 +17487,23 @@ function _buildOpportunityRows(){
     const st=_oppWindowStats(it,win);
     const cmbSt=_oppComboWindowStats(sku,win);
     const current=st.currentQty, previous=st.previousQty;
+    const currentDemand=current+cmbSt.currentQty, previousDemand=previous+cmbSt.previousQty;
     let growthPct=0;
-    if(previous>0) growthPct=((current-previous)/previous)*100;
-    else if(current>0) growthPct=100;
-    const rawGrowth=current<=0?0:(previous<=0?Math.min(40,20+current*4):_oppClamp(20+growthPct*0.20,0,40));
+    if(previousDemand>0) growthPct=((currentDemand-previousDemand)/previousDemand)*100;
+    else if(currentDemand>0) growthPct=100;
+    const rawGrowth=currentDemand<=0?0:(previousDemand<=0?Math.min(40,20+currentDemand*4):_oppClamp(20+growthPct*0.20,0,40));
     const salesScore=_oppClamp(rawGrowth,0,40);
     const stock=Math.max(0,_opsNum(it.inv_stock)), wip=Math.max(0,_opsNum(it.inv_wip)), available=stock+wip;
-    const drr=current/win;
+    const drr=currentDemand/win;
     const stockCover=drr>0?stock/drr:null;
     const totalCover=drr>0?available/drr:null;
-    const stockScore=current>0?_oppClamp((available/current)*30,0,30):0;
+    const stockScore=currentDemand>0?_oppClamp((available/currentDemand)*30,0,30):0;
     const returnDen=current+st.currentRet;
     const returnRate=returnDen>0?(st.currentRet/returnDen*100):0;
     const returnScore=_oppClamp(30*(1-returnRate/20),0,30);
     const score=_oppClamp(salesScore+stockScore+returnScore,0,100);
-    const action=_oppActionFor(score,growthPct,current,stockCover,stock,returnRate);
-    return {item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,currentSale:current,currentCmbSale:cmbSt.currentQty,previousSale:previous,previousCmbSale:cmbSt.previousQty,growthPct,salesScore,stock,wip,available,drr,stockCover,totalCover,returnQty:st.currentRet,returnRate,returnScore,stockScore,score,action};
+    const action=_oppActionFor(score,growthPct,currentDemand,stockCover,stock,returnRate);
+    return {item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),window:win,currentSale:current,currentCmbSale:cmbSt.currentQty,currentDemand,previousSale:previous,previousCmbSale:cmbSt.previousQty,previousDemand,growthPct,salesScore,stock,wip,available,drr,stockCover,totalCover,returnQty:st.currentRet,returnRate,returnScore,stockScore,score,action};
   }).filter(Boolean).sort((a,b)=>b.score-a.score||b.growthPct-a.growthPct||b.currentSale-a.currentSale);
   _opsFillTaxon('oppTaxon',_oppRows,r=>r.taxon);
   return _oppRows;
@@ -17428,23 +17516,23 @@ function _opportunityFiltered(){
   const action=document.getElementById('oppAction')?.value||'All';
   const minScore=_oppClamp(document.getElementById('oppMinScore')?.value||0,0,100);
   const rowMode=document.getElementById('oppRows')?.value||'selling';
-  return _oppRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentSale>0||r.previousSale>0));
+  return _oppRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentDemand>0||r.previousDemand>0));
 }
 function loadOpportunityScore(){ _oppRows=[]; _buildOpportunityRows(); renderOpportunityScore(); }
 function renderOpportunityScore(){
   _oppRows=[]; _buildOpportunityRows();
   const rows=_opportunityFiltered(), sum=document.getElementById('oppSummary'), host=document.getElementById('oppContent'); if(!host)return;
   const push=rows.filter(r=>r.action.label==='Push Now'||r.action.label==='Replenish & Push').length;
-  const highGrowth=rows.filter(r=>(r.previousSale<=0&&r.currentSale>0)||r.growthPct>=20).length;
+  const highGrowth=rows.filter(r=>(r.previousDemand<=0&&r.currentDemand>0)||r.growthPct>=20).length;
   const lowReturn=rows.filter(r=>r.currentSale>0&&r.returnRate<5).length;
   const avg=rows.length?rows.reduce((s,r)=>s+r.score,0)/rows.length:0;
   if(sum) sum.innerHTML=_opsKpi('SKUs Scored',rows.length.toLocaleString('en-IN'),'Current filters')+_opsKpi('Push Opportunities',push.toLocaleString('en-IN'),'Push Now + Replenish & Push')+_opsKpi('High Growth SKUs',highGrowth.toLocaleString('en-IN'),'Growth 20%+ or newly selling')+_opsKpi('Average Score',avg.toFixed(1),`${lowReturn.toLocaleString('en-IN')} SKUs below 5% return`);
   const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.currentSale).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.currentCmbSale||0).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.previousSale).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.previousCmbSale||0).toLocaleString('en-IN')}</td><td class="ops-num">${_oppGrowthText(r)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.stockCover===null?'—':_oosDaysText(r.stockCover)}</td><td class="ops-num">${Math.round(r.returnQty).toLocaleString('en-IN')}</td><td class="ops-num">${r.returnRate.toFixed(1)}%</td><td class="ops-num">${r.salesScore.toFixed(1)} / 40</td><td class="ops-num">${r.stockScore.toFixed(1)} / 30</td><td class="ops-num">${r.returnScore.toFixed(1)} / 30</td><td class="ops-num">${_oppScoreHtml(r.score)}</td><td>${_opsRiskBadge(r.action.key,r.action.label)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th>Latest Individual Sold (${parseInt(document.getElementById('oppWindow')?.value||'30')}D)</th><th>Latest In CMBs Sold</th><th>Previous Individual Sold</th><th>Previous In CMBs Sold</th><th>Sales Growth</th><th>Stock</th><th>WIP</th><th>Stock Cover (Days)</th><th>Return Qty</th><th>Return Rate</th><th>Sales Points</th><th>Stock Points</th><th>Return Points</th><th>Total Opportunity Score</th><th>Suggested Action</th></tr></thead><tbody>${body||'<tr><td colspan="19" class="ops-empty">No products match the current opportunity filters.</td></tr>'}</tbody></table>`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th>Latest Individual Sold (${parseInt(document.getElementById('oppWindow')?.value||'30')}D)</th><th>Latest In CMBs Sold</th><th>Previous Individual Sold</th><th>Previous In CMBs Sold</th><th title="Growth of Individual + In CMBs demand">Total Demand Growth</th><th>Stock</th><th>WIP</th><th>Stock Cover (Days)</th><th>Return Qty</th><th>Return Rate</th><th>Sales Points</th><th>Stock Points</th><th>Return Points</th><th>Total Opportunity Score</th><th>Suggested Action</th></tr></thead><tbody>${body||'<tr><td colspan="19" class="ops-empty">No products match the current opportunity filters.</td></tr>'}</tbody></table>`;
 }
 function exportOpportunityScore(){
   const rows=_opportunityFiltered(); if(!rows.length){alert('No opportunity-score rows to export');return;}
-  _dlCsv(['SKU','SKU Name','Category','Image Link','Period Days','Latest Individual Sold','Latest In CMBs Sold','Previous Individual Sold','Previous In CMBs Sold','Sales Growth %','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Return Qty','Return Rate %','Sales Points /40','Stock Points /30','Return Points /30','Total Opportunity Score /100','Suggested Action'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.image,r.window,Math.round(r.currentSale),Math.round(r.currentCmbSale||0),Math.round(r.previousSale),Math.round(r.previousCmbSale||0),Number(r.growthPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.stockCover===null?'':Number(r.stockCover.toFixed(2)),r.totalCover===null?'':Number(r.totalCover.toFixed(2)),Math.round(r.returnQty),Number(r.returnRate.toFixed(2)),Number(r.salesScore.toFixed(2)),Number(r.stockScore.toFixed(2)),Number(r.returnScore.toFixed(2)),Number(r.score.toFixed(2)),r.action.label]),'sales_opportunity_by_sku');
+  _dlCsv(['SKU','SKU Name','Category','Image Link','Period Days','Latest Individual Sold','Latest In CMBs Sold','Previous Individual Sold','Previous In CMBs Sold','Total Demand Growth %','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Return Qty','Return Rate %','Sales Points /40','Stock Points /30','Return Points /30','Total Opportunity Score /100','Suggested Action'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.image,r.window,Math.round(r.currentSale),Math.round(r.currentCmbSale||0),Math.round(r.previousSale),Math.round(r.previousCmbSale||0),Number(r.growthPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip),r.stockCover===null?'':Number(r.stockCover.toFixed(2)),r.totalCover===null?'':Number(r.totalCover.toFixed(2)),Math.round(r.returnQty),Number(r.returnRate.toFixed(2)),Number(r.salesScore.toFixed(2)),Number(r.stockScore.toFixed(2)),Number(r.returnScore.toFixed(2)),Number(r.score.toFixed(2)),r.action.label]),'sales_opportunity_by_sku');
 }
 window.loadOpportunityScore=loadOpportunityScore;window.renderOpportunityScore=renderOpportunityScore;window.exportOpportunityScore=exportOpportunityScore;
 
@@ -17565,9 +17653,9 @@ function _buildSalesAnomalyRows(){
     }
 
     const receiptAge=base.latestReceipt?_anomDateAge(base.latestReceipt):null;
-    if(base.latestReceipt && receiptAge!==null && receiptAge<win && st.currentQty<=0 && (stock>0||wip>0)){
+    if(base.latestReceipt && receiptAge!==null && receiptAge<win && (st.currentQty+cmbSt.currentQty)<=0 && (stock>0||wip>0)){
       const severity=stock>=50?'high':'medium';
-      _anomAdd(rows,base,'STOCK_NO_SALE','Stock Movement Without Sale',severity,`${receiptAge}D since receipt`,`Latest receiving date ${base.latestReceipt}; no sale in latest ${win} days; Inv Stock ${Math.round(stock)}, Inv WIP ${Math.round(wip)}.`);
+      _anomAdd(rows,base,'STOCK_NO_SALE','Stock Movement Without Sale',severity,`${receiptAge}D since receipt`,`Latest receiving date ${base.latestReceipt}; no individual/CMB demand in latest ${win} days; Inv Stock ${Math.round(stock)}, Inv WIP ${Math.round(wip)}.`);
     }
 
     if(String(LOGIN_ROLE||'').toLowerCase()==='admin'){
@@ -17688,14 +17776,14 @@ function renderStockStatus(){
       ${emp ? '' : '<th style="text-align:right">AOV/pc</th><th style="text-align:right">Disc %</th>'}
       <th style="text-align:right">Stock</th><th style="text-align:right">WIP</th>
       <th style="text-align:right">Available</th><th style="text-align:right">Reorder Qty</th>
-      <th style="text-align:right">Days Since Sale</th><th>Flags</th>
+      <th style="text-align:right">Days Since Demand</th><th>Flags</th>
     </tr></thead><tbody>${body || `<tr><td colspan="${emp?11:13}" style="text-align:center;padding:20px;color:#999">No SKUs match</td></tr>`}</tbody></table>
     ${sorted.length > 150 ? `<p style="color:var(--cn-mid);font-size:.75rem;padding:10px">Showing first 150 of ${sorted.length.toLocaleString('en-IN')} — narrow with filters. Export includes all rows.</p>` : ''}`;
 }
 function exportStockStatus(){
   const rows = _ssFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
-  const headers = ['SKU','SKU Name','Stone Color','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Sale','Flags'];
+  const headers = ['SKU','SKU Name','Stone Color','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Demand','Flags'];
   const data = rows.map(it => [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', it.taxon||'', it.status||'',
     Math.round(it.inv_stock||0), Math.round(it.inv_wip||0),
     Math.round((it.inv_stock||0)+(it.inv_wip||0)), Math.round(it.reorder_qty||0),
@@ -17932,13 +18020,13 @@ function renderPayments(){
       const label = w.label;
       const ov = Math.round(wkOverdue[wi]);
       const pay = Math.round(wkPayment[wi]);
-      // "Overdue-month end Target" = this week's live Overdue(month end) + this
-      // week's Payment Received (i.e. what the overdue would have been for this
-      // week BEFORE this week's payment was applied/knocked off).
-      const tgt = Math.round(ov + pay);
+      // Target is the backend's filter-aware MONTH-FROZEN customer target,
+      // not a value reconstructed from today's live overdue. This keeps the
+      // target stable while payments/live ledger amounts move during the month.
+      const tgt = Math.round(wkTarget[wi]);
       tgtTotal += tgt; ovTotal += ov; payTotal += pay;
-      // Balance = Target minus this week's Payment Received
-      const balAfter = Math.round(tgt - pay);
+      // Balance against the fixed target cannot be negative after over-collection.
+      const balAfter = Math.max(0, Math.round(tgt - pay));
       balTotal += balAfter;
       return {
         label, wi,
@@ -17974,7 +18062,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Overdue-month end Target</b> = this week's Overdue (Month End, Live) plus this week's Payment Received — i.e. what would have been overdue for this week if this week's payment had not come in. Only customers matching the current Tag/Customer filter are included.<br>
+        <b>Overdue-month end Target</b> = the month-frozen target from each matching customer's target snapshot. Tag/Customer filters sum only those same frozen customer targets, so the target does not move with later ledger changes.<br>
         <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
         <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
         <b>Balance</b> = Overdue-month end Target minus this week's Payment Received.
@@ -18836,7 +18924,10 @@ function renderInsights(){
 
   const lowStockAlertList = document.getElementById('alertLowStockList');
   if (lowStockAlertList){
-    const items = byFlag('low_stock_high_sale').sort((a,b)=>(b.qty_1m||0)-(a.qty_1m||0)).slice(0,10);
+    const items = byFlag('low_stock_high_sale').sort((a,b)=>
+      ((Number(b.qty_1m)||0)+(Number(b.combo_qty_1m)||0))-
+      ((Number(a.qty_1m)||0)+(Number(a.combo_qty_1m)||0))
+    ).slice(0,10);
     lowStockAlertList.innerHTML = items.length
       ? items.map(i => alertRow(i, (i.alert_flags||[]).find(f=>f.code==='low_stock_high_sale')||{})).join('')
       : '<div class="insight-empty">No stockout risks right now 🎉</div>';
@@ -19521,9 +19612,9 @@ function _scOrderSessionIndex(){
   const sessionIndex=new Map();
   (master||[]).forEach(item=>{
     const sku=String(item.sku||'').trim().toUpperCase();if(!sku)return;
-    (item.website_customer_events||[]).forEach(ev=>{
+    (item.website_payment_events||[]).forEach(ev=>{
       const date=_bizIso(ev.d||ev.date);if(!date)return;
-      const token=String(ev.s||`${ev.c||''}|${date}`).trim();if(!token)return;
+      const token=String(ev.o||ev.order||'').trim();if(!token)return;
       const key=`${sku}|${date}`,set=sessionIndex.get(key)||new Set();set.add(token);sessionIndex.set(key,set);
     });
   });
@@ -19545,7 +19636,7 @@ function _scChannelOrderSessionIndex(){
 function _scOrderPeriod(from,to,channelFilter){
   const sessionIndex=_scOrderSessionIndex(),channelOrderIndex=_scChannelOrderSessionIndex();
   const marketplaceNames=new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
-  const skuMap=new Map(),allOrders=new Set(),addressOrders=new Set(),marketplaceOrders=new Set(),purchaseOrders=new Set();
+  const skuMap=new Map(),allOrders=new Set(),websiteExactOrders=new Set(),marketplaceOrders=new Set(),purchaseOrders=new Set();
   const websiteFallbackOrders=new Set(),marketplaceFallbackOrders=new Set(),purchaseFallbackOrders=new Set(),otherIdentityOrders=new Set(),otherFallbackOrders=new Set();
   _scOrderEvents().forEach((e,index)=>{
     if(!e.date||e.date<from||e.date>to)return;
@@ -19558,7 +19649,7 @@ function _scOrderPeriod(from,to,channelFilter){
     if(orderChannel==='Website'){
       const sessions=sessionIndex.get(`${sku}|${e.date}`);
       if(sessions&&sessions.size){
-        sessions.forEach(token=>{const key=`WEB|${token}`;row.orderKeys.add(key);allOrders.add(key);addressOrders.add(key);});
+        sessions.forEach(token=>{const key=`WEB|${token}`;row.orderKeys.add(key);allOrders.add(key);websiteExactOrders.add(key);});
       }else{
         const key=`WEB-FALLBACK|${sku}|${e.date}|${index}`;row.orderKeys.add(key);allOrders.add(key);websiteFallbackOrders.add(key);
       }
@@ -19588,7 +19679,7 @@ function _scOrderPeriod(from,to,channelFilter){
   });
   const rows=Array.from(skuMap.values()).map(r=>({...r,orders:r.orderKeys.size,aov:r.orderKeys.size?r.rev/r.orderKeys.size:0}));
   const qty=rows.reduce((s,r)=>s+r.qty,0),rev=rows.reduce((s,r)=>s+r.rev,0),orders=allOrders.size;
-  return {from,to,rows,qty,rev,orders,aov:orders?rev/orders:0,addressOrders:addressOrders.size,marketplaceOrders:marketplaceOrders.size,purchaseOrders:purchaseOrders.size,otherIdentityOrders:otherIdentityOrders.size,websiteFallbackOrders:websiteFallbackOrders.size,marketplaceFallbackOrders:marketplaceFallbackOrders.size,purchaseFallbackOrders:purchaseFallbackOrders.size,otherFallbackOrders:otherFallbackOrders.size,fallbackOrders:websiteFallbackOrders.size+marketplaceFallbackOrders.size+purchaseFallbackOrders.size+otherFallbackOrders.size};
+  return {from,to,rows,qty,rev,orders,aov:orders?rev/orders:0,websiteExactOrders:websiteExactOrders.size,marketplaceOrders:marketplaceOrders.size,purchaseOrders:purchaseOrders.size,otherIdentityOrders:otherIdentityOrders.size,websiteFallbackOrders:websiteFallbackOrders.size,marketplaceFallbackOrders:marketplaceFallbackOrders.size,purchaseFallbackOrders:purchaseFallbackOrders.size,otherFallbackOrders:otherFallbackOrders.size,fallbackOrders:websiteFallbackOrders.size+marketplaceFallbackOrders.size+purchaseFallbackOrders.size+otherFallbackOrders.size};
 }
 function _scOrderPct(current,base){return base?((current-base)/Math.abs(base)*100):null;}
 function _scOrderDeltaText(current,base,isMoney){
@@ -19640,7 +19731,7 @@ function renderSalesComparisonOrders(){
   const shown=data.drivers;
   const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No baseline-date selling SKUs match the selected filters.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses same Order Date + customer + billing address (${b.addressOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
+  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses exact Order_Date + Invoice Code (${b.websiteExactOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
 }
 function resetSalesComparisonOrders(){
   _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB'),s=document.getElementById('scOrderSkuSearch');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';if(s)s.value='';_scOrderInit();renderSalesComparisonOrders();
@@ -19648,7 +19739,7 @@ function resetSalesComparisonOrders(){
 function exportSalesComparisonOrders(){
   const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No baseline-date selling SKU rows to export.');return;}
   const r=data.ranges;
-  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: date + customer + billing address; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
+  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: Order_Date + Invoice Code; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
@@ -20037,7 +20128,7 @@ mkCard = function(item, rev, conf, slow){
   const soldScope = currentTab === 'repeat' ? pastedSkuSet
     : (currentTab === 'matrix' && selectedSkuSet && selectedSkuSet.size ? selectedSkuSet : null);
   const soldSplit = cnxSoldSplit(item, soldCtx, {allowedParentSkus:soldScope});
-  const individualSold = Number(item.final_qty != null ? item.final_qty : soldSplit.individual.sold) || 0;
+  const individualSold = Number(soldSplit.individual.sold) || 0;
   const inCmbSold = Number(soldSplit.inCmb.sold) || 0;
   return `<div class="card">
     <div class="img-box">${img}${statusB}${confB}${invB}</div>
@@ -20765,6 +20856,23 @@ function _olsComboBaselineQty(rawSku,d1,d2){
   });
   return qty;
 }
+function _olsComboLastSaleDate(rawSku,end){
+  const key=String(rawSku&&rawSku.sku||rawSku||'').trim().toUpperCase();
+  const parents=cnxComboParentIndex().get(key)||[];
+  const seen=new Set();let latest='';
+  parents.forEach(parent=>{
+    const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);
+    ((parent&&parent.sales_entries)||[]).forEach(e=>{const d=_bizEntryDate(e);const q=Math.max(0,_opsNum(e&&e.qty));if(q>0&&d&&(!end||d<=end)&&_olsEntryAllowed(e)&&(!latest||d>latest))latest=d;});
+  });
+  return latest;
+}
+function _olsComboAggregateDemand(rawSku,win){
+  const key=String(rawSku&&rawSku.sku||rawSku||'').trim().toUpperCase();
+  const parents=cnxComboParentIndex().get(key)||[];
+  const seen=new Set();let baselineQty=0;
+  parents.forEach(parent=>{const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);baselineQty+=Math.max(0,_opsNum(_olsAggregateDemand(parent,win).baselineQty));});
+  return baselineQty;
+}
 function _buildOosLostRows(){
   const end=_bizIso(todayISO)||new Date().toISOString().slice(0,10);
   const win=Math.max(1,parseInt(document.getElementById('olsWindow')?.value||'90'));
@@ -20783,7 +20891,9 @@ function _buildOosLostRows(){
       return d&&d<=end&&_olsEntryAllowed(e);
     });
     const positive=entries.filter(e=>_opsNum(e&&e.qty)>0).sort((a,b)=>_bizEntryDate(a).localeCompare(_bizEntryDate(b)));
-    let lastSale=positive.length?_bizEntryDate(positive[positive.length-1]):'';
+    const directLastSale=positive.length?_bizEntryDate(positive[positive.length-1]):'';
+    const comboLastSale=_olsComboLastSaleDate(it.sku,end);
+    let lastSale=[directLastSale,comboLastSale].filter(Boolean).sort().pop()||'';
     if(!lastSale&&allowAggregate)lastSale=_bizIso(it.last_dispatch_date);
 
     let baseline=[];
@@ -20792,26 +20902,29 @@ function _buildOosLostRows(){
     let baselineRev=0;
     let drr=0;
     let demandBasis='No usable sale history';
-    if(lastSale&&positive.length){
+    let cmbBaselineQty=0;
+    if(lastSale){
       baseStart=_bizShift(lastSale,-win+1);
       baseline=positive.filter(e=>{const d=_bizEntryDate(e);return d>=baseStart&&d<=lastSale;});
       baselineQty=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.qty)),0);
       baselineRev=baseline.reduce((s,e)=>s+Math.max(0,_opsNum(e.rev)),0);
-      if(baselineQty>0){
-        drr=baselineQty/win;
-        demandBasis='Filtered dated transactions';
+      cmbBaselineQty=_olsComboBaselineQty(it.sku,baseStart,lastSale);
+      const totalBaselineQty=baselineQty+cmbBaselineQty;
+      if(totalBaselineQty>0){
+        drr=totalBaselineQty/win;
+        demandBasis='Filtered dated individual + CMB transactions';
       }
     }
     if(drr<=0&&allowAggregate){
       const fb=_olsAggregateDemand(it,win);
       baselineQty=fb.baselineQty;
-      drr=fb.drr;
-      demandBasis=fb.basis;
+      cmbBaselineQty=_olsComboAggregateDemand(it.sku,win);
+      drr=(baselineQty+cmbBaselineQty)/win;
+      demandBasis=drr>0 ? `${fb.basis} + CMB parent demand` : fb.basis;
     }else if(drr<=0&&!allowAggregate){
-      demandBasis='No sale in selected Type / Channel';
+      demandBasis='No individual/CMB demand in selected Type / Channel';
     }
 
-    const cmbBaselineQty=(lastSale&&baseStart)?_olsComboBaselineQty(sku,baseStart,lastSale):0;
     const oosDays=lastSale?Math.max(1,Math.min(cap,_bizDaysInclusive(_bizShift(lastSale,1),end)||1)):null;
     const priceCandidates=[
       baselineQty>0&&baselineRev>0?baselineRev/baselineQty:0,
@@ -20821,7 +20934,7 @@ function _buildOosLostRows(){
     const avgSp=Math.max(0,priceCandidates.find(v=>Number.isFinite(v)&&v>0)||0);
     const lostQty=drr>0&&oosDays!==null?drr*oosDays:0;
     const lostRevenue=lostQty*avgSp;
-    const affected=_olsAffectedChannel(baseline.length?baseline:positive,it);
+    const affected=(baseline.length||positive.length)?_olsAffectedChannel(baseline.length?baseline:positive,it):(cmbBaselineQty>0?'CMB parent demand':_olsAffectedChannel([],it));
     rows.push({
       item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),
       group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,
@@ -20880,7 +20993,7 @@ function renderOosLostSales(){
   const emptyMessage=allRows.length
     ?'No out-of-stock product meets the Minimum Daily Sales filter. Set Minimum Daily Sales to 0 to show every current out-of-stock product.'
     :'No product with Stock = 0 matches the selected Product Group, Category or SKU search.';
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th>Affected Channel</th><th>Last Sale</th><th>Estimated Days Without Stock</th><th>Individual Sold Before Stockout</th><th>In CMBs Sold Before Stockout</th><th>Average Daily Sales</th><th>Calculation Basis</th><th>Average Selling Price</th><th>Estimated Lost Qty</th><th>Estimated Lost Revenue</th><th>% of Current Target</th><th>WIP</th></tr></thead><tbody>${body||`<tr><td colspan="16" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th>Affected Channel</th><th>Last Sale</th><th>Estimated Days Without Stock</th><th>Individual Sold Before Stockout</th><th>In CMBs Sold Before Stockout</th><th>Average Daily Demand</th><th>Calculation Basis</th><th>Average Selling Price</th><th>Estimated Lost Qty</th><th>Estimated Lost Revenue</th><th>% of Current Target</th><th>WIP</th></tr></thead><tbody>${body||`<tr><td colspan="16" class="ops-empty">${escHtml(emptyMessage)}</td></tr>`}</tbody></table>${rows.length>OOS_RENDER_CAP?`<div class="ops-note">Showing first ${OOS_RENDER_CAP} of ${rows.length.toLocaleString('en-IN')} rows. Narrow filters or use Export CSV for all rows.</div>`:''}`;
   _olsRows=rows;
 }
 function exportOosLostSales(){
@@ -20888,7 +21001,7 @@ function exportOosLostSales(){
   const rows=_buildOosLostRows().filter(r=>r.drr>=minDrr);
   if(!rows.length){alert('No OOS lost-sales rows to export');return;}
   _dlCsv(
-    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Individual Sold Before Stockout','In CMBs Sold Before Stockout','Average Daily Sale','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
+    ['SKU','SKU Name','Taxon','Product Group','Image Link','Affected Channel','Last Positive Sale','Estimated OOS Days','Pre-OOS Window Days','Individual Sold Before Stockout','In CMBs Sold Before Stockout','Average Daily Demand','Demand Basis','Average Selling Price','Estimated Lost Qty','Estimated Lost Revenue','Potential Target Support','% of Current Month Target','Inv Stock','Inv WIP'],
     rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.taxon,r.group,r.image,r.affected,r.lastSale,r.oosDays===null?'':r.oosDays,r.window,Number(r.baselineQty.toFixed(2)),Number((r.cmbBaselineQty||0).toFixed(2)),Number(r.drr.toFixed(3)),r.demandBasis,Number(r.avgSp.toFixed(2)),Number(r.lostQty.toFixed(2)),Number(r.lostRevenue.toFixed(2)),Number(r.lostRevenue.toFixed(2)),r.targetPct===null?'':Number(r.targetPct.toFixed(2)),Math.round(r.stock),Math.round(r.wip)]),
     'oos_lost_sales_revenue'
   );
@@ -22284,6 +22397,17 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             rr["discount_pct"] = disc_map.get(r["sku"], 0)
         rows.append(rr)
 
+    # Preserve exact filtered-source totals BEFORE optional grouping and before
+    # the API display cap. This keeps KPI cards/export totals identical even
+    # when more than 1,000 Production rows match the filters.
+    _filtered_source_rows = len(rows)
+    _filtered_total_order_qty = sum((r.get("order_qty", 0) or 0) for r in rows)
+    _filtered_total_recv_qty = sum((r.get("recv_qty", 0) or 0) for r in rows)
+    _filtered_total_bal_qty = sum((r.get("bal_qty", 0) or 0) for r in rows)
+    _filtered_pending_rows = sum(1 for r in rows if _production_has_balance(r.get("bal_qty")))
+    _filtered_unique_orders = len({r.get("order_no") for r in rows if r.get("order_no")})
+    _filtered_unique_skus = len({r.get("sku") for r in rows if r.get("sku")})
+
     # SORT / GROUP: "top_repeat" = SKU-wise group (ek SKU ek row), uske totals,
     # sabse zyada baar order hue SKU pehle (zyada -> kam).
     if (sort_mode or "").strip().lower() == "top_repeat":
@@ -22329,11 +22453,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         grouped.sort(key=lambda r: (r.get("repeat_count", 0), r.get("order_qty", 0)), reverse=True)
         rows = grouped
 
-    # KPIs
+    # KPIs use the complete filtered source set captured before grouping/capping.
     grouped_mode = (sort_mode or "").strip().lower() == "top_repeat"
-    pending = sum(1 for r in rows if _production_has_balance(r.get("bal_qty")))
-    uniq_skus = len({r["sku"] for r in rows if r["sku"]})
-    uniq_orders = uniq_skus if grouped_mode else len({r["order_no"] for r in rows if r["order_no"]})
     if row_limit is None:
         output_rows = rows
     else:
@@ -22345,15 +22466,16 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     return {
         "rows": output_rows,
         "count": len(rows),
+        "filtered_source_rows": _filtered_source_rows,
         "returned_count": len(output_rows),
         "grouped": grouped_mode,
         "channels": channels, "types": types, "taxons": taxons,
-        "total_order_qty": int(round(sum(r["order_qty"] for r in rows))),
-        "total_recv_qty":  int(round(sum(r["recv_qty"] for r in rows))),
-        "total_bal_qty":   int(round(sum(r["bal_qty"] for r in rows))),
-        "pending_rows": pending,
-        "unique_orders": uniq_orders,
-        "unique_skus": uniq_skus,
+        "total_order_qty": int(round(_filtered_total_order_qty)),
+        "total_recv_qty":  int(round(_filtered_total_recv_qty)),
+        "total_bal_qty":   int(round(_filtered_total_bal_qty)),
+        "pending_rows": _filtered_pending_rows,
+        "unique_orders": _filtered_unique_orders,
+        "unique_skus": _filtered_unique_skus,
     }
 
 
@@ -22984,12 +23106,15 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
         day_elapsed = 0                 # future month
     pace = (days_in_month / day_elapsed) if day_elapsed > 0 else 0.0
 
-    # Actual ko (month, channel/type) par aggregate karo.
+    # Actual ko (month, channel/type) par aggregate karo. Target Achievement
+    # aur isi tab ka Daily Revenue Glimpse dono Order Date basis use karte hain,
+    # taaki same month/channel ke KPIs aapas me mismatch na karein. Dispatch-Date
+    # rows sirf source-outage fallback hain.
     # Target ka "Channel Type" (SOR, Website, Purchase…) = COSA ka "Type".
-    # Stake Holder sirf us channel ka naam/owner hai (e.g. Sarthak → SOR).
     act = {}
     for it in comp:
-        for e in it.get("sales_entries", []):
+        _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
+        for e in _target_entries:
             d = e.get("date")
             if not d or d == "N/A":
                 continue
@@ -23106,7 +23231,9 @@ def _build_operations_inventory(force=False):
         inv = _fetch_csv_fresh(INV_URL)
         inv.columns = [str(c).strip() for c in inv.columns]
         cols = list(inv.columns)
-        sku_col = find_col(cols, "SKU") or (cols[0] if cols else None)
+        # Live All Product source keeps SKU in physical column B. Header match
+        # remains primary; B is the safe fallback (A is S. No.).
+        sku_col = find_col(cols, "SKU") or (cols[1] if len(cols) > 1 else (cols[0] if cols else None))
 
         stock_candidates = [
             c for c in cols
@@ -23289,6 +23416,9 @@ def _build_daily_reporting():
         get_data(False)
     daily = CACHE.get("daily_reporting_daily", {}) or {}
     order_daily = CACHE.get("daily_reporting_orders", {}) or {}
+    website_order_daily = CACHE.get("daily_reporting_website_orders", {}) or {}
+    marketplace_order_daily = CACHE.get("daily_reporting_marketplace_orders", {}) or {}
+    qcommerce_order_daily = CACHE.get("daily_reporting_qcommerce_orders", {}) or {}
 
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     # Management report uses completed order days only. On 11-Aug this means
@@ -23311,6 +23441,10 @@ def _build_daily_reporting():
     def _one_period(key, start, end, label):
         start_iso, end_iso = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
         dtc = marketplace = qcommerce = 0.0
+        # AOV numerator is accumulated only for source-days that have an exact
+        # order identity feed. This matters for Q-Commerce: the current
+        # cossa_orderdate sheet has revenue rows but no Order ID column.
+        aov_revenue = 0.0
         order_keys = set()
         peak_date = ""
         peak_amount = None
@@ -23318,9 +23452,18 @@ def _build_daily_reporting():
             ds = str(day or "")
             if not (start_iso <= ds <= end_iso):
                 continue
-            dtc += float(vals.get("dtc") or 0)
-            marketplace += float(vals.get("marketplace") or 0)
-            qcommerce += float(vals.get("qcommerce") or 0)
+            day_dtc = float(vals.get("dtc") or 0)
+            day_marketplace = float(vals.get("marketplace") or 0)
+            day_qcommerce = float(vals.get("qcommerce") or 0)
+            dtc += day_dtc
+            marketplace += day_marketplace
+            qcommerce += day_qcommerce
+            if website_order_daily.get(ds):
+                aov_revenue += day_dtc
+            if marketplace_order_daily.get(ds):
+                aov_revenue += day_marketplace
+            if qcommerce_order_daily.get(ds):
+                aov_revenue += day_qcommerce
             day_total = float(vals.get("total") or 0)
             if peak_amount is None or day_total > peak_amount or (day_total == peak_amount and ds < peak_date):
                 peak_amount = day_total
@@ -23331,7 +23474,7 @@ def _build_daily_reporting():
                 order_keys.update(keys or set())
         total = dtc + marketplace + qcommerce
         orders = len(order_keys)
-        aov = total / orders if orders else 0.0
+        aov = aov_revenue / orders if orders else 0.0
         if not peak_date or peak_amount is None or peak_amount == 0:
             peak_date_label = ""
             peak_amount = 0.0
@@ -23349,6 +23492,7 @@ def _build_daily_reporting():
             "qcommerce_revenue": qcommerce,
             "orders": orders,
             "aov": aov,
+            "aov_revenue": aov_revenue,
             "peak_revenue_date": peak_date_label,
             "peak_revenue_amount": float(peak_amount or 0),
         }
@@ -23357,9 +23501,9 @@ def _build_daily_reporting():
     return {
         "periods": built,
         "as_of": completed_through.strftime("%d-%b-%Y"),
-        "source_note": "Data basis: completed Order Date / normalized exact Order No. — not Dispatch Date.",
+        "source_note": "Data basis: completed Order Date. Website = Order_Date + Invoice Code; marketplaces = native exact Order IDs. AOV uses only revenue from source-days with exact order identities, so numerator and order denominator always match.",
         "revenue_note": "Daily Reporting only: Return Amount gets +6% for every channel; Website also gets +6% on Net Revenue.",
-        "order_note": "Orders are unique normalized exact Order No. values from the source order sheets: Myntra H (Order id), Ajio F (FWD Seller Order NO), Amazon/Flipkart H (Order id; J identifies marketplace), Nykaa D (orderno), Tata D (OrderId), plus Website orders; cossa_orderdate order fallback is used only for Q-Commerce.",
+        "order_note": "Orders are unique source identities: Website = Order_Date + Invoice Code; Myntra H = Order id; Ajio F = FWD Seller Order NO; Amazon/Flipkart H = Order id (J identifies marketplace); Nykaa D = orderno; Tata D = OrderId. cossa_orderdate fallback is used only for Q-Commerce.",
     }
 
 
@@ -25094,7 +25238,9 @@ def _build_discount_leakage(min_disc=0.0, sort_key="leakage", cn_query=""):
             "stone_color": it.get("stone_color", ""),
             "taxon": it.get("taxon", ""), "plating": it.get("plating", ""),
             "mrp": mrp, "avg_sp": round(float(it.get("avg_selling_price") or 0), 2),
-            "last_sp": round(sp, 2), "disc_pct": disc_pct,
+            # Display the actual latest non-zero dated Selling Price separately
+            # from the qty-weighted average SP used for leakage mathematics.
+            "last_sp": round(float(it.get("last_selling_price") or 0), 2), "disc_pct": disc_pct,
             "per_unit_gap": round(per_unit_gap, 2), "qty": int(round(qty)),
             "leakage": round(leakage, 2),
             "net_revenue": float(it.get("total_net_revenue") or 0),
@@ -25426,10 +25572,12 @@ def _build_sku_costs():
             df = _fetch_csv_fresh(INV_URL)
             cols = list(df.columns)
             def _at(i): return cols[i] if len(cols) > i else None
-            C_SKU  = _at(0)
+            # Live All Product: B=SKU, E=Image Link, M=Cost, N=MRP. Header
+            # matching stays primary; physical fallbacks protect renamed headers.
+            C_SKU  = find_col(df.columns, "SKU", "sku code", "item code") or _at(1)
             C_COST = find_col(df.columns, "Cost", "cost", "product cost", "hi cost", "item cost") or _at(12)
             C_MRP  = find_col(df.columns, "MRP", "mrp", "m.r.p") or _at(13)
-            C_IMG2 = find_col(df.columns, "Image Link", "imagelink", "image", "img") or _at(1)
+            C_IMG2 = find_col(df.columns, "Image Link", "imagelink", "image", "img") or _at(4)
             patch_cost = {}; patch_mrp = {}; patch_img = {}
             for _, r in df.iterrows():
                 sku = clean(r.get(C_SKU, "")) if C_SKU else ""
