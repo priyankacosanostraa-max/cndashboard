@@ -7876,7 +7876,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhi()">Export CSV</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">SKUs starting with RKH, plus CMB (gift set) SKUs whose Stone Details/Remarks contain an RKH SKU. Restricted to FY 2026-27 orders only.</div>
+  <div class="small-note" style="margin:6px 0 14px">Curated Rakhi SKU list (RKH + CMB gift sets), FY 2026-27 Order Date sales only. Sold Qty and Net Revenue use the same rows as Rakhi — Overall Summary, so both sections reconcile exactly.</div>
   <div class="filter-box" style="margin:0 0 14px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
     <div class="fc"><label class="fl">Type</label>
       <select class="fs" id="rkhTypeFilter" onchange="rkhOnTypeFilterChange()">
@@ -13553,10 +13553,11 @@ function exportDiscount(){
 }
 window.loadDiscount = loadDiscount; window.exportDiscount = exportDiscount;
 
-/* ── RAKHI ── SKUs starting with RKH, + CMB (gift set) SKUs whose Stone
-   Details/Remarks mention an RKH SKU. Built client-side from dedicated `rakhi_sales_entries`, loaded from the
-   cossa_orderdate sheet — one row per Order Date transaction. Dispatch Date
-   is not used anywhere in the Rakhi sales calculations. */
+/* ── RAKHI ── Curated RKH + CMB gift-set SKU scope. Built client-side from
+   dedicated `rakhi_sales_entries`, loaded from the cossa_orderdate sheet — one
+   row per Order Date transaction. Dispatch Date is not used anywhere in the
+   Rakhi sales calculations. The same curated row-set feeds the headline and
+   Overall Summary sales/revenue KPIs. */
 let _rakhiRows = [];
 let _rakhiFilteredRows = [];
 /* ── Curated Rakhi SKU whitelist ──
@@ -13743,7 +13744,11 @@ function _rkhIsFy2627(e){
 function _rkhBuildRows(){
   const rows = [];
   (master || []).forEach(item => {
-    if (!item || !_rkhMatchItem(item)) return;
+    // One authoritative Rakhi sales scope for the whole tab: the curated SKU
+    // list supplied for Rakhi reporting. Previously this main table used the
+    // broader RKH/CMB pattern-match while Overall Summary used the curated list,
+    // so Sold Qty and Net Revenue could disagree on the same screen.
+    if (!item || !_rkhInWhitelist(item.sku)) return;
     const entries = Array.isArray(item.rakhi_sales_entries) ? item.rakhi_sales_entries : [];
     entries.forEach(e => {
       if (!_rkhIsFy2627(e)) return;
@@ -14011,7 +14016,10 @@ function _rkhWebsitePaymentStatsForSkus(rawSkus){
   return {cod,prepaid,total,codPct,prepaidPct};
 }
 function _rkhBuildOverallSummary(){
-  const wlRows = (_rakhiRows || []).filter(r => _rkhInWhitelist(r.sku));
+  // renderRakhi() always prepares _rakhiFilteredRows first. Use that exact
+  // active row-set here as well, so Type/global CN filters and the headline
+  // Rakhi cards, Overall Summary Sold Qty and Net Revenue all reconcile.
+  const wlRows = (_rakhiFilteredRows || []).filter(r => _rkhInWhitelist(r.sku));
 
   // Overall Rakhi Stock/WIP inventory rule:
   // 1) Standalone RKH SKU -> use its own inventory.
