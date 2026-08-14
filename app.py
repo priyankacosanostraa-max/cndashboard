@@ -3162,7 +3162,11 @@ def _refresh_data():
         it["combo_details"] = []
         if not combo or not combo.strip():
             continue
-        seen = set()
+        # Keep one child object per exact SKU, but preserve how many pieces of
+        # that child are required in ONE parent CMB. The same child SKU can
+        # legitimately appear more than once in Stone Details. Older logic
+        # deduped those repeats and silently treated 2x/3x child usage as 1x.
+        seen = {}
         for tok in _sku_re.findall(combo):
             key = tok.strip().upper().replace(" ", "")
             # normalize: "BH 1225" -> "BH-1225" agar map me dash-version ho
@@ -3173,12 +3177,13 @@ def _refresh_data():
                 if mm:
                     cand = mm.group(1) + "-" + mm.group(2)
             if cand in seen:
+                seen[cand]["component_qty"] = int(seen[cand].get("component_qty") or 1) + 1
                 continue
-            seen.add(cand)
             info = _stock_map.get(cand)
             ci = _item_map.get(cand)   # combo SKU ka full item (saari details ke liye)
-            it["combo_details"].append({
+            child_rec = {
                 "sku": cand,
+                "component_qty": 1,
                 "sku_name": (ci.get("sku_name") if ci else ""),
                 "cn_name": (ci.get("cn_name") if ci else ""),
                 "religion_class": (ci.get("religion_class") if ci else "Unclassified"),
@@ -3204,7 +3209,9 @@ def _refresh_data():
                 "taxon":    (ci.get("taxon") if ci else ""),
                 "plating":  (ci.get("plating") if ci else ""),
                 "found":     info is not None,
-            })
+            }
+            seen[cand] = child_rec
+            it["combo_details"].append(child_rec)
 
     # ── PHYSICAL SKU DEMAND ROLL-UP (Individual + In CMBs) ──
     # A child SKU consumes one inventory unit whenever a unique parent CMB is
@@ -7973,7 +7980,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusExcel()">Export Excel</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Only RKH child SKUs used inside the curated Rakhi CMBs are shown. Individual Sold is that child SKU's own FY 2026-27 Final Qty. In CMBs Sold adds the FY 2026-27 Final Qty of every unique Rakhi parent CMB containing that child, once per parent. Total Sold Qty = Individual Sold + In CMBs Sold. Example: child sold 1,800 individually and its 3 parent CMBs sold 500 in total, so Total Sold Qty = 2,300. The Rakhi Type filter applies to all three quantities.</div>
+  <div class="small-note" style="margin:6px 0 14px">Only RKH child SKUs used inside the curated Rakhi CMBs are shown. Individual Sold is that child SKU's own FY 2026-27 Final Qty. In CMBs Sold = each parent CMB's sold qty × that child's pieces required in one CMB, so the same child used 2x/3x inside one CMB is consumed 2x/3x. Total Sold Qty = Individual Sold + In CMBs Sold. Export Excel creates Sheet 1 = Child SKU Sales and Sheet 2 = CMB Wise Sales. The Rakhi Type filter applies to both sheets.</div>
   <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:26px"></div>
 
   <div class="insights-head">
@@ -15027,10 +15034,63 @@ window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = e
 /* ── RAKHI CHILD SKU → INDIVIDUAL + CMB SOLD QTY ──
    One row = one RKH child SKU used by at least one curated Rakhi CMB.
    Individual Sold = this child SKU's own FY 2026-27 Final Qty.
-   In CMBs Sold = every UNIQUE curated parent CMB's FY 2026-27 Final Qty,
-   counted once for this child even if the child is duplicated inside that CMB.
+   In CMBs Sold = SUM(parent CMB sold qty × child pieces required per CMB).
+   IMPORTANT: the same child may legitimately be used 2x/3x in ONE CMB.
    Total Sold Qty = Individual Sold + In CMBs Sold. */
 let _rakhiCommonSkuRows = [];
+let _rakhiCommonCmbRows = [];
+
+function _rkhComboChildQtyPerCmb(parent, childSku){
+  const target = String(childSku || '').trim().toUpperCase();
+  if (!target) return 0;
+
+  // First trust the raw Stone Details / combo text because it preserves repeated
+  // occurrences that older combo_details snapshots used to dedupe. We also
+  // understand common explicit quantity notations such as "RKH-0077 x 2",
+  // "2 x RKH-0077", "RKH-0077 (2 pcs)" and repeated literal SKU entries.
+  const raw = String((parent && (parent.combo_skus || parent.gift_set_stone_details)) || '').toUpperCase();
+  if (raw) {
+    const escaped = target
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/[-_\s]+/g, '[-_\\s]*');
+    let re = null;
+    try {
+      // Do not match the target as a prefix of another alphanumeric/SKU variant.
+      re = new RegExp('(^|[^A-Z0-9])(' + escaped + ')(?![A-Z0-9_\\-(])', 'g');
+    } catch (_e) {}
+    if (re) {
+      let total = 0, m;
+      while ((m = re.exec(raw)) !== null) {
+        const skuStart = m.index + String(m[1] || '').length;
+        const before = raw.slice(Math.max(0, skuStart - 18), skuStart);
+        const after = raw.slice(re.lastIndex, re.lastIndex + 30);
+        const beforeQty = before.match(/(\d+)\s*[X×*]\s*$/i);
+        const afterQty = after.match(/^\s*(?:[X×*]\s*(\d+)|(?:QTY|QUANTITY)\s*[:=\-]?\s*(\d+)|(\d+)\s*(?:PCS?|PIECES?|UNITS?)|\(\s*(\d+)\s*(?:PCS?|PIECES?|UNITS?)?\s*\))/i);
+        const q = Math.max(1, parseInt(
+          (afterQty && (afterQty[1] || afterQty[2] || afterQty[3] || afterQty[4])) ||
+          (beforeQty && beforeQty[1]) || 1,
+          10
+        ) || 1);
+        total += q;
+        if (re.lastIndex === m.index) re.lastIndex += 1;
+      }
+      if (total > 0) return total;
+    }
+  }
+
+  // Fallback to the parsed combo_details. New server data includes component_qty
+  // on each exact child record; old cached data still safely falls back to 1.
+  const targetCompact = target.replace(/[^A-Z0-9]/g, '');
+  const details = Array.isArray(parent && parent.combo_details) ? parent.combo_details : [];
+  let fallback = 0;
+  details.forEach(child => {
+    const sku = String((child && child.sku) || '').trim().toUpperCase();
+    if (!sku || sku.replace(/[^A-Z0-9]/g, '') !== targetCompact) return;
+    fallback += Math.max(1, Math.round(Number(child && child.component_qty) || 1));
+  });
+  return Math.max(1, fallback || 1);
+}
+
 function _rkhBuildCommonSkus(){
   const childMap = new Map();
   const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
@@ -15056,8 +15116,8 @@ function _rkhBuildCommonSkus(){
     d2: '2027-03-31'
   };
 
-  // Build child -> unique curated Rakhi parent mapping. Only RKH-coded children
-  // belong here. A duplicate child code inside one parent is deliberately one use.
+  // Build child -> curated Rakhi parent mapping. combo_details itself stays one
+  // row per exact child SKU, while pieces_per_cmb preserves repeated usage.
   (master || []).forEach(parent => {
     const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
     if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku) || !_rkhComboHasRakhi(parent)) return;
@@ -15080,7 +15140,6 @@ function _rkhBuildCommonSkus(){
           individual_sold: individualSold,
           in_cmb_sold: 0,
           total_sold: individualSold,
-          // Keep the old property for backward compatibility with any cached UI.
           total_cmb_sold: 0,
           parents: []
         };
@@ -15089,25 +15148,67 @@ function _rkhBuildCommonSkus(){
       if (!rec.sku_name && (childItem.sku_name || child.sku_name)) rec.sku_name = childItem.sku_name || child.sku_name || '';
       if (!rec.image_url && (childItem.image_url || child.image_url)) rec.image_url = childItem.image_url || child.image_url || '';
 
-      // Parent is visited once and this child is deduped within that parent, so
-      // the parent's Final Qty contributes exactly once to this child's CMB demand.
-      const qty = Number(parentSold.get(parentSku)) || 0;
-      rec.in_cmb_sold += qty;
+      const cmbSoldQty = Number(parentSold.get(parentSku)) || 0;
+      const piecesPerCmb = Math.max(1, Math.round(_rkhComboChildQtyPerCmb(parent, childSku) || 1));
+      const childQtyViaThisCmb = cmbSoldQty * piecesPerCmb;
+      rec.in_cmb_sold += childQtyViaThisCmb;
       rec.total_cmb_sold = rec.in_cmb_sold;
       rec.total_sold = rec.individual_sold + rec.in_cmb_sold;
-      rec.parents.push({sku: parentSku, sku_name: parent.sku_name || '', sold: qty});
+      rec.parents.push({
+        sku: parentSku,
+        sku_name: parent.sku_name || '',
+        sold: cmbSoldQty,
+        pieces_per_cmb: piecesPerCmb,
+        child_sold: childQtyViaThisCmb
+      });
     });
   });
 
   return Array.from(childMap.values()).map(rec => {
     rec.parents.sort((a,b)=>a.sku.localeCompare(b.sku));
-    // Recompute, rather than trusting incremental state, so refresh/export always
-    // reconcile exactly even if this function is reused after filter changes.
     rec.total_cmb_sold = Number(rec.in_cmb_sold) || 0;
     rec.total_sold = (Number(rec.individual_sold) || 0) + (Number(rec.in_cmb_sold) || 0);
     return rec;
   }).sort((a,b) => (b.total_sold - a.total_sold) || (b.in_cmb_sold - a.in_cmb_sold) || (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
+
+function _rkhBuildCommonCmbRows(childRows){
+  const byParent = new Map();
+  (childRows || []).forEach(child => {
+    (child.parents || []).forEach(p => {
+      const key = String(p.sku || '').trim().toUpperCase();
+      if (!key) return;
+      let rec = byParent.get(key);
+      if (!rec) {
+        rec = {
+          sku: key,
+          sku_name: p.sku_name || '',
+          cmb_sold: Number(p.sold) || 0,
+          children: []
+        };
+        byParent.set(key, rec);
+      }
+      const pieces = Math.max(1, Math.round(Number(p.pieces_per_cmb) || 1));
+      rec.children.push({
+        sku: child.sku || '',
+        sku_name: child.sku_name || '',
+        pieces_per_cmb: pieces,
+        child_units_sold: (Number(rec.cmb_sold) || 0) * pieces
+      });
+    });
+  });
+
+  return Array.from(byParent.values()).map(rec => {
+    rec.children.sort((a,b)=>String(a.sku).localeCompare(String(b.sku)));
+    rec.distinct_child_skus = rec.children.length;
+    rec.child_pieces_per_cmb = rec.children.reduce((s,c)=>s+(Number(c.pieces_per_cmb)||0),0);
+    rec.child_units_sold = rec.children.reduce((s,c)=>s+(Number(c.child_units_sold)||0),0);
+    rec.child_composition = rec.children.map(c => `${c.sku} x ${c.pieces_per_cmb}`).join(' | ');
+    rec.child_sales_breakdown = rec.children.map(c => `${c.sku}: ${Number(rec.cmb_sold)||0} x ${c.pieces_per_cmb} = ${Number(c.child_units_sold)||0}`).join(' | ');
+    return rec;
+  }).sort((a,b)=>(b.cmb_sold-a.cmb_sold)||a.sku.localeCompare(b.sku));
+}
+
 function renderRakhiCommonSkus(){
   const host = document.getElementById('rakhiCommonSkuContent');
   if (!host) return;
@@ -15117,6 +15218,7 @@ function renderRakhiCommonSkus(){
   }
   const list = _rkhBuildCommonSkus();
   _rakhiCommonSkuRows = list;
+  _rakhiCommonCmbRows = _rkhBuildCommonCmbRows(list);
   if (!list.length){
     host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is mapped inside a curated Rakhi CMB.</div>';
     return;
@@ -15132,7 +15234,9 @@ function renderRakhiCommonSkus(){
       : `<span class="rkh-common-photo-ph" style="display:flex">💎</span>`;
     const parents = r.parents.map(p => {
       const pEsc = String(p.sku).replace(/'/g, "\\'");
-      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuCodeWithFlag(p.sku))}</button>`;
+      const mult = Math.max(1, Math.round(Number(p.pieces_per_cmb) || 1));
+      const multLabel = mult > 1 ? ` <b style="color:#9a6500">×${mult}</b>` : '';
+      return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuCodeWithFlag(p.sku))}</button>${multLabel}`;
     }).join(', ');
     const childLabel = skuLabel(r.sku, r.sku_name || '');
     return `<tr>
@@ -15147,18 +15251,20 @@ function renderRakhiCommonSkus(){
   }).join('');
   const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
   const scopeText = rt === 'All' ? 'All Types' : rt;
-  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · Individual <b>${Math.round(totalIndividual).toLocaleString('en-IN')}</b> · In CMBs <b>${Math.round(totalInCmb).toLocaleString('en-IN')}</b> · Total Sold <b>${Math.round(totalSold).toLocaleString('en-IN')}</b> · ${escHtml(scopeText)} · FY 2026-27</div>
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · Individual <b>${Math.round(totalIndividual).toLocaleString('en-IN')}</b> · In CMBs <b>${Math.round(totalInCmb).toLocaleString('en-IN')}</b> · Total Sold <b>${Math.round(totalSold).toLocaleString('en-IN')}</b> · ${_rakhiCommonCmbRows.length.toLocaleString('en-IN')} CMBs · ${escHtml(scopeText)} · FY 2026-27</div>
     <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:1180px;border-collapse:collapse">
-      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Used In Rakhi CMBs</th><th>Parent Rakhi CMB SKUs</th></tr></thead>
+      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Used In Rakhi CMBs</th><th>Parent Rakhi CMB SKUs (× pieces/CMB)</th></tr></thead>
       <tbody>${rows}</tbody>
       <tfoot><tr><th colspan="2" style="text-align:right">TOTAL</th><th class="rkh-metric">${Math.round(totalIndividual).toLocaleString('en-IN')}</th><th class="rkh-metric">${Math.round(totalInCmb).toLocaleString('en-IN')}</th><th class="rkh-metric"><b>${Math.round(totalSold).toLocaleString('en-IN')}</b></th><th colspan="2"></th></tr></tfoot>
     </table>`;
 }
+
 async function exportRakhiCommonSkusExcel(){
-  // Always rebuild at click-time so an Excel export can never carry a stale
-  // pre-filter/pre-refresh quantity from _rakhiCommonSkuRows.
+  // Rebuild at click-time so both sheets use the exact same fresh FY/type scope.
   const list = _rkhBuildCommonSkus();
+  const cmbRows = _rkhBuildCommonCmbRows(list);
   _rakhiCommonSkuRows = list;
+  _rakhiCommonCmbRows = cmbRows;
   if (!list.length){ alert('No Rakhi child SKU sales data to export.'); return; }
   const type = document.getElementById('rkhTypeFilter')?.value || 'All';
   const rows = list.map(r => ({
@@ -15169,15 +15275,26 @@ async function exportRakhiCommonSkusExcel(){
     total_sold: (Number(r.individual_sold) || 0) + (Number(r.in_cmb_sold) || 0),
     total_cmb_sold: Number(r.in_cmb_sold) || 0,
     cmb_count: Array.isArray(r.parents) ? r.parents.length : 0,
-    parent_cmbs: (r.parents || []).map(p => p.sku).join(', '),
+    parent_cmbs: (r.parents || []).map(p => `${p.sku}${(Number(p.pieces_per_cmb)||1)>1 ? ` x${Math.round(Number(p.pieces_per_cmb)||1)}` : ''}`).join(', '),
+    parent_cmb_breakdown: (r.parents || []).map(p => `${p.sku}: ${Number(p.sold)||0} x ${Math.max(1,Math.round(Number(p.pieces_per_cmb)||1))} = ${Number(p.child_sold)||0}`).join(' | '),
     image_url: r.image_url || ''
+  }));
+  const cmb_rows = cmbRows.map(r => ({
+    sku: r.sku || '',
+    sku_name: r.sku_name || '',
+    cmb_sold: Number(r.cmb_sold) || 0,
+    children: (r.children || []).map(c => ({
+      sku: c.sku || '',
+      sku_name: c.sku_name || '',
+      pieces_per_cmb: Math.max(1, Math.round(Number(c.pieces_per_cmb) || 1))
+    }))
   }));
   try{
     const res = await fetch('/api/rakhi-child-cmb-sales/export.xlsx', {
       method: 'POST',
       credentials: 'same-origin',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({type, rows})
+      body: JSON.stringify({type, rows, cmb_rows})
     });
     if (!res.ok){
       let msg = 'Excel export failed';
@@ -15189,7 +15306,7 @@ async function exportRakhiCommonSkusExcel(){
     const url = URL.createObjectURL(blob);
     const today = String(todayISO || new Date().toISOString().slice(0,10));
     a.href = url;
-    a.download = `rakhi_child_sku_total_sales_${today}.xlsx`;
+    a.download = `rakhi_child_sku_and_cmb_sales_${today}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -24995,7 +25112,7 @@ def api_rakhi_cities():
 
 @app.route("/api/rakhi-child-cmb-sales/export.xlsx", methods=["POST"])
 def api_rakhi_child_cmb_sales_export_xlsx():
-    """Export the exact Rakhi child sold-quantity table currently shown."""
+    """Export Rakhi child sales in Sheet 1 and CMB-wise sales in Sheet 2."""
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
@@ -25005,9 +25122,10 @@ def api_rakhi_child_cmb_sales_export_xlsx():
 
         payload = request.get_json(silent=True) or {}
         raw_rows = payload.get("rows") or []
-        if not isinstance(raw_rows, list):
+        raw_cmb_rows = payload.get("cmb_rows") or []
+        if not isinstance(raw_rows, list) or not isinstance(raw_cmb_rows, list):
             return jsonify({"error": "invalid export rows"}), 400
-        if len(raw_rows) > 5000:
+        if len(raw_rows) > 5000 or len(raw_cmb_rows) > 5000:
             return jsonify({"error": "too many export rows"}), 400
         type_label = str(payload.get("type") or "All").strip() or "All"
 
@@ -25018,25 +25136,107 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                 text = "'" + text
             return text
 
-        # Recompute Total Sold server-side from its two auditable components.
-        # Never trust a client-provided grand total that could be stale.
+        # -------------------------
+        # Sheet 2 source of truth
+        # -------------------------
+        # Recompute every child-via-CMB quantity from:
+        # CMB sold qty × pieces of that exact child required in one CMB.
+        # This is what fixes 2x/3x use of the same child inside one parent CMB.
+        cmb_rows = []
+        cmb_child_totals = {}
+        child_parent_labels = {}
+        child_parent_breakdowns = {}
+        for raw in raw_cmb_rows:
+            if not isinstance(raw, dict):
+                continue
+            cmb_sku = clean(raw.get("sku", "")).upper()
+            if not cmb_sku:
+                continue
+            cmb_sold = to_num(raw.get("cmb_sold", 0))
+            raw_children = raw.get("children") or []
+            if not isinstance(raw_children, list):
+                raw_children = []
+
+            children = []
+            seen_child = set()
+            for child in raw_children:
+                if not isinstance(child, dict):
+                    continue
+                child_sku = clean(child.get("sku", "")).upper()
+                if not child_sku or child_sku in seen_child:
+                    continue
+                seen_child.add(child_sku)
+                pieces = max(1, int(round(to_num(child.get("pieces_per_cmb", 1)) or 1)))
+                child_units_sold = cmb_sold * pieces
+                child_name = clean(child.get("sku_name", ""))
+                children.append({
+                    "sku": child_sku,
+                    "sku_name": child_name,
+                    "pieces_per_cmb": pieces,
+                    "child_units_sold": child_units_sold,
+                })
+                cmb_child_totals[child_sku] = cmb_child_totals.get(child_sku, 0.0) + child_units_sold
+                child_parent_labels.setdefault(child_sku, []).append(
+                    f"{cmb_sku} x{pieces}" if pieces > 1 else cmb_sku
+                )
+                child_parent_breakdowns.setdefault(child_sku, []).append(
+                    f"{cmb_sku}: {cmb_sold:g} x {pieces} = {child_units_sold:g}"
+                )
+
+            children.sort(key=lambda x: x["sku"])
+            child_pieces_per_cmb = sum(int(c["pieces_per_cmb"]) for c in children)
+            child_units_total = sum(float(c["child_units_sold"]) for c in children)
+            cmb_rows.append({
+                "sku": cmb_sku,
+                "sku_name": clean(raw.get("sku_name", "")),
+                "cmb_sold": cmb_sold,
+                "distinct_child_skus": len(children),
+                "child_pieces_per_cmb": child_pieces_per_cmb,
+                "child_units_sold": child_units_total,
+                "child_composition": " | ".join(
+                    f'{c["sku"]} x {c["pieces_per_cmb"]}' for c in children
+                ),
+                "child_sales_breakdown": " | ".join(
+                    f'{c["sku"]}: {cmb_sold:g} x {c["pieces_per_cmb"]} = {c["child_units_sold"]:g}'
+                    for c in children
+                ),
+            })
+
+        cmb_rows.sort(key=lambda x: (-float(x["cmb_sold"]), x["sku"]))
+
+        # -------------------------
+        # Sheet 1 child SKU sales
+        # -------------------------
         rows = []
         for raw in raw_rows:
             if not isinstance(raw, dict):
                 continue
-            sku = clean(raw.get("sku", ""))
+            sku = clean(raw.get("sku", "")).upper()
             if not sku:
                 continue
             individual = to_num(raw.get("individual_sold", 0))
-            in_cmb = to_num(raw.get("in_cmb_sold", raw.get("total_cmb_sold", 0)))
+            # When Sheet 2 details are present, derive In CMBs Sold only from
+            # the server-recomputed CMB breakdown so both sheets reconcile.
+            if raw_cmb_rows:
+                in_cmb = to_num(cmb_child_totals.get(sku, 0))
+                parent_labels = ", ".join(child_parent_labels.get(sku, []))
+                parent_breakdown = " | ".join(child_parent_breakdowns.get(sku, []))
+                cmb_count = len(child_parent_labels.get(sku, []))
+            else:
+                # Backward compatibility for an older cached browser client.
+                in_cmb = to_num(raw.get("in_cmb_sold", raw.get("total_cmb_sold", 0)))
+                parent_labels = clean(raw.get("parent_cmbs", ""))
+                parent_breakdown = clean(raw.get("parent_cmb_breakdown", ""))
+                cmb_count = max(0, int(to_num(raw.get("cmb_count", 0))))
             rows.append({
                 "sku": sku,
                 "sku_name": clean(raw.get("sku_name", "")),
                 "individual_sold": individual,
                 "in_cmb_sold": in_cmb,
                 "total_sold": individual + in_cmb,
-                "cmb_count": max(0, int(to_num(raw.get("cmb_count", 0)))),
-                "parent_cmbs": clean(raw.get("parent_cmbs", "")),
+                "cmb_count": cmb_count,
+                "parent_cmbs": parent_labels,
+                "parent_cmb_breakdown": parent_breakdown,
                 "image_url": clean(raw.get("image_url", "")),
             })
 
@@ -25045,11 +25245,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Rakhi Child Sales"
-        headers = [
-            "Child Rakhi SKU", "SKU Name", "Individual Sold", "In CMBs Sold",
-            "Total Sold Qty", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs", "Image Link"
-        ]
+        ws.title = "Child SKU Sales"
 
         title_fill = PatternFill("solid", fgColor="F5E8BE")
         header_fill = PatternFill("solid", fgColor="E6C766")
@@ -25060,21 +25256,33 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-        title = ws.cell(1, 1, f"Rakhi Child SKU Sold Qty | Type: {type_label} | FY 2026-27")
-        title.font = Font(bold=True, size=12, color="2B2110")
-        title.fill = title_fill
-        title.alignment = center
-        for col in range(1, len(headers) + 1):
-            ws.cell(1, col).fill = title_fill
-            ws.cell(1, col).border = border
+        def _style_title_and_headers(sheet, title_text, headers):
+            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+            title = sheet.cell(1, 1, title_text)
+            title.font = Font(bold=True, size=12, color="2B2110")
+            title.fill = title_fill
+            title.alignment = center
+            for col in range(1, len(headers) + 1):
+                sheet.cell(1, col).fill = title_fill
+                sheet.cell(1, col).border = border
+            for col, header in enumerate(headers, 1):
+                cell = sheet.cell(2, col, header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = center
+                cell.border = border
 
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(2, col, header)
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = center
-            cell.border = border
+        # ===== Sheet 1: Child SKU Sales =====
+        child_headers = [
+            "Child Rakhi SKU", "SKU Name", "Individual Sold", "In CMBs Sold",
+            "Total Sold Qty", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs (x pieces/CMB)",
+            "CMB Sales Breakdown", "Image Link"
+        ]
+        _style_title_and_headers(
+            ws,
+            f"Rakhi Child SKU Sales | Type: {type_label} | FY 2026-27",
+            child_headers,
+        )
 
         for r_idx, row in enumerate(rows, 3):
             values = [
@@ -25085,6 +25293,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                 float(row["total_sold"]),
                 int(row["cmb_count"]),
                 _safe_excel_text(row["parent_cmbs"]),
+                _safe_excel_text(row["parent_cmb_breakdown"]),
                 _safe_excel_text(row["image_url"]),
             ]
             for col, value in enumerate(values, 1):
@@ -25095,14 +25304,14 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                     cell.number_format = '#,##0.##'
             image_url = str(row["image_url"] or "").strip()
             if image_url.lower().startswith(("http://", "https://")):
-                cell = ws.cell(r_idx, 8)
+                cell = ws.cell(r_idx, 9)
                 cell.hyperlink = image_url
                 cell.style = "Hyperlink"
 
-        data_last_row = ws.max_row
-        total_row = data_last_row + 2
-        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=2)
-        label = ws.cell(total_row, 1, "TOTAL SOLD QTY")
+        child_data_last_row = ws.max_row
+        child_total_row = child_data_last_row + 2
+        ws.merge_cells(start_row=child_total_row, start_column=1, end_row=child_total_row, end_column=2)
+        label = ws.cell(child_total_row, 1, "TOTAL SOLD QTY")
         label.font = Font(bold=True)
         label.fill = total_fill
         label.alignment = center
@@ -25110,28 +25319,87 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         total_in_cmb = sum(float(r["in_cmb_sold"]) for r in rows)
         total_sold = total_individual + total_in_cmb
         for col, value in ((3, total_individual), (4, total_in_cmb), (5, total_sold)):
-            cell = ws.cell(total_row, col, value)
+            cell = ws.cell(child_total_row, col, value)
             cell.font = Font(bold=True)
             cell.fill = total_fill
             cell.alignment = center
             cell.number_format = '#,##0.##'
-        for col in range(1, len(headers) + 1):
-            ws.cell(total_row, col).border = border
+        for col in range(1, len(child_headers) + 1):
+            ws.cell(child_total_row, col).border = border
             if col not in (1, 3, 4, 5):
-                ws.cell(total_row, col).fill = total_fill
+                ws.cell(child_total_row, col).fill = total_fill
 
         ws.freeze_panes = "A3"
-        ws.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{max(2, data_last_row)}"
-        widths = [22, 34, 17, 17, 18, 20, 55, 55]
-        for i, width in enumerate(widths, 1):
+        ws.auto_filter.ref = f"A2:{get_column_letter(len(child_headers))}{max(2, child_data_last_row)}"
+        child_widths = [22, 34, 17, 17, 18, 20, 48, 70, 55]
+        for i, width in enumerate(child_widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = width
         ws.row_dimensions[1].height = 26
-        ws.row_dimensions[2].height = 30
+        ws.row_dimensions[2].height = 32
+
+        # ===== Sheet 2: CMB Wise Sales =====
+        ws2 = wb.create_sheet("CMB Wise Sales")
+        cmb_headers = [
+            "Rakhi CMB SKU", "CMB Name", "CMB Sold Qty", "Distinct Rakhi Child SKUs",
+            "Rakhi Child Pieces / CMB", "Rakhi Child Units Sold via CMB",
+            "Rakhi Child Composition", "Child Consumption Breakdown"
+        ]
+        _style_title_and_headers(
+            ws2,
+            f"Rakhi CMB Wise Sales | Type: {type_label} | FY 2026-27",
+            cmb_headers,
+        )
+
+        for r_idx, row in enumerate(cmb_rows, 3):
+            values = [
+                _safe_excel_text(row["sku"]),
+                _safe_excel_text(row["sku_name"]),
+                float(row["cmb_sold"]),
+                int(row["distinct_child_skus"]),
+                int(row["child_pieces_per_cmb"]),
+                float(row["child_units_sold"]),
+                _safe_excel_text(row["child_composition"]),
+                _safe_excel_text(row["child_sales_breakdown"]),
+            ]
+            for col, value in enumerate(values, 1):
+                cell = ws2.cell(r_idx, col, value)
+                cell.border = border
+                cell.alignment = center if col in (3, 4, 5, 6) else left
+                if col in (3, 4, 5, 6):
+                    cell.number_format = '#,##0.##'
+
+        cmb_data_last_row = ws2.max_row
+        cmb_total_row = cmb_data_last_row + 2
+        ws2.merge_cells(start_row=cmb_total_row, start_column=1, end_row=cmb_total_row, end_column=2)
+        cmb_label = ws2.cell(cmb_total_row, 1, "TOTAL")
+        cmb_label.font = Font(bold=True)
+        cmb_label.fill = total_fill
+        cmb_label.alignment = center
+        total_cmb_sold = sum(float(r["cmb_sold"]) for r in cmb_rows)
+        total_child_units_via_cmb = sum(float(r["child_units_sold"]) for r in cmb_rows)
+        for col, value in ((3, total_cmb_sold), (6, total_child_units_via_cmb)):
+            cell = ws2.cell(cmb_total_row, col, value)
+            cell.font = Font(bold=True)
+            cell.fill = total_fill
+            cell.alignment = center
+            cell.number_format = '#,##0.##'
+        for col in range(1, len(cmb_headers) + 1):
+            ws2.cell(cmb_total_row, col).border = border
+            if col not in (1, 3, 6):
+                ws2.cell(cmb_total_row, col).fill = total_fill
+
+        ws2.freeze_panes = "A3"
+        ws2.auto_filter.ref = f"A2:{get_column_letter(len(cmb_headers))}{max(2, cmb_data_last_row)}"
+        cmb_widths = [22, 36, 16, 22, 23, 28, 70, 80]
+        for i, width in enumerate(cmb_widths, 1):
+            ws2.column_dimensions[get_column_letter(i)].width = width
+        ws2.row_dimensions[1].height = 26
+        ws2.row_dimensions[2].height = 34
 
         bio = io.BytesIO()
         wb.save(bio)
         bio.seek(0)
-        fname = f"rakhi_child_sku_total_sales_{now_ist().strftime('%Y-%m-%d')}.xlsx"
+        fname = f"rakhi_child_sku_and_cmb_sales_{now_ist().strftime('%Y-%m-%d')}.xlsx"
         resp = app.response_class(
             bio.read(),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -25139,7 +25407,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
         return resp
     except Exception as e:
-        return jsonify({"error": f"Rakhi child sales Excel export failed: {e}"}), 500
+        return jsonify({"error": f"Rakhi child/CMB sales Excel export failed: {e}"}), 500
 
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
