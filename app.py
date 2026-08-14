@@ -7973,7 +7973,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusExcel()">Export Excel</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Only Rakhi child SKUs are shown. Total Sold Qty in CMBs adds the FY 2026-27 parent-CMB Final Qty from every unique CMB that contains that child SKU. If the same child is in 3 CMBs and those CMBs sold 500 units in total, this table shows 500. The Rakhi Type filter below applies to this table too.</div>
+  <div class="small-note" style="margin:6px 0 14px">Only RKH child SKUs from the curated Rakhi CMBs on this tab are shown. Total Sold Qty in CMBs is the exact FY 2026-27 Final Qty of those unique parent CMBs added once each. If the same child is in 3 Rakhi CMBs and those parents sold 500 units in total, this table shows exactly 500. The Rakhi Type filter below applies to this table too.</div>
   <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:26px"></div>
 
   <div class="insights-head">
@@ -15024,65 +15024,68 @@ function exportRakhiChannelCSV(){
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
 
-/* ── RAKHI CHILD SKU → TOTAL SOLD QTY ACROSS ALL CMBs ──
-   One row = one Rakhi child SKU only. A parent CMB contributes its own Final Qty
-   once, even if the same child is accidentally repeated inside that CMB. If the
-   child is used in several different CMBs, every unique parent contributes. */
+/* ── RAKHI CHILD SKU → TOTAL SOLD QTY ACROSS RAKHI CMBs ──
+   One row = one RKH child SKU only. Sold Qty is calculated DIRECTLY from the
+   exact same FY 2026-27 Rakhi order rows used by this tab. Each curated parent
+   CMB contributes its Final Qty once for that child, even if the child code is
+   repeated inside the same CMB. Example: three Rakhi CMB parents sold
+   120 + 180 + 200 = 500, so the child shows exactly 500. */
 let _rakhiCommonSkuRows = [];
 function _rkhBuildCommonSkus(){
   const childMap = new Map();
-  const allCmbParentSkus = new Set();
+  const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
 
-  // Discover every Rakhi child that appears inside a CMB. This is intentionally
-  // broader than the curated parent whitelist: "all CMBs" means every CMB in
-  // the current product master can contribute to the child's consumption.
+  // Authoritative parent sales = the SAME Rakhi rows as the main table/summary.
+  // Do not use the generic all-dashboard combo index here: that can pull old or
+  // non-Rakhi CMB parents into a Rakhi-only table and inflate child Sold Qty.
+  const sourceRows = (_rakhiRows && _rakhiRows.length) ? _rakhiRows : _rkhBuildRows();
+  const parentSold = new Map();
+  sourceRows.forEach(r => {
+    const parentSku = String((r && r.sku) || '').trim().toUpperCase();
+    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku)) return;
+    if (rt !== 'All' && String((r && r.type) || '') !== rt) return;
+    parentSold.set(parentSku, (parentSold.get(parentSku) || 0) + (Number(r && r.qty) || 0));
+  });
+
+  // Build child -> unique RAKHI parent CMB mapping. Only RKH-coded child SKUs
+  // belong in this table. A child repeated twice in one parent is still one use.
   (master || []).forEach(parent => {
     const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
-    if (!_rkhIsComboSku(parentSku)) return;
-    allCmbParentSkus.add(parentSku);
-    _rkhStrictRakhiChildDetails(parent).forEach(child => {
+    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku)) return;
+
+    const seenChildren = new Set();
+    (Array.isArray(parent && parent.combo_details) ? parent.combo_details : []).forEach(child => {
       const childSku = String((child && child.sku) || '').trim().toUpperCase();
-      if (!childSku) return;
+      if (!childSku || !_rkhIsRakhiSku(childSku) || seenChildren.has(childSku)) return;
+      seenChildren.add(childSku);
+
       const compactChildSku = childSku.replace(/[^A-Z0-9]/g, '');
       const childItem = _masterSkuMap[childSku] || _bulkSkuLookup[compactChildSku] || {};
-      const current = childMap.get(childSku) || {
-        sku: childSku,
-        sku_name: childItem.sku_name || child.sku_name || '',
-        image_url: childItem.image_url || child.image_url || ''
-      };
-      if (!current.sku_name && (childItem.sku_name || child.sku_name)) current.sku_name = childItem.sku_name || child.sku_name || '';
-      if (!current.image_url && (childItem.image_url || child.image_url)) current.image_url = childItem.image_url || child.image_url || '';
-      childMap.set(childSku, current);
+      let rec = childMap.get(childSku);
+      if (!rec) {
+        rec = {
+          sku: childSku,
+          sku_name: childItem.sku_name || child.sku_name || '',
+          image_url: childItem.image_url || child.image_url || '',
+          total_cmb_sold: 0,
+          parents: []
+        };
+        childMap.set(childSku, rec);
+      }
+      if (!rec.sku_name && (childItem.sku_name || child.sku_name)) rec.sku_name = childItem.sku_name || child.sku_name || '';
+      if (!rec.image_url && (childItem.image_url || child.image_url)) rec.image_url = childItem.image_url || child.image_url || '';
+
+      // This parent is visited once and this child is deduped within the parent,
+      // therefore its Final Qty is added exactly once to the child total.
+      const qty = Number(parentSold.get(parentSku)) || 0;
+      rec.total_cmb_sold += qty;
+      rec.parents.push({sku: parentSku, sku_name: parent.sku_name || '', sold: qty});
     });
   });
 
-  const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
-  // Date bounds are used instead of relying only on the FY text tag so rows with
-  // a blank FY cell but a valid FY 2026-27 Order Date are not silently dropped.
-  const saleCtx = {
-    sourceField: 'rakhi_sales_entries',
-    types: rt && rt !== 'All' ? [rt] : [],
-    d1: '2026-04-01',
-    d2: '2027-03-31'
-  };
-
   return Array.from(childMap.values()).map(rec => {
-    const childItem = _masterSkuMap[rec.sku] || _roExactSkuLookup[rec.sku.replace(/[^A-Z0-9]/g, '')] || {sku: rec.sku};
-    const split = cnxSoldSplit(childItem, saleCtx, {allowedParentSkus: allCmbParentSkus});
-    const parentSeen = new Set();
-    const parents = [];
-    (split.parents || []).forEach(parent => {
-      const sku = String((parent && parent.sku) || '').trim().toUpperCase();
-      if (!sku || !_rkhIsComboSku(sku) || parentSeen.has(sku)) return;
-      parentSeen.add(sku);
-      parents.push({sku, sku_name: parent.sku_name || ''});
-    });
-    parents.sort((a,b)=>a.sku.localeCompare(b.sku));
-    return {
-      ...rec,
-      total_cmb_sold: Number(split && split.inCmb && split.inCmb.sold) || 0,
-      parents
-    };
+    rec.parents.sort((a,b)=>a.sku.localeCompare(b.sku));
+    return rec;
   }).sort((a,b) => (b.total_cmb_sold - a.total_cmb_sold) || (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
 function renderRakhiCommonSkus(){
