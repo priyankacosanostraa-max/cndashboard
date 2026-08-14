@@ -4322,9 +4322,10 @@ table.rkh-grid thead th{border-bottom:1px solid rgba(212,175,90,.35)}
   box-sizing:border-box;font-size:30px;color:#c0ad76;box-shadow:0 3px 10px rgba(15,23,42,.08)
 }
 #vRakhi .rkh-common-summary th:nth-child(1),#vRakhi .rkh-common-summary td:nth-child(1){min-width:118px;max-width:118px}
-#vRakhi .rkh-common-summary th:nth-child(2),#vRakhi .rkh-common-summary td:nth-child(2){min-width:150px;max-width:190px}
-#vRakhi .rkh-common-summary th:nth-child(3),#vRakhi .rkh-common-summary td:nth-child(3){min-width:110px;max-width:130px}
-#vRakhi .rkh-common-summary th:nth-child(4),#vRakhi .rkh-common-summary td:nth-child(4){min-width:300px;max-width:none}
+#vRakhi .rkh-common-summary th:nth-child(2),#vRakhi .rkh-common-summary td:nth-child(2){min-width:180px;max-width:240px}
+#vRakhi .rkh-common-summary th:nth-child(3),#vRakhi .rkh-common-summary td:nth-child(3){min-width:150px;max-width:180px}
+#vRakhi .rkh-common-summary th:nth-child(4),#vRakhi .rkh-common-summary td:nth-child(4){min-width:110px;max-width:140px}
+#vRakhi .rkh-common-summary th:nth-child(5),#vRakhi .rkh-common-summary td:nth-child(5){min-width:300px;max-width:none}
 @media (max-width:700px){
   #vRakhi table.ro td img{
     width:84px !important;
@@ -7965,14 +7966,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:8px">
     <div>
-      <div class="insights-title">Rakhi — Common Child SKU Summary</div>
+      <div class="insights-title">Rakhi — Child SKU Total Sold in CMBs</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusCSV()">Export CSV</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusExcel()">Export Excel</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Only Rakhi child SKUs used in more than one CMB (combo) are shown, with the number and names of those CMB SKUs.</div>
+  <div class="small-note" style="margin:6px 0 14px">Only Rakhi child SKUs are shown. Total Sold Qty in CMBs adds the FY 2026-27 parent-CMB Final Qty from every unique CMB that contains that child SKU. If the same child is in 3 CMBs and those CMBs sold 500 units in total, this table shows 500. The Rakhi Type filter below applies to this table too.</div>
   <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:26px"></div>
 
   <div class="insights-head">
@@ -14802,6 +14803,7 @@ function rkhOnTypeFilterChange(){
   renderRakhiOverallSummary();
   renderRakhiPackSummary();
   renderRakhiPivot();
+  renderRakhiCommonSkus();
   renderRakhiTopSkus();
   renderRakhiSlowMovers();
   renderRakhiReturns();
@@ -15022,36 +15024,66 @@ function exportRakhiChannelCSV(){
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
 
-/* ── RAKHI CHILD SKU → CURATED CMB MAPPING (CENTRAL TABLE) ── */
+/* ── RAKHI CHILD SKU → TOTAL SOLD QTY ACROSS ALL CMBs ──
+   One row = one Rakhi child SKU only. A parent CMB contributes its own Final Qty
+   once, even if the same child is accidentally repeated inside that CMB. If the
+   child is used in several different CMBs, every unique parent contributes. */
 let _rakhiCommonSkuRows = [];
 function _rkhBuildCommonSkus(){
-  const map = {};
+  const childMap = new Map();
+  const allCmbParentSkus = new Set();
+
+  // Discover every Rakhi child that appears inside a CMB. This is intentionally
+  // broader than the curated parent whitelist: "all CMBs" means every CMB in
+  // the current product master can contribute to the child's consumption.
   (master || []).forEach(parent => {
     const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
-    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku) || !_rkhComboHasRakhi(parent)) return;
+    if (!_rkhIsComboSku(parentSku)) return;
+    allCmbParentSkus.add(parentSku);
     _rkhStrictRakhiChildDetails(parent).forEach(child => {
       const childSku = String((child && child.sku) || '').trim().toUpperCase();
       if (!childSku) return;
       const compactChildSku = childSku.replace(/[^A-Z0-9]/g, '');
       const childItem = _masterSkuMap[childSku] || _bulkSkuLookup[compactChildSku] || {};
-      if (!map[childSku]){
-        map[childSku] = {
-          sku: childSku,
-          sku_name: childItem.sku_name || child.sku_name || '',
-          image_url: childItem.image_url || child.image_url || '',
-          parents: []
-        };
-      } else if (!map[childSku].image_url && (childItem.image_url || child.image_url)) {
-        map[childSku].image_url = childItem.image_url || child.image_url || '';
-      }
-      if (!map[childSku].parents.some(p => p.sku === parentSku)){
-        map[childSku].parents.push({sku: parentSku, sku_name: parent.sku_name || ''});
-      }
+      const current = childMap.get(childSku) || {
+        sku: childSku,
+        sku_name: childItem.sku_name || child.sku_name || '',
+        image_url: childItem.image_url || child.image_url || ''
+      };
+      if (!current.sku_name && (childItem.sku_name || child.sku_name)) current.sku_name = childItem.sku_name || child.sku_name || '';
+      if (!current.image_url && (childItem.image_url || child.image_url)) current.image_url = childItem.image_url || child.image_url || '';
+      childMap.set(childSku, current);
     });
   });
-  return Object.values(map)
-    .filter(r => r.parents.length > 1)
-    .sort((a, b) => (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
+
+  const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
+  // Date bounds are used instead of relying only on the FY text tag so rows with
+  // a blank FY cell but a valid FY 2026-27 Order Date are not silently dropped.
+  const saleCtx = {
+    sourceField: 'rakhi_sales_entries',
+    types: rt && rt !== 'All' ? [rt] : [],
+    d1: '2026-04-01',
+    d2: '2027-03-31'
+  };
+
+  return Array.from(childMap.values()).map(rec => {
+    const childItem = _masterSkuMap[rec.sku] || _roExactSkuLookup[rec.sku.replace(/[^A-Z0-9]/g, '')] || {sku: rec.sku};
+    const split = cnxSoldSplit(childItem, saleCtx, {allowedParentSkus: allCmbParentSkus});
+    const parentSeen = new Set();
+    const parents = [];
+    (split.parents || []).forEach(parent => {
+      const sku = String((parent && parent.sku) || '').trim().toUpperCase();
+      if (!sku || !_rkhIsComboSku(sku) || parentSeen.has(sku)) return;
+      parentSeen.add(sku);
+      parents.push({sku, sku_name: parent.sku_name || ''});
+    });
+    parents.sort((a,b)=>a.sku.localeCompare(b.sku));
+    return {
+      ...rec,
+      total_cmb_sold: Number(split && split.inCmb && split.inCmb.sold) || 0,
+      parents
+    };
+  }).sort((a,b) => (b.total_cmb_sold - a.total_cmb_sold) || (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
 function renderRakhiCommonSkus(){
   const host = document.getElementById('rakhiCommonSkuContent');
@@ -15063,9 +15095,10 @@ function renderRakhiCommonSkus(){
   const list = _rkhBuildCommonSkus();
   _rakhiCommonSkuRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No child Rakhi SKU is used in more than one CMB.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is mapped inside a CMB.</div>';
     return;
   }
+  const totalConsumed = list.reduce((s,r)=>s+(Number(r.total_cmb_sold)||0),0);
   const rows = list.map(r => {
     const skuEsc = String(r.sku).replace(/'/g, "\\'");
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -15076,38 +15109,65 @@ function renderRakhiCommonSkus(){
       const pEsc = String(p.sku).replace(/'/g, "\\'");
       return `<button class="sku-link" onclick="openSkuDetails('${pEsc}')">${escHtml(skuCodeWithFlag(p.sku))}</button>`;
     }).join(', ');
+    const childLabel = skuLabel(r.sku, r.sku_name || '');
     return `<tr>
       <td style="width:118px;text-align:center">${photo}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(skuCodeWithFlag(r.sku))}</b></button></td>
-      <td style="text-align:center"><b>${r.parents.length}</b></td>
-      <td style="white-space:normal;line-height:1.7">${parents}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(childLabel)}</b></button></td>
+      <td class="rkh-metric"><b>${Math.round(Number(r.total_cmb_sold)||0).toLocaleString('en-IN')}</b></td>
+      <td class="rkh-metric">${r.parents.length.toLocaleString('en-IN')}</td>
+      <td style="white-space:normal;line-height:1.7">${parents || '—'}</td>
     </tr>`;
   }).join('');
-  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> common Rakhi child SKUs found.</div>
-    <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:780px;border-collapse:collapse">
-      <thead><tr><th>Photo</th><th>Child SKU (RKH)</th><th>No. of CMBs</th><th>CMB SKUs</th></tr></thead>
+  const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
+  const scopeText = rt === 'All' ? 'All Types' : rt;
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · <b>${Math.round(totalConsumed).toLocaleString('en-IN')}</b> total CMB child-consumption qty · ${escHtml(scopeText)} · FY 2026-27</div>
+    <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:980px;border-collapse:collapse">
+      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Total Sold Qty in CMBs</th><th>Used In CMBs</th><th>Parent CMB SKUs</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
-function exportRakhiCommonSkusCSV(){
+async function exportRakhiCommonSkusExcel(){
   const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
-  if (!list.length){ alert('No common Rakhi child SKU summary to export.'); return; }
-  const headers = ['Child SKU (RKH)', 'No. of CMBs', 'CMB SKUs', 'Image Link'];
-  const data = list.map(r => [
-    r.sku,
-    r.parents.length,
-    r.parents.map(p => p.sku).join(', '),
-    r.image_url || ''
-  ]);
-  const csv = [headers].concat(data).map(row => row.map(c => {
-    const s = String(c == null ? '' : c);
-    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type: 'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'rakhi_common_child_sku_summary.csv'; a.click();
+  if (!list.length){ alert('No Rakhi child SKU CMB-sales data to export.'); return; }
+  const type = document.getElementById('rkhTypeFilter')?.value || 'All';
+  const rows = list.map(r => ({
+    sku: r.sku || '',
+    sku_name: r.sku_name || '',
+    total_cmb_sold: Number(r.total_cmb_sold) || 0,
+    cmb_count: Array.isArray(r.parents) ? r.parents.length : 0,
+    parent_cmbs: (r.parents || []).map(p => p.sku).join(', '),
+    image_url: r.image_url || ''
+  }));
+  try{
+    const res = await fetch('/api/rakhi-child-cmb-sales/export.xlsx', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({type, rows})
+    });
+    if (!res.ok){
+      let msg = 'Excel export failed';
+      try{ const j = await res.json(); if (j && j.error) msg = j.error; }catch(_e){}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const today = String(todayISO || new Date().toISOString().slice(0,10));
+    a.href = url;
+    a.download = `rakhi_child_sku_cmb_sales_${today}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 1500);
+  }catch(err){
+    alert('Excel export failed: ' + (err && err.message ? err.message : err));
+  }
 }
+// Backward-compatible alias in case an old cached button still calls the CSV name.
+function exportRakhiCommonSkusCSV(){ return exportRakhiCommonSkusExcel(); }
 window.renderRakhiCommonSkus = renderRakhiCommonSkus;
+window.exportRakhiCommonSkusExcel = exportRakhiCommonSkusExcel;
 window.exportRakhiCommonSkusCSV = exportRakhiCommonSkusCSV;
 
 /* ── RAKHI TOP-SELLING SKUs ── */
@@ -24898,6 +24958,110 @@ def api_rakhi_cities():
         return jsonify({"rows": rows, "count": len(rows), "diag": diag, "all_states_uts": INDIA_STATES_UTS})
     except Exception as e:
         return jsonify({"error": f"rakhi city rows build failed: {e}"}), 500
+
+@app.route("/api/rakhi-child-cmb-sales/export.xlsx", methods=["POST"])
+def api_rakhi_child_cmb_sales_export_xlsx():
+    """Export the exact Rakhi child-CMB table currently shown in the browser."""
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        payload = request.get_json(silent=True) or {}
+        rows = payload.get("rows") or []
+        if not isinstance(rows, list):
+            return jsonify({"error": "invalid export rows"}), 400
+        if len(rows) > 5000:
+            return jsonify({"error": "too many export rows"}), 400
+        type_label = str(payload.get("type") or "All").strip() or "All"
+
+        def _safe_excel_text(value):
+            s = str(value or "")
+            # Prevent spreadsheet formula injection in exported text cells.
+            if s.startswith(("=", "+", "-", "@")):
+                s = "'" + s
+            return s
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Rakhi Child CMB Sales"
+        headers = ["Child Rakhi SKU", "SKU Name", "Total Sold Qty in CMBs", "Used In CMBs", "Parent CMB SKUs", "Image Link"]
+
+        title_fill = PatternFill("solid", fgColor="F5E8BE")
+        header_fill = PatternFill("solid", fgColor="E6C766")
+        header_font = Font(bold=True, color="2B2110")
+        thin = Side(style="thin", color="D9CBA7")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
+        title = ws.cell(1, 1, f"Rakhi Child SKU - Total Sold in CMBs | Type: {type_label} | FY 2026-27")
+        title.font = Font(bold=True, size=12, color="2B2110")
+        title.fill = title_fill
+        title.alignment = center
+        for col in range(1, len(headers) + 1):
+            ws.cell(1, col).fill = title_fill
+            ws.cell(1, col).border = border
+
+        for col, header in enumerate(headers, 1):
+            c = ws.cell(2, col, header)
+            c.font = header_font
+            c.fill = header_fill
+            c.alignment = center
+            c.border = border
+
+        for r_idx, row in enumerate(rows, 3):
+            if not isinstance(row, dict):
+                continue
+            values = [
+                _safe_excel_text(row.get("sku")),
+                _safe_excel_text(row.get("sku_name")),
+                float(row.get("total_cmb_sold") or 0),
+                int(row.get("cmb_count") or 0),
+                _safe_excel_text(row.get("parent_cmbs")),
+                _safe_excel_text(row.get("image_url")),
+            ]
+            for col, value in enumerate(values, 1):
+                c = ws.cell(r_idx, col, value)
+                c.border = border
+                c.alignment = center if col in (3, 4) else left
+                if col in (3, 4):
+                    c.number_format = '#,##0.##'
+            image_url = str(row.get("image_url") or "").strip()
+            if image_url.lower().startswith(("http://", "https://")):
+                cell = ws.cell(r_idx, 6)
+                cell.hyperlink = image_url
+                cell.style = "Hyperlink"
+
+        ws.freeze_panes = "A3"
+        ws.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{max(2, ws.max_row)}"
+        widths = [22, 34, 22, 15, 55, 55]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+        ws.row_dimensions[1].height = 26
+        ws.row_dimensions[2].height = 30
+
+        total_row = ws.max_row + 2
+        ws.cell(total_row, 1, "TOTAL CMB CHILD-CONSUMPTION QTY").font = Font(bold=True)
+        ws.cell(total_row, 3, sum(float((r or {}).get("total_cmb_sold") or 0) for r in rows if isinstance(r, dict))).font = Font(bold=True)
+        ws.cell(total_row, 3).number_format = '#,##0.##'
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"rakhi_child_sku_cmb_sales_{now_ist().strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(
+            bio.read(),
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"Rakhi child CMB Excel export failed: {e}"}), 500
+
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
 def api_daily_revenue_glimpse_export_xlsx():
