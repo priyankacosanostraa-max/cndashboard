@@ -1265,6 +1265,55 @@ def _mp_safe_product_col(cols, candidates):
                 return col
     return None
 
+_MARKETPLACE_RETURN_PAYMENT_PLATFORMS = ("Myntra", "Amazon", "Flipkart", "Nykaa", "Ajio", "Tata")
+
+
+def _marketplace_payment_mode(raw, kind="auto"):
+    """Normalize a source payment value to cod/prepaid/unknown without guessing.
+
+    Current Mayuresh source sheets expose customer payment mode explicitly only
+    for Nykaa (Mode) and Tata (IsCOD).  Other marketplace loaders still probe
+    exact payment-column names so the dashboard starts using them automatically
+    if those source sheets add such a field later.  Missing/ambiguous values are
+    kept as unknown instead of being silently counted as Prepaid.
+    """
+    txt = str(raw if raw is not None else "").strip().casefold()
+    key = re.sub(r"[^a-z0-9]+", "", txt)
+    if not key or key in ("nan", "none", "na", "null", "unknown"):
+        return "unknown"
+    if key in ("1", "10", "true", "yes", "y", "cod", "cashondelivery", "cashdelivery"):
+        return "cod"
+    if key in ("0", "00", "false", "no", "n", "prepaid", "prepay", "prepaidorder", "onlinepaid"):
+        return "prepaid"
+    # Explicit text fields sometimes carry phrases instead of compact flags.
+    if "cashondelivery" in key or key.startswith("cod"):
+        return "cod"
+    if "prepaid" in key or "prepay" in key:
+        return "prepaid"
+    return "unknown"
+
+
+def _marketplace_returned_flag(return_qty=0, return_flag="", status=""):
+    if to_num(return_qty) > 0:
+        return True
+    flag = re.sub(r"[^a-z0-9]+", "", str(return_flag or "").casefold())
+    if flag and flag not in ("0", "00", "no", "false", "none", "na", "nan", "noreturn", "notreturn", "notreturned"):
+        return True
+    st = str(status or "").strip().casefold()
+    return any(tok in st for tok in ("return", "rto", "refund"))
+
+
+def _merge_marketplace_payment(existing, incoming):
+    """Prefer a known mode over blank; conflicting known modes stay unknown."""
+    a = existing if existing in ("cod", "prepaid") else "unknown"
+    b = incoming if incoming in ("cod", "prepaid") else "unknown"
+    if a == "unknown":
+        return b
+    if b == "unknown" or a == b:
+        return a
+    return "unknown"
+
+
 def _load_channel_order_events(inv_skus_map, dbg):
     """Build a compact SKU/date/channel -> exact-order identity feed.
 
@@ -1291,6 +1340,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
             "gross_qty_names": ("Qty.", "Qty", "Order Qty", "Quantity"),
             "return_qty_names": ("Return Qty", "Returned Qty"),
+            "payment_names": ("Payment Mode", "Payment Method", "Payment Type", "COD/Prepaid", "COD Prepaid", "IsCOD", "Is COD"),
+            "payment_kind": "auto",
+            "return_flag_names": ("Return", "Return Status", "Return Type"),
         },
         {
             "key": "myntra", "url": MYNTRA_SALES_URL,
@@ -1306,6 +1358,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
             "gross_qty_names": ("Qty.", "Qty", "Order Qty", "Quantity"),
             "return_qty_names": ("Return Qty", "Returned Qty"),
+            "payment_names": ("Payment Mode", "Payment Method", "Payment Type", "COD/Prepaid", "COD Prepaid", "IsCOD", "Is COD"),
+            "payment_kind": "auto",
+            "return_flag_names": ("Return", "Return Status", "Return Type"),
         },
         {
             "key": "nykaa", "url": NYKAA_SALES_URL,
@@ -1321,6 +1376,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
             "gross_qty_names": ("Order Qty", "Shipped Qty", "Qty", "Quantity"),
             "return_qty_names": ("Return Qty", "Returned Qty"),
+            "payment_names": ("Mode", "Payment Mode", "Payment Method", "Payment Type", "COD/Prepaid", "COD Prepaid", "IsCOD", "Is COD"),
+            "payment_kind": "auto",
+            "return_flag_names": ("Return", "Return Status", "Return Type"),
         },
         {
             "key": "tata", "url": TATA_SALES_URL,
@@ -1336,6 +1394,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
             "gross_qty_names": ("Order Qty", "Qty", "Quantity"),
             "return_qty_names": ("Return Qty", "Returned Qty"),
+            "payment_names": ("IsCOD", "Is COD", "COD", "Payment Mode", "Payment Method", "Payment Type", "COD/Prepaid", "COD Prepaid"),
+            "payment_kind": "auto",
+            "return_flag_names": ("Return", "Return Status", "Return Type"),
         },
         {
             "key": "ajio", "url": AJIO_SALES_URL,
@@ -1352,6 +1413,9 @@ def _load_channel_order_events(inv_skus_map, dbg):
             "net_qty_names": ("Net Qty", "Final Qty", "Sold Qty"),
             "gross_qty_names": ("Order Qty", "Shipped QTY", "Qty", "Quantity"),
             "return_qty_names": ("Return Qty", "Returned Qty"),
+            "payment_names": ("Payment Mode", "Payment Method", "Payment Type", "COD/Prepaid", "COD Prepaid", "IsCOD", "Is COD"),
+            "payment_kind": "auto",
+            "return_flag_names": ("Return", "Return Status", "Return Type"),
         },
     ]
 
@@ -1362,6 +1426,17 @@ def _load_channel_order_events(inv_skus_map, dbg):
     product_price_sums = {}
     reporting_order_sets = {}
     source_debug = {}
+
+    # Returns-tab marketplace payment mix.  Global order maps keep one exact
+    # order per platform/date/order-id; SKU maps apply the same de-dup rule
+    # inside an exact SKU filter.  Unknown payment mode is retained explicitly.
+    marketplace_payment_orders = {p: {} for p in _MARKETPLACE_RETURN_PAYMENT_PLATFORMS}
+    marketplace_payment_sku_orders = {}
+    marketplace_payment_columns = {p: "" for p in _MARKETPLACE_RETURN_PAYMENT_PLATFORMS}
+    marketplace_source_sheet = {
+        "Myntra": "Myntra", "Amazon": "Flipkart", "Flipkart": "Flipkart",
+        "Nykaa": "Nykaa", "Ajio": "Ajio", "Tata": "Tata",
+    }
 
     def _platform_label(value):
         token = re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
@@ -1386,6 +1461,10 @@ def _load_channel_order_events(inv_skus_map, dbg):
             select_groups.append(spec["platform_names"])
         if spec.get("customer_names"):
             select_groups.append(spec["customer_names"])
+        if spec.get("payment_names"):
+            select_groups.append(spec["payment_names"])
+        if spec.get("return_flag_names"):
+            select_groups.append(spec["return_flag_names"])
         for quantity_group in (
             spec.get("net_qty_names"), spec.get("gross_qty_names"),
             spec.get("return_qty_names"),
@@ -1457,6 +1536,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
             net_qty_col = find_col(frame.columns, *spec.get("net_qty_names", ()))
             gross_qty_col = find_col(frame.columns, *spec.get("gross_qty_names", ()))
             return_qty_col = find_col(frame.columns, *spec.get("return_qty_names", ()))
+            return_flag_col = find_col(frame.columns, *spec.get("return_flag_names", ()))
+            payment_col = find_col(frame.columns, *spec.get("payment_names", ()))
             product_price_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_PRICE_NAMES)
             product_mrp_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_MRP_NAMES)
             product_discount_pct_col = _mp_safe_product_col(frame.columns, _MP_PRODUCT_DISCOUNT_PCT_NAMES)
@@ -1467,7 +1548,8 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 "report_order": report_order_col, "report_platform": report_platform_col,
                 "status": status_col, "customer": customer_col,
                 "net_qty": net_qty_col, "gross_qty": gross_qty_col,
-                "return_qty": return_qty_col,
+                "return_qty": return_qty_col, "return_flag": return_flag_col,
+                "payment": payment_col,
                 "product_price": product_price_col,
                 "product_mrp": product_mrp_col,
                 "product_discount_pct": product_discount_pct_col,
@@ -1519,6 +1601,46 @@ def _load_channel_order_events(inv_skus_map, dbg):
                 order_token = hashlib.sha1(
                     (platform.casefold() + "|" + raw_order.casefold()).encode("utf-8", errors="ignore")
                 ).hexdigest()[:20]
+
+                # Returns payment-mode summary uses exact marketplace order IDs and
+                # includes returned orders in the denominator.  It therefore runs
+                # before the sold-only AOV/repeat filter below.
+                pay_platform = spec["fixed_platform"] or _platform_label(
+                    row.get(report_platform_col, "") if report_platform_col else row.get(platform_col, "")
+                )
+                raw_pay_order = clean(row.get(report_order_col, "")) if report_order_col else ""
+                if pay_platform in marketplace_payment_orders and raw_pay_order and dt is not None:
+                    pay_day = dt.strftime("%Y-%m-%d")
+                    raw_payment = row.get(payment_col, "") if payment_col else ""
+                    pay_mode = _marketplace_payment_mode(raw_payment, spec.get("payment_kind", "auto"))
+                    is_returned_payment = _marketplace_returned_flag(
+                        row.get(return_qty_col, 0) if return_qty_col else 0,
+                        row.get(return_flag_col, "") if return_flag_col else "",
+                        row.get(status_col, "") if status_col else "",
+                    )
+                    if payment_col:
+                        marketplace_payment_columns[pay_platform] = str(payment_col)
+                    pay_order_key = (pay_day, str(raw_pay_order).strip().casefold())
+                    pay_map = marketplace_payment_orders[pay_platform]
+                    pay_ev = pay_map.get(pay_order_key)
+                    if pay_ev is None:
+                        pay_map[pay_order_key] = {"d": pay_day, "m": pay_mode, "r": 1 if is_returned_payment else 0}
+                    else:
+                        pay_ev["m"] = _merge_marketplace_payment(pay_ev.get("m", "unknown"), pay_mode)
+                        if is_returned_payment:
+                            pay_ev["r"] = 1
+
+                    # Exact-SKU scope: duplicate lines of the same order/SKU are
+                    # still one order.  Return status is OR-ed across those lines.
+                    if raw_sku:
+                        sku_pay_map = marketplace_payment_sku_orders.setdefault(mapped_sku, {}).setdefault(pay_platform, {})
+                        sku_ev = sku_pay_map.get(pay_order_key)
+                        if sku_ev is None:
+                            sku_pay_map[pay_order_key] = {"d": pay_day, "m": pay_mode, "r": 1 if is_returned_payment else 0}
+                        else:
+                            sku_ev["m"] = _merge_marketplace_payment(sku_ev.get("m", "unknown"), pay_mode)
+                            if is_returned_payment:
+                                sku_ev["r"] = 1
 
                 # Existing AOV/repeat analytics keep their original rule: only
                 # sold orders survive here; fully returned rows are excluded.
@@ -1619,7 +1741,65 @@ def _load_channel_order_events(inv_skus_map, dbg):
     dbg["channel_order_events"] = sum(len(events) for events in compact.values())
     dbg["marketplace_product_price_skus"] = len(product_price_compact)
     dbg["marketplace_product_price_events"] = sum(len(events) for events in product_price_compact.values())
-    return compact, reporting_order_sets, product_price_compact
+
+    def _compact_payment_orders(order_map):
+        day_map = {}
+        for ev in order_map.values():
+            day = str(ev.get("d", "") or "")
+            if not day:
+                continue
+            b = day_map.setdefault(day, {
+                "d": _si(day), "cod": 0, "prepaid": 0, "unknown": 0,
+                "cod_returned": 0, "prepaid_returned": 0, "unknown_returned": 0,
+            })
+            mode = ev.get("m", "unknown")
+            if mode not in ("cod", "prepaid"):
+                mode = "unknown"
+            b[mode] += 1
+            if bool(int(ev.get("r", 0) or 0)):
+                b[mode + "_returned"] += 1
+        daily = [day_map[d] for d in sorted(day_map)]
+        totals = {
+            "cod": sum(x["cod"] for x in daily),
+            "prepaid": sum(x["prepaid"] for x in daily),
+            "unknown": sum(x["unknown"] for x in daily),
+            "cod_returned": sum(x["cod_returned"] for x in daily),
+            "prepaid_returned": sum(x["prepaid_returned"] for x in daily),
+            "unknown_returned": sum(x["unknown_returned"] for x in daily),
+            "daily": daily,
+        }
+        totals["classified"] = totals["cod"] + totals["prepaid"]
+        totals["total"] = totals["classified"] + totals["unknown"]
+        totals["returned"] = totals["cod_returned"] + totals["prepaid_returned"] + totals["unknown_returned"]
+        return totals
+
+    marketplace_returns_payment_summary = {}
+    for platform in _MARKETPLACE_RETURN_PAYMENT_PLATFORMS:
+        summary = _compact_payment_orders(marketplace_payment_orders.get(platform, {}))
+        summary["payment_column"] = marketplace_payment_columns.get(platform, "")
+        summary["payment_available"] = bool(summary.get("classified", 0) > 0)
+        summary["source_sheet"] = marketplace_source_sheet.get(platform, platform)
+        marketplace_returns_payment_summary[platform] = summary
+
+    marketplace_return_payment_daily = {}
+    for sku, platform_maps in marketplace_payment_sku_orders.items():
+        compact_platforms = {}
+        for platform, order_map in platform_maps.items():
+            summary = _compact_payment_orders(order_map)
+            if summary.get("daily"):
+                compact_platforms[platform] = summary["daily"]
+        if compact_platforms:
+            marketplace_return_payment_daily[sku] = compact_platforms
+
+    dbg["marketplace_returns_payment"] = {
+        p: {
+            "total": marketplace_returns_payment_summary[p]["total"],
+            "classified": marketplace_returns_payment_summary[p]["classified"],
+            "payment_column": marketplace_returns_payment_summary[p]["payment_column"],
+        }
+        for p in _MARKETPLACE_RETURN_PAYMENT_PLATFORMS
+    }
+    return compact, reporting_order_sets, product_price_compact, marketplace_returns_payment_summary, marketplace_return_payment_daily
 
 _DATA_LOCK = threading.Lock()
 _DF_REFS = {}
@@ -2361,7 +2541,8 @@ def _refresh_data():
     # Marketplace AOV must use the actual source Order ID, not a customer-name
     # approximation.  Sources are read sequentially and released immediately
     # so a three-year refresh does not keep five large DataFrames in memory.
-    channel_order_events, daily_reporting_marketplace_orders, marketplace_product_price_events = _load_channel_order_events(inv_skus_map, dbg)
+    (channel_order_events, daily_reporting_marketplace_orders, marketplace_product_price_events,
+     marketplace_returns_payment_summary, marketplace_return_payment_daily) = _load_channel_order_events(inv_skus_map, dbg)
 
     sales_exact = {}
     custs, types_, fyears = set(), set(), set()
@@ -3022,6 +3203,7 @@ def _refresh_data():
             "website_city_events": website_city_events.get(dedupe_key, []),
             "website_payment_events": website_payment_events.get(dedupe_key, []),
             "website_return_payment_daily": website_return_payment_daily.get(dedupe_key, []),
+            "marketplace_return_payment_daily": marketplace_return_payment_daily.get(dedupe_key, {}),
             "website_return_events": website_return_events.get(dedupe_key, []),
             "total_net_revenue": float(A["tot_rev"]),
             "final_qty":   A["tot_qty"],
@@ -3109,6 +3291,7 @@ def _refresh_data():
             "website_city_events": website_city_events.get(orphan_key, []),
             "website_payment_events": website_payment_events.get(orphan_key, []),
             "website_return_payment_daily": website_return_payment_daily.get(orphan_key, []),
+            "marketplace_return_payment_daily": marketplace_return_payment_daily.get(orphan_key, {}),
             "website_return_events": website_return_events.get(orphan_key, []),
             "total_net_revenue": float(A["tot_rev"]), "final_qty": A["tot_qty"],
             "return_qty": A["tot_ret"], "return_amount": float(A["tot_ret_amt"]),
@@ -3313,6 +3496,7 @@ def _refresh_data():
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
     CACHE["website_payment_summary"] = website_payment_summary
     CACHE["website_returns_payment_summary"] = website_returns_payment_summary
+    CACHE["marketplace_returns_payment_summary"] = marketplace_returns_payment_summary
     CACHE["daily_reporting_daily"] = daily_reporting_daily
     CACHE["daily_reporting_orders"] = daily_reporting_orders
     # Keep source-specific exact-order maps too. Daily Reporting AOV uses only
@@ -7297,8 +7481,8 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
 
     <div id="returnsPaymentBox" class="filter-box" style="margin:14px 0">
-      <label class="fl" style="margin-bottom:6px;display:block">Website Return Rate by Payment Mode</label>
-      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Website Order Date source: column W (Order_Date). COD source: column M (1 = COD, 0 = Prepaid).</div>
+      <label class="fl" style="margin-bottom:6px;display:block">COD / Prepaid Return Rate by Channel</label>
+      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Unique orders only. Website uses Invoice Code + Order_Date; marketplaces use their exact source Order ID. COD/Prepaid is shown only when the source sheet actually exposes a payment-mode field.</div>
       <div id="returnsPaymentDonut"></div>
     </div>
 
@@ -8645,6 +8829,7 @@ let grandNetRevenue = 0, grandFinalQty = 0;
 let marketplaceData = null;
 let websitePaymentSummary = {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
 let websiteReturnsPaymentSummary = {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
+let marketplaceReturnsPaymentSummary = {};
 let periodKpis = {total:0, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
 let imgB64 = null;
 let bulkFinderImgB64 = null;
@@ -11086,6 +11271,7 @@ function loadData(force){
       periodKpis = d.period_kpis || {total:grandNetRevenue, yesterday:0, this_month:0, this_fy:0, prev_fy:0};
       websitePaymentSummary = d.website_payment_summary || {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
       websiteReturnsPaymentSummary = d.website_returns_payment_summary || {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
+      marketplaceReturnsPaymentSummary = d.marketplace_returns_payment_summary || {};
 
       // Datalists with thousands of <option> nodes are particularly slow in
       // Chromium. Filtering still accepts any typed customer; this cap only
@@ -18824,7 +19010,7 @@ function renderReturns(){
   }
   const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const summary=document.getElementById('returnsSummary');
-  const websiteOrders=_returnsWebsitePaymentScope(state);
+  const websiteOrders=_returnsPaymentScope('Website',state);
   const websiteOrderText=(!websiteOrders.hidden&&!websiteOrders.empty)?` · Total Website Orders: <b>${Number(websiteOrders.totalOrders||0).toLocaleString('en-IN')}</b>`:'';
   if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b>${websiteOrderText} · showing top ${Math.min(20,rows.length)}.`;
   renderReturnsPaymentDonut(state);
@@ -18840,100 +19026,110 @@ function resetReturnsFilters(){
 function _returnsCompactSku(v){
   return String(v==null?'':v).toUpperCase().replace(/[^A-Z0-9]/g,'');
 }
-function _returnsWebsitePaymentScope(state){
-  const st=state||_returnsFilterState();
-  const ch=_returnsNorm(st.channel||'All');
-  if(ch && !['all','website','dtc','d2c'].includes(ch)){
-    return {hidden:true,reason:'Website COD / Prepaid split is available only for Website (D2C).'};
+function _returnsPaymentChannelCanon(v){
+  const n=_returnsNorm(v);
+  if(['website','dtc','d2c'].includes(n))return 'Website';
+  if(n==='myntra')return 'Myntra';
+  if(n==='amazon')return 'Amazon';
+  if(n==='flipkart')return 'Flipkart';
+  if(n==='nykaa')return 'Nykaa';
+  if(n==='ajio')return 'Ajio';
+  if(n==='tata'||n==='tata cliq'||n==='tatacliq')return 'Tata';
+  return String(v||'').trim();
+}
+const _RET_PAYMENT_CHANNELS=['Website','Myntra','Amazon','Flipkart','Nykaa','Ajio','Tata'];
+function _returnsExactItem(q){
+  const compact=_returnsCompactSku(q);
+  let item=(compact&&_roExactSkuLookup&&_roExactSkuLookup[compact])||null;
+  if(!item&&compact)item=(master||[]).find(it=>_returnsCompactSku(it?.sku)===compact)||null;
+  if(!item){
+    const matches=(master||[]).filter(it=>_returnsSearchMatch({sku:it?.sku,cn_name:it?.cn_name,sku_name:it?.sku_name},q));
+    if(matches.length===1)item=matches[0];
   }
-  const inDate=row=>{
-    const d=String(row?.d||'');
-    if(!d)return false;
-    if(st.d1 && d<st.d1)return false;
-    if(st.d2 && d>st.d2)return false;
-    return true;
-  };
+  return item;
+}
+function _returnsPaymentScope(channel,state){
+  const st=state||_returnsFilterState(), canon=_returnsPaymentChannelCanon(channel);
+  const selected=_returnsPaymentChannelCanon(st.channel||'All');
+  if(st.channel&&st.channel!=='All'&&selected!==canon)return {hidden:true};
+  const inDate=row=>{const d=String(row?.d||'');if(!d)return false;if(st.d1&&d<st.d1)return false;if(st.d2&&d>st.d2)return false;return true;};
   const q=String(st.search||'').trim();
-  let rows=[],scope='All Website orders';
-  if(q){
-    const compact=_returnsCompactSku(q);
-    let item=(compact&&_roExactSkuLookup&&_roExactSkuLookup[compact])||null;
-    if(!item && compact){
-      item=(master||[]).find(it=>_returnsCompactSku(it?.sku)===compact)||null;
-    }
-    if(!item){
-      // CN-name search can still resolve when it identifies exactly one SKU.
-      const matches=(master||[]).filter(it=>_returnsSearchMatch({sku:it?.sku,cn_name:it?.cn_name,sku_name:it?.sku_name},q));
-      if(matches.length===1)item=matches[0];
-    }
-    if(!item){
-      return {hidden:false,empty:true,reason:'Enter one exact SKU to see its Website COD vs Prepaid return rate.'};
-    }
-    rows=(item.website_return_payment_daily||[]).filter(inDate).map(r=>({
-      d:r.d,cod:Number(r.co)||0,codReturned:Number(r.cr)||0,
-      prepaid:Number(r.po)||0,prepaidReturned:Number(r.pr)||0
-    }));
-    scope=`SKU ${item.sku}`;
+  let rows=[],scope=`All ${canon} orders`,meta={};
+  if(canon==='Website'){
+    meta={payment_available:true,payment_column:'COD (column M)',source_sheet:'Website'};
+    if(q){
+      const item=_returnsExactItem(q);
+      if(!item)return {hidden:false,empty:true,channel:canon,reason:'Enter one exact SKU to see its payment-mode return rate.'};
+      rows=(item.website_return_payment_daily||[]).filter(inDate).map(r=>({d:r.d,cod:Number(r.co)||0,cod_returned:Number(r.cr)||0,prepaid:Number(r.po)||0,prepaid_returned:Number(r.pr)||0,unknown:0,unknown_returned:0}));
+      scope=`SKU ${item.sku}`;
+    }else rows=(websiteReturnsPaymentSummary?.daily||[]).filter(inDate).map(r=>({...r,unknown:0,unknown_returned:0}));
   }else{
-    rows=(websiteReturnsPaymentSummary?.daily||[]).filter(inDate).map(r=>({
-      d:r.d,cod:Number(r.cod)||0,codReturned:Number(r.cod_returned)||0,
-      prepaid:Number(r.prepaid)||0,prepaidReturned:Number(r.prepaid_returned)||0
-    }));
+    meta=marketplaceReturnsPaymentSummary?.[canon]||{};
+    if(q){
+      const item=_returnsExactItem(q);
+      if(!item)return {hidden:false,empty:true,channel:canon,reason:'Enter one exact SKU to see its payment-mode return rate.'};
+      rows=((item.marketplace_return_payment_daily||{})[canon]||[]).filter(inDate);
+      scope=`SKU ${item.sku}`;
+    }else rows=(meta.daily||[]).filter(inDate);
   }
   const totals=rows.reduce((a,r)=>{
-    a.cod+=r.cod;a.codReturned+=r.codReturned;a.prepaid+=r.prepaid;a.prepaidReturned+=r.prepaidReturned;return a;
-  },{cod:0,codReturned:0,prepaid:0,prepaidReturned:0});
-  const totalOrders=totals.cod+totals.prepaid;
-  const totalReturned=totals.codReturned+totals.prepaidReturned;
-  return {...totals,totalOrders,totalReturned,scope,hidden:false,empty:totalOrders<=0};
+    ['cod','prepaid','unknown','cod_returned','prepaid_returned','unknown_returned'].forEach(k=>a[k]+=Number(r?.[k])||0);return a;
+  },{cod:0,prepaid:0,unknown:0,cod_returned:0,prepaid_returned:0,unknown_returned:0});
+  totals.classified=totals.cod+totals.prepaid;
+  totals.totalOrders=totals.classified+totals.unknown;
+  totals.totalReturned=totals.cod_returned+totals.prepaid_returned+totals.unknown_returned;
+  return {...totals,scope,channel:canon,hidden:false,empty:totals.totalOrders<=0,paymentAvailable:canon==='Website'?true:!!meta.payment_available,paymentColumn:meta.payment_column||'',sourceSheet:meta.source_sheet||canon};
+}
+function _returnsPaymentCard(d){
+  const channel=escHtml(d.channel||'Channel'),scope=escHtml(d.scope||''),total=Number(d.totalOrders)||0,returned=Number(d.totalReturned)||0;
+  const codRate=d.cod?Math.min(100,Math.max(0,d.cod_returned/d.cod*100)):0;
+  const prepaidRate=d.prepaid?Math.min(100,Math.max(0,d.prepaid_returned/d.prepaid*100)):0;
+  const R1=50,R2=34,C1=2*Math.PI*R1,C2=2*Math.PI*R2,codDash=(C1*codRate/100).toFixed(2),preDash=(C2*prepaidRate/100).toFixed(2);
+  const hasClassified=(d.cod+d.prepaid)>0;
+  const sourceNote=d.paymentColumn?`${escHtml(d.sourceSheet)} · ${escHtml(d.paymentColumn)}`:`${escHtml(d.sourceSheet)} source`;
+  let detail='';
+  if(!hasClassified&&total>0){
+    const payMsg=d.paymentColumn?'Payment mode field exists, but the matching orders are blank/unclassified.':'COD/Prepaid field is not available in this source sheet.';
+    detail=`<div style="padding:10px 12px;border-radius:11px;background:#fff7e8;border:1px solid rgba(181,108,24,.20);font-size:.76rem;line-height:1.45"><b>${payMsg}</b><br>${total.toLocaleString('en-IN')} unique orders are present, but they are kept unclassified instead of being guessed as Prepaid.</div>`;
+  }else if(!total){
+    detail='<div class="insight-empty" style="min-height:74px">No orders match the active Date / SKU filter.</div>';
+  }else{
+    detail=`<div style="display:grid;gap:7px">
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:10px;background:#fffaf1;border:1px solid rgba(181,108,24,.16)"><span><b>COD</b><br><span class="small-note">${d.cod_returned.toLocaleString('en-IN')} returned / ${d.cod.toLocaleString('en-IN')} orders</span></span><b style="color:#b56c18">${codRate.toFixed(1)}%</b></div>
+      <div style="display:flex;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:10px;background:#f5fbf8;border:1px solid rgba(23,137,94,.16)"><span><b>Prepaid</b><br><span class="small-note">${d.prepaid_returned.toLocaleString('en-IN')} returned / ${d.prepaid.toLocaleString('en-IN')} orders</span></span><b style="color:#17895e">${prepaidRate.toFixed(1)}%</b></div>
+      ${d.unknown?`<div class="small-note">Unclassified payment mode: <b>${d.unknown.toLocaleString('en-IN')}</b> orders (${d.unknown_returned.toLocaleString('en-IN')} returned)</div>`:''}
+    </div>`;
+  }
+  return `<div style="background:#fff;border:1px solid rgba(31,36,48,.10);border-radius:15px;padding:13px;min-width:0">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px"><div><div style="font-weight:900;color:#1f2430">${channel}</div><div class="small-note">${scope}</div></div><div class="small-note" style="text-align:right">${sourceNote}</div></div>
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div style="width:150px;height:150px;flex:0 0 150px">
+        <svg viewBox="0 0 160 160" style="width:150px;height:150px;display:block" role="img" aria-label="${channel} COD and prepaid return rates">
+          <circle cx="80" cy="80" r="${R1}" fill="none" stroke="#eee8dc" stroke-width="13"></circle>
+          ${hasClassified?`<circle cx="80" cy="80" r="${R1}" fill="none" stroke="#b56c18" stroke-width="13" stroke-linecap="round" transform="rotate(-90 80 80)" stroke-dasharray="${codDash} ${C1.toFixed(2)}"></circle>`:''}
+          <circle cx="80" cy="80" r="${R2}" fill="none" stroke="#eee8dc" stroke-width="11"></circle>
+          ${hasClassified?`<circle cx="80" cy="80" r="${R2}" fill="none" stroke="#17895e" stroke-width="11" stroke-linecap="round" transform="rotate(-90 80 80)" stroke-dasharray="${preDash} ${C2.toFixed(2)}"></circle>`:''}
+          <text x="80" y="75" text-anchor="middle" font-size="9" font-weight="800" fill="#766746">${channel.slice(0,11).toUpperCase()}</text>
+          <text x="80" y="94" text-anchor="middle" font-size="17" font-weight="900" fill="#1f2430">${total.toLocaleString('en-IN')}</text>
+          <text x="80" y="108" text-anchor="middle" font-size="8" font-weight="700" fill="#8c7a42">TOTAL ORDERS</text>
+        </svg>
+      </div>
+      <div style="flex:1;min-width:210px"><div class="small-note" style="margin-bottom:7px">${returned.toLocaleString('en-IN')} returned orders</div>${detail}</div>
+    </div>
+  </div>`;
 }
 function renderReturnsPaymentDonut(state){
   const box=document.getElementById('returnsPaymentBox'),host=document.getElementById('returnsPaymentDonut'),sub=document.getElementById('returnsPaymentSubtitle');
   if(!box||!host)return;
-  const d=_returnsWebsitePaymentScope(state||_returnsFilterState());
-  if(d.hidden){
-    box.style.display='none';host.innerHTML='';return;
-  }
+  const st=state||_returnsFilterState();
+  const selected=_returnsPaymentChannelCanon(st.channel||'All');
+  const isSupported=_RET_PAYMENT_CHANNELS.includes(selected);
+  if(st.channel&&st.channel!=='All'&&!isSupported){box.style.display='none';host.innerHTML='';return;}
   box.style.display='block';
-  if(d.empty){
-    host.innerHTML=`<div class="insight-empty">${escHtml(d.reason||'No Website payment-mode orders match the selected filters.')}</div>`;
-    if(sub)sub.textContent='Website Order Date source: column W (Order_Date). COD source: column M (1 = COD, 0 = Prepaid).';
-    return;
-  }
-  const codRate=d.cod?Math.min(100,Math.max(0,d.codReturned/d.cod*100)):0;
-  const prepaidRate=d.prepaid?Math.min(100,Math.max(0,d.prepaidReturned/d.prepaid*100)):0;
-  const R1=58,R2=40,C1=2*Math.PI*R1,C2=2*Math.PI*R2;
-  const codDash=(C1*codRate/100).toFixed(2),preDash=(C2*prepaidRate/100).toFixed(2);
-  const totalOrders=Number(d.totalOrders)||(d.cod+d.prepaid);
-  const totalReturned=Number(d.totalReturned)||(d.codReturned+d.prepaidReturned);
-  const scope=escHtml(d.scope||'All Website orders');
-  if(sub)sub.textContent=`${d.scope||'All Website orders'} · Order Date: Website column W (Order_Date) · COD: column M (1 = COD, 0 = Prepaid) · all active Date/SKU filters applied.`;
-  host.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap;padding:4px 0 2px">
-    <div style="width:210px;height:210px;position:relative;flex:0 0 210px">
-      <svg viewBox="0 0 180 180" style="width:210px;height:210px;display:block" role="img" aria-label="Website COD and prepaid return rates">
-        <circle cx="90" cy="90" r="${R1}" fill="none" stroke="#eee8dc" stroke-width="15"></circle>
-        <circle cx="90" cy="90" r="${R1}" fill="none" stroke="#b56c18" stroke-width="15" stroke-linecap="round" transform="rotate(-90 90 90)" stroke-dasharray="${codDash} ${C1.toFixed(2)}"><title>COD return rate ${codRate.toFixed(1)}% — ${d.codReturned} returned of ${d.cod} COD orders</title></circle>
-        <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#eee8dc" stroke-width="13"></circle>
-        <circle cx="90" cy="90" r="${R2}" fill="none" stroke="#17895e" stroke-width="13" stroke-linecap="round" transform="rotate(-90 90 90)" stroke-dasharray="${preDash} ${C2.toFixed(2)}"><title>Prepaid return rate ${prepaidRate.toFixed(1)}% — ${d.prepaidReturned} returned of ${d.prepaid} Prepaid orders</title></circle>
-        <text x="90" y="84" text-anchor="middle" font-size="11" font-weight="800" fill="#766746">WEBSITE</text>
-        <text x="90" y="103" text-anchor="middle" font-size="18" font-weight="900" fill="#1f2430">${totalOrders.toLocaleString('en-IN')}</text>
-        <text x="90" y="117" text-anchor="middle" font-size="9" font-weight="700" fill="#8c7a42">TOTAL ORDERS</text>
-      </svg>
-    </div>
-    <div style="min-width:270px;max-width:560px;display:grid;gap:10px;flex:1">
-      <div style="font-weight:900;font-size:.9rem;color:#1f2430">${scope}</div>
-      <div style="display:flex;justify-content:space-between;gap:14px;align-items:center;padding:10px 12px;border:1px solid rgba(31,36,48,.10);border-radius:12px;background:#fff">
-        <div><b>Total Website Orders</b><div class="small-note">Unique Website orders in the active Order Date / SKU filter</div></div>
-        <div style="text-align:right"><b style="font-size:1.18rem;color:#1f2430">${totalOrders.toLocaleString('en-IN')}</b><div class="small-note">${totalReturned.toLocaleString('en-IN')} returned</div></div>
-      </div>
-      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(181,108,24,.18);border-radius:12px;background:#fffaf1">
-        <span style="width:11px;height:11px;border-radius:50%;background:#b56c18"></span><div><b>COD Return Rate</b><div class="small-note">${d.codReturned.toLocaleString('en-IN')} returned / ${d.cod.toLocaleString('en-IN')} COD orders</div></div><b style="font-size:1.18rem;color:#b56c18">${codRate.toFixed(1)}%</b>
-      </div>
-      <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(23,137,94,.18);border-radius:12px;background:#f5fbf8">
-        <span style="width:11px;height:11px;border-radius:50%;background:#17895e"></span><div><b>Prepaid Return Rate</b><div class="small-note">${d.prepaidReturned.toLocaleString('en-IN')} returned / ${d.prepaid.toLocaleString('en-IN')} Prepaid orders</div></div><b style="font-size:1.18rem;color:#17895e">${prepaidRate.toFixed(1)}%</b>
-      </div>
-    </div>
-  </div>`;
+  const channels=(st.channel&&st.channel!=='All')?[selected]:_RET_PAYMENT_CHANNELS;
+  const scopes=channels.map(ch=>_returnsPaymentScope(ch,st)).filter(x=>!x.hidden);
+  host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:12px">${scopes.map(_returnsPaymentCard).join('')}</div>`;
+  if(sub)sub.textContent='Unique order denominator · Date and exact-SKU filters apply to every card. Nykaa uses Mode; Tata uses IsCOD; Website uses COD column M. Myntra, Amazon/Flipkart and Ajio are not guessed when their current source sheet has no COD/Prepaid field.';
 }
 
 function renderReturnsChart(events,state){
@@ -21657,6 +21853,9 @@ def _build_role_gz(role, force=False):
             "website_returns_payment_summary",
             {"cod": 0, "prepaid": 0, "total": 0,
              "cod_returned": 0, "prepaid_returned": 0, "daily": []}
+        ),
+        "marketplace_returns_payment_summary": CACHE.get(
+            "marketplace_returns_payment_summary", {}
         ),
     }
     with _RESP_LOCK:                      # do builders ek saath na chalein (RAM spike)
