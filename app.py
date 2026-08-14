@@ -2013,7 +2013,7 @@ def _refresh_data():
 
     # ── Website repeat-customer identity index ─────────────────────────
     # Billing Address Name + Final Billing Address together identify one
-    # Website customer, while Order_Date + Invoice Code identifies each order.
+    # Website customer, while Order_Date + Display Order Code identifies each order.
     # Duplicate lines of one invoice collapse; two invoices by the same customer
     # on the same day stay distinct. Only short SHA-1 tokens reach the browser.
     website_customer_events = {}
@@ -2030,7 +2030,7 @@ def _refresh_data():
         "cod_returned": 0, "prepaid_returned": 0, "daily": []
     }
     # Returns-only Website order summary. Website orders are unique by
-    # Order_Date + Invoice Code, so repeated lines of the same invoice on the
+    # Order_Date + Display Order Code, so repeated lines of the same display order on the
     # same date count as one order.
     website_returns_payment_summary = {
         "cod": 0, "prepaid": 0, "total": 0,
@@ -2087,14 +2087,16 @@ def _refresh_data():
         # Header match is preferred; fixed M-column fallback protects against
         # harmless header spelling/spacing changes in the source sheet.
         W_COD = find_col(web_orders.columns, "COD", "Cash On Delivery", "Cash on Delivery") or _wat(12)
-        # Website order identity is authoritative from Invoice Code (physical J).
+        # Website order identity is authoritative from Display Order Code (physical A).
         # Across Home / Daily Reporting / Rakhi payment mix / Returns, the same
-        # Invoice Code on the same Order_Date is one order; the same code on a
+        # Display Order Code on the same Order_Date is one order; the same code on a
         # different Order_Date is a separate order. Using one identity rule
-        # prevents different dashboard cards from disagreeing.
-        W_RET_ORDER = (find_col(
-            web_orders.columns, "Invoice Code", "Invoice No", "Invoice Number"
-        ) or _wat(9))
+        # prevents different dashboard cards from disagreeing. Column A is the
+        # authoritative source; header matching is only a fallback for short exports.
+        W_RET_ORDER = (_wat(0) or find_col(
+            web_orders.columns, "Display Order Code", "DisplayOrderCode",
+            "Display Order No", "Display Order Number"
+        ))
         W_ORDER = W_RET_ORDER
         W_REPORT_ORDER = W_RET_ORDER
 
@@ -2106,6 +2108,7 @@ def _refresh_data():
             "return_qty": W_RTO, "cod": W_COD, "order": W_ORDER,
             "returns_order": W_RET_ORDER,
             "daily_reporting_order": W_REPORT_ORDER,
+            "order_identity_source": "Website column A / Display Order Code",
         }
 
         # Daily Reporting order count is intentionally independent of the
@@ -2121,11 +2124,11 @@ def _refresh_data():
                 if _dr_dt is None:
                     continue
                 _dr_day = _dr_dt.strftime("%Y-%m-%d")
-                _dr_invoice = clean(_dr_web_row.get(W_REPORT_ORDER, ""))
-                # Include date in the token because the same Invoice Code may
+                _dr_display_order = clean(_dr_web_row.get(W_REPORT_ORDER, ""))
+                # Include date in the token because the same Display Order Code may
                 # legitimately recur on another day and must count again there.
                 _dr_token = _daily_reporting_order_token(
-                    "Website", f"{_dr_day}|{_dr_invoice}" if _dr_invoice else ""
+                    "Website", f"{_dr_day}|{_dr_display_order}" if _dr_display_order else ""
                 )
                 if _dr_token:
                     daily_reporting_website_orders.setdefault(_dr_day, set()).add(_dr_token)
@@ -2162,8 +2165,8 @@ def _refresh_data():
                 raw_name = str(r.get(W_NAME, "") or "").strip()
                 raw_addr = str(r.get(W_ADDR, "") or "").strip()
 
-                # One Website order identity everywhere: Order_Date + Invoice Code.
-                # Keep a row fallback only for malformed source rows with no invoice.
+                # One Website order identity everywhere: Order_Date + Display Order Code.
+                # Keep a row fallback only for malformed source rows with no Display Order Code.
                 raw_order = clean(r.get(W_ORDER, "")) if W_ORDER else ""
                 if not raw_order:
                     raw_order = f"ROW:{date_iso}:{mapped_web_sku}:{web_row_no}"
@@ -2198,7 +2201,7 @@ def _refresh_data():
                         _web_all_payment_orders[order_token] = payment_event
                         # Keep per-SKU order events for every Website SKU so SKU
                         # Details, Sales Comparison, Rakhi and exports all use the
-                        # same exact invoice identity instead of customer-date proxies.
+                        # same exact Display Order Code identity instead of customer-date proxies.
                         _web_payment_sets.setdefault(mapped_web_sku, {})[order_token] = payment_event
 
                         # Website Returns payment mode: an order is treated as
@@ -2382,26 +2385,26 @@ def _refresh_data():
         }
 
         # RETURNS TAB ONLY: one Website order = one unique
-        # (Order_Date, Invoice Code). If the same Invoice Code is present on
+        # (Order_Date, Display Order Code). If the same Display Order Code is present on
         # several rows on the same date (for multiple line-items or duplicate
         # source rows), it contributes exactly one order to the denominator.
         # For a SKU-filtered Returns view the same rule is applied within that
-        # SKU: (Order_Date, Invoice Code, SKU) is counted once. Return status is
+        # SKU: (Order_Date, Display Order Code, SKU) is counted once. Return status is
         # OR-ed across duplicate lines so one returned line marks that order as
         # returned, without increasing the order count.
         _ret_order_all = {}
         _ret_order_sku = {}
         if W_DATE and W_RET_ORDER and W_COD:
             for _ret_row in _df_chunks(web_orders):
-                _ret_invoice = clean(_ret_row.get(W_RET_ORDER, ""))
-                if not _ret_invoice:
+                _ret_display_order = clean(_ret_row.get(W_RET_ORDER, ""))
+                if not _ret_display_order:
                     continue
                 _ret_dt = parse_date_any(_ret_row.get(W_DATE, ""))
                 if _ret_dt is None:
                     continue
                 _ret_day = _ret_dt.strftime("%Y-%m-%d")
-                _ret_invoice_key = str(_ret_invoice).strip().casefold()
-                if not _ret_invoice_key:
+                _ret_display_order_key = str(_ret_display_order).strip().casefold()
+                if not _ret_display_order_key:
                     continue
 
                 _ret_cod_raw = str(_ret_row.get(W_COD, "") or "").strip().casefold()
@@ -2421,7 +2424,7 @@ def _refresh_data():
                     or any(k in _ret_status for k in ("return", "rto", "refund"))
                 )
 
-                _ret_order_key = (_ret_day, _ret_invoice_key)
+                _ret_order_key = (_ret_day, _ret_display_order_key)
                 _ret_all_ev = _ret_order_all.get(_ret_order_key)
                 if _ret_all_ev is None:
                     _ret_order_all[_ret_order_key] = {
@@ -2444,12 +2447,12 @@ def _refresh_data():
                 elif _ret_returned:
                     _ret_sku_ev["r"] = 1
 
-        _ret_inv_daily_all = {}
+        _ret_order_daily_all = {}
         for _ret_ev in _ret_order_all.values():
             _ret_day = str(_ret_ev.get("d", "") or "")
             if not _ret_day:
                 continue
-            _ret_all_b = _ret_inv_daily_all.setdefault(
+            _ret_all_b = _ret_order_daily_all.setdefault(
                 _ret_day,
                 {"d": _si(_ret_day), "cod": 0, "prepaid": 0,
                  "cod_returned": 0, "prepaid_returned": 0}
@@ -2465,7 +2468,7 @@ def _refresh_data():
                 if _ret_returned:
                     _ret_all_b["prepaid_returned"] += 1
 
-        _ret_inv_daily_sku = {}
+        _ret_order_daily_sku = {}
         for _ret_sku, _ret_order_map in _ret_order_sku.items():
             _ret_day_map = {}
             for _ret_ev in _ret_order_map.values():
@@ -2485,25 +2488,25 @@ def _refresh_data():
                     _ret_sku_b["po"] += 1
                     if _ret_returned:
                         _ret_sku_b["pr"] += 1
-            _ret_inv_daily_sku[_ret_sku] = _ret_day_map
+            _ret_order_daily_sku[_ret_sku] = _ret_day_map
 
         # This per-SKU object is consumed only by the Returns tab; Rakhi/Home
         # payment metrics keep their existing logic unchanged.
         website_return_payment_daily = {
             sku: [day_map[d] for d in sorted(day_map)]
-            for sku, day_map in _ret_inv_daily_sku.items()
+            for sku, day_map in _ret_order_daily_sku.items()
         }
-        _ret_cod_total = sum(int(v.get("cod", 0) or 0) for v in _ret_inv_daily_all.values())
-        _ret_pre_total = sum(int(v.get("prepaid", 0) or 0) for v in _ret_inv_daily_all.values())
-        _ret_cod_returned = sum(int(v.get("cod_returned", 0) or 0) for v in _ret_inv_daily_all.values())
-        _ret_pre_returned = sum(int(v.get("prepaid_returned", 0) or 0) for v in _ret_inv_daily_all.values())
+        _ret_cod_total = sum(int(v.get("cod", 0) or 0) for v in _ret_order_daily_all.values())
+        _ret_pre_total = sum(int(v.get("prepaid", 0) or 0) for v in _ret_order_daily_all.values())
+        _ret_cod_returned = sum(int(v.get("cod_returned", 0) or 0) for v in _ret_order_daily_all.values())
+        _ret_pre_returned = sum(int(v.get("prepaid_returned", 0) or 0) for v in _ret_order_daily_all.values())
         website_returns_payment_summary = {
             "cod": _ret_cod_total,
             "prepaid": _ret_pre_total,
             "total": _ret_cod_total + _ret_pre_total,
             "cod_returned": _ret_cod_returned,
             "prepaid_returned": _ret_pre_returned,
-            "daily": [_ret_inv_daily_all[d] for d in sorted(_ret_inv_daily_all)],
+            "daily": [_ret_order_daily_all[d] for d in sorted(_ret_order_daily_all)],
         }
         dbg["website_repeat_skus"] = len(website_customer_events)
         dbg["website_repeat_sessions"] = sum(len(v) for v in website_customer_events.values())
@@ -2514,7 +2517,7 @@ def _refresh_data():
         dbg["website_return_payment_skus"] = len(website_return_payment_daily)
         dbg["website_return_event_skus"] = len(website_return_events)
         dbg["website_all_payment_orders"] = website_payment_summary["total"]
-        dbg["website_returns_invoice_rows"] = website_returns_payment_summary["total"]  # unique day+Invoice orders
+        dbg["website_returns_display_order_rows"] = website_returns_payment_summary["total"]  # unique day+Display Order Code orders
     except Exception as e:
         dbg["errors"].append(f"website repeat/city: {e}")
         website_customer_events = {}
@@ -7482,7 +7485,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="returnsPaymentBox" class="filter-box" style="margin:14px 0">
       <label class="fl" style="margin-bottom:6px;display:block">COD / Prepaid Return Rate by Channel</label>
-      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Unique orders only. Website uses Invoice Code + Order_Date; marketplaces use their exact source Order ID. COD/Prepaid is shown only when the source sheet actually exposes a payment-mode field.</div>
+      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Unique orders only. Website uses Display Order Code (column A) + Order_Date; marketplaces use their exact source Order ID. COD/Prepaid is shown only when the source sheet actually exposes a payment-mode field.</div>
       <div id="returnsPaymentDonut"></div>
     </div>
 
@@ -8310,7 +8313,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="ops-section" style="margin-top:22px">
       <div class="ops-head" style="margin-bottom:12px">
-        <div><div class="ops-title" style="font-size:26px">AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. Website order identity = Order_Date + Invoice Code, so repeated SKU/line rows of the same invoice count once.</div></div>
+        <div><div class="ops-title" style="font-size:26px">AOV Comparison &amp; Product Drivers</div><div class="ops-sub">AOV = Net Revenue ÷ unique orders. Website order identity = Order_Date + Display Order Code (column A), so repeated SKU/line rows of the same order count once.</div></div>
         <div class="ops-actions"><button class="go-btn" style="width:auto;padding:10px 14px" onclick="renderSalesComparisonOrders()">Refresh</button><button class="go-btn" style="width:auto;padding:10px 14px;background:#2f6f3e" onclick="exportSalesComparisonOrders()">Export CSV</button></div>
       </div>
       <div class="ops-filters">
@@ -10231,7 +10234,7 @@ function _sdUsageContext(item){
 }
 
 /* Count the selected SKU's real orders, not transaction lines. Website uses
-   exact Order_Date + Invoice Code tokens; marketplaces use native source Order
+   exact Order_Date + Display Order Code tokens; marketplaces use native source Order
    IDs. Purchase has no source order ID here, so it uses Order Date + Customer.
    A deterministic row fallback is retained only where identity is unavailable. */
 function _sdOrderStats(usage){
@@ -14273,7 +14276,7 @@ function _rkhWebsitePaymentStatsForSkus(rawSkus){
       if(!order || date<'2026-04-01' || date>'2027-03-31') return;
       if(payment!==0 && payment!==1) return;
       // One Website order may contain several curated Rakhi SKUs. The hashed
-      // Order_Date + Invoice Code token prevents that order being double-counted.
+      // Order_Date + Display Order Code token prevents that order being double-counted.
       if(!orders.has(order)) orders.set(order,payment);
     });
   });
@@ -20223,7 +20226,7 @@ function renderSalesComparisonOrders(){
   const shown=data.drivers;
   const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No baseline-date selling SKUs match the selected filters.</td></tr>'}</tbody></table>`;
-  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses exact Order_Date + Invoice Code (${b.websiteExactOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
+  if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses exact Order_Date + Display Order Code, column A (${b.websiteExactOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
 }
 function resetSalesComparisonOrders(){
   _scOrderInitialized=false;const p=document.getElementById('scOrderPreset'),t=document.getElementById('scOrderType'),a=document.getElementById('scOrderDateA'),b=document.getElementById('scOrderDateB'),s=document.getElementById('scOrderSkuSearch');if(p)p.value='days';if(t)t.value='All';if(a)a.value='';if(b)b.value='';if(s)s.value='';_scOrderInit();renderSalesComparisonOrders();
@@ -20231,7 +20234,7 @@ function resetSalesComparisonOrders(){
 function exportSalesComparisonOrders(){
   const data=_scBuildOrderComparison();_scOrderExportRows=data.drivers||[];if(data.error){alert(data.error);return;}if(!data.drivers.length){alert('No baseline-date selling SKU rows to export.');return;}
   const r=data.ranges;
-  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: Order_Date + Invoice Code; Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
+  _dlCsv(['Channel Filter','Baseline From','Baseline To','Comparison From','Comparison To','Order Definition','Rank','SKU','SKU Name','Baseline Sold Qty','Comparison Sold Qty','Qty Delta','Baseline Orders','Comparison Orders','Order Delta','Baseline Net Revenue','Comparison Net Revenue','Revenue Delta','Baseline Product AOV','Comparison Product AOV','Product AOV Delta','Comparison Inv Stock','Image Link'],data.drivers.map((x,i)=>[data.channel,r.a1,r.a2,r.b1,r.b2,'Website: Order_Date + Display Order Code (column A); Myntra/Amazon/Flipkart: source H Order ID; Nykaa/Tata/Ajio: source D Order ID; Purchase/B2B: date + Customer Name',i+1,x.sku,exportSkuName(x.sku,x.skuName),Number(x.a.qty.toFixed(2)),Number(x.b.qty.toFixed(2)),Number(x.qtyDelta.toFixed(2)),x.a.orders,x.b.orders,x.orderDelta,Number(x.a.rev.toFixed(2)),Number(x.b.rev.toFixed(2)),Number(x.revDelta.toFixed(2)),Number(x.a.aov.toFixed(2)),Number(x.b.aov.toFixed(2)),Number(x.aovDelta.toFixed(2)),Math.round(_opsNum((x.item||{}).inv_stock)),x.item?.image_url||'']),'sales_comparison_aov_product_drivers');
 }
 function loadSalesComparison(){_scPopulateFilters();_scAovInit();_scOrderInit();renderSalesComparison();renderSalesComparisonAov();renderSalesComparisonOrders();}
 function renderSalesComparison(){
@@ -23996,9 +23999,9 @@ def _build_daily_reporting():
     return {
         "periods": built,
         "as_of": completed_through.strftime("%d-%b-%Y"),
-        "source_note": "Data basis: completed Order Date. Website = Order_Date + Invoice Code; marketplaces = native exact Order IDs. AOV uses only revenue from source-days with exact order identities, so numerator and order denominator always match.",
+        "source_note": "Data basis: completed Order Date. Website = Order_Date + Display Order Code (column A); marketplaces = native exact Order IDs. AOV uses only revenue from source-days with exact order identities, so numerator and order denominator always match.",
         "revenue_note": "Daily Reporting only: Return Amount gets +6% for every channel; Website also gets +6% on Net Revenue.",
-        "order_note": "Orders are unique source identities: Website = Order_Date + Invoice Code; Myntra H = Order id; Ajio F = FWD Seller Order NO; Amazon/Flipkart H = Order id (J identifies marketplace); Nykaa D = orderno; Tata D = OrderId. cossa_orderdate fallback is used only for Q-Commerce.",
+        "order_note": "Orders are unique source identities: Website = Order_Date + Display Order Code (column A); Myntra H = Order id; Ajio F = FWD Seller Order NO; Amazon/Flipkart H = Order id (J identifies marketplace); Nykaa D = orderno; Tata D = OrderId. cossa_orderdate fallback is used only for Q-Commerce.",
     }
 
 
