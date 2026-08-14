@@ -7966,14 +7966,14 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:8px">
     <div>
-      <div class="insights-title">Rakhi — Child SKU Total Sold in CMBs</div>
+      <div class="insights-title">Rakhi — Child SKU Sold Qty</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRakhiCommonSkus()">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRakhiCommonSkusExcel()">Export Excel</button>
     </div>
   </div>
-  <div class="small-note" style="margin:6px 0 14px">Only RKH child SKUs from the curated Rakhi CMBs on this tab are shown. Total Sold Qty in CMBs is the exact FY 2026-27 Final Qty of those unique parent CMBs added once each. If the same child is in 3 Rakhi CMBs and those parents sold 500 units in total, this table shows exactly 500. The Rakhi Type filter below applies to this table too.</div>
+  <div class="small-note" style="margin:6px 0 14px">Only RKH child SKUs used inside the curated Rakhi CMBs are shown. Individual Sold is that child SKU's own FY 2026-27 Final Qty. In CMBs Sold adds the FY 2026-27 Final Qty of every unique Rakhi parent CMB containing that child, once per parent. Total Sold Qty = Individual Sold + In CMBs Sold. Example: child sold 1,800 individually and its 3 parent CMBs sold 500 in total, so Total Sold Qty = 2,300. The Rakhi Type filter applies to all three quantities.</div>
   <div id="rakhiCommonSkuContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;margin-bottom:26px"></div>
 
   <div class="insights-head">
@@ -15024,20 +15024,19 @@ function exportRakhiChannelCSV(){
 let _rakhiChRows = [];
 window.renderRakhiChannel = renderRakhiChannel; window.exportRakhiChannelCSV = exportRakhiChannelCSV;
 
-/* ── RAKHI CHILD SKU → TOTAL SOLD QTY ACROSS RAKHI CMBs ──
-   One row = one RKH child SKU only. Sold Qty is calculated DIRECTLY from the
-   exact same FY 2026-27 Rakhi order rows used by this tab. Each curated parent
-   CMB contributes its Final Qty once for that child, even if the child code is
-   repeated inside the same CMB. Example: three Rakhi CMB parents sold
-   120 + 180 + 200 = 500, so the child shows exactly 500. */
+/* ── RAKHI CHILD SKU → INDIVIDUAL + CMB SOLD QTY ──
+   One row = one RKH child SKU used by at least one curated Rakhi CMB.
+   Individual Sold = this child SKU's own FY 2026-27 Final Qty.
+   In CMBs Sold = every UNIQUE curated parent CMB's FY 2026-27 Final Qty,
+   counted once for this child even if the child is duplicated inside that CMB.
+   Total Sold Qty = Individual Sold + In CMBs Sold. */
 let _rakhiCommonSkuRows = [];
 function _rkhBuildCommonSkus(){
   const childMap = new Map();
   const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
 
-  // Authoritative parent sales = the SAME Rakhi rows as the main table/summary.
-  // Do not use the generic all-dashboard combo index here: that can pull old or
-  // non-Rakhi CMB parents into a Rakhi-only table and inflate child Sold Qty.
+  // Authoritative parent-CMB sales: exactly the same curated Rakhi FY rows used
+  // by the main Rakhi table/summary. This keeps unrelated catalogue CMBs out.
   const sourceRows = (_rakhiRows && _rakhiRows.length) ? _rakhiRows : _rkhBuildRows();
   const parentSold = new Map();
   sourceRows.forEach(r => {
@@ -15047,11 +15046,21 @@ function _rkhBuildCommonSkus(){
     parentSold.set(parentSku, (parentSold.get(parentSku) || 0) + (Number(r && r.qty) || 0));
   });
 
-  // Build child -> unique RAKHI parent CMB mapping. Only RKH-coded child SKUs
-  // belong in this table. A child repeated twice in one parent is still one use.
+  // Same FY/type context for direct child sales. Unlike _rakhiRows, the raw
+  // rakhi_sales_entries source contains every RKH SKU, including child codes
+  // that are not themselves in the curated top-level Rakhi whitelist.
+  const saleCtx = {
+    sourceField: 'rakhi_sales_entries',
+    types: rt && rt !== 'All' ? [rt] : [],
+    d1: '2026-04-01',
+    d2: '2027-03-31'
+  };
+
+  // Build child -> unique curated Rakhi parent mapping. Only RKH-coded children
+  // belong here. A duplicate child code inside one parent is deliberately one use.
   (master || []).forEach(parent => {
     const parentSku = String((parent && parent.sku) || '').trim().toUpperCase();
-    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku)) return;
+    if (!_rkhIsComboSku(parentSku) || !_rkhInWhitelist(parentSku) || !_rkhComboHasRakhi(parent)) return;
 
     const seenChildren = new Set();
     (Array.isArray(parent && parent.combo_details) ? parent.combo_details : []).forEach(child => {
@@ -15060,13 +15069,18 @@ function _rkhBuildCommonSkus(){
       seenChildren.add(childSku);
 
       const compactChildSku = childSku.replace(/[^A-Z0-9]/g, '');
-      const childItem = _masterSkuMap[childSku] || _bulkSkuLookup[compactChildSku] || {};
+      const childItem = _masterSkuMap[childSku] || _bulkSkuLookup[compactChildSku] || _roExactSkuLookup[compactChildSku] || {sku: childSku};
       let rec = childMap.get(childSku);
       if (!rec) {
+        const individualSold = Number(cnxSaleTotalsForItem(childItem, saleCtx).sold) || 0;
         rec = {
           sku: childSku,
           sku_name: childItem.sku_name || child.sku_name || '',
           image_url: childItem.image_url || child.image_url || '',
+          individual_sold: individualSold,
+          in_cmb_sold: 0,
+          total_sold: individualSold,
+          // Keep the old property for backward compatibility with any cached UI.
           total_cmb_sold: 0,
           parents: []
         };
@@ -15075,18 +15089,24 @@ function _rkhBuildCommonSkus(){
       if (!rec.sku_name && (childItem.sku_name || child.sku_name)) rec.sku_name = childItem.sku_name || child.sku_name || '';
       if (!rec.image_url && (childItem.image_url || child.image_url)) rec.image_url = childItem.image_url || child.image_url || '';
 
-      // This parent is visited once and this child is deduped within the parent,
-      // therefore its Final Qty is added exactly once to the child total.
+      // Parent is visited once and this child is deduped within that parent, so
+      // the parent's Final Qty contributes exactly once to this child's CMB demand.
       const qty = Number(parentSold.get(parentSku)) || 0;
-      rec.total_cmb_sold += qty;
+      rec.in_cmb_sold += qty;
+      rec.total_cmb_sold = rec.in_cmb_sold;
+      rec.total_sold = rec.individual_sold + rec.in_cmb_sold;
       rec.parents.push({sku: parentSku, sku_name: parent.sku_name || '', sold: qty});
     });
   });
 
   return Array.from(childMap.values()).map(rec => {
     rec.parents.sort((a,b)=>a.sku.localeCompare(b.sku));
+    // Recompute, rather than trusting incremental state, so refresh/export always
+    // reconcile exactly even if this function is reused after filter changes.
+    rec.total_cmb_sold = Number(rec.in_cmb_sold) || 0;
+    rec.total_sold = (Number(rec.individual_sold) || 0) + (Number(rec.in_cmb_sold) || 0);
     return rec;
-  }).sort((a,b) => (b.total_cmb_sold - a.total_cmb_sold) || (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
+  }).sort((a,b) => (b.total_sold - a.total_sold) || (b.in_cmb_sold - a.in_cmb_sold) || (b.parents.length - a.parents.length) || a.sku.localeCompare(b.sku));
 }
 function renderRakhiCommonSkus(){
   const host = document.getElementById('rakhiCommonSkuContent');
@@ -15098,10 +15118,12 @@ function renderRakhiCommonSkus(){
   const list = _rkhBuildCommonSkus();
   _rakhiCommonSkuRows = list;
   if (!list.length){
-    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is mapped inside a CMB.</div>';
+    host.innerHTML = '<div class="home-empty" style="padding:30px">No Rakhi child SKU is mapped inside a curated Rakhi CMB.</div>';
     return;
   }
-  const totalConsumed = list.reduce((s,r)=>s+(Number(r.total_cmb_sold)||0),0);
+  const totalIndividual = list.reduce((s,r)=>s+(Number(r.individual_sold)||0),0);
+  const totalInCmb = list.reduce((s,r)=>s+(Number(r.in_cmb_sold)||0),0);
+  const totalSold = list.reduce((s,r)=>s+(Number(r.total_sold)||0),0);
   const rows = list.map(r => {
     const skuEsc = String(r.sku).replace(/'/g, "\\'");
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
@@ -15116,27 +15138,36 @@ function renderRakhiCommonSkus(){
     return `<tr>
       <td style="width:118px;text-align:center">${photo}</td>
       <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')"><b>${escHtml(childLabel)}</b></button></td>
-      <td class="rkh-metric"><b>${Math.round(Number(r.total_cmb_sold)||0).toLocaleString('en-IN')}</b></td>
+      <td class="rkh-metric">${Math.round(Number(r.individual_sold)||0).toLocaleString('en-IN')}</td>
+      <td class="rkh-metric">${Math.round(Number(r.in_cmb_sold)||0).toLocaleString('en-IN')}</td>
+      <td class="rkh-metric"><b>${Math.round(Number(r.total_sold)||0).toLocaleString('en-IN')}</b></td>
       <td class="rkh-metric">${r.parents.length.toLocaleString('en-IN')}</td>
       <td style="white-space:normal;line-height:1.7">${parents || '—'}</td>
     </tr>`;
   }).join('');
   const rt = document.getElementById('rkhTypeFilter')?.value || 'All';
   const scopeText = rt === 'All' ? 'All Types' : rt;
-  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · <b>${Math.round(totalConsumed).toLocaleString('en-IN')}</b> total CMB child-consumption qty · ${escHtml(scopeText)} · FY 2026-27</div>
-    <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:980px;border-collapse:collapse">
-      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Total Sold Qty in CMBs</th><th>Used In CMBs</th><th>Parent CMB SKUs</th></tr></thead>
+  host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · Individual <b>${Math.round(totalIndividual).toLocaleString('en-IN')}</b> · In CMBs <b>${Math.round(totalInCmb).toLocaleString('en-IN')}</b> · Total Sold <b>${Math.round(totalSold).toLocaleString('en-IN')}</b> · ${escHtml(scopeText)} · FY 2026-27</div>
+    <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:1180px;border-collapse:collapse">
+      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Used In Rakhi CMBs</th><th>Parent Rakhi CMB SKUs</th></tr></thead>
       <tbody>${rows}</tbody>
+      <tfoot><tr><th colspan="2" style="text-align:right">TOTAL</th><th class="rkh-metric">${Math.round(totalIndividual).toLocaleString('en-IN')}</th><th class="rkh-metric">${Math.round(totalInCmb).toLocaleString('en-IN')}</th><th class="rkh-metric"><b>${Math.round(totalSold).toLocaleString('en-IN')}</b></th><th colspan="2"></th></tr></tfoot>
     </table>`;
 }
 async function exportRakhiCommonSkusExcel(){
-  const list = _rakhiCommonSkuRows && _rakhiCommonSkuRows.length ? _rakhiCommonSkuRows : _rkhBuildCommonSkus();
-  if (!list.length){ alert('No Rakhi child SKU CMB-sales data to export.'); return; }
+  // Always rebuild at click-time so an Excel export can never carry a stale
+  // pre-filter/pre-refresh quantity from _rakhiCommonSkuRows.
+  const list = _rkhBuildCommonSkus();
+  _rakhiCommonSkuRows = list;
+  if (!list.length){ alert('No Rakhi child SKU sales data to export.'); return; }
   const type = document.getElementById('rkhTypeFilter')?.value || 'All';
   const rows = list.map(r => ({
     sku: r.sku || '',
     sku_name: r.sku_name || '',
-    total_cmb_sold: Number(r.total_cmb_sold) || 0,
+    individual_sold: Number(r.individual_sold) || 0,
+    in_cmb_sold: Number(r.in_cmb_sold) || 0,
+    total_sold: (Number(r.individual_sold) || 0) + (Number(r.in_cmb_sold) || 0),
+    total_cmb_sold: Number(r.in_cmb_sold) || 0,
     cmb_count: Array.isArray(r.parents) ? r.parents.length : 0,
     parent_cmbs: (r.parents || []).map(p => p.sku).join(', '),
     image_url: r.image_url || ''
@@ -15158,7 +15189,7 @@ async function exportRakhiCommonSkusExcel(){
     const url = URL.createObjectURL(blob);
     const today = String(todayISO || new Date().toISOString().slice(0,10));
     a.href = url;
-    a.download = `rakhi_child_sku_cmb_sales_${today}.xlsx`;
+    a.download = `rakhi_child_sku_total_sales_${today}.xlsx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -24964,7 +24995,7 @@ def api_rakhi_cities():
 
 @app.route("/api/rakhi-child-cmb-sales/export.xlsx", methods=["POST"])
 def api_rakhi_child_cmb_sales_export_xlsx():
-    """Export the exact Rakhi child-CMB table currently shown in the browser."""
+    """Export the exact Rakhi child sold-quantity table currently shown."""
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
@@ -24973,35 +25004,64 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         from openpyxl.utils import get_column_letter
 
         payload = request.get_json(silent=True) or {}
-        rows = payload.get("rows") or []
-        if not isinstance(rows, list):
+        raw_rows = payload.get("rows") or []
+        if not isinstance(raw_rows, list):
             return jsonify({"error": "invalid export rows"}), 400
-        if len(rows) > 5000:
+        if len(raw_rows) > 5000:
             return jsonify({"error": "too many export rows"}), 400
         type_label = str(payload.get("type") or "All").strip() or "All"
 
         def _safe_excel_text(value):
-            s = str(value or "")
+            text = str(value or "")
             # Prevent spreadsheet formula injection in exported text cells.
-            if s.startswith(("=", "+", "-", "@")):
-                s = "'" + s
-            return s
+            if text.startswith(("=", "+", "-", "@")):
+                text = "'" + text
+            return text
+
+        # Recompute Total Sold server-side from its two auditable components.
+        # Never trust a client-provided grand total that could be stale.
+        rows = []
+        for raw in raw_rows:
+            if not isinstance(raw, dict):
+                continue
+            sku = clean(raw.get("sku", ""))
+            if not sku:
+                continue
+            individual = to_num(raw.get("individual_sold", 0))
+            in_cmb = to_num(raw.get("in_cmb_sold", raw.get("total_cmb_sold", 0)))
+            rows.append({
+                "sku": sku,
+                "sku_name": clean(raw.get("sku_name", "")),
+                "individual_sold": individual,
+                "in_cmb_sold": in_cmb,
+                "total_sold": individual + in_cmb,
+                "cmb_count": max(0, int(to_num(raw.get("cmb_count", 0)))),
+                "parent_cmbs": clean(raw.get("parent_cmbs", "")),
+                "image_url": clean(raw.get("image_url", "")),
+            })
+
+        if not rows:
+            return jsonify({"error": "no Rakhi child sales rows to export"}), 400
 
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Rakhi Child CMB Sales"
-        headers = ["Child Rakhi SKU", "SKU Name", "Total Sold Qty in CMBs", "Used In CMBs", "Parent CMB SKUs", "Image Link"]
+        ws.title = "Rakhi Child Sales"
+        headers = [
+            "Child Rakhi SKU", "SKU Name", "Individual Sold", "In CMBs Sold",
+            "Total Sold Qty", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs", "Image Link"
+        ]
 
         title_fill = PatternFill("solid", fgColor="F5E8BE")
         header_fill = PatternFill("solid", fgColor="E6C766")
         header_font = Font(bold=True, color="2B2110")
+        total_fill = PatternFill("solid", fgColor="F5E8BE")
         thin = Side(style="thin", color="D9CBA7")
         border = Border(left=thin, right=thin, top=thin, bottom=thin)
         center = Alignment(horizontal="center", vertical="center", wrap_text=True)
         left = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
         ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(headers))
-        title = ws.cell(1, 1, f"Rakhi Child SKU - Total Sold in CMBs | Type: {type_label} | FY 2026-27")
+        title = ws.cell(1, 1, f"Rakhi Child SKU Sold Qty | Type: {type_label} | FY 2026-27")
         title.font = Font(bold=True, size=12, color="2B2110")
         title.fill = title_fill
         title.alignment = center
@@ -25010,52 +25070,68 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             ws.cell(1, col).border = border
 
         for col, header in enumerate(headers, 1):
-            c = ws.cell(2, col, header)
-            c.font = header_font
-            c.fill = header_fill
-            c.alignment = center
-            c.border = border
+            cell = ws.cell(2, col, header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = border
 
         for r_idx, row in enumerate(rows, 3):
-            if not isinstance(row, dict):
-                continue
             values = [
-                _safe_excel_text(row.get("sku")),
-                _safe_excel_text(row.get("sku_name")),
-                float(row.get("total_cmb_sold") or 0),
-                int(row.get("cmb_count") or 0),
-                _safe_excel_text(row.get("parent_cmbs")),
-                _safe_excel_text(row.get("image_url")),
+                _safe_excel_text(row["sku"]),
+                _safe_excel_text(row["sku_name"]),
+                float(row["individual_sold"]),
+                float(row["in_cmb_sold"]),
+                float(row["total_sold"]),
+                int(row["cmb_count"]),
+                _safe_excel_text(row["parent_cmbs"]),
+                _safe_excel_text(row["image_url"]),
             ]
             for col, value in enumerate(values, 1):
-                c = ws.cell(r_idx, col, value)
-                c.border = border
-                c.alignment = center if col in (3, 4) else left
-                if col in (3, 4):
-                    c.number_format = '#,##0.##'
-            image_url = str(row.get("image_url") or "").strip()
+                cell = ws.cell(r_idx, col, value)
+                cell.border = border
+                cell.alignment = center if col in (3, 4, 5, 6) else left
+                if col in (3, 4, 5, 6):
+                    cell.number_format = '#,##0.##'
+            image_url = str(row["image_url"] or "").strip()
             if image_url.lower().startswith(("http://", "https://")):
-                cell = ws.cell(r_idx, 6)
+                cell = ws.cell(r_idx, 8)
                 cell.hyperlink = image_url
                 cell.style = "Hyperlink"
 
+        data_last_row = ws.max_row
+        total_row = data_last_row + 2
+        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=2)
+        label = ws.cell(total_row, 1, "TOTAL SOLD QTY")
+        label.font = Font(bold=True)
+        label.fill = total_fill
+        label.alignment = center
+        total_individual = sum(float(r["individual_sold"]) for r in rows)
+        total_in_cmb = sum(float(r["in_cmb_sold"]) for r in rows)
+        total_sold = total_individual + total_in_cmb
+        for col, value in ((3, total_individual), (4, total_in_cmb), (5, total_sold)):
+            cell = ws.cell(total_row, col, value)
+            cell.font = Font(bold=True)
+            cell.fill = total_fill
+            cell.alignment = center
+            cell.number_format = '#,##0.##'
+        for col in range(1, len(headers) + 1):
+            ws.cell(total_row, col).border = border
+            if col not in (1, 3, 4, 5):
+                ws.cell(total_row, col).fill = total_fill
+
         ws.freeze_panes = "A3"
-        ws.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{max(2, ws.max_row)}"
-        widths = [22, 34, 22, 15, 55, 55]
+        ws.auto_filter.ref = f"A2:{get_column_letter(len(headers))}{max(2, data_last_row)}"
+        widths = [22, 34, 17, 17, 18, 20, 55, 55]
         for i, width in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = width
         ws.row_dimensions[1].height = 26
         ws.row_dimensions[2].height = 30
 
-        total_row = ws.max_row + 2
-        ws.cell(total_row, 1, "TOTAL CMB CHILD-CONSUMPTION QTY").font = Font(bold=True)
-        ws.cell(total_row, 3, sum(float((r or {}).get("total_cmb_sold") or 0) for r in rows if isinstance(r, dict))).font = Font(bold=True)
-        ws.cell(total_row, 3).number_format = '#,##0.##'
-
         bio = io.BytesIO()
         wb.save(bio)
         bio.seek(0)
-        fname = f"rakhi_child_sku_cmb_sales_{now_ist().strftime('%Y-%m-%d')}.xlsx"
+        fname = f"rakhi_child_sku_total_sales_{now_ist().strftime('%Y-%m-%d')}.xlsx"
         resp = app.response_class(
             bio.read(),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -25063,7 +25139,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
         return resp
     except Exception as e:
-        return jsonify({"error": f"Rakhi child CMB Excel export failed: {e}"}), 500
+        return jsonify({"error": f"Rakhi child sales Excel export failed: {e}"}), 500
 
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
