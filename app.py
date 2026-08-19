@@ -6827,6 +6827,7 @@ table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{backgroun
 .fg .fc,.ops-page .ops-filters .fc{background:linear-gradient(145deg,#fffefb,#f8f0e2)!important;border:1px solid rgba(123,91,33,.1)!important;border-radius:14px!important;padding:12px!important;min-height:88px!important;box-shadow:0 7px 18px rgba(86,64,24,.05)!important}
 .fl,.ops-page label{color:#8a6119!important;font-size:8px!important;letter-spacing:1.4px!important;font-weight:950!important;text-transform:uppercase!important}
 .fi,.fs,input.fi,select.fs,textarea{min-height:40px!important;border:1px solid rgba(123,91,33,.18)!important;border-radius:11px!important;background:#fffefb!important;color:#201a12!important;box-shadow:inset 0 1px 3px rgba(86,64,24,.05)!important;transition:border-color .2s,box-shadow .2s!important}.fi:focus,.fs:focus,input.fi:focus,select.fs:focus,textarea:focus{outline:none!important;border-color:#b88930!important;box-shadow:0 0 0 3px rgba(184,137,48,.13),inset 0 1px 3px rgba(86,64,24,.04)!important}
+select.category-multi-select{min-height:96px!important;padding:6px 8px!important;line-height:1.35!important}select.category-multi-select option{padding:5px 7px!important;border-radius:7px!important;margin:1px 0!important}
 .go-btn,.ai-hbtn,.mini-btn,.home-back{border:0!important;border-radius:11px!important;background:linear-gradient(145deg,#ebcf88,#a87920)!important;color:#1d160c!important;box-shadow:0 10px 24px rgba(168,121,32,.17),inset 0 1px rgba(255,255,255,.55)!important;transition:transform .2s,box-shadow .2s!important}.go-btn:hover,.ai-hbtn:hover,.mini-btn:hover,.home-back:hover{transform:translateY(-2px)!important;box-shadow:0 16px 30px rgba(168,121,32,.22)!important}
 .kpis{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(175px,1fr))!important;gap:13px!important;align-items:stretch!important}.kpi{min-width:0!important;min-height:122px!important;text-align:left!important;padding:18px!important}.kpi-t{text-align:left!important;color:#8a6119!important}.kpi-v{text-align:left!important;font-family:'Montserrat',sans-serif!important;color:#201a12!important}
 .ro-table-wrap,.ops-page .ops-table-wrap{border:1px solid rgba(123,91,33,.14)!important;border-radius:19px!important;background:#fffefb!important;box-shadow:var(--cnx-shadow)!important;overflow:auto!important}.ro-table-wrap table.ro,.ops-page table.ops-table{background:#fffefb!important}.ro-table-wrap table.ro thead th,.ops-page table.ops-table th{background:#f2e5cf!important;color:#7d5614!important;border-bottom:1px solid rgba(123,91,33,.16)!important;font-weight:950!important}.ro-table-wrap table.ro tbody tr:nth-child(even) td,.ops-page table.ops-table tbody tr:nth-child(even) td{background:rgba(248,240,225,.45)!important}.ro-table-wrap table.ro tbody tr:hover td,.ops-page table.ops-table tbody tr:hover td{background:#fff3d9!important}
@@ -7109,7 +7110,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
           <div id="fSubChanChecks" class="type-checks"></div></div>
-        <div class="fc"><label class="fl">Taxon / Category</label>
+        <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">Product Type</label>
           <select class="fs" id="fCnTag" onchange="applyF()">
@@ -7204,7 +7205,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
           <div id="rSubChanChecks" class="type-checks"></div></div>
-        <div class="fc"><label class="fl">Taxon / Category</label>
+        <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
         <div class="fc"><label class="fl">Product Type</label>
           <select class="fs" id="rCnTag" onchange="applyRO()">
@@ -7717,7 +7718,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <option value="No Record">Dead (No Record)</option>
         <option value="New Launch">New Launch</option>
       </select></div>
-    <div class="fc"><label class="fl">Taxon / Category</label>
+    <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
       <select class="fs" id="ssTaxon" onchange="renderStockStatus()">
         <option value="All">All Categories</option>
       </select></div>
@@ -7797,7 +7798,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div>
       <div class="insights-head" style="margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Payment Inward Target — Week-wise (Planning Sheet)</div>
+        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
         <button class="go-btn" style="width:auto;padding:5px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">Export CSV</button>
       </div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
@@ -7954,7 +7955,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </select></div>
     <div class="fc"><label class="fl">Type</label>
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
-    <div class="fc"><label class="fl">Taxon</label>
+    <div class="fc"><label class="fl">Taxon (select one or more)</label>
       <select class="fs" id="prodTaxon" onchange="loadProduction()"><option value="">All Taxons</option></select></div>
     <div class="fc"><label class="fl">Search SKU</label>
       <input class="fi" id="prodSku" placeholder="type SKU…" oninput="prodSearchDebounced()"></div>
@@ -8363,7 +8364,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scD1" onchange="renderSalesComparison()"></div>
       <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scD2" onchange="renderSalesComparison()"></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="scType" onchange="renderSalesComparison()"><option value="All">All Types</option></select></div>
-      <div class="fc"><label class="fl">Taxon</label><select class="fs" id="scTaxon" onchange="renderSalesComparison()"><option value="All">All Taxons</option></select></div>
+      <div class="fc"><label class="fl">Taxon (select one or more)</label><select class="fs" id="scTaxon" onchange="renderSalesComparison()"><option value="All">All Taxons</option></select></div>
       <div class="fc"><label class="fl">Rakhi / Others</label><select class="fs" id="scProductGroup" onchange="renderSalesComparison()"><option value="All">All Products</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparison()">Reset</button>
     </div>
@@ -8505,7 +8506,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           <option value="Others">Others</option>
         </select>
       </div>
-      <div class="fc"><label class="fl">Category</label>
+      <div class="fc"><label class="fl">Category (select one or more)</label>
         <select class="fs" id="oosTaxon" onchange="renderOOS()">
           <option value="All">All Categories</option>
         </select>
@@ -8532,7 +8533,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="rpSearch" placeholder="Search SKU…" oninput="renderRepeatPlanner_d()"></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="rpGroup" onchange="renderRepeatPlanner()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="rpTaxon" onchange="renderRepeatPlanner()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="rpTaxon" onchange="renderRepeatPlanner()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Sales Period</label><select class="fs" id="rpWindow" onchange="renderRepeatPlanner()"><option value="30">Latest 30 Days</option><option value="90">Latest 90 Days</option><option value="15">Latest 15 Days</option><option value="7">Latest 7 Days</option></select></div>
       <div class="fc"><label class="fl">Lead Time (Days)</label><input class="fi" id="rpLeadDays" type="number" min="1" max="365" value="45" oninput="renderRepeatPlanner_d()"></div>
       <div class="fc"><label class="fl">Safety Stock (Days)</label><input class="fi" id="rpSafetyDays" type="number" min="0" max="180" value="15" oninput="renderRepeatPlanner_d()"></div>
@@ -8560,7 +8561,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">CMB Filter</label><select class="fs" id="crCmb" onchange="renderComboRisk()"><option value="All">All CMBs</option></select></div>
       <div class="fc"><label class="fl">Child SKU Use</label><select class="fs" id="crRelation" onchange="renderComboRisk()"><option value="all">All Child SKUs &amp; Combos</option><option value="shared">Child in Multiple CMBs</option><option value="single">Child in One CMB</option></select></div>
       <div class="fc"><label class="fl">Combo Group</label><select class="fs" id="crGroup" onchange="renderComboRisk()"><option value="All">All Combos</option><option value="Rakhi">Rakhi Combos</option><option value="Others">Other Combos</option></select></div>
-      <div class="fc"><label class="fl">Child Category</label><select class="fs" id="crTaxon" onchange="renderComboRisk()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Child Category (select one or more)</label><select class="fs" id="crTaxon" onchange="renderComboRisk()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Plan for Next</label><select class="fs" id="crHorizon" onchange="renderComboRisk()"><option value="15">15 Days</option><option value="30" selected>30 Days</option><option value="45">45 Days</option><option value="60">60 Days</option></select></div>
       <div class="fc"><label class="fl">Products to Show</label><select class="fs" id="crRiskOnly" onchange="renderComboRisk()"><option value="all" selected>All Child SKUs</option><option value="yes">Only Shortage Risk</option></select></div>
       <div class="fc"><label class="fl">Include WIP in Support</label><select class="fs" id="crIncludeWip" onchange="renderComboRisk()"><option value="no">No — Stock Only</option><option value="yes">Yes — Stock + WIP</option></select></div>
@@ -8612,7 +8613,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-filters">
         <div class="fc"><label class="fl">Alert</label><select class="fs" id="saType" onchange="renderSmartAlerts()"><option value="All">All Alerts</option><option value="OOS_7">Stockout within 7 Days</option><option value="HIGH_SALE_LOW_WIP">High Sales, Low WIP</option><option value="WIP_OLD">WIP Pending Too Long</option><option value="TARGET_BEHIND">Target Behind</option><option value="HIGH_RETURN">High Return Rate</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="saGroup" onchange="renderSmartAlerts()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-        <div class="fc"><label class="fl">Category</label><select class="fs" id="saTaxon" onchange="renderSmartAlerts()"><option value="All">All Categories</option></select></div>
+        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="saTaxon" onchange="renderSmartAlerts()"><option value="All">All Categories</option></select></div>
         <div class="fc"><label class="fl">Search</label><input class="fi" id="saSearch" placeholder="SKU / channel…" oninput="renderSmartAlerts_d()"></div>
         <div class="fc"><label class="fl">WIP Pending For</label><select class="fs" id="saWipDays" onchange="renderSmartAlerts()"><option value="15">15+ Days</option><option value="30" selected>30+ Days</option><option value="45">45+ Days</option><option value="60">60+ Days</option></select></div>
       </div>
@@ -8627,7 +8628,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-filters">
         <div class="fc"><label class="fl">Stock Age</label><select class="fs" id="iaBucket" onchange="renderInventoryAgeing()"><option value="All">All Ages</option><option value="0-30">0–30 Days</option><option value="31-60">31–60 Days</option><option value="61-90">61–90 Days</option><option value="90+">90+ Days</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="iaGroup" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-        <div class="fc"><label class="fl">Category</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Categories</option></select></div>
+        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Categories</option></select></div>
         <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing_d()"></div>
         <div class="fc"><label class="fl">Sales Activity</label><select class="fs" id="iaSaleActivity" onchange="renderInventoryAgeing()"><option value="all">All Products</option><option value="not60">Not Sold in Last 60 Days</option><option value="sold60">Sold in Last 60 Days</option></select></div>
         <div class="fc"><label class="fl">Products to Show</label><select class="fs" id="iaStockOnly" onchange="renderInventoryAgeing()"><option value="yes">Only Products with Stock</option><option value="all">Include Zero-Stock Products</option></select></div>
@@ -8653,7 +8654,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="oppSearch" placeholder="Search SKU…" oninput="renderOpportunityScore_d()"></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="oppGroup" onchange="renderOpportunityScore()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="oppTaxon" onchange="renderOpportunityScore()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="oppTaxon" onchange="renderOpportunityScore()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Sales Comparison Period</label><select class="fs" id="oppWindow" onchange="loadOpportunityScore()"><option value="30" selected>Latest 30D vs Previous 30D</option><option value="15">Latest 15D vs Previous 15D</option><option value="7">Latest 7D vs Previous 7D</option><option value="90">Latest 90D vs Previous 90D</option></select></div>
       <div class="fc"><label class="fl">Action</label><select class="fs" id="oppAction" onchange="renderOpportunityScore()"><option value="All">All Actions</option><option value="Push Now">Push Now</option><option value="Replenish & Push">Replenish &amp; Push</option><option value="Maintain">Maintain</option><option value="Watch">Watch</option><option value="Fix Returns">Fix Returns</option><option value="Pause / Fix">Pause / Fix</option></select></div>
       <div class="fc"><label class="fl">Minimum Score</label><input class="fi" id="oppMinScore" type="number" min="0" max="100" value="0" oninput="renderOpportunityScore_d()"></div>
@@ -8680,7 +8681,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Change Type</label><select class="fs" id="anomType" onchange="renderSalesAnomalies()"><option value="All">All Changes</option><option value="SALE_DROP">Sudden Sale Drop</option><option value="SALE_SPIKE">Unusual Sale Spike</option><option value="RETURN_INCREASE">Unexpected Return Increase</option><option value="STOCK_NO_SALE">Stock Movement Without Sale</option><option value="REVENUE_ISSUE">Negative / Incorrect Revenue</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="anomGroup" onchange="renderSalesAnomalies()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="anomChannel" onchange="renderSalesAnomalies()"><option value="All">All Channels</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="anomTaxon" onchange="renderSalesAnomalies()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="anomTaxon" onchange="renderSalesAnomalies()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Comparison Period</label><select class="fs" id="anomWindow" onchange="loadSalesAnomalies(false)"><option value="7">Latest 7D vs Previous 7D</option><option value="15">Latest 15D vs Previous 15D</option><option value="30" selected>Latest 30D vs Previous 30D</option><option value="60">Latest 60D vs Previous 60D</option></select></div>
       <div class="fc"><label class="fl">Severity</label><select class="fs" id="anomSeverity" onchange="renderSalesAnomalies()"><option value="All">All Severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option></select></div>
       <div class="fc"><label class="fl">Minimum Previous Sales</label><input class="fi" id="anomBaseline" type="number" min="1" value="5" oninput="loadSalesAnomalies_d()"></div>
@@ -8708,7 +8709,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
       <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="_concSourceChanged()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Top Product Share Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
@@ -8742,7 +8743,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="dpD1" onchange="renderDemandPatterns()"></div>
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="dpD2" onchange="renderDemandPatterns()"></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="dpGroup" onchange="renderDemandPatterns()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="dpTaxon" onchange="renderDemandPatterns()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="dpTaxon" onchange="renderDemandPatterns()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="dpType" onchange="renderDemandPatterns()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="dpChannel" onchange="renderDemandPatterns()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="dpSearch" placeholder="Search SKU / product…" oninput="renderDemandPatterns_d()"></div>
@@ -8769,7 +8770,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="ops-filters">
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="olsGroup" onchange="renderOosLostSales()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-      <div class="fc"><label class="fl">Category</label><select class="fs" id="olsTaxon" onchange="renderOosLostSales()"><option value="All">All Categories</option></select></div>
+      <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="olsTaxon" onchange="renderOosLostSales()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="olsType" onchange="renderOosLostSales()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="olsChannel" onchange="renderOosLostSales()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Sales Period Before Stockout</label><select class="fs" id="olsWindow" onchange="renderOosLostSales()"><option value="30">30 Days</option><option value="60">60 Days</option><option value="90" selected>90 Days</option><option value="180">180 Days</option></select></div>
@@ -8942,6 +8943,74 @@ const CNX_SMOOTH_MODE = true;
 let insightRows = [];
 let roSortKey = "total_net_revenue";
 let roSortDir = -1;
+
+// ── Category multi-select shared by every dashboard tab ───────────────────
+// Click any category to toggle it; Ctrl/Cmd is NOT required.  "All" (or the
+// blank All option used by Production) is mutually exclusive with categories.
+const CNX_CATEGORY_SELECT_IDS = [
+  'fTaxon','rTaxon','iTaxon','ssTaxon','prodTaxon','scTaxon','oosTaxon',
+  'rpTaxon','crTaxon','saTaxon','iaTaxon','oppTaxon','anomTaxon',
+  'concTaxon','dpTaxon','olsTaxon'
+];
+function cnxSelectedCategoryValues(id){
+  const el = document.getElementById(id);
+  if (!el) return [];
+  const opts = Array.from(el.selectedOptions || []);
+  return opts.map(o => String(o.value ?? '')).filter(v => v && v !== 'All');
+}
+function cnxCategoryMatches(selected, value){
+  const vals = Array.isArray(selected) ? selected : [];
+  return vals.length === 0 || vals.includes(String(value ?? ''));
+}
+function cnxResetCategorySelection(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  const allOpt = Array.from(el.options || []).find(o => o.value === 'All') ||
+                 Array.from(el.options || []).find(o => o.value === '');
+  Array.from(el.options || []).forEach(o => { o.selected = !!allOpt && o === allOpt; });
+  if (!allOpt && el.options && el.options.length) el.options[0].selected = true;
+}
+function cnxRestoreCategorySelection(id, values){
+  const el = document.getElementById(id);
+  if (!el) return;
+  const list = Array.isArray(values) ? values : ((values && values !== 'All') ? [values] : []);
+  const wanted = new Set(list.map(v => String(v)));
+  let matched = 0;
+  Array.from(el.options || []).forEach(o => {
+    const on = o.value !== 'All' && o.value !== '' && wanted.has(String(o.value));
+    o.selected = on;
+    if (on) matched++;
+  });
+  if (!matched) cnxResetCategorySelection(id);
+}
+function cnxEnableCategoryMultiSelect(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.multiple = true;
+  el.size = Math.max(2, Math.min(5, Math.max(2, el.options.length)));
+  el.classList.add('category-multi-select');
+  el.title = 'Click categories to select more than one. Click All to clear the category selection.';
+  if (el.dataset.cnxMultiReady === '1') return;
+  el.dataset.cnxMultiReady = '1';
+  el.addEventListener('mousedown', function(ev){
+    const opt = ev.target;
+    if (!opt || opt.tagName !== 'OPTION') return;
+    ev.preventDefault();
+    const isAll = opt.value === 'All' || opt.value === '';
+    if (isAll){
+      Array.from(el.options).forEach(o => { o.selected = (o === opt); });
+    } else {
+      opt.selected = !opt.selected;
+      Array.from(el.options).forEach(o => { if (o.value === 'All' || o.value === '') o.selected = false; });
+      const any = Array.from(el.options).some(o => o.value !== 'All' && o.value !== '' && o.selected);
+      if (!any) cnxResetCategorySelection(id);
+    }
+    el.dispatchEvent(new Event('change', {bubbles:true}));
+  });
+}
+function cnxEnableAllCategoryMultiSelects(){
+  CNX_CATEGORY_SELECT_IDS.forEach(cnxEnableCategoryMultiSelect);
+}
 
 function fmt(n){ return '₹' + Math.round(n || 0).toLocaleString('en-IN'); }
 function safeText(v){ return (v === null || v === undefined) ? '' : String(v); }
@@ -9706,6 +9775,8 @@ function toggleDbg(){
 }
 
 function showTab(t){
+  // Some secondary tabs populate category options lazily; re-enable the shared multi-select behavior on every tab change.
+  setTimeout(cnxEnableAllCategoryMultiSelects, 0);
   const tabs = ['matrix','repeat','finder','skudetails','marketplaces'];
   tabs.forEach((x,i)=>{
     const el = document.getElementById('v'+x.charAt(0).toUpperCase()+x.slice(1));
@@ -11373,7 +11444,7 @@ function loadData(force){
       renderChannelChecks();
       renderSubChannelChecks();
       renderPackChecks();
-      ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = taxHtml; });
+      ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = taxHtml; cnxResetCategorySelection(id); cnxEnableCategoryMultiSelect(id); } });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
       // Launch Month options — month-wise (Month + Year combined), ascending
       const lm = new Map();
@@ -11385,6 +11456,7 @@ function loadData(force){
       const fy = document.getElementById('fFY'); if (fy) fy.innerHTML = fyHtml;
 
       selectedSkuSet = new Set();
+      cnxEnableAllCategoryMultiSelects();
       refreshChecklists();
       if (L) L.style.display = 'none'; stopWarmupPoll();
       // showTab('home') queues exactly one Home render. The old flow rendered
@@ -11442,7 +11514,7 @@ function mkCard(item, rev, conf, slow){
 }
 
 let _matrixTxns = [];   // Overall Details drill-down (customer/date filtered) rows — export ke liye
-let _matrixPivot = [];  // Overall Details pivot (customer + SKU wise totals) — export ke liye
+let _matrixPivot = [];  // Overall Details pivot (strictly one row per SKU) — export ke liye
 function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
   const cnQ = cnxGlobalCnQuery();
@@ -11450,7 +11522,7 @@ function applyF(){
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
   const subChanSel = getSelectedSubChannels('fSubChan');
-  const taxonQ = document.getElementById('fTaxon')?.value || 'All';
+  const taxonSel = cnxSelectedCategoryValues('fTaxon');
   const cnTagQ = document.getElementById('fCnTag')?.value || 'All';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
   const fyQ = document.getElementById('fFY')?.value || 'All FYs';
@@ -11504,7 +11576,7 @@ function applyF(){
     if (txt && !hay.includes(txt)) return;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return;
     if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
-    if (taxonQ !== 'All' && item.taxon !== taxonQ) return;
+    if (!cnxCategoryMatches(taxonSel, item.taxon)) return;
     if (cnTagQ === 'Religious' && !item.is_religious) return;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return;
     if (statusQ !== 'All' && item.status !== statusQ) return;
@@ -11594,16 +11666,24 @@ function applyF(){
         const invBy = {};
         master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
 
-        // ── Pivot: customer + SKU ke hisaab se (alag alag date ki entries) jod do ──
+        // ── SKU pivot: EXACTLY one row per SKU, even across many customers/dates. ──
+        // Combo-child usage is shown separately in the same SKU row via "In CMBs Sold";
+        // it never creates another pivot row.
         const pivotMap = new Map();
         txns.forEach(t => {
-          const key = t.cust + '|||' + t.sku;
-          if (!pivotMap.has(key)) pivotMap.set(key, { cust: t.cust, sku: t.sku, sku_name: t.sku_name, qty: 0, rev: 0 });
+          const key = String(t.sku || '').trim().toUpperCase();
+          if (!key) return;
+          if (!pivotMap.has(key)) pivotMap.set(key, { sku: t.sku, sku_name: t.sku_name, qty: 0, rev: 0, customers: new Set() });
           const p = pivotMap.get(key);
           p.qty += parseFloat(t.qty) || 0;
           p.rev += parseFloat(t.rev) || 0;
+          const c = String(t.cust || '').trim();
+          if (c) p.customers.add(c);
         });
-        _matrixPivot = Array.from(pivotMap.values()).sort((a,b) => b.rev - a.rev);
+        _matrixPivot = Array.from(pivotMap.values()).map(p => ({
+          sku:p.sku, sku_name:p.sku_name, qty:p.qty, rev:p.rev,
+          customer_count:p.customers.size, customer_names:Array.from(p.customers).sort()
+        })).sort((a,b) => b.rev - a.rev);
 
         const MATRIX_RENDER_CAP = 150;
         const visibleTxns = txns.slice(0, MATRIX_RENDER_CAP);
@@ -11630,12 +11710,12 @@ function applyF(){
           const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
           const iv = invBy[p.sku] || {s:0, w:0, img:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
-          const pivotCtx = {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:String(p.cust||'').trim().toLowerCase(),fy:fyQ==='All FYs'?'':fyQ,d1,d2,businessChannel:true};
+          const pivotCtx = {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,businessChannel:true};
           const pivotItem = _masterSkuMap[String(p.sku||'').trim().toUpperCase()] || {sku:p.sku};
           const pivotCmbSold = cnxSoldSplit(pivotItem,pivotCtx,{allowedParentSkus:hasSelectedSkus?selectedSkuSet:null}).inCmb.sold;
           return `<tr>
-            <td>${safeText(p.cust)}</td>
             <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(p.sku, p.sku_name)}</button></div></td>
+            <td class="gold" title="${escHtml((p.customer_names||[]).join(', '))}">${Number(p.customer_count||0).toLocaleString('en-IN')}</td>
             <td class="gold">${p.qty}</td>
             <td class="gold">${Math.round(pivotCmbSold)}</td>
             ${LOGIN_ROLE==='employee' ? '' : `<td class="green">${fmt(p.rev)}</td>`}
@@ -11664,7 +11744,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>Customer</th><th>SKU</th><th>Individual Sold</th><th>In CMBs Sold</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
           ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
@@ -11678,7 +11758,7 @@ function applyF(){
   }
   const setTxt = (id, val) => { const el=document.getElementById(id); if (el) el.textContent = fmt(val); };
 
-  const noFilter = !(txt || hasSelectedSkus || taxonQ!=='All' || cnTagQ!=='All' || statusQ!=='All' ||
+  const noFilter = !(txt || hasSelectedSkus || taxonSel.length>0 || cnTagQ!=='All' || statusQ!=='All' ||
                      fyQ!=='All FYs' || plat!=='All' || mrpRange || launchQ!=='All' || custQ || d1 || d2 ||
                      typeSel.length>0 || chanSel.length>0 || subChanSel.length>0);
   if (noFilter) {
@@ -11727,10 +11807,10 @@ function _matrixBuildPayload(kind){
   return _matrixPivot.map(p => {
     const iv = invBy[p.sku] || {s:0, w:0, img:''};
     const item=_masterSkuMap[String(p.sku||'').trim().toUpperCase()]||{sku:p.sku};
-    const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:String(p.cust||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
+    const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
     const comboQty=cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
     return {
-      customer: p.cust, sku: p.sku, qty: p.qty, combo_qty: comboQty, revenue: showRev ? Math.round(p.rev) : null,
+      sku: p.sku, customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty, revenue: showRev ? Math.round(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
       image_url: iv.img || ''
     };
@@ -11751,9 +11831,9 @@ function exportMatrixCSV(kind){
       return line;
     });
   } else {
-    headers = ['Customer','SKU','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
+    headers = ['SKU','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
     csvRows = rows.map(r => {
-      const line = [r.customer, r.sku, r.qty, r.combo_qty||0];
+      const line = [r.sku, r.customers||'', r.customer_count||0, r.qty, r.combo_qty||0];
       if (showRev) line.push(r.revenue);
       line.push(r.inv_stock, r.inv_wip, r.image_url);
       return line;
@@ -11801,7 +11881,8 @@ window.exportMatrixPDF = exportMatrixPDF;
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
-  ['fTaxon','fStatus','fFY','fPlat','fLaunch','fCnTag'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
+  ['fStatus','fFY','fPlat','fLaunch','fCnTag'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
+  cnxResetCategorySelection('fTaxon');
   document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fSubChanChecks input:checked').forEach(c => c.checked = false);
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
   selectedSkuSet.clear();
@@ -11844,7 +11925,7 @@ function applyRO(){
   const chanSel = getSelectedChannels('rChan');
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtx = roInvContext(typeSel, chanSel, subChanSel);
-  const taxQ = document.getElementById('rTaxon')?.value || 'All';
+  const taxSel = cnxSelectedCategoryValues('rTaxon');
   const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const d1 = document.getElementById('rD1')?.value || '';
@@ -11876,7 +11957,7 @@ function applyRO(){
     if (pastedSkuSet && !pastedSkuSet.has(String(item.sku).toUpperCase())) return false;
     if (txt && !`${item.sku||''} ${item.sku_name||''} ${item.cn_name||''}`.toLowerCase().includes(txt)) return false;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return false;
-    if (taxQ !== 'All' && item.taxon !== taxQ) return false;
+    if (!cnxCategoryMatches(taxSel, item.taxon)) return false;
     if (cnTagQ === 'Religious' && !item.is_religious) return false;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
@@ -11925,7 +12006,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - Math.max(0,n-1)*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
@@ -11967,7 +12048,7 @@ function applyRO(){
   });
   _setSkuRevenueShareContext('repeat', roRevenueShareMap, roRevenueShareTotal);
 
-  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -12137,11 +12218,9 @@ function applyRO(){
     const comboWip = (c) => wipOf(c);
     const wipLabel = roAnuMode ? "WIP (Anu Ma'am)" : (roInvCtx.wipLabel || 'WIP');
     // Filter-aware combo details: Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(
-      item.combo_details, comboStock, comboWip, wipLabel, typeSel,
-      {q7:q7, q15:q15, q30:q30, sold:qty},
-      {parentSku:item.sku, types:typeSel, channels:chanSel, subChannels:subChanSel, customer:custQ, d1, d2}
-    );
+    const comboHtml = (item.combo_details && item.combo_details.length)
+      ? `<div class="small-note" style="margin-top:4px">Gift set · ${item.combo_details.length} child SKU${item.combo_details.length===1?'':'s'}. Child demand is rolled into each child SKU's own <b>In CMBs Sold</b> value, so the pivot keeps one row per SKU.</div>`
+      : '';
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${img}
@@ -12286,7 +12365,7 @@ function applyColFilters(){
     typeSelCF.length > 0 ||
     chanSelCF.length > 0 ||
     subChanSelCF.length > 0 ||
-    (document.getElementById('rTaxon')?.value || 'All') !== 'All' ||
+    cnxSelectedCategoryValues('rTaxon').length > 0 ||
     (document.getElementById('rCust')?.value  || '').trim() ||
     (document.getElementById('rD1')?.value    || '') ||
     (document.getElementById('rD2')?.value    || '') ||
@@ -12314,15 +12393,9 @@ function applyColFilters(){
     const comboWip2 = (c) => wipOfCF(c);
     const wipLabel2 = roAnuModeCF ? "WIP (Anu Ma'am)" : (roInvCtxCF.wipLabel || 'WIP');
     // Filter-aware combo details (col-filter render): Type filter ke hisaab se individual SKU sales
-    const comboHtml = _renderComboDetails(
-      item.combo_details, comboStock2, comboWip2, wipLabel2, typeSelCF,
-      {q7:q7, q15:q15, q30:q30, sold:qty},
-      {
-        parentSku:item.sku, types:typeSelCF, channels:chanSelCF, subChannels:subChanSelCF,
-        customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),
-        d1:document.getElementById('rD1')?.value||'', d2:document.getElementById('rD2')?.value||''
-      }
-    );
+    const comboHtml = (item.combo_details && item.combo_details.length)
+      ? `<div class="small-note" style="margin-top:4px">Gift set · ${item.combo_details.length} child SKU${item.combo_details.length===1?'':'s'}. Child demand is rolled into each child SKU's own <b>In CMBs Sold</b> value, so the pivot keeps one row per SKU.</div>`
+      : '';
     return `<tr>
       <td style="text-align:center"><input type="checkbox" class="ro-tick" ${checked} onclick="toggleSkuSelection('${skuEsc}', this.checked)"></td>
       <td><div class="sku-cell">${imgTag}
@@ -12365,7 +12438,7 @@ function resetRO(){
   document.querySelectorAll('#rTypeChecks input:checked').forEach(c => c.checked = false);
   roAnuWipMap = {}; roAnuLastQuery = null;
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
-  const rx = document.getElementById('rTaxon'); if (rx) rx.value='All';
+  cnxResetCategorySelection('rTaxon');
   const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
@@ -12537,48 +12610,9 @@ function exportRO(fmtType){
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
     });
-    // Gift set ke andar child demand = parent CMB ki filtered sale + child ki
-    // apni direct sale. Yeh sirf exported display rows hain; KPI/master totals
-    // me child rows add nahi hote.
-    (item.combo_details || []).forEach(c => {
-      const childInv = roChildOwnInventory(c);
-      const childItem = childInv.item;
-      const childDirect = cnxSaleTotalsForItem(childItem, roSaleCtxX);
-      const c7 = Math.round(r7);
-      const c15 = Math.round(r15);
-      const c30 = Math.round(r30);
-      const cIndividual = Math.round(childDirect.sold);
-      const cInCmb = Math.round(rSold);
-      data.push({
-        'Row Type': '— Set Item',
-        SKU: c.sku,
-        'SKU Name': exportSkuName(c.sku, c.sku_name),
-        'Stone Color': c.stone_color || '',
-        'Set Item Of': item.sku,
-        'Product Dimensions': '',
-        'Pack Details': '',
-        '7D Sale': c7,
-        '15D Sale': c15,
-        '30D Sale': c30,
-        'Individual Sold': cIndividual,
-        'In CMBs Sold': cInCmb,
-        'MRP': parseFloat(c.mrp) || 0,
-        ...(emp1 ? {} : {'Selling Price': '', 'Discount %': ''}),
-        'Inv Stock': childInv.stock,
-        'Inv WIP': childInv.wip,
-        'Blocked Qty': c.blocked_qty || 0,
-        'Forecast Sold Qty': c.forecast_60d || 0,
-        'Reorder Qty': c.reorder_qty || 0,
-        Status: c.found ? '' : 'Not in inventory',
-        Taxon: c.taxon || '',
-        Plating: c.plating || '',
-        Type: typeSel.length > 0 ? typeSel.join(', ') : '',
-        'Customer Count': '',
-        'Remark': '',
-        'Remark 2': '',
-        'Image Link': c.image_url || '',
-      });
-    });
+    // One-row-per-SKU export: child CMB usage is already captured in the main
+    // SKU row's "In CMBs Sold" column, so child rows are intentionally not
+    // appended here.
   });
   downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType);
 }
@@ -14802,7 +14836,7 @@ function _rkhBuildPivot(rows){
   const typeSet = new Set();
   const map = {};
   rows.forEach(r => {
-    const key = String(r.sku || '').trim();
+    const key = String(r.sku || '').trim().toUpperCase();
     if (!key) return;
     const t = String(r.type || '').trim() || 'Unspecified';
     typeSet.add(t);
@@ -14844,7 +14878,7 @@ function renderRakhiPivot(){
       : '—';
     const stk = parseInt(r.inv_stock) || 0;
     const wip = parseInt(r.inv_wip) || 0;
-    const comboHtml = _rkhComboBoxHtml(r.combo_details,r.sku,(r.qty ?? r.totalQty ?? r.sales ?? 0));
+    const comboHtml = (r.combo_details && r.combo_details.length) ? `<div class="small-note" style="margin-top:4px">Gift set · ${r.combo_details.length} child SKU${r.combo_details.length===1?'':'s'}. Child demand is included in each child SKU's own <b>In CMBs Sold</b> value.</div>` : '';
     return `<tr>
       <td>${img}</td>
       <td><div class="sku-cell" style="flex-direction:column;align-items:flex-start;gap:6px">
@@ -16019,7 +16053,12 @@ function prodSearchDebounced(){ clearTimeout(_prodSearchTimer); _prodSearchTimer
 function _productionQueryString(forceFresh=false){
   const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',sku:'prodSku',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
   const params=new URLSearchParams();
-  Object.entries(fields).forEach(([key,id])=>params.set(key,document.getElementById(id)?.value||''));
+  Object.entries(fields).forEach(([key,id])=>{
+    if(key==='taxon'){
+      const vals=cnxSelectedCategoryValues(id);
+      if(vals.length) vals.forEach(v=>params.append(key,v)); else params.set(key,'');
+    }else params.set(key,document.getElementById(id)?.value||'');
+  });
   params.set('cn_name',document.getElementById('cnGlobalSearch')?.value||'');
   if(forceFresh) params.set('fresh','1');
   return params.toString();
@@ -16046,7 +16085,10 @@ function loadProduction(forceFresh=false){
         };
         fill('prodChannel', d.channels, 'All Channels');
         fill('prodType', d.types, 'All Types');
+        const _prodTaxPrev=cnxSelectedCategoryValues('prodTaxon');
         fill('prodTaxon', d.taxons, 'All Taxons');
+        cnxRestoreCategorySelection('prodTaxon', _prodTaxPrev);
+        cnxEnableCategoryMultiSelect('prodTaxon');
         _prodFilled = true;
       }
       renderProduction();
@@ -16160,7 +16202,8 @@ function renderProduction(){
 }
 function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
-  ['prodChannel','prodType','prodTaxon','prodBalance','prodSort'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  ['prodChannel','prodType','prodBalance','prodSort'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
+  cnxResetCategorySelection('prodTaxon');
   loadProduction(true);
 }
 async function exportProduction(format){
@@ -17195,12 +17238,12 @@ function _oosBuildRows(){
 
 function _oosFilteredRows(){
   const group = document.getElementById('oosGroup')?.value || 'All';
-  const taxon = document.getElementById('oosTaxon')?.value || 'All';
+  const taxonSel = cnxSelectedCategoryValues('oosTaxon');
   const rows = _oosRows.length ? _oosRows : _oosBuildRows();
   return rows.filter(r => {
     if (!cnxSkuMatchesGlobalCn(r.sku)) return false;
     if (group !== 'All' && r.group !== group) return false;
-    if (taxon !== 'All' && r.taxon !== taxon) return false;
+    if (!cnxCategoryMatches(taxonSel, r.taxon)) return false;
     return true;
   });
 }
@@ -17208,13 +17251,14 @@ function _oosFilteredRows(){
 function _oosFillTaxonFilter(){
   const sel = document.getElementById('oosTaxon');
   if (!sel) return;
-  const current = sel.value || 'All';
+  const current = cnxSelectedCategoryValues('oosTaxon');
   const taxons = Array.from(new Set((_oosRows || [])
     .map(r => String((r && r.taxon) || 'General').trim() || 'General')))
     .sort((a,b) => a.localeCompare(b, undefined, {sensitivity:'base'}));
   sel.innerHTML = '<option value="All">All Taxons</option>' +
     taxons.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
-  sel.value = taxons.includes(current) ? current : 'All';
+  cnxRestoreCategorySelection('oosTaxon', current);
+  cnxEnableCategoryMultiSelect('oosTaxon');
 }
 
 function _oosPhotoHtml(url){
@@ -17303,7 +17347,7 @@ function exportOOS(){
     r.risk.label
   ]);
   const group = (document.getElementById('oosGroup')?.value || 'All').toLowerCase();
-  const taxon = String(document.getElementById('oosTaxon')?.value || 'All')
+  const taxon = (cnxSelectedCategoryValues('oosTaxon').join('-') || 'all')
     .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'all';
   _dlCsv(headers, data, `oos_stockout_risk_${group}_${taxon}`);
 }
@@ -17357,10 +17401,11 @@ function _opsPhoto(url){
 function _opsGroup(it){ return _oosProductGroup(it); }
 function _opsFillTaxon(id, rows, getter){
   const el = document.getElementById(id); if (!el) return;
-  const cur = el.value || 'All';
+  const cur = cnxSelectedCategoryValues(id);
   const vals = Array.from(new Set((rows||[]).map(getter||((x)=>x.taxon)).map(v=>String(v||'General').trim()||'General'))).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
   el.innerHTML = '<option value="All">All Categories</option>' + vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
-  el.value = vals.includes(cur) ? cur : 'All';
+  cnxRestoreCategorySelection(id, cur);
+  cnxEnableCategoryMultiSelect(id);
 }
 function _opsRiskBadge(key, label){
   const cls = key==='critical'||key==='red' ? 'red' : key==='high'||key==='orange' ? 'orange' : key==='medium'||key==='gold' ? 'gold' : key==='good'||key==='green' ? 'green' : key==='blue' ? 'blue' : 'gray';
@@ -17400,10 +17445,10 @@ function _repeatPlannerFiltered(){
   const rows = _rpRows.length ? _rpRows : _buildRepeatPlannerRows();
   const q=String(document.getElementById('rpSearch')?.value||'').trim().toLowerCase();
   const group=document.getElementById('rpGroup')?.value||'All';
-  const taxon=document.getElementById('rpTaxon')?.value||'All';
+  const taxonSel=cnxSelectedCategoryValues('rpTaxon');
   const need=document.getElementById('rpNeedOnly')?.value||'yes';
   const minDrr=Math.max(0,_opsNum(document.getElementById('rpMinDrr')?.value||0));
-  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&cnxCategoryMatches(taxonSel,r.taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
 }
 function loadRepeatPlanner(){ _rpRows=[]; _buildRepeatPlannerRows(); renderRepeatPlanner(); }
 function renderRepeatPlanner(){
@@ -17462,10 +17507,10 @@ function _buildComboRiskRows(){
 function _comboRiskFiltered(){
   const rows=_crRows.length?_crRows:_buildComboRiskRows();
   const q=String(document.getElementById('crSearch')?.value||'').trim().toLowerCase();
-  const g=document.getElementById('crGroup')?.value||'All',tx=document.getElementById('crTaxon')?.value||'All';
+  const g=document.getElementById('crGroup')?.value||'All',txSel=cnxSelectedCategoryValues('crTaxon');
   const cmb=document.getElementById('crCmb')?.value||'All',relation=document.getElementById('crRelation')?.value||'all';
   const only=document.getElementById('crRiskOnly')?.value||'all';
-  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.cmb)&&(!q||`${r.sku} ${r.skuName} ${r.cmb} ${r.cmbName}`.toLowerCase().includes(q))&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(cmb==='All'||r.cmb===cmb)&&(relation==='all'||(relation==='shared'?r.parentCount>1:r.parentCount===1))&&(only!=='yes'||r.blocked>0));
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.cmb)&&(!q||`${r.sku} ${r.skuName} ${r.cmb} ${r.cmbName}`.toLowerCase().includes(q))&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(cmb==='All'||r.cmb===cmb)&&(relation==='all'||(relation==='shared'?r.parentCount>1:r.parentCount===1))&&(only!=='yes'||r.blocked>0));
 }
 function loadComboRisk(){_crRows=[];_buildComboRiskRows();renderComboRisk();}
 function renderComboRisk(){
@@ -17953,8 +17998,8 @@ function _buildSmartAlertRows(){
   _opsFillTaxon('saTaxon',_smartAlertRows.filter(r=>r.entityType==='SKU'),r=>r.taxon); return _smartAlertRows;
 }
 function _smartAlertsFiltered(){
-  _smartAlertRows=[];_buildSmartAlertRows(); const type=document.getElementById('saType')?.value||'All'; const group=document.getElementById('saGroup')?.value||'All'; const tax=document.getElementById('saTaxon')?.value||'All'; const q=String(document.getElementById('saSearch')?.value||'').trim().toLowerCase();
-  return _smartAlertRows.filter(r=>(r.entityType!=='SKU'||cnxSkuMatchesGlobalCn(r.entity))&&(type==='All'||r.type===type)&&(group==='All'||r.group===group||r.entityType==='Channel')&&(tax==='All'||r.taxon===tax||r.entityType==='Channel')&&(!q||`${r.entity} ${r.name} ${r.typeLabel} ${r.detail}`.toLowerCase().includes(q)));
+  _smartAlertRows=[];_buildSmartAlertRows(); const type=document.getElementById('saType')?.value||'All'; const group=document.getElementById('saGroup')?.value||'All'; const taxSel=cnxSelectedCategoryValues('saTaxon'); const q=String(document.getElementById('saSearch')?.value||'').trim().toLowerCase();
+  return _smartAlertRows.filter(r=>(r.entityType!=='SKU'||cnxSkuMatchesGlobalCn(r.entity))&&(type==='All'||r.type===type)&&(group==='All'||r.group===group||r.entityType==='Channel')&&(r.entityType==='Channel'||cnxCategoryMatches(taxSel,r.taxon))&&(!q||`${r.entity} ${r.name} ${r.typeLabel} ${r.detail}`.toLowerCase().includes(q)));
 }
 function renderSmartAlerts(){
   const rows=_smartAlertsFiltered();const sum=document.getElementById('saSummary');const host=document.getElementById('saContent');if(!host)return;
@@ -17983,7 +18028,7 @@ function _buildInventoryAgeRows(){
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
-  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const b=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const tx=document.getElementById('iaTaxon')?.value||'All';const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const saleActivity=document.getElementById('iaSaleActivity')?.value||'all';const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(b==='All'||r.bucket===b)&&(g==='All'||r.group===g)&&(tx==='All'||r.taxon===tx)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(saleActivity==='all'||(saleActivity==='not60'&&(r.daysSinceSale===null||r.daysSinceSale>=60))||(saleActivity==='sold60'&&r.daysSinceSale!==null&&r.daysSinceSale<60))&&(stockOnly!=='yes'||r.stock>0));
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const b=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('iaTaxon');const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const saleActivity=document.getElementById('iaSaleActivity')?.value||'all';const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(b==='All'||r.bucket===b)&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(saleActivity==='all'||(saleActivity==='not60'&&(r.daysSinceSale===null||r.daysSinceSale>=60))||(saleActivity==='sold60'&&r.daysSinceSale!==null&&r.daysSinceSale<60))&&(stockOnly!=='yes'||r.stock>0));
 }
 function renderInventoryAgeing(){
   _inventoryAgeRows=[];_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
@@ -18076,11 +18121,11 @@ function _opportunityFiltered(){
   if(!_oppRows.length) _buildOpportunityRows();
   const q=String(document.getElementById('oppSearch')?.value||'').trim().toLowerCase();
   const group=document.getElementById('oppGroup')?.value||'All';
-  const taxon=document.getElementById('oppTaxon')?.value||'All';
+  const taxonSel=cnxSelectedCategoryValues('oppTaxon');
   const action=document.getElementById('oppAction')?.value||'All';
   const minScore=_oppClamp(document.getElementById('oppMinScore')?.value||0,0,100);
   const rowMode=document.getElementById('oppRows')?.value||'selling';
-  return _oppRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentDemand>0||r.previousDemand>0));
+  return _oppRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&cnxCategoryMatches(taxonSel,r.taxon)&&(action==='All'||r.action.label===action)&&r.score>=minScore&&(rowMode==='all'||r.currentDemand>0||r.previousDemand>0));
 }
 function loadOpportunityScore(){ _oppRows=[]; _buildOpportunityRows(); renderOpportunityScore(); }
 function renderOpportunityScore(){
@@ -18252,10 +18297,10 @@ function _salesAnomalyFiltered(){
   if(!_anomRows.length) _buildSalesAnomalyRows();
   const type=document.getElementById('anomType')?.value||'All';
   const group=document.getElementById('anomGroup')?.value||'All';
-  const taxon=document.getElementById('anomTaxon')?.value||'All';
+  const taxonSel=cnxSelectedCategoryValues('anomTaxon');
   const severity=document.getElementById('anomSeverity')?.value||'All';
   const q=String(document.getElementById('anomSearch')?.value||'').trim().toLowerCase();
-  return _anomRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(type==='All'||r.type===type)&&(group==='All'||r.group===group)&&(taxon==='All'||r.taxon===taxon)&&(severity==='All'||r.severity===severity)&&(!q||`${r.sku} ${r.skuName} ${r.typeLabel}`.toLowerCase().includes(q)));
+  return _anomRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(type==='All'||r.type===type)&&(group==='All'||r.group===group)&&cnxCategoryMatches(taxonSel,r.taxon)&&(severity==='All'||r.severity===severity)&&(!q||`${r.sku} ${r.skuName} ${r.typeLabel}`.toLowerCase().includes(q)));
 }
 function loadSalesAnomalies(fresh){
   const host=document.getElementById('anomContent'); if(host) host.innerHTML='<div class="ops-empty">Analysing sales, returns, revenue and recent stock receipts...</div>';
@@ -18286,19 +18331,21 @@ function loadStockStatus(){
     const opts = (allTaxons || []).slice().sort((a,b)=>String(a).localeCompare(String(b)));
     sel.innerHTML = '<option value="All">All Categories</option>' +
       opts.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+    cnxResetCategorySelection('ssTaxon');
+    cnxEnableCategoryMultiSelect('ssTaxon');
   }
   renderStockStatus();
 }
 function _ssFiltered(){
   const q = (document.getElementById('ssSearch')?.value || '').trim().toLowerCase();
   const statusF = document.getElementById('ssStatus')?.value || '';
-  const taxonF = document.getElementById('ssTaxon')?.value || 'All';
+  const taxonSel = cnxSelectedCategoryValues('ssTaxon');
   const stockF = document.getElementById('ssStock')?.value || '';
   return (master || []).filter(it => {
     if (!cnxItemMatchesGlobalCn(it)) return false;
     if (q && !String(it.sku||'').toLowerCase().includes(q) && !String(it.taxon||'').toLowerCase().includes(q)) return false;
     if (statusF && it.status !== statusF) return false;
-    if (taxonF !== 'All' && (it.taxon||'') !== taxonF) return false;
+    if (!cnxCategoryMatches(taxonSel, it.taxon||'')) return false;
     if (stockF){
       const flags = (it.alert_flags||[]).map(f=>f.code);
       if (stockF === 'oos' && !flags.includes('oos')) return false;
@@ -18541,8 +18588,98 @@ function renderPayments(){
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
   }
-  // ---- WEEK-WISE PAYMENT INWARD TARGET — direct from Planning sheet ----
-  _renderPayWeekPlanning();
+  // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
+  const wkHost = document.getElementById('payWeekTable');
+  if (wkHost){
+    const wm = d.week_meta || [];
+    // filtered customers ke week_due se "Overdue(month end)" week-wise recompute
+    // (isme carried-forward backlog + is month ke due-dates dono already shamil
+    // hain — backend hi Week 1 me carry-forward add kar deta hai)
+    const wkOverdue = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.week_due || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkOverdue[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
+    });
+    // Payment Received — jaisa tha waisa hi (FILTERED rows ke week_paid se)
+    const wkPayment = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.week_paid || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkPayment[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
+    });
+    // "Overdue(month end) Target" — ab FILTER-AWARE: har customer ka target
+    // month ki pehli baar hi freeze ho chuka hai (backend me), yahan sirf
+    // FILTERED customers ka wahi frozen target sum hota hai. Isliye Tag/Type
+    // filter lagane par ye number badalta hai, par poore month ke liye fixed
+    // rehta hai (ledger baad me kitna bhi badle, frozen value nahi badlegi).
+    const wkTarget = wm.map(()=>0);
+    rows.forEach(r => {
+      (r.target_week_due || []).forEach(([ds, amt]) => {
+        for (let wi=0; wi<wm.length; wi++){
+          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkTarget[wi] += (parseFloat(amt)||0); break; }
+        }
+      });
+    });
+    let tgtTotal = 0, ovTotal = 0, payTotal = 0, balTotal = 0;
+    _payWeekRowsExport = [];
+    let _weekRowsData = wm.map((w,wi) => {
+      const label = w.label;
+      const ov = Math.round(wkOverdue[wi]);
+      const pay = Math.round(wkPayment[wi]);
+      // Target is the backend's filter-aware MONTH-FROZEN customer target,
+      // not a value reconstructed from today's live overdue. This keeps the
+      // target stable while payments/live ledger amounts move during the month.
+      const tgt = Math.round(wkTarget[wi]);
+      tgtTotal += tgt; ovTotal += ov; payTotal += pay;
+      // Balance against the fixed target cannot be negative after over-collection.
+      const balAfter = Math.max(0, Math.round(tgt - pay));
+      balTotal += balAfter;
+      return {
+        label, wi,
+        rangeShort: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)),
+        overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter
+      };
+    });
+    _payWeekRowsExport = _weekRowsData.map(r => ({week: r.label, range: r.rangeShort, overdue_target: r.overdue_target, overdue_month_end: r.overdue_month_end, payment_received: r.payment_received, balance_remaining: r.balance_remaining}));
+    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
+    if (_payWeekSortKey){
+      const k = _payWeekSortKey, dir = _payWeekSortDir;
+      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((a[k]||0) - (b[k]||0)));
+    }
+    const body = _weekRowsData.map(r => `<tr>
+        <td style="padding:5px 8px">${escHtml(r.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(r.rangeShort)}</span></td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(r.overdue_target)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(r.overdue_month_end)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(r.payment_received)}</td>
+        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(r.balance_remaining)}</td>
+      </tr>`).join('');
+    wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
+        <th style="padding:5px 8px">Week</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">Overdue-month end Target ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_month_end')" class="sort-arrow">Overdue (Month End, Live) ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('payment_received')" class="sort-arrow">Payment Received ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Balance ⇅</th>
+      </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
+      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
+        <td style="padding:5px 8px">Total</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(tgtTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
+      </tr></tfoot></table>
+      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
+        <b>Overdue-month end Target</b> = the month-frozen target from each matching customer's target snapshot. Tag/Customer filters sum only those same frozen customer targets, so the target does not move with later ledger changes.<br>
+        <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
+        <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
+        <b>Balance</b> = Overdue-month end Target minus this week's Payment Received.
+        Week 1 = 1st–7th of the month, and so on.
+      </p>`;
+  }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
   const tagHost = document.getElementById('payTagSummary');
@@ -18655,29 +18792,10 @@ function exportPayAging(){
   _dlCsv(headers, data, 'aging_bucket');
 }
 function exportPayWeek(){
-  const d = _planData;
-  if (!d || !d.weekwise_rows || !d.weekwise_rows.length){ alert('No Planning week-wise data to export'); return; }
-  const weeks = d.weekwise_weeks || [];
-  const headers = ['Channel','Inward Projection'];
-  weeks.forEach(w => { headers.push(w.label + ' Projection'); headers.push(w.label + ' Actual'); });
-  const data = (d.weekwise_rows||[]).map(r => {
-    const row = [r.category, Math.round(r.inward_projection||0)];
-    weeks.forEach(w => {
-      const x = (r.weeks||{})[w.key] || {};
-      row.push(Math.round(x.projection||0));
-      row.push(x.actual === null || x.actual === undefined || x.actual === '' ? '' : Math.round(x.actual||0));
-    });
-    return row;
-  });
-  const t = d.weekwise_totals || {};
-  const tr = ['Total', Math.round(t.inward_projection||0)];
-  weeks.forEach(w => {
-    const x=(t.weeks||{})[w.key]||{};
-    tr.push(Math.round(x.projection||0));
-    tr.push(x.actual === null || x.actual === undefined || x.actual === '' ? '' : Math.round(x.actual||0));
-  });
-  data.push(tr);
-  _dlCsv(headers, data, 'payment_inward_target_weekwise_planning');
+  if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
+  const headers = ['Week','Range','Overdue-month end Target','Overdue (Month End, Live)','Payment Received','Balance'];
+  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
+  _dlCsv(headers, data, 'week_wise_overdue_tracker');
 }
 function exportPayTagSummary(){
   if (!_payTagRowsExport.length){ alert('No data to export'); return; }
@@ -18849,43 +18967,6 @@ function loadPaymentsPlanning(force){
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
-function _renderPayWeekPlanning(){
-  const host = document.getElementById('payWeekTable');
-  if (!host) return;
-  const d = _planData;
-  if (!d){
-    host.innerHTML = '<div class="home-empty" style="padding:18px">Loading Planning week-wise data…</div>';
-    return;
-  }
-  const weeks = d.weekwise_weeks || [];
-  const rows = d.weekwise_rows || [];
-  if (!weeks.length || !rows.length){
-    host.innerHTML = '<div class="home-empty" style="padding:18px;color:#a33">' + escHtml(d.weekwise_error || d.error || 'Planning sheet me week-wise table nahi mila') + '</div>';
-    _payWeekRowsExport = [];
-    return;
-  }
-  const fmtMaybe = v => (v === null || v === undefined || v === '') ? '<span style="color:var(--cn-mid)">—</span>' : fmt(v);
-  const weekHead = weeks.map(w => `<th style="text-align:right;padding:5px 8px">${escHtml(w.label)} Projection</th><th style="text-align:right;padding:5px 8px">Actual</th>`).join('');
-  const body = rows.map(r => {
-    const cells = weeks.map(w => {
-      const x = (r.weeks||{})[w.key] || {};
-      return `<td style="text-align:right;padding:5px 8px;font-weight:700;background:#fdf6e3;color:#8a6d3b">${fmtMaybe(x.projection)}</td><td style="text-align:right;padding:5px 8px;font-weight:700;color:#1f7a3a">${fmtMaybe(x.actual)}</td>`;
-    }).join('');
-    return `<tr><td style="padding:5px 8px;font-weight:700">${escHtml(r.category)}</td><td style="text-align:right;padding:5px 8px;font-weight:800">${fmt(r.inward_projection||0)}</td>${cells}</tr>`;
-  }).join('');
-  const t = d.weekwise_totals || {};
-  const totalCells = weeks.map(w => {
-    const x = (t.weeks||{})[w.key] || {};
-    return `<td style="text-align:right;padding:5px 8px">${fmtMaybe(x.projection)}</td><td style="text-align:right;padding:5px 8px">${fmtMaybe(x.actual)}</td>`;
-  }).join('');
-  host.innerHTML = `<p style="color:var(--cn-mid);font-size:.72rem;margin:0 0 6px">Planning source · Updated till: <b>${escHtml(d.today||'')}</b></p>
-    <div style="overflow-x:auto"><table class="ro" style="width:100%;font-size:.78rem;min-width:${Math.max(760, 270 + weeks.length*230)}px"><thead><tr>
-      <th style="padding:5px 8px">Channel</th><th style="text-align:right;padding:5px 8px">Inward Projection</th>${weekHead}
-    </tr></thead><tbody>${body}</tbody><tfoot><tr style="font-weight:900;background:var(--cn-ivory)">
-      <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(t.inward_projection||0)}</td>${totalCells}
-    </tr></tfoot></table></div>`;
-}
-
 function renderPaymentsPlanning(){
   const host = document.getElementById('planContent');
   const d = _planData;
@@ -18923,7 +19004,6 @@ function renderPaymentsPlanning(){
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
-  _renderPayWeekPlanning();
 }
 function exportPaymentsPlanning(){
   const d = _planData;
@@ -19456,7 +19536,7 @@ function renderInsights(){
 
   _fillInsightsChannelFilter();
   const typeSel = getSelectedTypes('iType');
-  const taxonQ = document.getElementById('iTaxon')?.value || 'All';
+  const taxonSel = cnxSelectedCategoryValues('iTaxon');
   const channelQ = document.getElementById('iChannel')?.value || 'All';
   const channelKey = String(channelQ).toLocaleLowerCase('en-US');
   const d1 = document.getElementById('iD1')?.value || '';
@@ -19473,9 +19553,9 @@ function renderInsights(){
   };
 
   const items = (master || []).filter(i => {
-    if (taxonQ !== 'All' && i.taxon !== taxonQ) return false;
+    if (!cnxCategoryMatches(taxonSel, i.taxon)) return false;
     const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinChannel(e) && withinDate(e));
-    if (!typeSel.length && channelQ === 'All' && !(d1 || d2) && taxonQ === 'All') return true;
+    if (!typeSel.length && channelQ === 'All' && !(d1 || d2) && taxonSel.length === 0) return true;
     return ents.length > 0;
   }).map(i => {
     const ents = (i.sales_entries || []).filter(e => (!typeSel.length || typeSel.includes(e.type)) && withinChannel(e) && withinDate(e));
@@ -19693,7 +19773,7 @@ function applyInsights(){
 
 function resetInsights(){
   document.querySelectorAll('#iTypeChecks input:checked').forEach(c => c.checked = false);
-  const tx = document.getElementById('iTaxon'); if (tx) tx.value = 'All';
+  cnxResetCategorySelection('iTaxon');
   const ch = document.getElementById('iChannel'); if (ch) ch.value = 'All';
   const d1 = document.getElementById('iD1'); if (d1) d1.value = '';
   const d2 = document.getElementById('iD2'); if (d2) d2.value = '';
@@ -20081,7 +20161,8 @@ function _scPopulateFilters(){
   const type=document.getElementById('scType'),orderType=document.getElementById('scOrderType'),tax=document.getElementById('scTaxon');
   const typeOptions='<option value="All">All Types</option>'+Array.from(new Set(allTypes||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   if(type&&type.options.length<=1)type.innerHTML=typeOptions;
-  if(tax&&tax.options.length<=1)tax.innerHTML='<option value="All">All Taxons</option>'+Array.from(new Set(allTaxons||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  if(tax&&tax.options.length<=1){ tax.innerHTML='<option value="All">All Taxons</option>'+Array.from(new Set(allTaxons||[])).sort().map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join(''); cnxResetCategorySelection('scTaxon'); }
+  cnxEnableCategoryMultiSelect('scTaxon');
   if(!_scInitialized){
     const end=todayISO||new Date().toISOString().slice(0,10),start=_scShiftDate(end,-29);
     const d1=document.getElementById('scD1'),d2=document.getElementById('scD2');if(d1)d1.value=start;if(d2)d2.value=end;
@@ -20400,12 +20481,12 @@ function renderSalesComparison(){
   _scPopulateFilters();
   _scExportRows=[];
   const sum=document.getElementById('scSummary'),chart=document.getElementById('scChart'),host=document.getElementById('scContent'),note=document.getElementById('scNote');if(!sum||!chart||!host)return;
-  const d1=document.getElementById('scD1')?.value||'',d2=document.getElementById('scD2')?.value||'',type=document.getElementById('scType')?.value||'All',taxon=document.getElementById('scTaxon')?.value||'All',productGroup=document.getElementById('scProductGroup')?.value||'All';
+  const d1=document.getElementById('scD1')?.value||'',d2=document.getElementById('scD2')?.value||'',type=document.getElementById('scType')?.value||'All',taxonSel=cnxSelectedCategoryValues('scTaxon'),productGroup=document.getElementById('scProductGroup')?.value||'All';
   if(!d1||!d2||d1>d2){sum.innerHTML='';chart.innerHTML='<div class="rkh-rev-empty">Choose a valid From and To date.</div>';host.innerHTML='';if(note)note.textContent='';return;}
   const groups={'Rel':{cls:'Rel',skus:new Set(),orders:0,qty:0,rev:0},'Non-Rel':{cls:'Non-Rel',skus:new Set(),orders:0,qty:0,rev:0}},byDate={};
   let unclassifiedLines=0,unclassifiedSkus=new Set();
   (master||[]).forEach(item=>{
-    if(taxon!=='All'&&String(item.taxon||'')!==taxon)return;
+    if(!cnxCategoryMatches(taxonSel,String(item.taxon||'')))return;
     const itemProductGroup=_rkhInWhitelist(item.sku)?'Rakhi':'Others';
     if(productGroup!=='All'&&itemProductGroup!==productGroup)return;
     const cls=cnClassOf(item),target=groups[cls];
@@ -20418,7 +20499,8 @@ function renderSalesComparison(){
     });
   });
   const list=['Rel','Non-Rel'].map(k=>groups[k]),totalQty=list.reduce((s,g)=>s+g.qty,0),totalRev=list.reduce((s,g)=>s+g.rev,0),emp=LOGIN_ROLE==='employee';
-  const daily=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));_scExportRows=daily.map(d=>({from:d1,to:d2,type,taxon,product_group:productGroup,date:d.date,rel_qty:d.rel.qty,non_rel_qty:d.nonRel.qty,rel_revenue:d.rel.rev,non_rel_revenue:d.nonRel.rev}));
+  const taxonLabel=taxonSel.length?taxonSel.join(', '):'All';
+  const daily=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));_scExportRows=daily.map(d=>({from:d1,to:d2,type,taxon:taxonLabel,product_group:productGroup,date:d.date,rel_qty:d.rel.qty,non_rel_qty:d.nonRel.qty,rel_revenue:d.rel.rev,non_rel_revenue:d.nonRel.rev}));
   sum.innerHTML=list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Sold Qty</div><div class="yc-val">${Math.round(g.qty).toLocaleString('en-IN')}</div><div class="yc-sub">${g.orders.toLocaleString('en-IN')} lines · ${(totalQty?g.qty/totalQty*100:0).toFixed(1)}% share</div></div>`).join('')+(emp?'':list.map(g=>`<div class="yoy-card"><div class="yc-label">${escHtml(g.cls)} Net Revenue</div><div class="yc-val">${fmt(g.rev)}</div><div class="yc-sub">${(totalRev?g.rev/totalRev*100:0).toFixed(1)}% share</div></div>`).join(''));
   chart.innerHTML=_scChartHtml(daily,emp?'qty':'rev');
   const summaryHead=`<tr><th>CN Class</th><th>Distinct Selling SKUs</th><th>Order Lines</th><th>Sold Qty</th><th>Qty Share</th>${emp?'':'<th>Net Revenue</th><th>Revenue Share</th><th>Avg Selling Price</th>'}</tr>`;
@@ -20428,7 +20510,7 @@ function renderSalesComparison(){
   host.innerHTML=`<div class="ops-section"><div class="ops-section-head"><div class="ops-section-title">Comparison Summary</div></div><table class="ro" style="width:100%;min-width:780px"><thead>${summaryHead}</thead><tbody>${summaryBody}</tbody></table></div><div class="ops-section" style="margin-top:16px"><div class="ops-section-head"><div class="ops-section-title">Date-wise Comparison</div><div class="small-note">Latest ${dailyDesc.length.toLocaleString('en-IN')} active dates · export includes all</div></div><table class="ro" style="width:100%;min-width:850px"><thead>${dailyHead}</thead><tbody>${dailyBody||`<tr><td colspan="7" class="ops-empty">No sales found.</td></tr>`}</tbody></table></div>`;
   if(note)note.textContent=`Source: Cosa Nostraa sales entries by Dispatch Date. Product group: ${productGroup==='All'?'All Products':productGroup}. Rakhi uses the curated Rakhi SKU list; Others includes SKUs outside that list. CN classification: All Product AF Name. ${unclassifiedLines.toLocaleString('en-IN')} filtered lines across ${unclassifiedSkus.size.toLocaleString('en-IN')} unclassified SKUs were excluded.`;
 }
-function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),tax=document.getElementById('scTaxon'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';if(tax)tax.value='All';if(productGroup)productGroup.value='All';renderSalesComparison();}
+function resetSalesComparison(){const end=todayISO||new Date().toISOString().slice(0,10),d1=document.getElementById('scD1'),d2=document.getElementById('scD2'),type=document.getElementById('scType'),productGroup=document.getElementById('scProductGroup');if(d1)d1.value=_scShiftDate(end,-29);if(d2)d2.value=end;if(type)type.value='All';cnxResetCategorySelection('scTaxon');if(productGroup)productGroup.value='All';renderSalesComparison();}
 function exportSalesComparison(){if(!_scExportRows.length)renderSalesComparison();if(!_scExportRows.length){alert('No comparison data to export.');return;}const emp=LOGIN_ROLE==='employee';_dlCsv(['From','To','Type','Taxon','Product Group','Date','Rel Sold Qty','Non-Rel Sold Qty',...(emp?[]:['Rel Net Revenue','Non-Rel Net Revenue'])],_scExportRows.map(r=>[r.from,r.to,r.type,r.taxon,r.product_group,r.date,Number(r.rel_qty.toFixed(2)),Number(r.non_rel_qty.toFixed(2)),...(emp?[]:[Number(r.rel_revenue.toFixed(2)),Number(r.non_rel_revenue.toFixed(2))])]),'sales_comparison_rel_vs_non_rel');}
 window.loadSalesComparison=loadSalesComparison;window.renderSalesComparison=renderSalesComparison;window.resetSalesComparison=resetSalesComparison;window.exportSalesComparison=exportSalesComparison;window.renderSalesComparisonAov=renderSalesComparisonAov;window.resetSalesComparisonAov=resetSalesComparisonAov;window.exportSalesComparisonAov=exportSalesComparisonAov;window._scOrderPresetChanged=_scOrderPresetChanged;window._scOrderSearchChanged=_scOrderSearchChanged;window.renderSalesComparisonOrders=renderSalesComparisonOrders;window.resetSalesComparisonOrders=resetSalesComparisonOrders;window.exportSalesComparisonOrders=exportSalesComparisonOrders;
 
@@ -21037,7 +21119,7 @@ function _bizEvents(){
 }
 function _bizBaseFilter(prefix, includeDates=true){
   const group=document.getElementById(prefix+'Group')?.value||'All';
-  const taxon=document.getElementById(prefix+'Taxon')?.value||'All';
+  const taxonSel=cnxSelectedCategoryValues(prefix+'Taxon');
   const type=document.getElementById(prefix+'Type')?.value||'All';
   const channel=document.getElementById(prefix+'Channel')?.value||'All';
   const search=String(document.getElementById(prefix+'Search')?.value||'').trim().toLowerCase();
@@ -21045,7 +21127,7 @@ function _bizBaseFilter(prefix, includeDates=true){
   const d2=includeDates?_bizIso(document.getElementById(prefix+'D2')?.value):'';
   return e=>{
     if(group!=='All'&&e.group!==group)return false;
-    if(taxon!=='All'&&e.taxon!==taxon)return false;
+    if(!cnxCategoryMatches(taxonSel,e.taxon))return false;
     if(type!=='All'&&e.type!==type)return false;
     if(channel!=='All'&&e.channel!==channel)return false;
     if(search&&!`${e.sku} ${e.skuName}`.toLowerCase().includes(search))return false;
@@ -21157,10 +21239,10 @@ function _concSummaryQty(it,days){
 }
 function _concItemFilter(it){
   const group=document.getElementById('concGroup')?.value||'All';
-  const taxon=document.getElementById('concTaxon')?.value||'All';
+  const taxonSel=cnxSelectedCategoryValues('concTaxon');
   const q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
   if(group!=='All'&&_opsGroup(it)!==group)return false;
-  if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;
+  if(!cnxCategoryMatches(taxonSel,String(it.taxon||'General')))return false;
   if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;
   return true;
 }
@@ -21280,7 +21362,7 @@ function renderConcentrationRisk(){
   const noDetailedEvents=_bizEvents().length===0;
   const noNarrowingFilters=selectedType==='All'&&selectedChannel==='All'&&selectedSource==='Overall'&&
     (document.getElementById('concGroup')?.value||'All')==='All'&&
-    (document.getElementById('concTaxon')?.value||'All')==='All'&&
+    cnxSelectedCategoryValues('concTaxon').length===0&&
     !String(document.getElementById('concSearch')?.value||'').trim();
   if(totalQty<=0&&noDetailedEvents&&noNarrowingFilters){
     fallbackUsed=true;
@@ -21310,8 +21392,8 @@ function renderConcentrationRisk(){
   }
   const skuRows=Array.from(sku.entries()).map(([name,v])=>({name,display:skuLabel(name,v.item?.sku_name),rev:v.rev,qty:v.qty,share:_bizPct(v.rev,totalRev),item:v.item})).sort((a,b)=>b.rev-a.rev||b.qty-a.qty);
   const channelRows=_bizRankMap(channel,totalRev),taxonRows=_bizRankMap(taxon,totalRev);
-  const group=document.getElementById('concGroup')?.value||'All',tax=document.getElementById('concTaxon')?.value||'All',q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
-  const cityMetaFilter=m=>(group==='All'||m.group===group)&&(tax==='All'||m.taxon===tax)&&(!q||`${m.sku} ${m.skuName}`.toLowerCase().includes(q));
+  const group=document.getElementById('concGroup')?.value||'All',taxSel=cnxSelectedCategoryValues('concTaxon'),q=String(document.getElementById('concSearch')?.value||'').trim().toLowerCase();
+  const cityMetaFilter=m=>(group==='All'||m.group===group)&&cnxCategoryMatches(taxSel,m.taxon)&&(!q||`${m.sku} ${m.skuName}`.toLowerCase().includes(q));
   const cityInfo=_concCityRanks(cityMetaFilter,revenueMode?totalRev:0);
   const top5=skuRows.slice(0,5).reduce((s,r)=>s+r.rev,0),topSku=skuRows[0],topChannel=channelRows[0],topTaxon=taxonRows[0],topCity=cityInfo.rows[0];
   const threshold=Math.max(0,_opsNum(document.getElementById('concThreshold')?.value||20));
@@ -21450,9 +21532,9 @@ function exportDemandPatterns(){
 
 function _olsMatchesMeta(it){
   if(!cnxItemMatchesGlobalCn(it))return false;
-  const group=document.getElementById('olsGroup')?.value||'All',taxon=document.getElementById('olsTaxon')?.value||'All',q=String(document.getElementById('olsSearch')?.value||'').trim().toLowerCase();
+  const group=document.getElementById('olsGroup')?.value||'All',taxonSel=cnxSelectedCategoryValues('olsTaxon'),q=String(document.getElementById('olsSearch')?.value||'').trim().toLowerCase();
   if(group!=='All'&&_opsGroup(it)!==group)return false;
-  if(taxon!=='All'&&String(it.taxon||'General')!==taxon)return false;
+  if(!cnxCategoryMatches(taxonSel,String(it.taxon||'General')))return false;
   if(q&&!`${it.sku||''} ${it.sku_name||''}`.toLowerCase().includes(q))return false;
   return true;
 }
@@ -23246,7 +23328,10 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     sq = sku_query.strip().lower()
     oq = order_query.strip().lower()
     cnq = cn_query.strip().lower()
-    txf = taxon_filter.strip().lower()
+    if isinstance(taxon_filter, (list, tuple, set)):
+        txfs = {str(v).strip().lower() for v in taxon_filter if str(v).strip()}
+    else:
+        txfs = {v.strip().lower() for v in str(taxon_filter or '').split('|||') if v.strip()}
     tyf = type_filter.strip().lower()
     bo = (balance_only or "").strip().lower()   # "yes" = K != 0, "no" = K == 0
     inv_filter_ctx = (cf or tyf).strip()
@@ -23276,7 +23361,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         if tyf and r["order_type"].strip().lower() != tyf:
             continue
-        if txf and r["taxon"].strip().lower() != txf:
+        if txfs and r["taxon"].strip().lower() not in txfs:
             continue
         if bo == "yes" and not _production_has_balance(r.get("bal_qty")):
             continue
@@ -26332,7 +26417,7 @@ def api_overall_export_xlsx():
         ws.title = "Pivot" if kind == "pivot" else "Transactions"
 
         if kind == "pivot":
-            headers = ["Customer", "SKU", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["SKU", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
             headers = ["Dispatch Date", "SKU", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
@@ -26343,10 +26428,10 @@ def api_overall_export_xlsx():
             c.font = Font(bold=True, color="FFFFFF")
             c.fill = PatternFill("solid", fgColor="8C7A42")
 
-        num_cols = {"Individual Sold", "In CMBs Sold", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"}
+        num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"}
         for r in rows:
             if kind == "pivot":
-                line = [r.get("customer", ""), r.get("sku", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [r.get("sku", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
@@ -26462,7 +26547,7 @@ def api_overall_export_pdf():
             elements.append(Spacer(1, 6))
 
         if kind == "pivot":
-            headers = ["Photo", "Customer", "SKU", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Photo", "SKU", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP"]
         else:
             headers = ["Photo", "Date", "SKU", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
@@ -26472,7 +26557,7 @@ def api_overall_export_pdf():
         for r in rows:
             img_cell = _img_flowable(r.get("image_url"))
             if kind == "pivot":
-                line = [img_cell, r.get("customer", ""), r.get("sku", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [img_cell, r.get("sku", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
@@ -26609,7 +26694,7 @@ def _production_request_filters():
         "od2": request.args.get("od2", "").strip(),
         "dd1": request.args.get("dd1", "").strip(),
         "dd2": request.args.get("dd2", "").strip(),
-        "taxon_filter": request.args.get("taxon", "").strip(),
+        "taxon_filter": [v.strip() for v in request.args.getlist("taxon") if v.strip()],
         "type_filter": request.args.get("type", "").strip(),
         "balance_only": request.args.get("balance", "").strip(),
         "order_query": request.args.get("order_no", "").strip(),
@@ -26797,7 +26882,7 @@ def api_production_export_xlsx():
             ("Exported At", now_ist().strftime("%d-%b-%Y %I:%M %p")),
             ("Channel Filter", filters.get("channel_filter") or "All"),
             ("Type Filter", filters.get("type_filter") or "All"),
-            ("Category Filter", filters.get("taxon_filter") or "All"),
+            ("Category Filter", ", ".join(filters.get("taxon_filter") or []) or "All"),
             ("SKU Search", filters.get("sku_query") or "All"),
             ("Order No. Search", filters.get("order_query") or "All"),
             ("Order Date From", filters.get("od1") or "All"),
@@ -27655,10 +27740,6 @@ def _build_payments_planning():
     today = now_ist().date()
     rows = []
     source_totals = None
-    weekwise_rows = []
-    weekwise_totals = None
-    weekwise_weeks = []
-    weekwise_error = None
     period_label = ""
     updated_till = ""
     plan_err = None
@@ -27724,63 +27805,6 @@ def _build_payments_planning():
                 source_totals = {k: v for k, v in parsed.items() if k != "category"}
                 break
             rows.append(parsed)
-        # Locate the second Planning table: Channel + Inward Projection + W1/W2... Projection/Actual.
-        # This block is intentionally parsed from the same published Summary sheet so the
-        # Payments tab always mirrors Planning without hard-coded values.
-        week_header_at = None
-        for j in range(header_at + 1, len(raw_rows)):
-            norm = [_plan_norm(v) for v in raw_rows[j]]
-            if "channel" in norm and "inwardprojection" in norm and any(re.fullmatch(r"w\d+projection", x or "") for x in norm):
-                week_header_at = j
-                break
-        if week_header_at is not None:
-            wh = raw_rows[week_header_at]
-            wn = [_plan_norm(v) for v in wh]
-            wc_channel = _plan_col_index(wh, "Channel", "Category", "Type")
-            wc_inward = _plan_col_index(wh, "Inward Projection", "Inward projection", "Projection")
-            week_cols = []
-            for ci, key in enumerate(wn):
-                m = re.fullmatch(r"w(\d+)projection", key or "")
-                if not m:
-                    continue
-                num = int(m.group(1))
-                actual_ci = ci + 1 if ci + 1 < len(wn) and wn[ci + 1] == "actual" else None
-                wk = f"w{num}"
-                week_cols.append((num, wk, ci, actual_ci))
-                weekwise_weeks.append({"key": wk, "label": f"W{num}"})
-            for row in raw_rows[week_header_at + 1:]:
-                category = clean(_plan_cell(row, wc_channel))
-                if not category:
-                    continue
-                inward = round(to_num(_plan_cell(row, wc_inward)), 0) if wc_inward is not None else 0
-                wdata = {}
-                for num, wk, pc, ac in week_cols:
-                    p_raw = clean(_plan_cell(row, pc))
-                    a_raw = clean(_plan_cell(row, ac)) if ac is not None else ""
-                    wdata[wk] = {
-                        "projection": round(to_num(p_raw), 0) if p_raw else 0,
-                        "actual": round(to_num(a_raw), 0) if a_raw else None,
-                    }
-                parsed_w = {"category": category, "inward_projection": inward, "weeks": wdata}
-                if _plan_norm(category) in ("total", "grandtotal"):
-                    weekwise_totals = {"inward_projection": inward, "weeks": wdata}
-                    break
-                # Ignore formula spacer/error rows; real channel rows have a name and either inward/weekly values.
-                if inward or any((x.get("projection") or x.get("actual")) for x in wdata.values()):
-                    weekwise_rows.append(parsed_w)
-            if weekwise_rows and weekwise_totals is None:
-                weekwise_totals = {
-                    "inward_projection": round(sum(r["inward_projection"] for r in weekwise_rows), 0),
-                    "weeks": {
-                        w["key"]: {
-                            "projection": round(sum((r["weeks"].get(w["key"], {}).get("projection") or 0) for r in weekwise_rows), 0),
-                            "actual": round(sum((r["weeks"].get(w["key"], {}).get("actual") or 0) for r in weekwise_rows), 0),
-                        } for w in weekwise_weeks
-                    },
-                }
-        else:
-            weekwise_error = "Planning sheet me W1/W2 Projection + Actual wala table nahi mila"
-
         if not rows:
             raise ValueError("Planning table me channel rows nahi mile")
     except Exception as e:
@@ -27801,10 +27825,6 @@ def _build_payments_planning():
     data = {
         "rows": rows,
         "totals": source_totals,
-        "weekwise_rows": weekwise_rows,
-        "weekwise_totals": weekwise_totals or {"inward_projection": 0, "weeks": {}},
-        "weekwise_weeks": weekwise_weeks,
-        "weekwise_error": weekwise_error,
         "month_label": period_label or today.strftime("%b-%y"),
         "today": updated_till or today.strftime("%d-%b-%y"),
         "error": plan_err,
