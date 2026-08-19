@@ -7552,13 +7552,15 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="filter-box" style="margin:12px 0 14px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end">
+        <div class="fc"><label class="fl">Order From</label><input class="fi" id="wrOrderD1" type="date" onchange="renderWebsiteReturns()"></div>
+        <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Payment Mode</label><select class="fs" id="wrPaymentMode" onchange="renderWebsiteReturns()"><option value="All">All</option><option value="COD">COD</option><option value="Prepaid">Prepaid</option></select></div>
         <div class="fc"><label class="fl">Min Payment</label><input class="fi" id="wrPayMin" type="number" min="0" step="1" placeholder="0" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><label class="fl">Max Payment</label><input class="fi" id="wrPayMax" type="number" min="0" step="1" placeholder="No limit" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="renderWebsiteReturns()"><option value="All">All Origins</option></select></div>
-        <div class="fc"><label class="fl">Destination</label><select class="fs" id="wrDestination" onchange="renderWebsiteReturns()"><option value="All">All Destinations</option></select></div>
+        <div class="fc"><label class="fl">Destination Search</label><input class="fi" id="wrDestination" type="search" list="wrDestinationList" autocomplete="off" placeholder="Type city / destination…" oninput="websiteReturnsApply_d()"><datalist id="wrDestinationList"></datalist></div>
         <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="renderWebsiteReturns()"><option value="All">All Reasons</option></select></div>
         <div class="fc"><label class="fl">Order / Customer Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Order ID, display code, customer…" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebsiteReturnsFilters()">Reset</button></div>
@@ -7575,9 +7577,9 @@ select.lg-in option{background:#fff;color:#1a1610}
       <table class="ops-table" id="websiteReturnsTable" style="min-width:1180px">
         <thead><tr>
           <th>Order ID</th><th>Display Order Code</th><th>Customer</th><th>Payment</th>
-          <th>Pickup Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
+          <th>Order Date</th><th>Pickup Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
         </tr></thead>
-        <tbody id="websiteReturnsBody"><tr><td colspan="8" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
+        <tbody id="websiteReturnsBody"><tr><td colspan="9" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -19265,6 +19267,11 @@ function _wrSetOptions(id, values, allLabel){
   el.innerHTML=`<option value="All">${escHtml(allLabel||'All')}</option>`+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   el.value=vals.includes(old)?old:'All';
 }
+function _wrSetDatalist(id, values){
+  const el=_wrEl(id); if(!el)return;
+  const vals=Array.from(new Set((values||[]).map(_wrText).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
+  el.innerHTML=vals.map(v=>`<option value="${escHtml(v)}"></option>`).join('');
+}
 function _wrKpi(label,value,sub){
   return `<div class="ops-kpi"><div class="ops-kpi-label">${escHtml(label)}</div><div class="ops-kpi-value">${escHtml(String(value))}</div><div class="ops-kpi-sub">${escHtml(sub||'')}</div></div>`;
 }
@@ -19274,17 +19281,19 @@ function _wrPaymentMode(r){
 }
 function _websiteReturnsFilterRows(){
   const rows=(_websiteReturnsData&&_websiteReturnsData.rows)||[];
+  const od1=_wrEl('wrOrderD1')?.value||'',od2=_wrEl('wrOrderD2')?.value||'';
   const d1=_wrEl('wrD1')?.value||'',d2=_wrEl('wrD2')?.value||'';
   const mode=_wrEl('wrPaymentMode')?.value||'All';
-  const origin=_wrEl('wrOrigin')?.value||'All',dest=_wrEl('wrDestination')?.value||'All',reason=_wrEl('wrReason')?.value||'All';
+  const origin=_wrEl('wrOrigin')?.value||'All',destQ=_wrNorm(_wrEl('wrDestination')?.value||''),reason=_wrEl('wrReason')?.value||'All';
   const payMin=_wrNum(_wrEl('wrPayMin')?.value),payMax=_wrNum(_wrEl('wrPayMax')?.value);
   const q=_wrNorm(_wrEl('wrSearch')?.value||'');
   return rows.filter(r=>{
-    const d=_wrText(r.pickup_date);
+    const od=_wrText(r.order_date),d=_wrText(r.pickup_date);
+    if(od1&&(!od||od<od1))return false;if(od2&&(!od||od>od2))return false;
     if(d1&&(!d||d<d1))return false;if(d2&&(!d||d>d2))return false;
     if(mode!=='All'&&_wrPaymentMode(r)!==mode)return false;
     if(origin!=='All'&&_wrText(r.origin)!==origin)return false;
-    if(dest!=='All'&&_wrText(r.destination)!==dest)return false;
+    if(destQ&&!_wrNorm(r.destination).includes(destQ))return false;
     if(reason!=='All'&&_wrText(r.rto_reason)!==reason)return false;
     const p=_wrNum(r.payment);
     if(payMin!==null&&(p===null||p<payMin))return false;
@@ -19299,10 +19308,10 @@ function _websiteReturnsFilterRows(){
 function renderWebsiteReturns(){
   const body=_wrEl('websiteReturnsBody');
   if(!_websiteReturnsData){
-    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="8" class="ops-empty">Website return data has not loaded yet.</td></tr>';
+    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="9" class="ops-empty">Website return data has not loaded yet.</td></tr>';
     return;
   }
-  const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.pickup_date||'').localeCompare(String(a.pickup_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
+  const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.order_date||b.pickup_date||'').localeCompare(String(a.order_date||a.pickup_date||''))||String(b.pickup_date||'').localeCompare(String(a.pickup_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
   _websiteReturnsFilteredRows=rows;
   const cod=rows.filter(r=>_wrPaymentMode(r)==='COD').length;
   const prepaid=rows.filter(r=>_wrPaymentMode(r)==='Prepaid').length;
@@ -19316,8 +19325,8 @@ function renderWebsiteReturns(){
   const show=rows.slice(0,500),note=_wrEl('wrTableNote');
   if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} filtered returns · showing ${show.length.toLocaleString('en-IN')}${rows.length>show.length?' (export includes all filtered rows)':''}`;
   if(body){
-    if(!show.length)body.innerHTML='<tr><td colspan="8" class="ops-empty">No Website returns match the selected filters.</td></tr>';
-    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td>${escHtml(r.customer||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.pickup_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+    if(!show.length)body.innerHTML='<tr><td colspan="9" class="ops-empty">No Website returns match the selected filters.</td></tr>';
+    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td>${escHtml(r.customer||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
   }
   const src=_wrEl('wrSourceNote');
   if(src){
@@ -19330,31 +19339,31 @@ async function loadWebsiteReturns(force=false){
   if(_websiteReturnsLoading)return;
   if(_websiteReturnsData&&!force){renderWebsiteReturns();return;}
   _websiteReturnsLoading=true;
-  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="8" class="ops-empty">Loading live Website return sheet…</td></tr>';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="9" class="ops-empty">Loading live Website return sheet…</td></tr>';
   try{
     const r=await fetch('/api/website-returns'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
     const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
     _websiteReturnsData=d;
     _wrSetOptions('wrOrigin',d.filters?.origins||[],'All Origins');
-    _wrSetOptions('wrDestination',d.filters?.destinations||[],'All Destinations');
+    _wrSetDatalist('wrDestinationList',d.filters?.destinations||[]);
     _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
     renderWebsiteReturns();
   }catch(e){
     _websiteReturnsData=null;
-    if(body)body.innerHTML=`<tr><td colspan="8" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="9" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
     const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
   }finally{_websiteReturnsLoading=false;}
 }
 function resetWebsiteReturnsFilters(){
-  ['wrD1','wrD2','wrPayMin','wrPayMax','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
-  ['wrPaymentMode','wrOrigin','wrDestination','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrPayMin','wrPayMax','wrDestination','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
+  ['wrPaymentMode','wrOrigin','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
   renderWebsiteReturns();
 }
 const websiteReturnsApply_d=_debounce(()=>renderWebsiteReturns(),160);
 function exportWebsiteReturnsCsv(){
   const rows=_websiteReturnsFilteredRows||[];if(!rows.length){alert('No Website return rows to export.');return;}
-  const headers=['Order ID','Display Order Code','Customer','Payment','Pickup Date','Origin','Destination','RTO Reason'];
-  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',r.customer||'',r.payment||'',r.pickup_date||'',r.origin||'',r.destination||'',r.rto_reason||'']);
+  const headers=['Order ID','Display Order Code','Customer','Payment','Order Date','Pickup Date','Origin','Destination','RTO Reason'];
+  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',r.customer||'',r.payment||'',r.order_date||'',r.pickup_date||'',r.origin||'',r.destination||'',r.rto_reason||'']);
   _dlCsv(headers,vals,'website_returns_filtered');
 }
 window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
