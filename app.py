@@ -7797,7 +7797,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div>
       <div class="insights-head" style="margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
+        <div class="insights-title" style="font-size:.85rem">Payment Inward Target — Week-wise (Planning Sheet)</div>
         <button class="go-btn" style="width:auto;padding:5px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">Export CSV</button>
       </div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
@@ -18541,98 +18541,8 @@ function renderPayments(){
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
   }
-  // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
-  const wkHost = document.getElementById('payWeekTable');
-  if (wkHost){
-    const wm = d.week_meta || [];
-    // filtered customers ke week_due se "Overdue(month end)" week-wise recompute
-    // (isme carried-forward backlog + is month ke due-dates dono already shamil
-    // hain — backend hi Week 1 me carry-forward add kar deta hai)
-    const wkOverdue = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.week_due || []).forEach(([ds, amt]) => {
-        for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkOverdue[wi] += (parseFloat(amt)||0); break; }
-        }
-      });
-    });
-    // Payment Received — jaisa tha waisa hi (FILTERED rows ke week_paid se)
-    const wkPayment = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.week_paid || []).forEach(([ds, amt]) => {
-        for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkPayment[wi] += (parseFloat(amt)||0); break; }
-        }
-      });
-    });
-    // "Overdue(month end) Target" — ab FILTER-AWARE: har customer ka target
-    // month ki pehli baar hi freeze ho chuka hai (backend me), yahan sirf
-    // FILTERED customers ka wahi frozen target sum hota hai. Isliye Tag/Type
-    // filter lagane par ye number badalta hai, par poore month ke liye fixed
-    // rehta hai (ledger baad me kitna bhi badle, frozen value nahi badlegi).
-    const wkTarget = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.target_week_due || []).forEach(([ds, amt]) => {
-        for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkTarget[wi] += (parseFloat(amt)||0); break; }
-        }
-      });
-    });
-    let tgtTotal = 0, ovTotal = 0, payTotal = 0, balTotal = 0;
-    _payWeekRowsExport = [];
-    let _weekRowsData = wm.map((w,wi) => {
-      const label = w.label;
-      const ov = Math.round(wkOverdue[wi]);
-      const pay = Math.round(wkPayment[wi]);
-      // Target is the backend's filter-aware MONTH-FROZEN customer target,
-      // not a value reconstructed from today's live overdue. This keeps the
-      // target stable while payments/live ledger amounts move during the month.
-      const tgt = Math.round(wkTarget[wi]);
-      tgtTotal += tgt; ovTotal += ov; payTotal += pay;
-      // Balance against the fixed target cannot be negative after over-collection.
-      const balAfter = Math.max(0, Math.round(tgt - pay));
-      balTotal += balAfter;
-      return {
-        label, wi,
-        rangeShort: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)),
-        overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter
-      };
-    });
-    _payWeekRowsExport = _weekRowsData.map(r => ({week: r.label, range: r.rangeShort, overdue_target: r.overdue_target, overdue_month_end: r.overdue_month_end, payment_received: r.payment_received, balance_remaining: r.balance_remaining}));
-    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
-    if (_payWeekSortKey){
-      const k = _payWeekSortKey, dir = _payWeekSortDir;
-      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((a[k]||0) - (b[k]||0)));
-    }
-    const body = _weekRowsData.map(r => `<tr>
-        <td style="padding:5px 8px">${escHtml(r.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(r.rangeShort)}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(r.overdue_target)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(r.overdue_month_end)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(r.payment_received)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(r.balance_remaining)}</td>
-      </tr>`).join('');
-    wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
-        <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">Overdue-month end Target ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_month_end')" class="sort-arrow">Overdue (Month End, Live) ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('payment_received')" class="sort-arrow">Payment Received ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Balance ⇅</th>
-      </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
-      <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-        <td style="padding:5px 8px">Total</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(tgtTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
-      </tr></tfoot></table>
-      <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Overdue-month end Target</b> = the month-frozen target from each matching customer's target snapshot. Tag/Customer filters sum only those same frozen customer targets, so the target does not move with later ledger changes.<br>
-        <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
-        <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
-        <b>Balance</b> = Overdue-month end Target minus this week's Payment Received.
-        Week 1 = 1st–7th of the month, and so on.
-      </p>`;
-  }
+  // ---- WEEK-WISE PAYMENT INWARD TARGET — direct from Planning sheet ----
+  _renderPayWeekPlanning();
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
   const tagHost = document.getElementById('payTagSummary');
@@ -18745,10 +18655,29 @@ function exportPayAging(){
   _dlCsv(headers, data, 'aging_bucket');
 }
 function exportPayWeek(){
-  if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue-month end Target','Overdue (Month End, Live)','Payment Received','Balance'];
-  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
-  _dlCsv(headers, data, 'week_wise_overdue_tracker');
+  const d = _planData;
+  if (!d || !d.weekwise_rows || !d.weekwise_rows.length){ alert('No Planning week-wise data to export'); return; }
+  const weeks = d.weekwise_weeks || [];
+  const headers = ['Channel','Inward Projection'];
+  weeks.forEach(w => { headers.push(w.label + ' Projection'); headers.push(w.label + ' Actual'); });
+  const data = (d.weekwise_rows||[]).map(r => {
+    const row = [r.category, Math.round(r.inward_projection||0)];
+    weeks.forEach(w => {
+      const x = (r.weeks||{})[w.key] || {};
+      row.push(Math.round(x.projection||0));
+      row.push(x.actual === null || x.actual === undefined || x.actual === '' ? '' : Math.round(x.actual||0));
+    });
+    return row;
+  });
+  const t = d.weekwise_totals || {};
+  const tr = ['Total', Math.round(t.inward_projection||0)];
+  weeks.forEach(w => {
+    const x=(t.weeks||{})[w.key]||{};
+    tr.push(Math.round(x.projection||0));
+    tr.push(x.actual === null || x.actual === undefined || x.actual === '' ? '' : Math.round(x.actual||0));
+  });
+  data.push(tr);
+  _dlCsv(headers, data, 'payment_inward_target_weekwise_planning');
 }
 function exportPayTagSummary(){
   if (!_payTagRowsExport.length){ alert('No data to export'); return; }
@@ -18920,6 +18849,43 @@ function loadPaymentsPlanning(force){
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
+function _renderPayWeekPlanning(){
+  const host = document.getElementById('payWeekTable');
+  if (!host) return;
+  const d = _planData;
+  if (!d){
+    host.innerHTML = '<div class="home-empty" style="padding:18px">Loading Planning week-wise data…</div>';
+    return;
+  }
+  const weeks = d.weekwise_weeks || [];
+  const rows = d.weekwise_rows || [];
+  if (!weeks.length || !rows.length){
+    host.innerHTML = '<div class="home-empty" style="padding:18px;color:#a33">' + escHtml(d.weekwise_error || d.error || 'Planning sheet me week-wise table nahi mila') + '</div>';
+    _payWeekRowsExport = [];
+    return;
+  }
+  const fmtMaybe = v => (v === null || v === undefined || v === '') ? '<span style="color:var(--cn-mid)">—</span>' : fmt(v);
+  const weekHead = weeks.map(w => `<th style="text-align:right;padding:5px 8px">${escHtml(w.label)} Projection</th><th style="text-align:right;padding:5px 8px">Actual</th>`).join('');
+  const body = rows.map(r => {
+    const cells = weeks.map(w => {
+      const x = (r.weeks||{})[w.key] || {};
+      return `<td style="text-align:right;padding:5px 8px;font-weight:700;background:#fdf6e3;color:#8a6d3b">${fmtMaybe(x.projection)}</td><td style="text-align:right;padding:5px 8px;font-weight:700;color:#1f7a3a">${fmtMaybe(x.actual)}</td>`;
+    }).join('');
+    return `<tr><td style="padding:5px 8px;font-weight:700">${escHtml(r.category)}</td><td style="text-align:right;padding:5px 8px;font-weight:800">${fmt(r.inward_projection||0)}</td>${cells}</tr>`;
+  }).join('');
+  const t = d.weekwise_totals || {};
+  const totalCells = weeks.map(w => {
+    const x = (t.weeks||{})[w.key] || {};
+    return `<td style="text-align:right;padding:5px 8px">${fmtMaybe(x.projection)}</td><td style="text-align:right;padding:5px 8px">${fmtMaybe(x.actual)}</td>`;
+  }).join('');
+  host.innerHTML = `<p style="color:var(--cn-mid);font-size:.72rem;margin:0 0 6px">Planning source · Updated till: <b>${escHtml(d.today||'')}</b></p>
+    <div style="overflow-x:auto"><table class="ro" style="width:100%;font-size:.78rem;min-width:${Math.max(760, 270 + weeks.length*230)}px"><thead><tr>
+      <th style="padding:5px 8px">Channel</th><th style="text-align:right;padding:5px 8px">Inward Projection</th>${weekHead}
+    </tr></thead><tbody>${body}</tbody><tfoot><tr style="font-weight:900;background:var(--cn-ivory)">
+      <td style="padding:5px 8px">Total</td><td style="text-align:right;padding:5px 8px">${fmt(t.inward_projection||0)}</td>${totalCells}
+    </tr></tfoot></table></div>`;
+}
+
 function renderPaymentsPlanning(){
   const host = document.getElementById('planContent');
   const d = _planData;
@@ -18957,6 +18923,7 @@ function renderPaymentsPlanning(){
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
+  _renderPayWeekPlanning();
 }
 function exportPaymentsPlanning(){
   const d = _planData;
@@ -27688,6 +27655,10 @@ def _build_payments_planning():
     today = now_ist().date()
     rows = []
     source_totals = None
+    weekwise_rows = []
+    weekwise_totals = None
+    weekwise_weeks = []
+    weekwise_error = None
     period_label = ""
     updated_till = ""
     plan_err = None
@@ -27753,6 +27724,63 @@ def _build_payments_planning():
                 source_totals = {k: v for k, v in parsed.items() if k != "category"}
                 break
             rows.append(parsed)
+        # Locate the second Planning table: Channel + Inward Projection + W1/W2... Projection/Actual.
+        # This block is intentionally parsed from the same published Summary sheet so the
+        # Payments tab always mirrors Planning without hard-coded values.
+        week_header_at = None
+        for j in range(header_at + 1, len(raw_rows)):
+            norm = [_plan_norm(v) for v in raw_rows[j]]
+            if "channel" in norm and "inwardprojection" in norm and any(re.fullmatch(r"w\d+projection", x or "") for x in norm):
+                week_header_at = j
+                break
+        if week_header_at is not None:
+            wh = raw_rows[week_header_at]
+            wn = [_plan_norm(v) for v in wh]
+            wc_channel = _plan_col_index(wh, "Channel", "Category", "Type")
+            wc_inward = _plan_col_index(wh, "Inward Projection", "Inward projection", "Projection")
+            week_cols = []
+            for ci, key in enumerate(wn):
+                m = re.fullmatch(r"w(\d+)projection", key or "")
+                if not m:
+                    continue
+                num = int(m.group(1))
+                actual_ci = ci + 1 if ci + 1 < len(wn) and wn[ci + 1] == "actual" else None
+                wk = f"w{num}"
+                week_cols.append((num, wk, ci, actual_ci))
+                weekwise_weeks.append({"key": wk, "label": f"W{num}"})
+            for row in raw_rows[week_header_at + 1:]:
+                category = clean(_plan_cell(row, wc_channel))
+                if not category:
+                    continue
+                inward = round(to_num(_plan_cell(row, wc_inward)), 0) if wc_inward is not None else 0
+                wdata = {}
+                for num, wk, pc, ac in week_cols:
+                    p_raw = clean(_plan_cell(row, pc))
+                    a_raw = clean(_plan_cell(row, ac)) if ac is not None else ""
+                    wdata[wk] = {
+                        "projection": round(to_num(p_raw), 0) if p_raw else 0,
+                        "actual": round(to_num(a_raw), 0) if a_raw else None,
+                    }
+                parsed_w = {"category": category, "inward_projection": inward, "weeks": wdata}
+                if _plan_norm(category) in ("total", "grandtotal"):
+                    weekwise_totals = {"inward_projection": inward, "weeks": wdata}
+                    break
+                # Ignore formula spacer/error rows; real channel rows have a name and either inward/weekly values.
+                if inward or any((x.get("projection") or x.get("actual")) for x in wdata.values()):
+                    weekwise_rows.append(parsed_w)
+            if weekwise_rows and weekwise_totals is None:
+                weekwise_totals = {
+                    "inward_projection": round(sum(r["inward_projection"] for r in weekwise_rows), 0),
+                    "weeks": {
+                        w["key"]: {
+                            "projection": round(sum((r["weeks"].get(w["key"], {}).get("projection") or 0) for r in weekwise_rows), 0),
+                            "actual": round(sum((r["weeks"].get(w["key"], {}).get("actual") or 0) for r in weekwise_rows), 0),
+                        } for w in weekwise_weeks
+                    },
+                }
+        else:
+            weekwise_error = "Planning sheet me W1/W2 Projection + Actual wala table nahi mila"
+
         if not rows:
             raise ValueError("Planning table me channel rows nahi mile")
     except Exception as e:
@@ -27773,6 +27801,10 @@ def _build_payments_planning():
     data = {
         "rows": rows,
         "totals": source_totals,
+        "weekwise_rows": weekwise_rows,
+        "weekwise_totals": weekwise_totals or {"inward_projection": 0, "weeks": {}},
+        "weekwise_weeks": weekwise_weeks,
+        "weekwise_error": weekwise_error,
         "month_label": period_label or today.strftime("%b-%y"),
         "today": updated_till or today.strftime("%d-%b-%y"),
         "error": plan_err,
