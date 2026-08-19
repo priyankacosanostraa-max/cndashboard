@@ -19332,7 +19332,10 @@ function renderWebsiteReturns(){
   if(src){
     const unknown=Math.max(0,rows.length-classified);
     const modeSource=_wrText(_websiteReturnsData.payment_mode_source)||'Website order COD flag';
-    src.innerHTML=`Live source: <b>BlueDart Return</b> · ${Number(_websiteReturnsData.unique_shipments||0).toLocaleString('en-IN')} unique Website return shipments · COD/Prepaid from <b>${escHtml(modeSource)}</b>${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    const validWebsite=Number(_websiteReturnsData.source_rows||_websiteReturnsData.unique_shipments||0);
+    const ignoredNonWebsite=Number(_websiteReturnsData.ignored_non_website_rows||0);
+    const sheetRows=Number(_websiteReturnsData.sheet_rows_including_header||0);
+    src.innerHTML=`Live source: <b>BlueDart Return</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website return rows</b>${sheetRows?` out of ${sheetRows.toLocaleString('en-IN')} sheet rows (header included)`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/Designer error rows ignored`:''} · COD/Prepaid from <b>${escHtml(modeSource)}</b>${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
   }
 }
 async function loadWebsiteReturns(force=false){
@@ -22099,7 +22102,7 @@ def api_warmup_status():
 #  WEBSITE RETURNS — BlueDart Return tracker
 #  Separate operational source from the Mayuresh Website sales sheet.
 # ════════════════════════════════════════════════════════════════
-_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "error": None}
+_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None}
 _WEBSITE_RETURNS_TTL = 300
 
 
@@ -22217,11 +22220,18 @@ def _load_website_returns(force=False):
         c_reason = _wr_col(df, "Rto Reason", "RTO Reason", pos=29)
         c_mode = _wr_col(df, "Mode", pos=32)
 
+        # Pandas has already consumed the header row, so len(df) is the number
+        # of source data rows.  The published BlueDart Return sheet also contains
+        # non-Website formula/error rows (currently labelled Designer); those are
+        # not Website returns and must not inflate the operational return count.
+        sheet_data_rows = int(len(df))
         source_rows = 0
+        ignored_non_website_rows = 0
         shipments = {}
         for _, raw in df.iterrows():
             channel = _wr_clean_value(raw.get(c_channel, "")) if c_channel is not None else ""
             if channel and channel.strip().casefold() != "website":
+                ignored_non_website_rows += 1
                 continue
             order_id = _wr_clean_value(raw.get(c_order_id, "")) if c_order_id is not None else ""
             waybill = _wr_clean_value(raw.get(c_waybill, "")) if c_waybill is not None else ""
@@ -22232,10 +22242,15 @@ def _load_website_returns(force=False):
             source_rows += 1
             key_raw = waybill or ("ORDER:" + order_id)
             key = re.sub(r"[^a-z0-9]", "", key_raw.casefold()) or key_raw.casefold()
+            source_customer = _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else ""
+            consignee_name = _wr_clean_value(raw.get(c_consignee, "")) if c_consignee is not None else ""
             rec = {
                 "channel": channel or "Website",
                 "order_date": _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else "",
-                "customer": _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else "",
+                # BlueDart's historical `Coustomer` column is blank on many newer
+                # records.  `Consignee Name` is the actual customer name there, so
+                # use it as the authoritative fallback instead of showing a dash.
+                "customer": source_customer or consignee_name,
                 "display_order_code": _wr_clean_value(raw.get(c_display_order, "")) if c_display_order is not None else "",
                 "order_id": order_id,
                 "payment": _wr_clean_value(raw.get(c_payment, "")) if c_payment is not None else "",
@@ -22244,7 +22259,7 @@ def _load_website_returns(force=False):
                 "pickup_date": _wr_iso_date(raw.get(c_pickup, "")) if c_pickup is not None else "",
                 "origin": _wr_clean_value(raw.get(c_origin, "")) if c_origin is not None else "",
                 "destination": _wr_clean_value(raw.get(c_dest, "")) if c_dest is not None else "",
-                "consignee": _wr_clean_value(raw.get(c_consignee, "")) if c_consignee is not None else "",
+                "consignee": consignee_name,
                 "status_description": _wr_clean_value(raw.get(c_status_desc, "")) if c_status_desc is not None else "",
                 "status_group": _wr_clean_value(raw.get(c_status_group, "")) if c_status_group is not None else "",
                 "status_date": _wr_iso_date(raw.get(c_status_date, "")) if c_status_date is not None else "",
@@ -22277,7 +22292,14 @@ def _load_website_returns(force=False):
 
         rows = list(shipments.values())
         rows.sort(key=lambda r: (r.get("status_date") or r.get("order_date") or "", r.get("order_id") or ""), reverse=True)
-        _WEBSITE_RETURNS_CACHE.update({"rows": rows, "ts": now, "source_rows": source_rows, "error": None})
+        _WEBSITE_RETURNS_CACHE.update({
+            "rows": rows,
+            "ts": now,
+            "source_rows": source_rows,
+            "sheet_data_rows": sheet_data_rows,
+            "ignored_non_website_rows": ignored_non_website_rows,
+            "error": None,
+        })
         return rows
     except Exception as e:
         _WEBSITE_RETURNS_CACHE["error"] = str(e)
@@ -22325,6 +22347,9 @@ def api_website_returns():
             "rows": enriched_rows,
             "filters": filters,
             "source_rows": int(_WEBSITE_RETURNS_CACHE.get("source_rows") or 0),
+            "sheet_data_rows": int(_WEBSITE_RETURNS_CACHE.get("sheet_data_rows") or 0),
+            "ignored_non_website_rows": int(_WEBSITE_RETURNS_CACHE.get("ignored_non_website_rows") or 0),
+            "sheet_rows_including_header": int(_WEBSITE_RETURNS_CACHE.get("sheet_data_rows") or 0) + 1,
             "unique_shipments": len(rows),
             "payment_classified": classified,
             "payment_unclassified": max(0, len(rows) - classified),
