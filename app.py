@@ -292,6 +292,14 @@ AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https:/
 NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
 TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
 AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
+# Website Returns patch: key 8-column table + COD/Prepaid KPIs/filters.
+# Website courier-return tracker (BlueDart Return tab).  This is intentionally
+# separate from the sales Website sheet: the Returns dashboard uses this source
+# for Website RTO/return operations and the marketplace Returns tab excludes Website.
+WEBSITE_RETURNS_URL = os.environ.get(
+    "WEBSITE_RETURNS_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSegcNg_GA_w91K0AZzsdmAgb5jwOaD7ciZE8ORpe1dIWiLegdjKWjC4wV7s8ZOEKSu6gZStp3QBTH2/pub?gid=67983640&single=true&output=csv",
+)
 # Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
@@ -2019,6 +2027,10 @@ def _refresh_data():
     website_customer_events = {}
     website_city_events = {}
     website_payment_events = {}
+    # Compact Website Display Order Code -> payment mode lookup (hashed order token).
+    # The dedicated BlueDart Website Returns tab uses this to classify each return
+    # as COD / Prepaid without sending raw customer-order indexes to the browser.
+    website_return_payment_mode_lookup = {}
     # Compact per-SKU daily Website payment/return counts used by Returns tab.
     # co/cr = COD orders / COD returned orders; po/pr = Prepaid orders / returned orders.
     website_return_payment_daily = {}
@@ -2214,6 +2226,9 @@ def _refresh_data():
                             "o": _si(order_token), "p": int(cod_value), "d": _si(order_day)
                         }
                         _web_all_payment_orders[order_token] = payment_event
+                        website_return_payment_mode_lookup[order_token] = (
+                            "COD" if int(cod_value) == 1 else "Prepaid"
+                        )
                         # Keep per-SKU order events for every Website SKU so SKU
                         # Details, Sales Comparison, Rakhi and exports all use the
                         # same exact Display Order Code identity instead of customer-date proxies.
@@ -2536,6 +2551,7 @@ def _refresh_data():
         website_customer_events = {}
         website_city_events = {}
         website_payment_events = {}
+        website_return_payment_mode_lookup = {}
         website_return_payment_daily = {}
         website_return_events = {}
         website_payment_summary = {
@@ -3512,6 +3528,7 @@ def _refresh_data():
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
     CACHE["website_payment_summary"] = website_payment_summary
     CACHE["website_returns_payment_summary"] = website_returns_payment_summary
+    CACHE["website_return_payment_mode_lookup"] = website_return_payment_mode_lookup
     CACHE["marketplace_returns_payment_summary"] = marketplace_returns_payment_summary
     CACHE["daily_reporting_daily"] = daily_reporting_daily
     CACHE["daily_reporting_orders"] = daily_reporting_orders
@@ -7016,6 +7033,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
   <button class="menu-item" id="m34" onclick="showTab('returns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M9 7 5 11l4 4"/><path d="M5 11h9a5 5 0 0 1 5 5v2"/><path d="M15 5h4v4"/></svg></span><span>Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m35" onclick="showTab('webreturns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/><path d="m15 17 2 2 4-5"/></svg></span><span>Website Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#1d6f42;color:#fff;font-size:7px;font-weight:900">LIVE</span></button>
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
@@ -7480,7 +7498,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <div class="ops-kicker">SALES RETURN ANALYSIS</div>
         <div class="ops-title">Returns</div>
-        <div class="ops-sub">Top 20 returned SKUs. Return amount is calculated on the transaction selling price: Return Qty × Selling Price.</div>
+        <div class="ops-sub">Marketplace and non-Website returns only. Website courier/RTO returns are now tracked separately in the Website Returns tab.</div>
       </div>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportReturnsExcel()">Export Excel</button>
     </div>
@@ -7498,7 +7516,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="returnsPaymentBox" class="filter-box" style="margin:14px 0">
       <label class="fl" style="margin-bottom:6px;display:block">COD / Prepaid Return Rate by Channel</label>
-      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Unique orders only. Website uses Display Order Code (column A) only; Invoice Code (J) is not used. Date filters use the canonical Order_Date attached to that A-code. Marketplaces use their exact source Order ID. COD/Prepaid is shown only when the source sheet actually exposes a payment-mode field.</div>
+      <div id="returnsPaymentSubtitle" class="small-note" style="margin-bottom:10px;white-space:normal">Marketplace orders only. Date and exact-SKU filters apply to every card. COD/Prepaid is shown only when the marketplace source sheet exposes a payment-mode field.</div>
       <div id="returnsPaymentDonut"></div>
     </div>
 
@@ -7515,6 +7533,51 @@ select.lg-in option{background:#fff;color:#1a1610}
           <th>Return Qty</th><th class="rev-only">Return Amount (Selling Price Basis)</th>
         </tr></thead>
         <tbody id="returnsBody"></tbody>
+      </table>
+    </div></div>
+  </div>
+
+  <div id="vWebsiteReturns" class="ops-page" style="display:none">
+    <div class="ops-hero" style="align-items:flex-end">
+      <div>
+        <div class="ops-kicker">WEBSITE · BLUEDART RETURN TRACKER</div>
+        <div class="ops-title">Website Returns</div>
+        <div class="ops-sub">Live Website return data with COD / Prepaid classification. Only the key return fields are shown below.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteReturnsCsv()">Export CSV</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="loadWebsiteReturns(true)">Refresh Live Sheet</button>
+      </div>
+    </div>
+
+    <div class="filter-box" style="margin:12px 0 14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end">
+        <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="renderWebsiteReturns()"></div>
+        <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="renderWebsiteReturns()"></div>
+        <div class="fc"><label class="fl">Payment Mode</label><select class="fs" id="wrPaymentMode" onchange="renderWebsiteReturns()"><option value="All">All</option><option value="COD">COD</option><option value="Prepaid">Prepaid</option></select></div>
+        <div class="fc"><label class="fl">Min Payment</label><input class="fi" id="wrPayMin" type="number" min="0" step="1" placeholder="0" oninput="websiteReturnsApply_d()"></div>
+        <div class="fc"><label class="fl">Max Payment</label><input class="fi" id="wrPayMax" type="number" min="0" step="1" placeholder="No limit" oninput="websiteReturnsApply_d()"></div>
+        <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="renderWebsiteReturns()"><option value="All">All Origins</option></select></div>
+        <div class="fc"><label class="fl">Destination</label><select class="fs" id="wrDestination" onchange="renderWebsiteReturns()"><option value="All">All Destinations</option></select></div>
+        <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="renderWebsiteReturns()"><option value="All">All Reasons</option></select></div>
+        <div class="fc"><label class="fl">Order / Customer Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Order ID, display code, customer…" oninput="websiteReturnsApply_d()"></div>
+        <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebsiteReturnsFilters()">Reset</button></div>
+      </div>
+      <div id="wrSourceNote" class="small-note" style="margin-top:10px;white-space:normal"></div>
+    </div>
+
+    <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
+
+    <div class="ops-section-head">
+      <div><div class="ops-section-title">Website Returns</div><div class="small-note" id="wrTableNote"></div></div>
+    </div>
+    <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:690px">
+      <table class="ops-table" id="websiteReturnsTable" style="min-width:1180px">
+        <thead><tr>
+          <th>Order ID</th><th>Display Order Code</th><th>Customer</th><th>Payment</th>
+          <th>Pickup Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
+        </tr></thead>
+        <tbody id="websiteReturnsBody"><tr><td colspan="8" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -9816,6 +9879,7 @@ const MENU_TAB_META = {
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m34: {name:"Returns",          desc:"Top return SKUs with date, SKU/CN Name and channel filters."},
+  m35: {name:"Website Returns",  desc:"Website returns with COD / Prepaid counts, key order fields and RTO reasons."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
@@ -18935,9 +18999,9 @@ function _returnsBuildSource(){
   const isWebsiteChannel=v=>['website','dtc','d2c'].includes(_returnsNorm(v));
   (master||[]).forEach(item=>{
     const sku=String(item?.sku||'').trim(); if(!sku)return;
-    // Non-Website channels keep the existing COSA return source. Website/DTC
-    // is intentionally excluded here because its authoritative Returns date
-    // comes from Website sheet physical column W (Order_Date).
+    // Existing Returns tab is marketplace / non-Website only. Website/DTC is
+    // intentionally excluded here and lives in the dedicated Website Returns
+    // tab backed by the BlueDart Return tracker.
     (item.sales_entries||[]).forEach(e=>{
       const entryChannel=_returnsEntryChannel(e);
       if(isWebsiteChannel(entryChannel))return;
@@ -18949,14 +19013,6 @@ function _returnsBuildSource(){
         sku, sku_name:item.sku_name||'', cn_name:item.cn_name||'', image_url:item.image_url||'',
         date:String(e?.date||''), channel:entryChannel, qty, sp,
         amount:Math.max(0,Number(amount)||0)
-      });
-    });
-    (item.website_return_events||[]).forEach(ev=>{
-      const qty=Math.max(0,Number(ev?.q)||0); if(!(qty>0))return;
-      const amount=Math.max(0,Number(ev?.a)||0);
-      rows.push({
-        sku, sku_name:item.sku_name||'', cn_name:item.cn_name||'', image_url:item.image_url||'',
-        date:String(ev?.d||''), channel:'D2C', qty, sp:qty>0?amount/qty:0, amount
       });
     });
   });
@@ -19026,9 +19082,7 @@ function renderReturns(){
   }
   const sumQty=events.reduce((s,e)=>s+(Number(e.qty)||0),0), sumAmt=events.reduce((s,e)=>s+(Number(e.amount)||0),0);
   const summary=document.getElementById('returnsSummary');
-  const websiteOrders=_returnsPaymentScope('Website',state);
-  const websiteOrderText=(!websiteOrders.hidden&&!websiteOrders.empty)?` · Total Website Orders: <b>${Number(websiteOrders.totalOrders||0).toLocaleString('en-IN')}</b>`:'';
-  if(summary) summary.innerHTML=`Filtered returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b>${websiteOrderText} · showing top ${Math.min(20,rows.length)}.`;
+  if(summary) summary.innerHTML=`Filtered marketplace / non-Website returns: <b>${Math.round(sumQty).toLocaleString('en-IN')} units</b>${LOGIN_ROLE==='employee'?'':` · <b>${fmt(sumAmt)}</b> selling-price return amount`} · <b>${allRows.length.toLocaleString('en-IN')} SKUs</b> · showing top ${Math.min(20,rows.length)}.`;
   renderReturnsPaymentDonut(state);
   renderReturnsChart(events,state);
 }
@@ -19053,7 +19107,7 @@ function _returnsPaymentChannelCanon(v){
   if(n==='tata'||n==='tata cliq'||n==='tatacliq')return 'Tata';
   return String(v||'').trim();
 }
-const _RET_PAYMENT_CHANNELS=['Website','Myntra','Amazon','Flipkart','Nykaa','Ajio','Tata'];
+const _RET_PAYMENT_CHANNELS=['Myntra','Amazon','Flipkart','Nykaa','Ajio','Tata'];
 function _returnsExactItem(q){
   const compact=_returnsCompactSku(q);
   let item=(compact&&_roExactSkuLookup&&_roExactSkuLookup[compact])||null;
@@ -19070,31 +19124,21 @@ function _returnsPaymentScope(channel,state){
   if(st.channel&&st.channel!=='All'&&selected!==canon)return {hidden:true};
   const inDate=row=>{const d=String(row?.d||'');if(!d)return false;if(st.d1&&d<st.d1)return false;if(st.d2&&d>st.d2)return false;return true;};
   const q=String(st.search||'').trim();
-  let rows=[],scope=`All ${canon} orders`,meta={};
-  if(canon==='Website'){
-    meta={payment_available:true,payment_column:'COD (column M)',source_sheet:'Website'};
-    if(q){
-      const item=_returnsExactItem(q);
-      if(!item)return {hidden:false,empty:true,channel:canon,reason:'Enter one exact SKU to see its payment-mode return rate.'};
-      rows=(item.website_return_payment_daily||[]).filter(inDate).map(r=>({d:r.d,cod:Number(r.co)||0,cod_returned:Number(r.cr)||0,prepaid:Number(r.po)||0,prepaid_returned:Number(r.pr)||0,unknown:0,unknown_returned:0}));
-      scope=`SKU ${item.sku}`;
-    }else rows=(websiteReturnsPaymentSummary?.daily||[]).filter(inDate).map(r=>({...r,unknown:0,unknown_returned:0}));
-  }else{
-    meta=marketplaceReturnsPaymentSummary?.[canon]||{};
-    if(q){
-      const item=_returnsExactItem(q);
-      if(!item)return {hidden:false,empty:true,channel:canon,reason:'Enter one exact SKU to see its payment-mode return rate.'};
-      rows=((item.marketplace_return_payment_daily||{})[canon]||[]).filter(inDate);
-      scope=`SKU ${item.sku}`;
-    }else rows=(meta.daily||[]).filter(inDate);
-  }
+  if(canon==='Website')return {hidden:true};
+  let rows=[],scope=`All ${canon} orders`,meta=marketplaceReturnsPaymentSummary?.[canon]||{};
+  if(q){
+    const item=_returnsExactItem(q);
+    if(!item)return {hidden:false,empty:true,channel:canon,reason:'Enter one exact SKU to see its payment-mode return rate.'};
+    rows=((item.marketplace_return_payment_daily||{})[canon]||[]).filter(inDate);
+    scope=`SKU ${item.sku}`;
+  }else rows=(meta.daily||[]).filter(inDate);
   const totals=rows.reduce((a,r)=>{
     ['cod','prepaid','unknown','cod_returned','prepaid_returned','unknown_returned'].forEach(k=>a[k]+=Number(r?.[k])||0);return a;
   },{cod:0,prepaid:0,unknown:0,cod_returned:0,prepaid_returned:0,unknown_returned:0});
   totals.classified=totals.cod+totals.prepaid;
   totals.totalOrders=totals.classified+totals.unknown;
   totals.totalReturned=totals.cod_returned+totals.prepaid_returned+totals.unknown_returned;
-  return {...totals,scope,channel:canon,hidden:false,empty:totals.totalOrders<=0,paymentAvailable:canon==='Website'?true:!!meta.payment_available,paymentColumn:meta.payment_column||'',sourceSheet:meta.source_sheet||canon};
+  return {...totals,scope,channel:canon,hidden:false,empty:totals.totalOrders<=0,paymentAvailable:!!meta.payment_available,paymentColumn:meta.payment_column||'',sourceSheet:meta.source_sheet||canon};
 }
 function _returnsPaymentCard(d){
   const channel=escHtml(d.channel||'Channel'),scope=escHtml(d.scope||''),total=Number(d.totalOrders)||0,returned=Number(d.totalReturned)||0;
@@ -19145,7 +19189,7 @@ function renderReturnsPaymentDonut(state){
   const channels=(st.channel&&st.channel!=='All')?[selected]:_RET_PAYMENT_CHANNELS;
   const scopes=channels.map(ch=>_returnsPaymentScope(ch,st)).filter(x=>!x.hidden);
   host.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:12px">${scopes.map(_returnsPaymentCard).join('')}</div>`;
-  if(sub)sub.textContent='Unique order denominator · Website order ID is column A Display Order Code only (column J Invoice Code is ignored). Date and exact-SKU filters apply to every card. Nykaa uses Mode; Tata uses IsCOD; Website uses COD column M. Myntra, Amazon/Flipkart and Ajio are not guessed when their current source sheet has no COD/Prepaid field.';
+  if(sub)sub.textContent='Marketplace unique-order denominator. Date and exact-SKU filters apply to every card. Nykaa uses Mode; Tata uses IsCOD. Myntra, Amazon/Flipkart and Ajio are not guessed when their current source sheet has no COD/Prepaid field.';
 }
 
 function renderReturnsChart(events,state){
@@ -19191,6 +19235,129 @@ function exportReturnsExcel(){
   const blob=new Blob([html],{type:'application/vnd.ms-excel;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='returns_top20_filtered.xls';a.click();setTimeout(()=>URL.revokeObjectURL(url),1200);
 }
 window.loadReturns=loadReturns;window.renderReturns=renderReturns;window.resetReturnsFilters=resetReturnsFilters;window.returnsApply_d=returnsApply_d;window.renderReturnsPaymentDonut=renderReturnsPaymentDonut;window.returnsPointHover=returnsPointHover;window.returnsPointLeave=returnsPointLeave;window.exportReturnsExcel=exportReturnsExcel;
+
+/* ── WEBSITE RETURNS · BLUEDART RETURN ─────────────────────────────── */
+let _websiteReturnsData = null;
+let _websiteReturnsFilteredRows = [];
+let _websiteReturnsLoading = false;
+
+function _wrEl(id){return document.getElementById(id);}
+function _wrText(v){return String(v==null?'':v).trim();}
+function _wrNorm(v){return _wrText(v).toLowerCase();}
+function _wrNum(v){
+  const s=_wrText(v).replace(/[₹,\s]/g,'');
+  if(!s)return null;
+  const n=Number(s);return Number.isFinite(n)?n:null;
+}
+function _wrFmtDate(iso){
+  const s=_wrText(iso); if(!s)return '—';
+  const d=new Date(s+'T00:00:00');
+  return Number.isNaN(d.getTime())?s:d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+}
+function _wrFmtPayment(v){
+  const n=_wrNum(v);if(n===null)return _wrText(v)||'—';
+  return '₹'+n.toLocaleString('en-IN',{maximumFractionDigits:2});
+}
+function _wrSetOptions(id, values, allLabel){
+  const el=_wrEl(id); if(!el)return;
+  const old=el.value||'All';
+  const vals=Array.from(new Set((values||[]).map(_wrText).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
+  el.innerHTML=`<option value="All">${escHtml(allLabel||'All')}</option>`+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  el.value=vals.includes(old)?old:'All';
+}
+function _wrKpi(label,value,sub){
+  return `<div class="ops-kpi"><div class="ops-kpi-label">${escHtml(label)}</div><div class="ops-kpi-value">${escHtml(String(value))}</div><div class="ops-kpi-sub">${escHtml(sub||'')}</div></div>`;
+}
+function _wrPaymentMode(r){
+  const m=_wrText(r?.payment_mode);
+  return m==='COD'||m==='Prepaid'?m:'Unclassified';
+}
+function _websiteReturnsFilterRows(){
+  const rows=(_websiteReturnsData&&_websiteReturnsData.rows)||[];
+  const d1=_wrEl('wrD1')?.value||'',d2=_wrEl('wrD2')?.value||'';
+  const mode=_wrEl('wrPaymentMode')?.value||'All';
+  const origin=_wrEl('wrOrigin')?.value||'All',dest=_wrEl('wrDestination')?.value||'All',reason=_wrEl('wrReason')?.value||'All';
+  const payMin=_wrNum(_wrEl('wrPayMin')?.value),payMax=_wrNum(_wrEl('wrPayMax')?.value);
+  const q=_wrNorm(_wrEl('wrSearch')?.value||'');
+  return rows.filter(r=>{
+    const d=_wrText(r.pickup_date);
+    if(d1&&(!d||d<d1))return false;if(d2&&(!d||d>d2))return false;
+    if(mode!=='All'&&_wrPaymentMode(r)!==mode)return false;
+    if(origin!=='All'&&_wrText(r.origin)!==origin)return false;
+    if(dest!=='All'&&_wrText(r.destination)!==dest)return false;
+    if(reason!=='All'&&_wrText(r.rto_reason)!==reason)return false;
+    const p=_wrNum(r.payment);
+    if(payMin!==null&&(p===null||p<payMin))return false;
+    if(payMax!==null&&(p===null||p>payMax))return false;
+    if(q){
+      const hay=_wrNorm(`${r.order_id||''} ${r.display_order_code||''} ${r.customer||''} ${r.payment||''} ${r.origin||''} ${r.destination||''} ${r.rto_reason||''}`);
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+}
+function renderWebsiteReturns(){
+  const body=_wrEl('websiteReturnsBody');
+  if(!_websiteReturnsData){
+    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="8" class="ops-empty">Website return data has not loaded yet.</td></tr>';
+    return;
+  }
+  const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.pickup_date||'').localeCompare(String(a.pickup_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
+  _websiteReturnsFilteredRows=rows;
+  const cod=rows.filter(r=>_wrPaymentMode(r)==='COD').length;
+  const prepaid=rows.filter(r=>_wrPaymentMode(r)==='Prepaid').length;
+  const classified=cod+prepaid;
+  const k=_wrEl('wrKpis');
+  if(k)k.innerHTML=
+    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),'Filtered Website return shipments')+
+    _wrKpi('COD Returns',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
+    _wrKpi('Prepaid Returns',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered returns`);
+
+  const show=rows.slice(0,500),note=_wrEl('wrTableNote');
+  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} filtered returns · showing ${show.length.toLocaleString('en-IN')}${rows.length>show.length?' (export includes all filtered rows)':''}`;
+  if(body){
+    if(!show.length)body.innerHTML='<tr><td colspan="8" class="ops-empty">No Website returns match the selected filters.</td></tr>';
+    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td>${escHtml(r.customer||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.pickup_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+  }
+  const src=_wrEl('wrSourceNote');
+  if(src){
+    const unknown=Math.max(0,rows.length-classified);
+    const modeSource=_wrText(_websiteReturnsData.payment_mode_source)||'Website order COD flag';
+    src.innerHTML=`Live source: <b>BlueDart Return</b> · ${Number(_websiteReturnsData.unique_shipments||0).toLocaleString('en-IN')} unique Website return shipments · COD/Prepaid from <b>${escHtml(modeSource)}</b>${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+  }
+}
+async function loadWebsiteReturns(force=false){
+  if(_websiteReturnsLoading)return;
+  if(_websiteReturnsData&&!force){renderWebsiteReturns();return;}
+  _websiteReturnsLoading=true;
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="8" class="ops-empty">Loading live Website return sheet…</td></tr>';
+  try{
+    const r=await fetch('/api/website-returns'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
+    _websiteReturnsData=d;
+    _wrSetOptions('wrOrigin',d.filters?.origins||[],'All Origins');
+    _wrSetOptions('wrDestination',d.filters?.destinations||[],'All Destinations');
+    _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
+    renderWebsiteReturns();
+  }catch(e){
+    _websiteReturnsData=null;
+    if(body)body.innerHTML=`<tr><td colspan="8" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
+  }finally{_websiteReturnsLoading=false;}
+}
+function resetWebsiteReturnsFilters(){
+  ['wrD1','wrD2','wrPayMin','wrPayMax','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
+  ['wrPaymentMode','wrOrigin','wrDestination','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  renderWebsiteReturns();
+}
+const websiteReturnsApply_d=_debounce(()=>renderWebsiteReturns(),160);
+function exportWebsiteReturnsCsv(){
+  const rows=_websiteReturnsFilteredRows||[];if(!rows.length){alert('No Website return rows to export.');return;}
+  const headers=['Order ID','Display Order Code','Customer','Payment','Pickup Date','Origin','Destination','RTO Reason'];
+  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',r.customer||'',r.payment||'',r.pickup_date||'',r.origin||'',r.destination||'',r.rto_reason||'']);
+  _dlCsv(headers,vals,'website_returns_filtered');
+}
+window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -20499,6 +20666,7 @@ showTab = function(t){
     finder: {id: 'vFinder', btn: 'm4'},
     skudetails: {id: 'vSkudetails', btn: 'm5'},
     returns: {id: 'vReturns', btn: 'm34'},
+    webreturns: {id: 'vWebsiteReturns', btn: 'm35'},
     insights: {id: 'vInsights', btn: 'm6'},
     target: {id: 'vTarget', btn: 'm10'},
     discount: {id: 'vDiscount', btn: 'm12'},
@@ -20555,6 +20723,7 @@ showTab = function(t){
       finder: 'SKU FINDER',
       skudetails: 'SKU DETAILS',
       returns: 'RETURNS',
+      webreturns: 'WEBSITE RETURNS',
       insights: 'INSIGHTS',
       target: 'TARGET',
       discount: 'DISCOUNTS',
@@ -20593,6 +20762,7 @@ showTab = function(t){
   // bhaari kaam agle frame me. Isse page badalne par hang nahi hoga.
   if (t === 'repeat')   setTimeout(()=>{ try{ renderRoSkuChecklist(); applyRO(); }catch(e){console.error(e);} }, 0);
   if (t === 'returns')  setTimeout(()=>{ try{ loadReturns(); }catch(e){console.error(e);} }, 0);
+  if (t === 'webreturns') setTimeout(()=>{ try{ loadWebsiteReturns(false); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
@@ -21915,6 +22085,246 @@ def api_data():
 @app.route("/api/warmup-status")
 def api_warmup_status():
     return jsonify({**_WARMUP, "ready": bool(CACHE.get("data"))})
+
+# ════════════════════════════════════════════════════════════════
+#  WEBSITE RETURNS — BlueDart Return tracker
+#  Separate operational source from the Mayuresh Website sales sheet.
+# ════════════════════════════════════════════════════════════════
+_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "error": None}
+_WEBSITE_RETURNS_TTL = 300
+
+
+def _wr_clean_value(v):
+    if v is None:
+        return ""
+    try:
+        if pd.isna(v):
+            return ""
+    except Exception:
+        pass
+    s = str(v).replace("\u00a0", " ").strip()
+    if s.lower() in ("nan", "none", "nat") or s.upper() in ("#N/A", "#N/A!", "#REF!", "#VALUE!", "#DIV/0!"):
+        return ""
+    return s
+
+
+def _wr_iso_date(v):
+    """Tracker has both 15-Dec-2025 and 1/2/2026 style dates.
+
+    Slash dates in this workbook are month/day/year (e.g. 1/2/2026 = Jan 2),
+    so explicit US-style formats are tried before day-first fallbacks.
+    """
+    s = _wr_clean_value(v)
+    if not s:
+        return ""
+    # Remove a trailing time only for the explicit date formats below; pandas
+    # fallback still gets the untouched value for unusual exports.
+    fmts = (
+        "%d-%b-%Y", "%d-%b-%y", "%m/%d/%Y", "%m/%d/%y",
+        "%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y",
+        "%d-%m-%Y", "%d-%m-%y", "%m-%d-%Y", "%m-%d-%y",
+    )
+    candidates = [s]
+    m = re.match(r"^(.+?)(?:\s+\d{1,2}:\d{2}(?::\d{2})?.*)$", s)
+    if m:
+        candidates.append(m.group(1).strip())
+    for c in candidates:
+        for fmt in fmts:
+            try:
+                return datetime.strptime(c, fmt).date().isoformat()
+            except Exception:
+                pass
+    try:
+        dt = pd.to_datetime(s, errors="coerce", dayfirst=False)
+        if not pd.isna(dt):
+            return dt.date().isoformat()
+    except Exception:
+        pass
+    try:
+        dt = pd.to_datetime(s, errors="coerce", dayfirst=True)
+        if not pd.isna(dt):
+            return dt.date().isoformat()
+    except Exception:
+        pass
+    return ""
+
+
+def _wr_num(v):
+    s = _wr_clean_value(v).replace(",", "").replace("₹", "").strip()
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
+
+
+def _wr_col(df, *names, pos=None):
+    c = find_col(list(df.columns), *names)
+    if c is not None:
+        return c
+    if isinstance(pos, int) and 0 <= pos < len(df.columns):
+        return df.columns[pos]
+    return None
+
+
+def _wr_last_nonblank(old, new):
+    nv = _wr_clean_value(new)
+    return nv if nv else old
+
+
+def _load_website_returns(force=False):
+    now = time.time()
+    if (not force and _WEBSITE_RETURNS_CACHE.get("rows") is not None
+            and now - float(_WEBSITE_RETURNS_CACHE.get("ts") or 0) < _WEBSITE_RETURNS_TTL):
+        return _WEBSITE_RETURNS_CACHE["rows"]
+    try:
+        # 33 columns / ~1.1k rows: compact enough to load completely. Positional
+        # fallbacks mirror the verified BlueDart Return A:AG layout.
+        df = _fetch_csv_fresh(WEBSITE_RETURNS_URL)
+        if df is None or df.empty:
+            raise ValueError("BlueDart Return sheet is empty")
+        cols = list(df.columns)
+        c_channel = _wr_col(df, "Channel", pos=0)
+        c_order_date = _wr_col(df, "Order date", "Order Date", pos=1)
+        c_customer = _wr_col(df, "Coustomer", "Customer", pos=2)
+        c_display_order = _wr_col(df, "Display Order Code", pos=3)
+        c_order_id = _wr_col(df, "Order id", "Order ID", pos=4)
+        c_payment = _wr_col(df, "Payment", pos=5)
+        c_waybill = _wr_col(df, "WayBill No", "Waybill No", "Way Bill No", pos=6)
+        c_ref = _wr_col(df, "Reference No", "Reference Number", pos=7)
+        c_pickup = _wr_col(df, "P/U_Date", "P/U Date", "Pickup Date", pos=8)
+        c_origin = _wr_col(df, "Origin Description", pos=9)
+        c_dest = _wr_col(df, "Destination Description", pos=10)
+        c_consignee = _wr_col(df, "Consignee Name", pos=11)
+        c_status_desc = _wr_col(df, "Status Description", pos=12)
+        c_status_group = _wr_col(df, "Status Group", pos=13)
+        c_status_date = _wr_col(df, "Status Date", pos=14)
+        c_weight = _wr_col(df, "Weight", pos=22)
+        c_pcs = _wr_col(df, "Pcs", "PCS", pos=24)
+        c_exp = _wr_col(df, "Exp Delivery Dat", "Exp Delivery Date", "Expected Delivery Date", pos=25)
+        c_new_waybill = _wr_col(df, "New Waybill No", "New WayBill No", pos=27)
+        c_sender = _wr_col(df, "Sender", pos=28)
+        c_reason = _wr_col(df, "Rto Reason", "RTO Reason", pos=29)
+        c_mode = _wr_col(df, "Mode", pos=32)
+
+        source_rows = 0
+        shipments = {}
+        for _, raw in df.iterrows():
+            channel = _wr_clean_value(raw.get(c_channel, "")) if c_channel is not None else ""
+            if channel and channel.strip().casefold() != "website":
+                continue
+            order_id = _wr_clean_value(raw.get(c_order_id, "")) if c_order_id is not None else ""
+            waybill = _wr_clean_value(raw.get(c_waybill, "")) if c_waybill is not None else ""
+            # Empty tracker lines are not records. WayBill is the shipment-level
+            # identifier; Order ID is a fallback only when courier waybill is blank.
+            if not waybill and not order_id:
+                continue
+            source_rows += 1
+            key_raw = waybill or ("ORDER:" + order_id)
+            key = re.sub(r"[^a-z0-9]", "", key_raw.casefold()) or key_raw.casefold()
+            rec = {
+                "channel": channel or "Website",
+                "order_date": _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else "",
+                "customer": _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else "",
+                "display_order_code": _wr_clean_value(raw.get(c_display_order, "")) if c_display_order is not None else "",
+                "order_id": order_id,
+                "payment": _wr_clean_value(raw.get(c_payment, "")) if c_payment is not None else "",
+                "waybill_no": waybill,
+                "reference_no": _wr_clean_value(raw.get(c_ref, "")) if c_ref is not None else "",
+                "pickup_date": _wr_iso_date(raw.get(c_pickup, "")) if c_pickup is not None else "",
+                "origin": _wr_clean_value(raw.get(c_origin, "")) if c_origin is not None else "",
+                "destination": _wr_clean_value(raw.get(c_dest, "")) if c_dest is not None else "",
+                "consignee": _wr_clean_value(raw.get(c_consignee, "")) if c_consignee is not None else "",
+                "status_description": _wr_clean_value(raw.get(c_status_desc, "")) if c_status_desc is not None else "",
+                "status_group": _wr_clean_value(raw.get(c_status_group, "")) if c_status_group is not None else "",
+                "status_date": _wr_iso_date(raw.get(c_status_date, "")) if c_status_date is not None else "",
+                "rto_reason": _wr_clean_value(raw.get(c_reason, "")) if c_reason is not None else "",
+                "weight": _wr_clean_value(raw.get(c_weight, "")) if c_weight is not None else "",
+                "pcs": _wr_clean_value(raw.get(c_pcs, "")) if c_pcs is not None else "",
+                "expected_delivery_date": _wr_iso_date(raw.get(c_exp, "")) if c_exp is not None else "",
+                "new_waybill_no": _wr_clean_value(raw.get(c_new_waybill, "")) if c_new_waybill is not None else "",
+                "sender": _wr_clean_value(raw.get(c_sender, "")) if c_sender is not None else "",
+                "mode": _wr_clean_value(raw.get(c_mode, "")) if c_mode is not None else "",
+            }
+            old = shipments.get(key)
+            if old is None:
+                shipments[key] = rec
+            else:
+                # The tracker can repeat a shipment as its status is updated. Keep
+                # the latest dated status while retaining useful nonblank fields
+                # (especially RTO Reason) from earlier duplicate lines.
+                old_status = old.get("status_date") or ""
+                new_status = rec.get("status_date") or ""
+                prefer_new = bool(new_status and (not old_status or new_status >= old_status))
+                merged = dict(old)
+                for field in rec:
+                    if rec[field] and (prefer_new or not merged.get(field)):
+                        merged[field] = rec[field]
+                # Always retain a captured reason if the newest event has no reason.
+                if not rec.get("rto_reason") and old.get("rto_reason"):
+                    merged["rto_reason"] = old["rto_reason"]
+                shipments[key] = merged
+
+        rows = list(shipments.values())
+        rows.sort(key=lambda r: (r.get("status_date") or r.get("order_date") or "", r.get("order_id") or ""), reverse=True)
+        _WEBSITE_RETURNS_CACHE.update({"rows": rows, "ts": now, "source_rows": source_rows, "error": None})
+        return rows
+    except Exception as e:
+        _WEBSITE_RETURNS_CACHE["error"] = str(e)
+        # If the sheet has a temporary network issue, a recent previous snapshot
+        # is safer than returning a blank operational dashboard.
+        if _WEBSITE_RETURNS_CACHE.get("rows") is not None:
+            return _WEBSITE_RETURNS_CACHE["rows"]
+        raise
+
+
+@app.route("/api/website-returns")
+def api_website_returns():
+    force = request.args.get("force", "0").lower() in ("1", "true", "yes")
+    try:
+        rows = _load_website_returns(force=force)
+        payment_lookup = CACHE.get("website_return_payment_mode_lookup") or {}
+
+        enriched_rows = []
+        for r in rows:
+            rec = dict(r)
+            payment_mode = ""
+            matched_key = ""
+            for raw_order in (rec.get("display_order_code", ""), rec.get("order_id", "")):
+                token = _daily_reporting_order_token("Website", raw_order)
+                if token and token in payment_lookup:
+                    payment_mode = payment_lookup[token]
+                    matched_key = _daily_reporting_order_key(raw_order)
+                    break
+            rec["payment_mode"] = payment_mode
+            # BlueDart's Display Order Code formula is sometimes #N/A. Its Order ID
+            # matches Website Display Order Code; backfill only when the COD lookup
+            # confirms that exact Website order identity.
+            if not rec.get("display_order_code") and payment_mode and matched_key:
+                rec["display_order_code"] = matched_key
+            enriched_rows.append(rec)
+
+        filters = {
+            "rto_reasons": sorted({r.get("rto_reason", "") for r in enriched_rows if r.get("rto_reason")}),
+            "origins": sorted({r.get("origin", "") for r in enriched_rows if r.get("origin")}),
+            "destinations": sorted({r.get("destination", "") for r in enriched_rows if r.get("destination")}),
+            "payment_modes": [m for m in ("COD", "Prepaid") if any(r.get("payment_mode") == m for r in enriched_rows)],
+        }
+        classified = sum(1 for r in enriched_rows if r.get("payment_mode") in ("COD", "Prepaid"))
+        return jsonify({
+            "rows": enriched_rows,
+            "filters": filters,
+            "source_rows": int(_WEBSITE_RETURNS_CACHE.get("source_rows") or 0),
+            "unique_shipments": len(rows),
+            "payment_classified": classified,
+            "payment_unclassified": max(0, len(rows) - classified),
+            "payment_mode_source": "Website order COD flag (Display Order Code)",
+            "loaded_at": now_ist().strftime("%d-%b-%Y %H:%M"),
+            "source": "BlueDart Return",
+        })
+    except Exception as e:
+        return jsonify({"error": "Website Returns sheet load failed: " + str(e)[:300]}), 502
 
 # ════════════════════════════════════════════════════════════════
 #  🎯 TARGET vs ACTUAL  (admin only)
