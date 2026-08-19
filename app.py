@@ -11133,6 +11133,7 @@ function exportSD(fmtType){
     return {
       'Dispatch Date': e.date === 'N/A' ? '' : e.date,
       SKU: item.sku,
+      'CN Name': item.cn_name || '',
       'SKU Name': exportSkuName(item.sku, item.sku_name),
       'CN Name': item.cn_name || '',
       'CN Class': cnClassOf(item),
@@ -11664,7 +11665,7 @@ function applyF(){
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
-        master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
+        master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
 
         // ── SKU pivot: EXACTLY one row per SKU, even across many customers/dates. ──
         // Combo-child usage is shown separately in the same SKU row via "In CMBs Sold";
@@ -11690,7 +11691,7 @@ function applyF(){
         const visiblePivot = _matrixPivot.slice(0, MATRIX_RENDER_CAP);
         const rowsHtml = visibleTxns.map(t => {
           const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
+          const iv = invBy[t.sku] || {s:0, w:0, b:0, img:'', cn:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
           return `<tr>
             <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
@@ -11708,7 +11709,7 @@ function applyF(){
 
         const pivotRowsHtml = visiblePivot.map(p => {
           const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[p.sku] || {s:0, w:0, img:''};
+          const iv = invBy[p.sku] || {s:0, w:0, img:'', cn:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
           const pivotCtx = {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,businessChannel:true};
           const pivotItem = _masterSkuMap[String(p.sku||'').trim().toUpperCase()] || {sku:p.sku};
@@ -11784,7 +11785,7 @@ function _matrixExportMeta(){
 }
 function _matrixInvLookup(){
   const invBy = {};
-  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url}; });
+  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
   return invBy;
 }
 function _matrixBuildPayload(kind){
@@ -11794,7 +11795,7 @@ function _matrixBuildPayload(kind){
     return _matrixTxns.map(t => {
       const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
       return {
-        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, customer: t.cust, type: t.type,
+        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
         qty: parseFloat(t.qty) || 0, combo_qty: 0, revenue: showRev ? Math.round(parseFloat(t.rev) || 0) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
         image_url: iv.img || ''
@@ -11810,7 +11811,7 @@ function _matrixBuildPayload(kind){
     const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
     const comboQty=cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
     return {
-      sku: p.sku, customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty, revenue: showRev ? Math.round(p.rev) : null,
+      sku: p.sku, cn_name: item.cn_name || iv.cn || '', customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty, revenue: showRev ? Math.round(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
       image_url: iv.img || ''
     };
@@ -11823,17 +11824,17 @@ function exportMatrixCSV(kind){
   const showRev = LOGIN_ROLE !== 'employee';
   let headers, csvRows;
   if (kind === 'transactions'){
-    headers = ['Dispatch Date','SKU','Customer','Type','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
+    headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
     csvRows = rows.map(r => {
-      const line = [r.date, r.sku, r.customer, r.type, r.qty, r.combo_qty||0];
+      const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.qty, r.combo_qty||0];
       if (showRev) line.push(r.revenue);
       line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url);
       return line;
     });
   } else {
-    headers = ['SKU','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
+    headers = ['SKU','CN Name','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
     csvRows = rows.map(r => {
-      const line = [r.sku, r.customers||'', r.customer_count||0, r.qty, r.combo_qty||0];
+      const line = [r.sku, r.cn_name||'', r.customers||'', r.customer_count||0, r.qty, r.combo_qty||0];
       if (showRev) line.push(r.revenue);
       line.push(r.inv_stock, r.inv_wip, r.image_url);
       return line;
@@ -12465,7 +12466,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -12481,6 +12482,7 @@ function exportRO(fmtType){
       'Row Type': children.length ? 'Gift Set' : 'Product',
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
+      'CN Name': parentItem.cn_name || '',
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
       'Set Item Of': '',
       'Stone Color': stoneMap[skuKey] || '',
@@ -12507,6 +12509,7 @@ function exportRO(fmtType){
           'Row Type':'— Set Item',
           'Dispatch Date':t.date==='N/A'?'':t.date,
           SKU:c.sku||'',
+          'CN Name':(childItem && childItem.cn_name) || c.cn_name || '',
           'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
           'Set Item Of':t.sku,
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
@@ -12574,7 +12577,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -13936,8 +13939,8 @@ function exportDiscount(){
   const d = _discData;
   const filteredRows=(d&&d.rows?d.rows:[]).filter(r=>cnxSkuMatchesGlobalCn(r.sku));
   if (!filteredRows.length){ alert('No discount data to export.'); return; }
-  const headers = ['SKU','SKU Name','Stone Color','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Individual Sold','In CMBs Sold','Leakage','Net Revenue'];
-  const rows = filteredRows.map(r => [r.sku, exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
+  const headers = ['SKU','CN Name','SKU Name','Stone Color','Category','Plating','MRP','Avg SP','Last SP','Discount %','Gap per unit','Individual Sold','In CMBs Sold','Leakage','Net Revenue'];
+  const rows = filteredRows.map(r => [r.sku, (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name||r.cn_name||'', exportSkuName(r.sku, r.sku_name), r.stone_color||'', r.taxon, r.plating, Math.round(r.mrp), Math.round(r.avg_sp),
     Math.round(r.last_sp), r.disc_pct, Math.round(r.per_unit_gap), r.qty, Math.round(cnxSoldSplit(_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{sku:r.sku},{}).inCmb.sold), Math.round(r.leakage), Math.round(r.net_revenue)]);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
@@ -14587,7 +14590,7 @@ function exportRakhiOverallSummaryCSV(){
   const s = _rakhiOverallSummaryData;
   if (!s){ alert('No summary data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['SKU','Row Type','Parent CMB','SKU Name','Stock','WIP','WH+WIP','Individual Sold','In CMBs Sold','Order Lines','Repeat Orders','Repeat Customers','Identifiable Customers','Repeat Customer Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
+  const headers = ['SKU','CN Name','Row Type','Parent CMB','SKU Name','Stock','WIP','WH+WIP','Individual Sold','In CMBs Sold','Order Lines','Repeat Orders','Repeat Customers','Identifiable Customers','Repeat Customer Rate %',...(emp ? [] : ['Net Revenue']),'DRR','DRR Day Span','Points'];
   const data = [];
 
   (s.skuRows || []).forEach(r => {
@@ -14608,7 +14611,7 @@ function exportRakhiOverallSummaryCSV(){
     const rkhCtx={sourceField:'rakhi_sales_entries',types:rkhType&&rkhType!=='All'?[rkhType]:[],fy:'FY 2026-27'};
     const parentSplit=cnxSoldSplit(parentItem,rkhCtx);
     data.push([
-      r.sku, uniqueChildren.length ? 'Gift Set' : 'Product', '', exportSkuName(r.sku, r.sku_name),
+      r.sku, parentItem.cn_name || '', uniqueChildren.length ? 'Gift Set' : 'Product', '', exportSkuName(r.sku, r.sku_name),
       Math.round(r.stock), Math.round(r.wip), Math.round(r.whWip), Math.round(r.sales), Math.round(parentSplit.inCmb.sold),
       r.orders, r.repeatOrders, r.repeatCustomers, r.distinctCustomers, r.repeatRate.toFixed(1),
       ...(emp ? [] : [exactRevenue]), r.drr.toFixed(2), r.daySpan, r.points.join(' | ')
@@ -14619,7 +14622,7 @@ function exportRakhiOverallSummaryCSV(){
       const childItem=_masterSkuMap[String(c.sku||'').trim().toUpperCase()]||c;
       const childDirect=cnxSaleTotalsForItem(childItem,rkhCtx).sold;
       data.push([
-        String(c.sku||'').trim().toUpperCase(), '— Set Item', r.sku, exportSkuName(c.sku,c.sku_name),
+        String(c.sku||'').trim().toUpperCase(), childItem.cn_name || c.cn_name || '', '— Set Item', r.sku, exportSkuName(c.sku,c.sku_name),
         stock, wip, stock+wip, Math.round(childDirect), Math.round(r.sales),
         '', '', '', '', '', ...(emp?[]:['']), '', '', 'Child SKU of '+r.sku
       ]);
@@ -14900,9 +14903,9 @@ function exportRakhiPivotCSV(){
   const types = _rakhiPivotTypes || [];
   if (!list.length){ alert('No Rakhi pivot data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['SKU', 'SKU Name', ...types.map(t => t + ' Qty'), 'Individual Sold', 'In CMBs Sold', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['SKU', 'CN Name', 'SKU Name', ...types.map(t => t + ' Qty'), 'Individual Sold', 'In CMBs Sold', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = list.map(r => [
-    r.sku, exportSkuName(r.sku, r.sku_name),
+    r.sku, (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name||r.cn_name||'', exportSkuName(r.sku, r.sku_name),
     ...types.map(t => Math.round(r.byType[t] || 0)),
     Math.round(r.totalQty), Math.round(r.cmbQty||0),
     ...(emp ? [] : [Math.round(r.totalRev)]),
@@ -15651,6 +15654,7 @@ async function exportRakhiCommonSkusExcel(){
   const rows = list.map(r => ({
     sku: r.sku || '',
     sku_name: r.sku_name || '',
+    cn_name: (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name || '',
     individual_sold: Number(r.individual_sold) || 0,
     in_cmb_sold: Number(r.in_cmb_sold) || 0,
     total_sold: (Number(r.individual_sold) || 0) + (Number(r.in_cmb_sold) || 0),
@@ -15663,16 +15667,19 @@ async function exportRakhiCommonSkusExcel(){
   const cmb_rows = cmbRows.map(r => ({
     sku: r.sku || '',
     sku_name: r.sku_name || '',
+    cn_name: (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name || '',
     cmb_sold: Number(r.cmb_sold) || 0,
     children: (r.children || []).map(c => ({
       sku: c.sku || '',
       sku_name: c.sku_name || '',
+      cn_name: (_masterSkuMap[String(c.sku||'').trim().toUpperCase()]||{}).cn_name || '',
       pieces_per_cmb: Math.max(1, Math.round(Number(c.pieces_per_cmb) || 1))
     }))
   }));
   const individual_rows = individualRows.map(r => ({
     sku: r.sku || '',
     sku_name: r.sku_name || '',
+    cn_name: (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name || '',
     individual_sold: Number(r.individual_sold) || 0,
     image_url: r.image_url || ''
   }));
@@ -15801,12 +15808,12 @@ function exportRakhiTopSkusCSV(){
   const list = _rakhiTopSkuRows || [];
   if (!list.length){ alert('No Rakhi SKU data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Row Type', 'Rank', 'SKU', 'SKU Name', 'Individual Sold', 'In CMBs Sold', 'Daily Avg Demand', 'Estimated Days to OOS', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['Row Type', 'Rank', 'SKU', 'CN Name', 'SKU Name', 'Individual Sold', 'In CMBs Sold', 'Daily Avg Demand', 'Estimated Days to OOS', ...(emp ? [] : ['Net Revenue']), 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = [];
   list.forEach((r, i) => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
-      i + 1, r.sku, exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
+      i + 1, r.sku, (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name||r.cn_name||'', exportSkuName(r.sku, r.sku_name), Math.round(r.qty),
       Math.round(Number(r.cmbSold)||0),
       Number(r.daily_avg_sale || 0).toFixed(2),
       r.est_days_to_oos == null ? '' : Math.ceil(r.est_days_to_oos),
@@ -15816,7 +15823,7 @@ function exportRakhiTopSkusCSV(){
     // Gift Set ke andar wale (Stone Details) sub-SKUs — inki apni Inv Stock/WIP
     (r.combo_details || []).forEach(c => {
       data.push([
-        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), '', '', '', '',
+        'Stone Detail', '', c.sku, (_masterSkuMap[String(c.sku||'').trim().toUpperCase()]||{}).cn_name||c.cn_name||'', exportSkuName(c.sku, c.sku_name), '', '', '', '',
         ...(emp ? [] : ['']),
         parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
@@ -15909,12 +15916,12 @@ function renderRakhiSlowMovers(){
 function exportRakhiSlowMoversCSV(){
   const list = _rakhiSlowMoverRows || [];
   if (!list.length){ alert('No Slow Movers data to export.'); return; }
-  const headers = ['Row Type', 'SKU', 'SKU Name', 'Taxon', 'Daily Avg Demand', 'Estimated Days to OOS', 'Inv Stock', 'Inv WIP', 'Days Since Last Demand', 'Image Link'];
+  const headers = ['Row Type', 'SKU', 'CN Name', 'SKU Name', 'Taxon', 'Daily Avg Demand', 'Estimated Days to OOS', 'Inv Stock', 'Inv WIP', 'Days Since Last Demand', 'Image Link'];
   const data = [];
   list.forEach(r => {
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
-      r.sku, exportSkuName(r.sku, r.sku_name), r.taxon || '',
+      r.sku, (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name||r.cn_name||'', exportSkuName(r.sku, r.sku_name), r.taxon || '',
       Number(r.daily_avg_sale || 0).toFixed(2),
       r.est_days_to_oos == null ? '' : Math.ceil(r.est_days_to_oos),
       r.inv_stock, r.inv_wip,
@@ -15922,7 +15929,7 @@ function exportRakhiSlowMoversCSV(){
     ]);
     (r.combo_details || []).forEach(c => {
       data.push([
-        'Stone Detail', c.sku, exportSkuName(c.sku, c.sku_name), '', '', '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
+        'Stone Detail', c.sku, (_masterSkuMap[String(c.sku||'').trim().toUpperCase()]||{}).cn_name||c.cn_name||'', exportSkuName(c.sku, c.sku_name), '', '', '', parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0,
         '', c.image_url || ''
       ]);
     });
@@ -17331,9 +17338,10 @@ function renderOOS(){
 function exportOOS(){
   const rows = _oosFilteredRows();
   if (!rows.length){ alert('No OOS risk rows to export'); return; }
-  const headers = ['SKU','SKU Name','Product Group','Image Link','Individual Sold (30D)','In CMBs Sold (30D)','Daily Demand Rate','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Risk'];
+  const headers = ['SKU','CN Name','SKU Name','Product Group','Image Link','Individual Sold (30D)','In CMBs Sold (30D)','Daily Demand Rate','Stock','WIP','Stock Cover Days','Stock + WIP Cover Days','Risk'];
   const data = rows.map(r => [
     r.sku,
+    (_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{}).cn_name||r.cn_name||'',
     exportSkuName(r.sku, r.skuName),
     r.group,
     r.image || '',
@@ -18394,8 +18402,8 @@ function renderStockStatus(){
 function exportStockStatus(){
   const rows = _ssFiltered();
   if (!rows.length){ alert('No rows to export'); return; }
-  const headers = ['SKU','SKU Name','Stone Color','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Demand','Flags'];
-  const data = rows.map(it => [it.sku, exportSkuName(it.sku, it.sku_name), it.stone_color||'', it.taxon||'', it.status||'',
+  const headers = ['SKU','CN Name','SKU Name','Stone Color','Category','Movement Status','Stock','WIP','Available','Reorder Qty','Days Since Last Demand','Flags'];
+  const data = rows.map(it => [it.sku, it.cn_name||'', exportSkuName(it.sku, it.sku_name), it.stone_color||'', it.taxon||'', it.status||'',
     Math.round(it.inv_stock||0), Math.round(it.inv_wip||0),
     Math.round((it.inv_stock||0)+(it.inv_wip||0)), Math.round(it.reorder_qty||0),
     it.days_since_last_sale >= 0 ? it.days_since_last_sale : '',
@@ -19782,9 +19790,10 @@ function resetInsights(){
 
 function exportInsights(fmtType){
   if (!insightRows || !insightRows.length) { alert('No insights rows to export'); return; }
-  const headers = ['SKU','SKU Name','Stone Color','MRP','Selling Price','Net Revenue','Sold Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
+  const headers = ['SKU','CN Name','SKU Name','Stone Color','MRP','Selling Price','Net Revenue','Sold Qty','Return Qty','Return Amount','Inv Stock','Inv WIP','Status','Taxon','Plating','Type(s)','First Dispatch','Last Dispatch','Combo SKUs','Customer Count','Image Link'];
   const data = insightRows.map(i => ({
     SKU: i.sku,
+    'CN Name': i.cn_name || '',
     'SKU Name': exportSkuName(i.sku, i.sku_name),
     'Stone Color': i.stone_color || '',
     'MRP': parseFloat(i.mrp) || 0,
@@ -20641,7 +20650,7 @@ function _festivalBuildRows(kind){
     const whereSold=[...where.entries()].sort((a,b)=>b[1].qty-a[1].qty||b[1].rev-a[1].rev||a[0].localeCompare(b[0])).map(([label,s])=>s.qty>0?`${label} (${Math.round(s.qty).toLocaleString('en-IN')})`:label);
     const cities=(cityAgg.get(_festivalSkuKey(item?.sku))||[]).slice(0,3).map(([name,qty])=>({name,qty}));
     rows.push({
-      sku:String(item?.sku||''),sku_name:String(item?.sku_name||item?.cn_name||''),image_url:String(item?.image_url||''),
+      sku:String(item?.sku||''),cn_name:String(item?.cn_name||''),sku_name:String(item?.sku_name||item?.cn_name||''),image_url:String(item?.image_url||''),
       sold_qty:sold,cmb_sold_qty:cmbSold,net_revenue:rev,where_sold:whereSold,top_cities:cities,line_count:lineCount
     });
   });
@@ -20696,7 +20705,7 @@ async function exportFestivalExcel(kind){
   const rows=_festivalRowsCache[kind]||_festivalBuildRows(kind);
   if(!rows.length){alert('No product sales to export for this period.');return;}
   try{
-    const resp=await fetch('/api/festival-sales/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({festival:kind,channel:_festivalSelectedChannel(kind),rows:rows.map((r,i)=>({rank:i+1,sku:r.sku,sku_name:r.sku_name,sold_qty:r.sold_qty,cmb_sold_qty:r.cmb_sold_qty||0,net_revenue:r.net_revenue,where_sold:r.where_sold.join('\n'),top_cities:r.top_cities.map((c,j)=>`${j+1}. ${c.name} (${Math.round(c.qty)})`).join('\n'),image_url:r.image_url}))})});
+    const resp=await fetch('/api/festival-sales/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({festival:kind,channel:_festivalSelectedChannel(kind),rows:rows.map((r,i)=>({rank:i+1,sku:r.sku,cn_name:r.cn_name||'',sku_name:r.sku_name,sold_qty:r.sold_qty,cmb_sold_qty:r.cmb_sold_qty||0,net_revenue:r.net_revenue,where_sold:r.where_sold.join('\n'),top_cities:r.top_cities.map((c,j)=>`${j+1}. ${c.name} (${Math.round(c.qty)})`).join('\n'),image_url:r.image_url}))})});
     if(!resp.ok){let msg=`HTTP ${resp.status}`;try{const d=await resp.json();msg=d?.error||msg;}catch(_e){}throw new Error(msg);}
     const blob=await resp.blob(),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${kind}_last_year_product_sales.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
   }catch(e){alert('Excel export failed: '+(e?.message||e));}
@@ -23391,6 +23400,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         rr["pending_order_count"] = len(sku_pending_orders.get(r["sku"], []))
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
+        rr["cn_name"] = cn_map.get(r["sku"], "")
         rr["stone_color"] = stone_map.get(r["sku"], "")
         rr["inv_stock"] = _prod_inv_stock(r["sku"])
         rr["inv_wip"] = _prod_inv_wip(r["sku"])
@@ -24721,7 +24731,7 @@ def api_festival_sales_export_xlsx():
         ws = wb.active
         ws.title = "Janmashtami" if festival == "janmashtami" else "Ganesh Chaturthi"
         include_revenue = role == "admin"
-        headers = ["Rank", "SKU", "Product Name", "Individual Sold", "In CMBs Sold"]
+        headers = ["Rank", "SKU", "CN Name", "Product Name", "Individual Sold", "In CMBs Sold"]
         if include_revenue:
             headers.append("Net Revenue")
         headers += ["Where Sold", "Top 3 Cities", "Image Link"]
@@ -24758,6 +24768,7 @@ def api_festival_sales_export_xlsx():
             values = [
                 int(to_num(row.get("rank", idx))) or idx,
                 str(row.get("sku", "") or ""),
+                str(row.get("cn_name", "") or ""),
                 str(row.get("sku_name", "") or ""),
                 float(to_num(row.get("sold_qty", 0))),
                 float(to_num(row.get("cmb_sold_qty", 0))),
@@ -24772,14 +24783,14 @@ def api_festival_sales_export_xlsx():
             for col, value in enumerate(values, 1):
                 c = ws.cell(row_no, col, value)
                 c.border = border
-                c.alignment = center if col in (1, 4, 5) else left
-            ws.cell(row_no, 4).number_format = '#,##0.00'
+                c.alignment = center if col in (1, 5, 6) else left
             ws.cell(row_no, 5).number_format = '#,##0.00'
+            ws.cell(row_no, 6).number_format = '#,##0.00'
             if include_revenue:
-                ws.cell(row_no, 6).number_format = 'Rs #,##0.00'
-                image_col = 9
+                ws.cell(row_no, 7).number_format = 'Rs #,##0.00'
+                image_col = 10
             else:
-                image_col = 8
+                image_col = 9
             img_cell = ws.cell(row_no, image_col)
             if str(img_cell.value or "").startswith(("http://", "https://")):
                 img_cell.hyperlink = str(img_cell.value)
@@ -24789,7 +24800,7 @@ def api_festival_sales_export_xlsx():
 
         ws.freeze_panes = "A5"
         ws.auto_filter.ref = f"A4:{get_column_letter(max_col)}{row_no-1}"
-        widths = [8, 18, 42, 14, 14]
+        widths = [8, 18, 34, 42, 14, 14]
         if include_revenue:
             widths.append(18)
         widths += [32, 38, 50]
@@ -25970,6 +25981,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                 children.append({
                     "sku": child_sku,
                     "sku_name": child_name,
+                    "cn_name": clean(child.get("cn_name", "")),
                     "pieces_per_cmb": pieces,
                     "child_units_sold": child_units_sold,
                 })
@@ -25987,6 +25999,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             cmb_rows.append({
                 "sku": cmb_sku,
                 "sku_name": clean(raw.get("sku_name", "")),
+                "cn_name": clean(raw.get("cn_name", "")),
                 "cmb_sold": cmb_sold,
                 "distinct_child_skus": len(children),
                 "child_pieces_per_cmb": child_pieces_per_cmb,
@@ -26020,6 +26033,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             individual_rows.append({
                 "sku": sku,
                 "sku_name": clean(raw.get("sku_name", "")),
+                "cn_name": clean(raw.get("cn_name", "")),
                 "individual_sold": sold,
                 "image_url": clean(raw.get("image_url", "")),
             })
@@ -26071,6 +26085,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             rows.append({
                 "sku": sku,
                 "sku_name": clean(raw.get("sku_name", "")),
+                "cn_name": clean(raw.get("cn_name", "")),
                 "individual_sold": individual,
                 "in_cmb_sold": in_cmb,
                 "total_sold": individual + in_cmb,
@@ -26114,7 +26129,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
 
         # ===== Sheet 1: Child SKU Sales =====
         child_headers = [
-            "Child Rakhi SKU", "SKU Name", "Individual Sold", "In CMBs Sold",
+            "Child Rakhi SKU", "CN Name", "SKU Name", "Individual Sold", "In CMBs Sold",
             "Total Sold Qty", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs (x pieces/CMB)",
             "CMB Sales Breakdown", "Image Link"
         ]
@@ -26127,6 +26142,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         for r_idx, row in enumerate(rows, 3):
             values = [
                 _safe_excel_text(row["sku"]),
+                _safe_excel_text(row.get("cn_name", "")),
                 _safe_excel_text(row["sku_name"]),
                 float(row["individual_sold"]),
                 float(row["in_cmb_sold"]),
@@ -26139,12 +26155,12 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             for col, value in enumerate(values, 1):
                 cell = ws.cell(r_idx, col, value)
                 cell.border = border
-                cell.alignment = center if col in (3, 4, 5, 6) else left
-                if col in (3, 4, 5, 6):
+                cell.alignment = center if col in (4, 5, 6, 7) else left
+                if col in (4, 5, 6, 7):
                     cell.number_format = '#,##0.##'
             image_url = str(row["image_url"] or "").strip()
             if image_url.lower().startswith(("http://", "https://")):
-                cell = ws.cell(r_idx, 9)
+                cell = ws.cell(r_idx, 10)
                 cell.hyperlink = image_url
                 cell.style = "Hyperlink"
 
@@ -26158,7 +26174,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         total_individual = sum(float(r["individual_sold"]) for r in rows)
         total_in_cmb = sum(float(r["in_cmb_sold"]) for r in rows)
         total_sold = total_individual + total_in_cmb
-        for col, value in ((3, total_individual), (4, total_in_cmb), (5, total_sold)):
+        for col, value in ((4, total_individual), (5, total_in_cmb), (6, total_sold)):
             cell = ws.cell(child_total_row, col, value)
             cell.font = Font(bold=True)
             cell.fill = total_fill
@@ -26166,12 +26182,12 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             cell.number_format = '#,##0.##'
         for col in range(1, len(child_headers) + 1):
             ws.cell(child_total_row, col).border = border
-            if col not in (1, 3, 4, 5):
+            if col not in (1, 4, 5, 6):
                 ws.cell(child_total_row, col).fill = total_fill
 
         ws.freeze_panes = "A3"
         ws.auto_filter.ref = f"A2:{get_column_letter(len(child_headers))}{max(2, child_data_last_row)}"
-        child_widths = [22, 34, 17, 17, 18, 20, 48, 70, 55]
+        child_widths = [22, 34, 34, 17, 17, 18, 20, 48, 70, 55]
         for i, width in enumerate(child_widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = width
         ws.row_dimensions[1].height = 26
@@ -26179,7 +26195,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
 
         # ===== Sheet 2: CMB sales first, then standalone Rakhi sales =====
         ws2 = wb.create_sheet("CMB Wise Sales")
-        section_headers = ["SKU", "SKU Name", "Sold Qty"]
+        section_headers = ["SKU", "CN Name", "SKU Name", "Sold Qty"]
         _style_title_and_headers(
             ws2,
             f"Rakhi CMB Sales | Type: {type_label} | FY 2026-27",
@@ -26191,40 +26207,41 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         for row in cmb_rows:
             values = [
                 _safe_excel_text(row["sku"]),
+                _safe_excel_text(row.get("cn_name", "")),
                 _safe_excel_text(row["sku_name"]),
                 float(row["cmb_sold"]),
             ]
             for col, value in enumerate(values, 1):
                 cell = ws2.cell(r_idx, col, value)
                 cell.border = border
-                cell.alignment = center if col == 3 else left
-                if col == 3:
+                cell.alignment = center if col == 4 else left
+                if col == 4:
                     cell.number_format = '#,##0.##'
             r_idx += 1
 
         cmb_total_row = r_idx + 1
-        ws2.merge_cells(start_row=cmb_total_row, start_column=1, end_row=cmb_total_row, end_column=2)
+        ws2.merge_cells(start_row=cmb_total_row, start_column=1, end_row=cmb_total_row, end_column=3)
         cmb_label = ws2.cell(cmb_total_row, 1, "TOTAL CMB SOLD QTY")
         cmb_label.font = Font(bold=True)
         cmb_label.fill = total_fill
         cmb_label.alignment = center
-        cmb_total = ws2.cell(cmb_total_row, 3, sum(float(r["cmb_sold"]) for r in cmb_rows))
+        cmb_total = ws2.cell(cmb_total_row, 4, sum(float(r["cmb_sold"]) for r in cmb_rows))
         cmb_total.font = Font(bold=True)
         cmb_total.fill = total_fill
         cmb_total.alignment = center
         cmb_total.number_format = '#,##0.##'
-        for col in range(1, 4):
+        for col in range(1, 5):
             ws2.cell(cmb_total_row, col).border = border
             ws2.cell(cmb_total_row, col).fill = total_fill
 
         # Section 2: after all CMB rows, show every RKH SKU sold individually.
         ind_title_row = cmb_total_row + 3
-        ws2.merge_cells(start_row=ind_title_row, start_column=1, end_row=ind_title_row, end_column=3)
+        ws2.merge_cells(start_row=ind_title_row, start_column=1, end_row=ind_title_row, end_column=4)
         ind_title = ws2.cell(ind_title_row, 1, f"Individual Rakhi Sales | Type: {type_label} | FY 2026-27")
         ind_title.font = Font(bold=True, size=12, color="2B2110")
         ind_title.fill = title_fill
         ind_title.alignment = center
-        for col in range(1, 4):
+        for col in range(1, 5):
             ws2.cell(ind_title_row, col).fill = title_fill
             ws2.cell(ind_title_row, col).border = border
 
@@ -26240,34 +26257,35 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         for row in individual_rows:
             values = [
                 _safe_excel_text(row["sku"]),
+                _safe_excel_text(row.get("cn_name", "")),
                 _safe_excel_text(row["sku_name"]),
                 float(row["individual_sold"]),
             ]
             for col, value in enumerate(values, 1):
                 cell = ws2.cell(r_idx, col, value)
                 cell.border = border
-                cell.alignment = center if col == 3 else left
-                if col == 3:
+                cell.alignment = center if col == 4 else left
+                if col == 4:
                     cell.number_format = '#,##0.##'
             r_idx += 1
 
         ind_total_row = r_idx + 1
-        ws2.merge_cells(start_row=ind_total_row, start_column=1, end_row=ind_total_row, end_column=2)
+        ws2.merge_cells(start_row=ind_total_row, start_column=1, end_row=ind_total_row, end_column=3)
         ind_label = ws2.cell(ind_total_row, 1, "TOTAL INDIVIDUAL RAKHI SOLD QTY")
         ind_label.font = Font(bold=True)
         ind_label.fill = total_fill
         ind_label.alignment = center
-        ind_total = ws2.cell(ind_total_row, 3, sum(float(r["individual_sold"]) for r in individual_rows))
+        ind_total = ws2.cell(ind_total_row, 4, sum(float(r["individual_sold"]) for r in individual_rows))
         ind_total.font = Font(bold=True)
         ind_total.fill = total_fill
         ind_total.alignment = center
         ind_total.number_format = '#,##0.##'
-        for col in range(1, 4):
+        for col in range(1, 5):
             ws2.cell(ind_total_row, col).border = border
             ws2.cell(ind_total_row, col).fill = total_fill
 
         ws2.freeze_panes = "A3"
-        for i, width in enumerate([22, 40, 18], 1):
+        for i, width in enumerate([22, 34, 40, 18], 1):
             ws2.column_dimensions[get_column_letter(i)].width = width
         ws2.row_dimensions[1].height = 26
         ws2.row_dimensions[2].height = 30
@@ -26417,10 +26435,10 @@ def api_overall_export_xlsx():
         ws.title = "Pivot" if kind == "pivot" else "Transactions"
 
         if kind == "pivot":
-            headers = ["SKU", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
-            headers = ["Dispatch Date", "SKU", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
 
         ws.append(headers)
@@ -26431,12 +26449,12 @@ def api_overall_export_xlsx():
         num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"}
         for r in rows:
             if kind == "pivot":
-                line = [r.get("sku", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [r.get("sku", ""), r.get("cn_name", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
             else:
-                line = [r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
@@ -26547,22 +26565,22 @@ def api_overall_export_pdf():
             elements.append(Spacer(1, 6))
 
         if kind == "pivot":
-            headers = ["Photo", "SKU", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Photo", "SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP"]
         else:
-            headers = ["Photo", "Date", "SKU", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+            headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
                       + ["Stock", "WIP", "Blocked"]
 
         table_data = [headers]
         for r in rows:
             img_cell = _img_flowable(r.get("image_url"))
             if kind == "pivot":
-                line = [img_cell, r.get("sku", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [img_cell, r.get("sku", ""), r.get("cn_name", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
             else:
-                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
@@ -26714,7 +26732,7 @@ def _production_export_table(report):
     """Full filtered Production rows; never uses the 1,000-row screen cap."""
     show_pricing = session.get("role") == "admin"
     headers = [
-        "Order Date", "Order No.", "SKU", "SKU Name", "Stock", "WIP",
+        "Order Date", "Order No.", "SKU", "CN Name", "SKU Name", "Stock", "WIP",
         "Stone Color", "Category", "Type", "Channel",
     ]
     if show_pricing:
@@ -26730,6 +26748,7 @@ def _production_export_table(report):
             r.get("date_disp") or r.get("date") or "",
             r.get("order_no") or "",
             r.get("sku") or "",
+            r.get("cn_name") or "",
             cn_sku_label(r.get("sku") or ""),
             round(float(r.get("inv_stock") or 0)),
             round(float(r.get("inv_wip") or 0)),
@@ -26850,7 +26869,7 @@ def api_production_export_xlsx():
 
         ws.auto_filter.ref = ws.dimensions
         widths = {
-            "Order Date": 14, "Order No.": 18, "SKU": 18, "SKU Name": 42,
+            "Order Date": 14, "Order No.": 18, "SKU": 18, "CN Name": 34, "SKU Name": 42,
             "Stock": 12, "WIP": 12, "Stone Color": 18, "Category": 18,
             "Type": 18, "Channel": 18, "AOV / Piece": 14, "Discount %": 13,
             "Pending / Balance Order Nos.": 52, "Times Ordered": 14, "Order Qty": 12,
