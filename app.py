@@ -561,6 +561,48 @@ def _cn_base_code(s):
             b = mm.group(1) + "-" + mm.group(2)
     return b
 
+
+def _inventory_suffix_candidates(sku):
+    """Inventory lookup candidates while preserving the displayed/sales SKU.
+
+    Exact SKU always wins.  If it is absent, a trailing descriptive word such
+    as -SHIV / -CELB / -RAKHI / -SET can be ignored ONLY for inventory lookup.
+    We deliberately do not strip one-letter endings (P/S/X etc.) because those
+    can be real size/variant SKUs elsewhere in the dashboard.
+    """
+    raw = re.sub(r"\s+", "", str(sku or "").strip().upper())
+    if not raw:
+        return []
+    out = [raw]
+    cur = raw
+    for _ in range(3):
+        if "-" not in cur:
+            break
+        head, tail = cur.rsplit("-", 1)
+        tail = tail.strip().upper()
+        # Descriptive suffix must start with a letter and contain >=2 chars.
+        # Numeric/body fragments such as the 0159_(B) part are never stripped.
+        if not re.fullmatch(r"[A-Z][A-Z0-9_()]{1,}", tail):
+            break
+        if not head:
+            break
+        out.append(head)
+        cur = head
+    return out
+
+
+def _inventory_resolve_key(sku, mapping_or_keys):
+    """Return exact inventory key, else a valid trailing-word fallback key."""
+    if mapping_or_keys is None:
+        return ""
+    for cand in _inventory_suffix_candidates(sku):
+        try:
+            if cand in mapping_or_keys:
+                return cand
+        except Exception:
+            return ""
+    return ""
+
 def _cn_fetch_all_products():
     """cosanostraa.com ke public /products.json se saare products
     (title + variant SKUs) paginate karke khींchta hai. Tight timeouts
@@ -3253,6 +3295,8 @@ def _refresh_data():
             "inv_wip_sor":      wip_sor,
             "blocked_qty":      blocked,
             "total_inv":   stk + wip,
+            "inventory_source_sku": raw.strip().upper(),
+            "inventory_suffix_fallback": False,
             "mrp":         mrp,
             # Bulk-only MRP: exact physical N column from All Product.
             "bulk_mrp_n":  bulk_mrp_n,
@@ -3323,16 +3367,17 @@ def _refresh_data():
         taxons.add(taxon)
         if plat != "N/A": platings.add(plat)
 
-    # ── ORPHAN SKUs: cossa sheet ke SKU jo All Product (inventory) sheet
-    # mein NAHI hain — unka revenue Total Net Rev jaise unfiltered KPIs mein
-    # toh count hota tha (kyunki wo grand_net_revenue/period_kpis seedhe COSA
-    # rows se ban rahe the), par kisi bhi card/filter/SKU-view mein kabhi
-    # nahi dikhta tha, isliye Type/Taxon/Customer/Date filter lagate hi
-    # numbers "total" se kam dikhte the. Ab unhe bhi ek minimal item banake
-    # add kar rahe hain (taxon = "Not In Inventory") taaki filtered KPIs
-    # bhi sheet ke total se exactly match karein. In SKUs ko All Product
-    # sheet mein add karna hi asli data-hygiene fix hai — yeh sirf display
-    # ko sahi karta hai.
+    # ── SALES SKUs NOT PRESENT AS AN EXACT INVENTORY ROW ──
+    # Full sales / website SKU is preserved everywhere (e.g. LP-0222-SHIV),
+    # but backend inventory may belong to the physical base SKU (LP-0222).
+    # Exact inventory match always wins. Only when exact is absent do we ignore
+    # a trailing descriptive word such as SHIV/CELB/etc., and only when that
+    # shorter SKU actually exists in All Product. This keeps sales separate by
+    # full SKU while making Inv Stock/WIP operationally correct across tabs.
+    _inventory_items_exact = {
+        str(it.get("sku", "")).strip().upper(): it
+        for it in compiled if str(it.get("sku", "")).strip()
+    }
     for orphan_key in set(sales_exact) | set(orderdate_sales_exact):
         if orphan_key in seen_skus:
             continue
@@ -3347,20 +3392,54 @@ def _refresh_data():
         _orphan_aov = (float(A["tot_rev"]) / float(A["tot_qty"])) if float(A["tot_qty"]) > 0 else 0.0
         _cn_name_o = cn_display_name(orphan_key) or orphan_key
         _cn_tags_o = cn_classify_tags(_cn_name_o)
+
+        _inv_source_key = _inventory_resolve_key(orphan_key, _inventory_items_exact)
+        _inv_source = _inventory_items_exact.get(_inv_source_key) if _inv_source_key else None
+        _suffix_fallback = bool(_inv_source and _inv_source_key != str(orphan_key).strip().upper())
+        _src = _inv_source or {}
+        _src_stock = int(_src.get("inv_stock") or 0)
+        _src_wip = int(_src.get("inv_wip") or 0)
+        _src_taxon = _src.get("taxon") or "Not In Inventory"
+        _src_rel = _src.get("religion_class") or "Unclassified"
+
         item = {
             "sku": orphan_key, "sku_name": cn_sku_label(orphan_key),
-            "cn_name": "", "religion_class": "Unclassified",
-            "is_religious": _cn_tags_o["religious"], "is_seasonal": _cn_tags_o["seasonal"],
-            "image_url": "", "inv_stock": 0, "inv_wip": 0, "wh_wip": 0,
-            "inv_wip_website": 0, "inv_wip_designer": 0, "inv_wip_customer": 0,
-            "inv_wip_customize": 0, "inv_wip_sor": 0,
-            "blocked_qty": 0, "total_inv": 0, "mrp": 0.0, "cost": 0.0,
+            "cn_name": _src.get("cn_name", "") or "",
+            "religion_class": _src_rel,
+            "is_religious": (_src.get("is_religious") if _inv_source else _cn_tags_o["religious"]),
+            "is_seasonal": (_src.get("is_seasonal") if _inv_source else _cn_tags_o["seasonal"]),
+            "image_url": _src.get("image_url", "") or "",
+            "inv_stock": _src_stock,
+            "inv_stock_3p": (_src.get("inv_stock_3p") if _src.get("inv_stock_3p") is not None else None),
+            "inv_wip": _src_wip,
+            "wh_wip": int(_src.get("wh_wip") or (_src_stock + _src_wip)),
+            "inv_wip_website": int(_src.get("inv_wip_website") or 0),
+            "inv_wip_designer": int(_src.get("inv_wip_designer") or 0),
+            "inv_wip_customer": int(_src.get("inv_wip_customer") or 0),
+            "inv_wip_customize": int(_src.get("inv_wip_customize") or 0),
+            "inv_wip_sor": int(_src.get("inv_wip_sor") or 0),
+            "blocked_qty": int(_src.get("blocked_qty") or 0),
+            "total_inv": _src_stock + _src_wip,
+            "mrp": float(_src.get("mrp") or 0.0),
+            "bulk_mrp_n": float(_src.get("bulk_mrp_n") or 0.0),
+            "cost": float(_src.get("cost") or 0.0),
             "website_selling_price": cn_website_selling_price(orphan_key),
             "avg_selling_price": round(_orphan_aov, 2), "last_selling_price": 0.0,
             "aov_per_piece": round(_orphan_aov, 2),
-            "discount_pct": 0.0, "taxon": "Not In Inventory", "plating": "N/A",
-            "dimensions": "", "launch_date": "", "launch_key": "", "launch_month": "",
-            "combo_skus": "", "pack_details": "", "stone_color": "", "sales_entries": ent,
+            "discount_pct": 0.0,
+            "taxon": _src_taxon,
+            "plating": _src.get("plating", "N/A") or "N/A",
+            "dimensions": _src.get("dimensions", "") or "",
+            "launch_date": _src.get("launch_date", "") or "",
+            "launch_key": _src.get("launch_key", "") or "",
+            "launch_month": _src.get("launch_month", "") or "",
+            "combo_skus": _src.get("combo_skus", "") or "",
+            "gift_set_stone_details": _src.get("gift_set_stone_details", "") or "",
+            "pack_details": _src.get("pack_details", "") or "",
+            "stone_color": _src.get("stone_color", "") or "",
+            "inventory_source_sku": _inv_source_key or "",
+            "inventory_suffix_fallback": _suffix_fallback,
+            "sales_entries": ent,
             "orderdate_sales_entries": od_ent,
             "rakhi_sales_entries": rkh_ent,
             "website_customer_events": website_customer_events.get(orphan_key, []),
@@ -3383,7 +3462,7 @@ def _refresh_data():
             "status": "",
         }
         item["forecast_60d"] = simple_forecast(ent, 60)
-        item["reorder_qty"] = 0
+        item["reorder_qty"] = max(0, int(round(item["forecast_60d"] - (item["inv_stock"] + item["inv_wip"]))))
         item["status"] = classify_status(item, month_s)
         _flags, _best_chan, _best_chan_rev, _days_since, _best_mkt, _best_mkt_rev, _trend = _compute_alerts_and_channel(item, today)
         item["alert_flags"] = _flags
@@ -3395,7 +3474,7 @@ def _refresh_data():
         item["days_since_last_sale"] = _days_since if _days_since is not None else -1
         item["combo_details"] = []
         compiled.append(item)
-        taxons.add("Not In Inventory")
+        taxons.add(_src_taxon)
 
     # ── COMBO/GIFT-SET enrichment ──
     # Stone Details (combo_skus) me jo SKUs likhe hain, un sabki Inv Stock + WIP
@@ -7667,7 +7746,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <div class="ops-kicker">LIVE WEBSITE · BACKEND INVENTORY MAPPING</div>
         <div class="ops-title">Website OOS Audit</div>
-        <div class="ops-sub">Crawls every published SKU on cosanostraa.com, keeps only website Out-of-Stock SKUs, and maps each one to backend Inv Stock + WIP. No email automation is included.</div>
+        <div class="ops-sub">Crawls every published SKU on cosanostraa.com, keeps only website Out-of-Stock SKUs, and maps each one to backend Inv Stock + WIP. Full website SKU stays visible; trailing tags like SHIV/CELB are ignored only for inventory lookup when the base SKU exists. No email automation is included.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteOosExcel()">Export Email Excel</button>
@@ -19692,7 +19771,7 @@ function _woFiltered(){
     if(view==='Sufficient' && stock<threshold)return false;
     if(view==='Below' && stock>=threshold)return false;
     if(q){
-      const hay=`${r.sku||''} ${r.cn_name||''} ${r.product_title||''} ${r.product_url||''}`.toLowerCase();
+      const hay=`${r.sku||''} ${r.inventory_source_sku||''} ${r.cn_name||''} ${r.product_title||''} ${r.product_url||''}`.toLowerCase();
       if(!hay.includes(q))return false;
     }
     return true;
@@ -19719,7 +19798,7 @@ function renderWebsiteOos(){
       <div class="ops-kpi"><div class="ops-kpi-l">Website OOS SKUs</div><div class="ops-kpi-v">${all.length.toLocaleString('en-IN')}</div><div class="ops-kpi-s">All live OOS SKUs shown below</div></div>
       <div class="ops-kpi"><div class="ops-kpi-l">Sufficient Stock Flags</div><div class="ops-kpi-v" style="color:#b3261e">${flags.length.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Backend Inv Stock ≥ ${threshold}</div></div>
       <div class="ops-kpi"><div class="ops-kpi-l">Below Threshold</div><div class="ops-kpi-v">${below.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Backend Inv Stock &lt; ${threshold}</div></div>
-      <div class="ops-kpi"><div class="ops-kpi-l">Backend SKU Matched</div><div class="ops-kpi-v">${matched.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Exact normalized SKU match</div></div>`;
+      <div class="ops-kpi"><div class="ops-kpi-l">Backend SKU Matched</div><div class="ops-kpi-v">${matched.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Exact SKU + valid suffix fallback</div></div>`;
   }
 
   const subj=_woEl('woEmailSubject');
@@ -19734,7 +19813,7 @@ function renderWebsiteOos(){
     const salesFrom=_websiteOosData.website_sales_7d_from||'';
     const salesTo=_websiteOosData.website_sales_7d_to||'';
     const salesRange=(salesFrom&&salesTo)?` · Website sold qty: <b>${escHtml(salesFrom)} → ${escHtml(salesTo)}</b> from Website Order_Date (sold qty net of RTO)`:'';
-    note.innerHTML=`Live source: <b>cosanostraa.com/products.json</b> · ${products.toLocaleString('en-IN')} products across ${pages.toLocaleString('en-IN')} page${pages===1?'':'s'} · backend source: <b>${escHtml(_websiteOosData.inventory_source||'All Product')}</b> · website availability is read from Shopify variant <b>available</b> · photos come from the live Shopify product/variant image${salesRange} · exact SKU mapping after case/space/underscore normalization${unknown?` · ${unknown.toLocaleString('en-IN')} SKU(s) with unknown availability excluded`:''}${checked?` · last live check ${escHtml(checked)}`:''}.`;
+    note.innerHTML=`Live source: <b>cosanostraa.com/products.json</b> · ${products.toLocaleString('en-IN')} products across ${pages.toLocaleString('en-IN')} page${pages===1?'':'s'} · backend source: <b>${escHtml(_websiteOosData.inventory_source||'All Product')}</b> · website availability is read from Shopify variant <b>available</b> · photos come from the live Shopify product/variant image${salesRange} · exact SKU first; if absent, trailing word suffix (SHIV/CELB/etc.) is ignored only when the shorter SKU exists in backend inventory${unknown?` · ${unknown.toLocaleString('en-IN')} SKU(s) with unknown availability excluded`:''}${checked?` · last live check ${escHtml(checked)}`:''}.`;
   }
   const tableNote=_woEl('woTableNote');
   if(tableNote)tableNote.textContent=`${rows.length.toLocaleString('en-IN')} shown of ${all.length.toLocaleString('en-IN')} Website OOS SKUs. Rows with Inv Stock ≥ ${threshold} are email flags.`;
@@ -19749,12 +19828,15 @@ function renderWebsiteOos(){
     const img=String(r.image_url||'').trim();
     const sku=String(r.sku||'');
     const skuEsc=sku.replace(/'/g,"\\'");
+    const invSource=String(r.inventory_source_sku||'');
+    const invMapNote=(invSource&&invSource.toUpperCase()!==sku.toUpperCase())
+      ? `<div class="small-note" style="margin-top:3px;color:#6f6550">Inv/WIP from <b>${escHtml(invSource)}</b></div>` : '';
     const photoHtml=img
       ? `<a href="${escHtml(url||img)}" target="_blank" rel="noopener" title="Open product"><img src="${escHtml(img)}" alt="${escHtml(r.cn_name||r.product_title||sku)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="width:72px;height:72px;object-fit:contain;object-position:center;border:1px solid #e6dcc4;border-radius:10px;background:#fff;padding:4px;box-sizing:border-box" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span style="display:none;width:72px;height:72px;align-items:center;justify-content:center;border:1px solid #e6dcc4;border-radius:10px;background:#faf8f2;color:#8a7a55;font-size:10px;font-weight:800;text-align:center;padding:5px;box-sizing:border-box">No image</span></a>`
       : `<span style="display:inline-flex;width:72px;height:72px;align-items:center;justify-content:center;border:1px solid #e6dcc4;border-radius:10px;background:#faf8f2;color:#8a7a55;font-size:10px;font-weight:800;text-align:center;padding:5px;box-sizing:border-box">No image</span>`;
     return `<tr${flagged?' style="background:rgba(179,38,30,.045)"':''}>
       <td style="text-align:center">${photoHtml}</td>
-      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(sku)}</button>${flagged?'<div class="small-note" style="color:#b3261e;font-weight:900;margin-top:3px">SUFFICIENT STOCK FLAG</div>':''}</td>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(sku)}</button>${invMapNote}${flagged?'<div class="small-note" style="color:#b3261e;font-weight:900;margin-top:3px">SUFFICIENT STOCK FLAG</div>':''}</td>
       <td>${escHtml(r.cn_name||r.product_title||'—')}</td>
       <td>${url?`<a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:#8a651d;font-weight:850;text-decoration:underline">Open Product</a>`:'—'}</td>
       <td><span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#fde9e7;color:#a52018;font-weight:900">${escHtml(r.website_status||'Out of Stock')}</span></td>
@@ -19771,7 +19853,7 @@ async function loadWebsiteOos(force=false){
   const body=_woEl('websiteOosBody');
   const btn=_woEl('woRefreshBtn');
   if(btn){btn.disabled=true;btn.textContent='Syncing…';}
-  if(body)body.innerHTML='<tr><td colspan="7" class="ops-empty">Crawling live cosanostraa.com SKUs, product photos, last 7-day Website sales and mapping backend inventory…</td></tr>';
+  if(body)body.innerHTML='<tr><td colspan="8" class="ops-empty">Crawling live cosanostraa.com SKUs, product photos, last 7-day Website sales and mapping backend inventory…</td></tr>';
   try{
     const r=await fetch('/api/website-oos'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
     const d=await r.json();
@@ -23096,8 +23178,10 @@ def _build_website_oos_report(force=False):
                 if web["availability_known"] != web["occurrences"]:
                     unknown_availability += 1
                     continue
-                inv = inv_map.get(key) or {}
-                master_item = master_map.get(key) or {}
+                inv_key = _inventory_resolve_key(key, inv_map)
+                inv = inv_map.get(inv_key) or {}
+                master_key = key if key in master_map else _inventory_resolve_key(key, master_map)
+                master_item = master_map.get(master_key) or {}
                 cn_name = clean(master_item.get("cn_name", "")) or clean(web.get("product_title", "")) or web.get("sku", "")
                 oos_rows.append({
                     "sku": web.get("sku", ""),
@@ -23110,7 +23194,9 @@ def _build_website_oos_report(force=False):
                     "inv_stock": max(0, to_int(inv.get("inv_stock", 0))),
                     "blocked_qty": max(0, to_int(inv.get("blocked_qty", 0))),
                     "inv_wip": max(0, to_int(inv.get("inv_wip", 0))),
-                    "backend_match": bool(key in inv_map),
+                    "inventory_source_sku": inv_key or "",
+                    "inventory_suffix_fallback": bool(inv_key and inv_key != key),
+                    "backend_match": bool(inv_key),
                 })
 
             oos_rows.sort(key=lambda r: (-int(r.get("inv_stock") or 0), str(r.get("sku") or "").upper()))
@@ -24137,6 +24223,10 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     except Exception:
         pass
 
+    def _prod_meta_key(sku):
+        key = str(sku or "").strip().upper()
+        return _inventory_resolve_key(key, stock_map) or key
+
     # Production sheet fetch (60 sec live-sync cache; manual Refresh still forces a fresh fetch)
     if _PROD_CACHE["rows"] is not None and (time.time() - _PROD_CACHE["ts"] < 60):
         rows_all = _PROD_CACHE["rows"]
@@ -24196,7 +24286,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 
     # Taxon har row me daal do (inv map se)
     for r in rows_all:
-        r["taxon"] = tax_map.get(r["sku"], "")
+        r["taxon"] = tax_map.get(_prod_meta_key(r["sku"]), "")
 
     # Filter dropdown options
     channels = sorted({r["channel"] for r in rows_all if r["channel"]})
@@ -24239,22 +24329,25 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         # Blank channel/type filter = normal overall inventory. SOR/3P channels
         # use the All Product sheet's "Inv. Stock _3P" when it exists.
         if inv_filter_ctx and ("sor" in inv_filter_ctx or "3p" in inv_filter_ctx):
-            return stock_3p_map.get(sku, stock_map.get(sku, 0)) or 0
-        return stock_map.get(sku, 0) or 0
+            k = _prod_meta_key(sku)
+            return stock_3p_map.get(k, stock_map.get(k, 0)) or 0
+        k = _prod_meta_key(sku)
+        return stock_map.get(k, 0) or 0
 
     def _prod_inv_wip(sku):
+        k = _prod_meta_key(sku)
         if inv_filter_ctx:
             if "website" in inv_filter_ctx:
-                return wip_website_map.get(sku, 0) or 0
+                return wip_website_map.get(k, 0) or 0
             if "designer" in inv_filter_ctx:
-                return wip_designer_map.get(sku, 0) or 0
+                return wip_designer_map.get(k, 0) or 0
             if "customize" in inv_filter_ctx or "customise" in inv_filter_ctx:
-                return wip_customize_map.get(sku, 0) or 0
+                return wip_customize_map.get(k, 0) or 0
             if "customer" in inv_filter_ctx:
-                return wip_customer_map.get(sku, 0) or 0
+                return wip_customer_map.get(k, 0) or 0
             if "sor" in inv_filter_ctx or "3p" in inv_filter_ctx:
-                return wip_sor_map.get(sku, 0) or 0
-        return wip_map.get(sku, 0) or 0
+                return wip_sor_map.get(k, 0) or 0
+        return wip_map.get(k, 0) or 0
     rows = []
     for r in rows_all:
         if cf and r["channel"].strip().lower() != cf:
@@ -24271,7 +24364,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         if oq and oq not in r["order_no"].lower():
             continue
-        if cnq and cnq not in str(cn_map.get(r["sku"], "")).lower():
+        if cnq and cnq not in str(cn_map.get(_prod_meta_key(r["sku"]), "")).lower():
             continue
         # Order date range
         if od1 and (not r["date"] or r["date"] < od1):
@@ -24284,15 +24377,16 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         if dd2 and (not r["delivery_iso"] or r["delivery_iso"] > dd2):
             continue
         rr = dict(r)
-        rr["image_url"] = img_map.get(r["sku"], "")
+        _meta_key = _prod_meta_key(r["sku"])
+        rr["image_url"] = img_map.get(_meta_key, "")
         # Existing frontend/export field name is kept for compatibility, but
         # its contents are intentionally pending-only order numbers.
         rr["all_orders"] = sku_pending_orders.get(r["sku"], [])
         rr["pending_order_count"] = len(sku_pending_orders.get(r["sku"], []))
         rr["sku_total_balance"] = sku_total_balance.get(r["sku"], 0)
         rr["sku_name"] = cn_sku_label(r["sku"])
-        rr["cn_name"] = cn_map.get(r["sku"], "")
-        rr["stone_color"] = stone_map.get(r["sku"], "")
+        rr["cn_name"] = cn_map.get(_meta_key, "")
+        rr["stone_color"] = stone_map.get(_meta_key, "")
         rr["inv_stock"] = _prod_inv_stock(r["sku"])
         rr["inv_wip"] = _prod_inv_wip(r["sku"])
         rr["repeat_count"] = len(sku_orders.get(r["sku"], []))   # kitni baar order hua (distinct orders)
@@ -24301,8 +24395,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             rr["aov_per_piece"] = 0
             rr["discount_pct"] = 0
         else:
-            rr["aov_per_piece"] = aov_map.get(r["sku"], 0)
-            rr["discount_pct"] = disc_map.get(r["sku"], 0)
+            rr["aov_per_piece"] = aov_map.get(_meta_key, 0)
+            rr["discount_pct"] = disc_map.get(_meta_key, 0)
         rows.append(rr)
 
     # Preserve exact filtered-source totals BEFORE optional grouping and before
