@@ -189,6 +189,14 @@
 #   4. New "Repeat Orders" tab with 7d/15d/30d qty, forecast
 # FIXES: Bulletproof Qty/Rev Parsing + Fuzzy SKU Matching + Unified Grand Totals
 # ============================================================
+# RAILWAY PUBLIC-NETWORK PATCH (20-Aug-2026):
+#   - always serves on 0.0.0.0:$PORT in deployment
+#   - honours Railway X-Forwarded-* headers via ProxyFix
+#   - uses RAILWAY_PUBLIC_DOMAIN dynamically (no Wi-Fi/hotspot hard-coding)
+#   - public /healthz + /api/health readiness endpoint
+#   - Railway public URL can be used for keepalive automatically
+# NOTE: Railway Public Networking/domain must still be enabled in Railway.
+# ============================================================
 # DATA ACCURACY PATCH (01-Aug-2026): corrected PIN-State boundary mapping,
 # city/PIN mismatch handling, cancelled/non-positive Website rows, and
 # city+State aggregation across Rakhi and Website/D2C views.
@@ -277,6 +285,7 @@ except Exception as _genai_err:
     print("google-genai not installed — AI Studio disabled (baaki sab chalega).",
           str(_genai_err)[:120])
 from flask import Flask, request, jsonify, render_template_string, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Config ───────────────────────────────────────────────────
 INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv"
@@ -363,10 +372,30 @@ def _ensure_pkl():
     _PKL_LAST_FAIL_TS = time.time()
     return False
 PORT      = int(os.environ.get("PORT", 5000))
-# Deploy/host detect (Render etc.) — yahan se data-load tez karte hain.
+
+# ── Railway / public-network deployment ─────────────────────
+# Railway's public edge can reach the container only when the app listens on
+# 0.0.0.0:$PORT.  RAILWAY_PUBLIC_DOMAIN is provided by Railway when a public
+# domain is attached.  Keeping the URL derived from the platform avoids any
+# Wi-Fi / hotspot specific hard-coded hostname.
+def _public_url_from_env():
+    raw = (os.environ.get("PUBLIC_BASE_URL")
+           or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+           or os.environ.get("RENDER_EXTERNAL_URL")
+           or "").strip()
+    if not raw:
+        return ""
+    if not re.match(r"^https?://", raw, re.I):
+        raw = "https://" + raw
+    return raw.rstrip("/")
+
+PUBLIC_BASE_URL = _public_url_from_env()
+
+# Deploy/host detect (Railway / Render / Heroku etc.) — data-load optimisations.
 DEPLOY_HOST = bool(os.environ.get("DEPLOY") or os.environ.get("RENDER")
-                   or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("DYNO")
-                   or os.environ.get("PORT"))
+                   or os.environ.get("RAILWAY_ENVIRONMENT")
+                   or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+                   or os.environ.get("DYNO") or os.environ.get("PORT"))
 # FAST_LOAD: heavy difflib fuzzy SKU-matching skip karo (sabse bada load-time
 # kha raha tha — 55k/59k pe atak jata tha). Exact + normalized match phir bhi
 # chalega (99% SKUs cover). Managed host par default ON. Env FAST_LOAD=0 se band.
@@ -22134,9 +22163,18 @@ document.addEventListener('click',function(ev){
 
 # ── Flask ────────────────────────────────────────────────────
 app = Flask(__name__)
+
+# Railway terminates HTTPS at its edge and forwards the request to this app.
+# ProxyFix makes Flask use the real public scheme/host from X-Forwarded-*
+# headers.  This is important for logins/cookies when the same site is opened
+# from office Wi-Fi, home Wi-Fi or a mobile hotspot.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
 app.secret_key = os.environ.get("SECRET_KEY", "cosa-nostraa-" + base64.b64encode(os.urandom(18)).decode())
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = bool(DEPLOY_HOST)
+app.config["PREFERRED_URL_SCHEME"] = "https" if DEPLOY_HOST else "http"
 # Session ab PERMANENT nahi — browser band hote hi / refresh par dobara login.
 # (Frontend bhi har load par login gate dikhata hai.)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
@@ -22149,14 +22187,31 @@ USERS = {
         (os.environ.get("EMP_PASS", "cn2026"), "employee"),
 }
 
-_PUBLIC_API = ("/api/login", "/api/me", "/api/logout", "/api/warmup-status")
+_PUBLIC_API = ("/api/login", "/api/me", "/api/logout", "/api/warmup-status", "/api/health")
 
 @app.before_request
 def _auth_guard():
+    # Never block a browser/proxy preflight.  Normal API requests still require
+    # the existing login session exactly as before.
+    if request.method == "OPTIONS":
+        return None
     p = request.path or ""
     if p.startswith("/api/") and p not in _PUBLIC_API:
         if not session.get("role"):
             return jsonify({"error": "auth required"}), 401
+
+@app.route("/healthz")
+@app.route("/api/health")
+def api_health():
+    # Lightweight public readiness endpoint for Railway Public Networking.
+    # It intentionally does not expose business data.
+    return jsonify({
+        "ok": True,
+        "service": "cosa-nostraa-dashboard",
+        "ready": CACHE.get("data") is not None,
+        "stage": _WARMUP.get("stage", "idle"),
+        "public": bool(PUBLIC_BASE_URL),
+    })
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
@@ -29366,7 +29421,7 @@ def start_cloudflare_tunnel(port):
 # ── Background warmup + auto-refresh ─────────────────────────
 REFRESH_INTERVAL = int(os.environ.get("REFRESH_INTERVAL", 600))   # seconds (10 min — 512MB par RAM-spikes kam)
 
-KEEPALIVE_URL = (os.environ.get("KEEPALIVE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
+KEEPALIVE_URL = (os.environ.get("KEEPALIVE_URL") or PUBLIC_BASE_URL or "").strip()
 
 def _keepalive_loop():
     """Render free-tier ko sone se rokta hai — har 8 min khud ko ping.
@@ -29462,8 +29517,9 @@ def _cn_catalog_loop():
 
 # ── Launch ───────────────────────────────────────────────────
 IS_DEPLOY = bool(os.environ.get("DEPLOY") or os.environ.get("RENDER")
-                 or os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("DYNO")
-                 or os.environ.get("PORT"))
+                 or os.environ.get("RAILWAY_ENVIRONMENT")
+                 or os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+                 or os.environ.get("DYNO") or os.environ.get("PORT"))
 
 # Background warmup + keepalive start at IMPORT time too, so the app works under
 # BOTH `python app.py` and `gunicorn app:app` (Render kisi bhi start command se).
@@ -29490,7 +29546,13 @@ _start_background_threads()
 
 if __name__ == "__main__":
     if IS_DEPLOY:
-        print("Production mode — serving on port", PORT)
+        print("Production mode — listening publicly on 0.0.0.0:%s" % PORT)
+        if PUBLIC_BASE_URL:
+            print("Public URL:", PUBLIC_BASE_URL)
+        else:
+            print("NOTE: No public domain detected. In Railway: Settings -> Networking -> Public Networking -> Generate Domain.")
+        # IMPORTANT: 0.0.0.0 + Railway-provided PORT is required for access
+        # from every external network. Do not change this to localhost/127.0.0.1.
         app.run(host="0.0.0.0", port=PORT, threaded=True, use_reloader=False)
         raise SystemExit
 
