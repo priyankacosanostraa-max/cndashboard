@@ -7690,18 +7690,18 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="filter-box" style="margin:0 0 14px;padding:14px 16px">
       <div class="fl" style="margin-bottom:6px">EMAIL SUBJECT PREVIEW</div>
       <div id="woEmailSubject" style="font-size:16px;font-weight:900;color:#5f4514">—</div>
-      <div class="small-note" style="margin-top:5px">Excel export contains only sufficient-stock website OOS flags and uses the exact requested columns: SKU code, CN Name, Product URL, Website Status, In stock inventory.</div>
+      <div class="small-note" style="margin-top:5px">Product photos and Last 7 Days Website Sold Qty are shown live in this dashboard. Excel export still contains only sufficient-stock website OOS flags and keeps the exact requested email columns: SKU code, CN Name, Product URL, Website Status, In stock inventory.</div>
     </div>
 
     <div class="ops-section-head">
       <div><div class="ops-section-title">All Website Out-of-Stock SKUs</div><div class="small-note" id="woTableNote">Live website OOS variants will appear here.</div></div>
     </div>
     <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:720px">
-      <table class="ops-table" id="websiteOosTable" style="min-width:980px">
+      <table class="ops-table" id="websiteOosTable" style="min-width:1220px">
         <thead><tr>
-          <th>SKU Code</th><th>CN Name</th><th>Product URL</th><th>Website Status</th><th>In Stock Inventory</th>
+          <th>Photo</th><th>SKU Code</th><th>CN Name</th><th>Product URL</th><th>Website Status</th><th>In Stock Inventory</th><th>Website Sold Qty · Last 7 Days</th>
         </tr></thead>
-        <tbody id="websiteOosBody"><tr><td colspan="5" class="ops-empty">Open this tab to crawl live cosanostraa.com availability.</td></tr></tbody>
+        <tbody id="websiteOosBody"><tr><td colspan="7" class="ops-empty">Open this tab to crawl live cosanostraa.com availability.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -19701,7 +19701,7 @@ function _woFiltered(){
 function renderWebsiteOos(){
   const body=_woEl('websiteOosBody');
   if(!_websiteOosData){
-    if(body&&!_websiteOosLoading)body.innerHTML='<tr><td colspan="5" class="ops-empty">Website OOS data has not loaded yet.</td></tr>';
+    if(body&&!_websiteOosLoading)body.innerHTML='<tr><td colspan="7" class="ops-empty">Website OOS data has not loaded yet.</td></tr>';
     return;
   }
   const threshold=_woThreshold();
@@ -19731,25 +19731,34 @@ function renderWebsiteOos(){
     const pages=_woNum(_websiteOosData.website_pages);
     const products=_woNum(_websiteOosData.website_products);
     const unknown=_woNum(_websiteOosData.availability_unknown_skus);
-    note.innerHTML=`Live source: <b>cosanostraa.com/products.json</b> · ${products.toLocaleString('en-IN')} products across ${pages.toLocaleString('en-IN')} page${pages===1?'':'s'} · backend source: <b>${escHtml(_websiteOosData.inventory_source||'All Product')}</b> · website availability is read from Shopify variant <b>available</b> · exact SKU mapping after case/space/underscore normalization${unknown?` · ${unknown.toLocaleString('en-IN')} SKU(s) with unknown availability excluded`:''}${checked?` · last live check ${escHtml(checked)}`:''}.`;
+    const salesFrom=_websiteOosData.website_sales_7d_from||'';
+    const salesTo=_websiteOosData.website_sales_7d_to||'';
+    const salesRange=(salesFrom&&salesTo)?` · Website sold qty: <b>${escHtml(salesFrom)} → ${escHtml(salesTo)}</b> from Website Order_Date (sold qty net of RTO)`:'';
+    note.innerHTML=`Live source: <b>cosanostraa.com/products.json</b> · ${products.toLocaleString('en-IN')} products across ${pages.toLocaleString('en-IN')} page${pages===1?'':'s'} · backend source: <b>${escHtml(_websiteOosData.inventory_source||'All Product')}</b> · website availability is read from Shopify variant <b>available</b> · photos come from the live Shopify product/variant image${salesRange} · exact SKU mapping after case/space/underscore normalization${unknown?` · ${unknown.toLocaleString('en-IN')} SKU(s) with unknown availability excluded`:''}${checked?` · last live check ${escHtml(checked)}`:''}.`;
   }
   const tableNote=_woEl('woTableNote');
   if(tableNote)tableNote.textContent=`${rows.length.toLocaleString('en-IN')} shown of ${all.length.toLocaleString('en-IN')} Website OOS SKUs. Rows with Inv Stock ≥ ${threshold} are email flags.`;
 
   if(!body)return;
-  if(!rows.length){body.innerHTML='<tr><td colspan="5" class="ops-empty">No Website OOS SKUs match the current filters.</td></tr>';return;}
+  if(!rows.length){body.innerHTML='<tr><td colspan="7" class="ops-empty">No Website OOS SKUs match the current filters.</td></tr>';return;}
   body.innerHTML=rows.map(r=>{
     const stock=Math.round(_woNum(r.inv_stock));
     const flagged=stock>=threshold;
     const url=String(r.product_url||'');
+    const img=String(r.image_url||'').trim();
     const sku=String(r.sku||'');
     const skuEsc=sku.replace(/'/g,"\\'");
+    const photoHtml=img
+      ? `<a href="${escHtml(url||img)}" target="_blank" rel="noopener" title="Open product"><img src="${escHtml(img)}" alt="${escHtml(r.cn_name||r.product_title||sku)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" style="width:72px;height:72px;object-fit:contain;object-position:center;border:1px solid #e6dcc4;border-radius:10px;background:#fff;padding:4px;box-sizing:border-box" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex'"><span style="display:none;width:72px;height:72px;align-items:center;justify-content:center;border:1px solid #e6dcc4;border-radius:10px;background:#faf8f2;color:#8a7a55;font-size:10px;font-weight:800;text-align:center;padding:5px;box-sizing:border-box">No image</span></a>`
+      : `<span style="display:inline-flex;width:72px;height:72px;align-items:center;justify-content:center;border:1px solid #e6dcc4;border-radius:10px;background:#faf8f2;color:#8a7a55;font-size:10px;font-weight:800;text-align:center;padding:5px;box-sizing:border-box">No image</span>`;
     return `<tr${flagged?' style="background:rgba(179,38,30,.045)"':''}>
+      <td style="text-align:center">${photoHtml}</td>
       <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(sku)}</button>${flagged?'<div class="small-note" style="color:#b3261e;font-weight:900;margin-top:3px">SUFFICIENT STOCK FLAG</div>':''}</td>
       <td>${escHtml(r.cn_name||r.product_title||'—')}</td>
       <td>${url?`<a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:#8a651d;font-weight:850;text-decoration:underline">Open Product</a>`:'—'}</td>
       <td><span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#fde9e7;color:#a52018;font-weight:900">${escHtml(r.website_status||'Out of Stock')}</span></td>
       <td class="${stock>0?'gold':'muted'}" style="font-weight:900">${stock.toLocaleString('en-IN')}</td>
+      <td style="font-weight:900;text-align:right">${_woNum(r.website_sold_qty_7d).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
     </tr>`;
   }).join('');
 }
@@ -19760,7 +19769,7 @@ async function loadWebsiteOos(force=false){
   const body=_woEl('websiteOosBody');
   const btn=_woEl('woRefreshBtn');
   if(btn){btn.disabled=true;btn.textContent='Syncing…';}
-  if(body)body.innerHTML='<tr><td colspan="5" class="ops-empty">Crawling live cosanostraa.com SKUs and mapping backend inventory…</td></tr>';
+  if(body)body.innerHTML='<tr><td colspan="7" class="ops-empty">Crawling live cosanostraa.com SKUs, product photos, last 7-day Website sales and mapping backend inventory…</td></tr>';
   try{
     const r=await fetch('/api/website-oos'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
     const d=await r.json();
@@ -19768,7 +19777,7 @@ async function loadWebsiteOos(force=false){
     _websiteOosData=d;
     renderWebsiteOos();
   }catch(e){
-    if(body)body.innerHTML=`<tr><td colspan="5" class="ops-empty">Website OOS live sync failed: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="7" class="ops-empty">Website OOS live sync failed: ${escHtml(e?.message||e)}</td></tr>`;
     const note=_woEl('woSourceNote');if(note)note.textContent='Live sync failed. Existing dashboard data is unchanged; use Refresh Live Website to retry.';
   }finally{
     _websiteOosLoading=false;
@@ -22872,6 +22881,65 @@ def _website_oos_fetch_live_products():
             return products_all, pages
     raise RuntimeError("cosanostraa.com catalogue exceeded 60 pages; audit stopped to avoid incomplete results")
 
+def _website_oos_fetch_7d_sales():
+    """Return normalized SKU -> Website sold qty for today + previous 6 days.
+
+    Source and quantity rules intentionally mirror the dashboard's authoritative
+    Website sales logic: physical W / Order_Date, New SKU, cancelled/void/failed
+    rows excluded, and sold qty is gross Qty minus RTO/Return Qty (never below 0).
+    The published CSV is fetched with _fetch_csv_fresh so every 5-minute OOS
+    live refresh sees the latest Website order sheet rather than a stale cache.
+    """
+    df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
+    if df is None or df.empty:
+        return {}, "", ""
+    df.columns = [str(c).strip() for c in df.columns]
+    cols = list(df.columns)
+    def _at(i):
+        return cols[i] if len(cols) > i else None
+
+    w_date = (_at(22) or find_col(
+        df.columns, "Order_Date", "Order Date", "Display Order Date", "order date", "orderdate"
+    ))
+    w_sku = (find_col(df.columns, "New SKU", "SKU", "sku code", "product sku", "item sku") or _at(7))
+    qty_keys = {
+        "finalqty", "finalquantity", "soldqty", "saleqty", "orderqty",
+        "orderedqty", "totalqty", "quantity", "qty",
+    }
+    w_qty = next((
+        c for c in df.columns
+        if re.sub(r"[^a-z0-9]", "", str(c).lower()) in qty_keys
+    ), None)
+    w_status = find_col(df.columns, "Sale Order Status", "Order Status", "status")
+    w_rto = find_col(df.columns, "RTO Qty", "Return Qty", "Returned Qty")
+    if not w_date or not w_sku:
+        raise RuntimeError(f"Website 7D sold qty columns missing: date={w_date}, sku={w_sku}")
+
+    today = datetime.now(TZ).date()
+    start = today - timedelta(days=6)
+    totals = {}
+    for row in _df_chunks(df, 4000):
+        status = str(row.get(w_status, "") or "").strip().lower() if w_status else ""
+        if status and any(x in status for x in ("cancel", "void", "failed")):
+            continue
+        dt = parse_date_any(row.get(w_date, ""))
+        if dt is None:
+            continue
+        d = dt.date()
+        if d < start or d > today:
+            continue
+        sku = clean(row.get(w_sku, ""))
+        key = _cn_normalize(sku)
+        if not key:
+            continue
+        gross = to_num(row.get(w_qty, 0)) if w_qty else 1.0
+        rto = max(0.0, to_num(row.get(w_rto, 0))) if w_rto else 0.0
+        sold = max(0.0, float(gross) - float(rto)) if w_qty else 1.0
+        if sold <= 0:
+            continue
+        totals[key] = totals.get(key, 0.0) + sold
+    return totals, start.isoformat(), today.isoformat()
+
 def _build_website_oos_report(force=False):
     now = time.time()
     cached = _WEBSITE_OOS_CACHE.get("payload")
@@ -22888,9 +22956,10 @@ def _build_website_oos_report(force=False):
             if not products:
                 raise RuntimeError("cosanostraa.com returned zero products; refusing to publish an empty OOS audit")
 
-            # Manual live refresh also refreshes backend All Product inventory;
-            # ordinary loads can use the short Operations inventory cache.
+            # Manual/5-minute live refresh also refreshes backend inventory and
+            # the Website order sheet used for the Last 7 Days sold-qty column.
             inv_rows, inv_meta = _build_operations_inventory(force=force)
+            website_sales_7d, website_sales_7d_from, website_sales_7d_to = _website_oos_fetch_7d_sales()
             inv_map = {}
             for r in (inv_rows or []):
                 key = _cn_normalize(r.get("sku", ""))
@@ -22932,6 +23001,36 @@ def _build_website_oos_report(force=False):
             for p in products:
                 title = clean((p or {}).get("title", ""))
                 handle = clean((p or {}).get("handle", ""))
+
+                # Shopify products.json supplies product images and variant image_id.
+                # Prefer the exact variant image; fall back to the product's main
+                # image so every OOS row can show a useful live storefront photo.
+                images_by_id = {}
+                product_image_url = ""
+                for _img in ((p or {}).get("images") or []):
+                    if not isinstance(_img, dict):
+                        continue
+                    _src = clean(_img.get("src", ""))
+                    _iid = clean(_img.get("id", ""))
+                    if _src:
+                        if _src.startswith("//"):
+                            _src = "https:" + _src
+                        elif _src.startswith("/"):
+                            _src = CN_STORE_URL.rstrip("/") + _src
+                        if not product_image_url:
+                            product_image_url = _src
+                        if _iid:
+                            images_by_id[_iid] = _src
+                _main_img = (p or {}).get("image") or {}
+                if isinstance(_main_img, dict):
+                    _src = clean(_main_img.get("src", ""))
+                    if _src:
+                        if _src.startswith("//"):
+                            _src = "https:" + _src
+                        elif _src.startswith("/"):
+                            _src = CN_STORE_URL.rstrip("/") + _src
+                        product_image_url = _src or product_image_url
+
                 for v in ((p or {}).get("variants") or []):
                     sku = clean((v or {}).get("sku", ""))
                     if not sku:
@@ -22947,10 +23046,30 @@ def _build_website_oos_report(force=False):
                     else:
                         product_url = CN_STORE_URL
                     available = _website_oos_bool((v or {}).get("available"))
+
+                    # Variant-specific photo, if available. Shopify may expose
+                    # either image_id or featured_image depending on storefront.
+                    image_url = ""
+                    _variant_image_id = clean((v or {}).get("image_id", ""))
+                    if _variant_image_id:
+                        image_url = images_by_id.get(_variant_image_id, "")
+                    _featured = (v or {}).get("featured_image") or (v or {}).get("image") or {}
+                    if (not image_url) and isinstance(_featured, dict):
+                        _src = clean(_featured.get("src", ""))
+                        if _src:
+                            if _src.startswith("//"):
+                                _src = "https:" + _src
+                            elif _src.startswith("/"):
+                                _src = CN_STORE_URL.rstrip("/") + _src
+                            image_url = _src
+                    if not image_url:
+                        image_url = product_image_url
+
                     rec = sku_web.get(key)
                     if rec is None:
                         rec = {
                             "sku": sku, "product_title": title, "product_url": product_url,
+                            "image_url": image_url,
                             "occurrences": 0, "availability_known": 0, "any_available": False,
                         }
                         sku_web[key] = rec
@@ -22964,6 +23083,8 @@ def _build_website_oos_report(force=False):
                         rec["product_title"] = title
                     if (not rec.get("product_url") or rec.get("product_url") == CN_STORE_URL) and handle:
                         rec["product_url"] = product_url
+                    if (not rec.get("image_url")) and image_url:
+                        rec["image_url"] = image_url
 
             oos_rows = []
             unknown_availability = 0
@@ -22981,7 +23102,9 @@ def _build_website_oos_report(force=False):
                     "cn_name": cn_name,
                     "product_title": web.get("product_title", ""),
                     "product_url": web.get("product_url", ""),
+                    "image_url": web.get("image_url", ""),
                     "website_status": "Out of Stock",
+                    "website_sold_qty_7d": round(float(website_sales_7d.get(key, 0.0)), 4),
                     "inv_stock": max(0, to_int(inv.get("inv_stock", 0))),
                     "blocked_qty": max(0, to_int(inv.get("blocked_qty", 0))),
                     "inv_wip": max(0, to_int(inv.get("inv_wip", 0))),
@@ -22999,6 +23122,9 @@ def _build_website_oos_report(force=False):
                 "oos_without_backend_stock": sum(1 for r in oos_rows if int(r.get("inv_stock") or 0) <= 0),
                 "backend_matched_oos_skus": sum(1 for r in oos_rows if r.get("backend_match")),
                 "availability_unknown_skus": unknown_availability,
+                "website_sales_7d_from": website_sales_7d_from,
+                "website_sales_7d_to": website_sales_7d_to,
+                "website_sales_source": "Website Order_Date / New SKU",
                 "inventory_source": str((inv_meta or {}).get("source") or "All Product"),
                 "inventory_stock_column": str((inv_meta or {}).get("stock_column") or "Inv Stock"),
                 "checked_at": datetime.now(TZ).isoformat(),
