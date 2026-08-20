@@ -292,7 +292,7 @@ AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https:/
 NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
 TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
 AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
-# Website Returns patch: key fields + COD/Prepaid KPIs/filters + order-to-SKU join.
+# Website Returns patch: contact + pickup/status analysis + COD/Prepaid + order-to-SKU join.
 # SKU Details Website filter also shows BlueDart return customers and RTO reasons.
 # Website courier-return tracker (BlueDart Return tab).  This is intentionally
 # separate from the sales Website sheet: the Returns dashboard uses this source
@@ -7478,9 +7478,9 @@ select.lg-in option{background:#fff;color:#1a1610}
           </div>
         </div>
         <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:430px">
-          <table class="ops-table" id="sdWebsiteReturnsTable" style="min-width:1000px">
-            <thead><tr><th>Order Date</th><th>Customer</th><th>Order ID</th><th>Website Order SKU(s)</th><th>Payment</th><th>Destination</th><th>RTO Reason</th></tr></thead>
-            <tbody id="sdWebsiteReturnsBody"><tr><td colspan="7" class="ops-empty">Select Website in Type to view return customers.</td></tr></tbody>
+          <table class="ops-table" id="sdWebsiteReturnsTable" style="min-width:1520px">
+            <thead><tr><th>Order Date</th><th>Pickup Date</th><th>Customer</th><th>Customer Contact</th><th>Order ID</th><th>Website Order SKU(s)</th><th>Payment</th><th>Destination</th><th>Status Description</th><th>Status Date</th><th>RTO Reason</th></tr></thead>
+            <tbody id="sdWebsiteReturnsBody"><tr><td colspan="11" class="ops-empty">Select Website in Type to view return customers.</td></tr></tbody>
           </table>
         </div></div>
       </div>
@@ -7577,7 +7577,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <div class="ops-kicker">WEBSITE · BLUEDART RETURN TRACKER</div>
         <div class="ops-title">Website Returns</div>
-        <div class="ops-sub">Live Website return data with COD / Prepaid classification. Only the key return fields are shown below.</div>
+        <div class="ops-sub">Analysis-ready Website return dashboard using BlueDart return operations, Website SKU mapping and COD / Prepaid classification.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteReturnsCsv()">Export CSV</button>
@@ -7591,14 +7591,18 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="renderWebsiteReturns()"></div>
+        <div class="fc"><label class="fl">Status From</label><input class="fi" id="wrStatusD1" type="date" onchange="renderWebsiteReturns()"></div>
+        <div class="fc"><label class="fl">Status To</label><input class="fi" id="wrStatusD2" type="date" onchange="renderWebsiteReturns()"></div>
         <div class="fc"><label class="fl">Payment Mode</label><select class="fs" id="wrPaymentMode" onchange="renderWebsiteReturns()"><option value="All">All</option><option value="COD">COD</option><option value="Prepaid">Prepaid</option></select></div>
         <div class="fc"><label class="fl">Min Payment</label><input class="fi" id="wrPayMin" type="number" min="0" step="1" placeholder="0" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><label class="fl">Max Payment</label><input class="fi" id="wrPayMax" type="number" min="0" step="1" placeholder="No limit" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="renderWebsiteReturns()"><option value="All">All Origins</option></select></div>
         <div class="fc"><label class="fl">Destination Search</label><input class="fi" id="wrDestination" type="search" list="wrDestinationList" autocomplete="off" placeholder="Type city / destination…" oninput="websiteReturnsApply_d()"><datalist id="wrDestinationList"></datalist></div>
+        <div class="fc"><label class="fl">Status Description</label><select class="fs" id="wrStatusDescription" onchange="renderWebsiteReturns()"><option value="All">All Statuses</option></select></div>
+        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="renderWebsiteReturns()"><option value="All">All Groups</option></select></div>
         <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="renderWebsiteReturns()"><option value="All">All Reasons</option></select></div>
         <div class="fc"><label class="fl">SKU Search</label><input class="fi" id="wrSku" type="search" list="wrSkuList" autocomplete="off" placeholder="SKU or child SKU inside CMB…" oninput="websiteReturnsApply_d()"><datalist id="wrSkuList"></datalist></div>
-        <div class="fc"><label class="fl">Order / Customer Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Order ID, display code, customer…" oninput="websiteReturnsApply_d()"></div>
+        <div class="fc"><label class="fl">Customer / Contact / Order Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Name, contact, order ID, display code…" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebsiteReturnsFilters()">Reset</button></div>
       </div>
       <div id="wrSourceNote" class="small-note" style="margin-top:10px;white-space:normal"></div>
@@ -7606,16 +7610,24 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
+    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Every analysis card follows the same active filters as the table and export.</div></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
+      <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top RTO Reasons</label><div id="wrReasonAnalysis"></div></div>
+      <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status Description</label><div id="wrStatusAnalysis"></div></div>
+      <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top Destinations</label><div id="wrDestinationAnalysis"></div></div>
+      <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status-Date Trend</label><div id="wrTrendAnalysis"></div></div>
+    </div>
+
     <div class="ops-section-head">
       <div><div class="ops-section-title">Website Returns</div><div class="small-note" id="wrTableNote"></div></div>
     </div>
     <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:690px">
-      <table class="ops-table" id="websiteReturnsTable" style="min-width:1180px">
+      <table class="ops-table" id="websiteReturnsTable" style="min-width:1720px">
         <thead><tr>
-          <th>Order ID</th><th>Display Order Code</th><th>SKU(s)</th><th>Customer</th><th>Payment</th>
-          <th>Order Date</th><th>Pickup Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
+          <th>Order ID</th><th>Display Order Code</th><th>SKU(s)</th><th>Customer</th><th>Customer Contact</th><th>Payment</th>
+          <th>Order Date</th><th>Pickup Date</th><th>Status Description</th><th>Status Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
         </tr></thead>
-        <tbody id="websiteReturnsBody"><tr><td colspan="10" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
+        <tbody id="websiteReturnsBody"><tr><td colspan="13" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -9987,7 +9999,7 @@ const MENU_TAB_META = {
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m34: {name:"Returns",          desc:"Top return SKUs with date, SKU/CN Name and channel filters."},
-  m35: {name:"Website Returns",  desc:"Website returns with COD / Prepaid counts, key order fields and RTO reasons."},
+  m35: {name:"Website Returns",  desc:"BlueDart Website returns with customer contact, pickup/status dates, SKU search, COD/Prepaid and return analysis."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
@@ -19381,8 +19393,6 @@ function _wrRowMatchesSkuQuery(r, rawQuery){
   return _wrRowSkuKeys(r).some(orderSku=>{
     const kc=orderSku.replace(/[^A-Z0-9]/g,'');
     if(orderSku.includes(q)||(qc&&kc.includes(qc)))return true;
-    // A returned parent CMB also means every child component in that CMB was
-    // part of the returned Website order. This lets child-SKU search find it.
     const parent=_masterSkuMap[orderSku]||(master||[]).find(it=>_opsSkuKey(it?.sku)===orderSku);
     return (Array.isArray(parent?.combo_details)?parent.combo_details:[]).some(ch=>{
       const ck=_opsSkuKey(ch?.sku),cc=ck.replace(/[^A-Z0-9]/g,'');
@@ -19415,7 +19425,7 @@ function renderSdWebsiteReturns(){
   box.style.display='block';
   if(!_websiteReturnsData){
     if(note)note.textContent='Loading BlueDart Website return customers for this SKU…';
-    if(body)body.innerHTML='<tr><td colspan="7" class="ops-empty">Loading Website return data…</td></tr>';
+    if(body)body.innerHTML='<tr><td colspan="11" class="ops-empty">Loading Website return data…</td></tr>';
     if(!_websiteReturnsLoading)loadWebsiteReturns(false);
     return;
   }
@@ -19427,17 +19437,17 @@ function renderSdWebsiteReturns(){
     if(d1&&(!d||d<d1))return false;
     if(d2&&(!d||d>d2))return false;
     return true;
-  }).sort((a,b)=>String(b.order_date||b.pickup_date||'').localeCompare(String(a.order_date||a.pickup_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
-  const customers=new Set(rows.map(r=>_wrNorm(r.customer)).filter(Boolean));
+  }).sort((a,b)=>String(b.order_date||b.pickup_date||'').localeCompare(String(a.order_date||a.pickup_date||''))||String(b.status_date||'').localeCompare(String(a.status_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
+  const customers=new Set(rows.map(r=>_wrNorm(r.customer_contact)||_wrNorm(r.customer)).filter(Boolean));
   const direct=_opsSkuKey(currentSdSku);
   const parentMatches=Array.from(target).filter(s=>s!==direct);
   if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} Website return shipment${rows.length===1?'':'s'} · ${customers.size.toLocaleString('en-IN')} customer${customers.size===1?'':'s'}${parentMatches.length?` · includes parent CMB returns: ${parentMatches.join(', ')}`:''} · date filter uses Website Order Date.`;
   if(!body)return;
   if(!rows.length){
-    body.innerHTML='<tr><td colspan="7" class="ops-empty">No BlueDart Website returns for this SKU under the selected date range.</td></tr>';
+    body.innerHTML='<tr><td colspan="11" class="ops-empty">No BlueDart Website returns for this SKU under the selected date range.</td></tr>';
     return;
   }
-  body.innerHTML=rows.slice(0,300).map(r=>`<tr><td>${_wrFmtDate(r.order_date||r.pickup_date)}</td><td style="font-weight:850">${escHtml(r.customer||'—')}</td><td>${escHtml(r.order_id||r.display_order_code||'—')}</td><td style="font-weight:800">${escHtml(_wrSkuText(r))}</td><td>${escHtml(_wrPaymentMode(r))}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+  body.innerHTML=rows.slice(0,300).map(r=>`<tr><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="font-weight:850">${escHtml(r.customer||'—')}</td><td style="font-weight:800">${escHtml(r.customer_contact||'—')}</td><td>${escHtml(r.order_id||r.display_order_code||'—')}</td><td style="font-weight:800">${escHtml(_wrSkuText(r))}</td><td>${escHtml(_wrPaymentMode(r))}</td><td>${escHtml(r.destination||'—')}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
 }
 window.renderSdWebsiteReturns=renderSdWebsiteReturns;
 
@@ -19445,69 +19455,110 @@ function _websiteReturnsFilterRows(){
   const rows=(_websiteReturnsData&&_websiteReturnsData.rows)||[];
   const od1=_wrEl('wrOrderD1')?.value||'',od2=_wrEl('wrOrderD2')?.value||'';
   const d1=_wrEl('wrD1')?.value||'',d2=_wrEl('wrD2')?.value||'';
+  const sd1=_wrEl('wrStatusD1')?.value||'',sd2=_wrEl('wrStatusD2')?.value||'';
   const mode=_wrEl('wrPaymentMode')?.value||'All';
-  const origin=_wrEl('wrOrigin')?.value||'All',destQ=_wrNorm(_wrEl('wrDestination')?.value||''),reason=_wrEl('wrReason')?.value||'All';
+  const origin=_wrEl('wrOrigin')?.value||'All',destQ=_wrNorm(_wrEl('wrDestination')?.value||'');
+  const statusDesc=_wrEl('wrStatusDescription')?.value||'All',statusGroup=_wrEl('wrStatusGroup')?.value||'All';
+  const reason=_wrEl('wrReason')?.value||'All';
   const payMin=_wrNum(_wrEl('wrPayMin')?.value),payMax=_wrNum(_wrEl('wrPayMax')?.value);
   const skuQ=_wrText(_wrEl('wrSku')?.value||'');
   const q=_wrNorm(_wrEl('wrSearch')?.value||'');
   return rows.filter(r=>{
-    const od=_wrText(r.order_date),d=_wrText(r.pickup_date);
+    const od=_wrText(r.order_date),d=_wrText(r.pickup_date),sd=_wrText(r.status_date);
     if(od1&&(!od||od<od1))return false;if(od2&&(!od||od>od2))return false;
     if(d1&&(!d||d<d1))return false;if(d2&&(!d||d>d2))return false;
+    if(sd1&&(!sd||sd<sd1))return false;if(sd2&&(!sd||sd>sd2))return false;
     if(mode!=='All'&&_wrPaymentMode(r)!==mode)return false;
     if(origin!=='All'&&_wrText(r.origin)!==origin)return false;
     if(destQ&&!_wrNorm(r.destination).includes(destQ))return false;
+    if(statusDesc!=='All'&&_wrText(r.status_description)!==statusDesc)return false;
+    if(statusGroup!=='All'&&_wrText(r.status_group)!==statusGroup)return false;
     if(reason!=='All'&&_wrText(r.rto_reason)!==reason)return false;
     if(skuQ&&!_wrRowMatchesSkuQuery(r,skuQ))return false;
     const p=_wrNum(r.payment);
     if(payMin!==null&&(p===null||p<payMin))return false;
     if(payMax!==null&&(p===null||p>payMax))return false;
     if(q){
-      const hay=_wrNorm(`${r.order_id||''} ${r.display_order_code||''} ${r.customer||''} ${r.payment||''} ${r.origin||''} ${r.destination||''} ${r.rto_reason||''}`);
+      const hay=_wrNorm(`${r.order_id||''} ${r.display_order_code||''} ${r.customer||''} ${r.customer_contact||''} ${r.payment||''} ${r.origin||''} ${r.destination||''} ${r.status_description||''} ${r.status_group||''} ${r.status_date||''} ${r.rto_reason||''} ${_wrSkuText(r)} ${_wrPaymentMode(r)}`);
       if(!hay.includes(q))return false;
     }
     return true;
   });
 }
+function _wrTopCounts(rows, getter, limit=8){
+  const m=new Map();
+  (rows||[]).forEach(r=>{const key=_wrText(getter(r));if(!key)return;m.set(key,(m.get(key)||0)+1);});
+  return Array.from(m.entries()).map(([label,count])=>({label,count})).sort((a,b)=>b.count-a.count||a.label.localeCompare(b.label)).slice(0,limit);
+}
+function _wrRenderRanked(id, items, total, emptyText){
+  const el=_wrEl(id);if(!el)return;
+  if(!items.length){el.innerHTML=`<div class="small-note">${escHtml(emptyText||'No data for active filters.')}</div>`;return;}
+  const max=Math.max(...items.map(x=>x.count),1);
+  el.innerHTML=items.map((x,i)=>{
+    const pct=total?x.count*100/total:0,bar=Math.max(4,x.count*100/max);
+    return `<div style="margin:0 0 10px"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div style="font-weight:800;font-size:11px;line-height:1.3">${i+1}. ${escHtml(x.label)}</div><div style="font-weight:900;white-space:nowrap">${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct.toFixed(1)}%)</span></div></div><div style="height:6px;border-radius:999px;background:var(--cn-line);margin-top:5px;overflow:hidden"><div style="height:100%;width:${bar.toFixed(1)}%;background:var(--cn-gold);border-radius:999px"></div></div></div>`;
+  }).join('');
+}
+function _wrMonthLabel(key){
+  const m=String(key||'').match(/^(\d{4})-(\d{2})$/);if(!m)return key;
+  const d=new Date(Number(m[1]),Number(m[2])-1,1);
+  return d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+}
+function renderWebsiteReturnsAnalytics(rows){
+  const total=(rows||[]).length;
+  _wrRenderRanked('wrReasonAnalysis',_wrTopCounts(rows,r=>r.rto_reason||'No RTO reason captured',8),total,'No RTO reasons for active filters.');
+  _wrRenderRanked('wrStatusAnalysis',_wrTopCounts(rows,r=>r.status_description||r.status_group||'No status captured',8),total,'No status data for active filters.');
+  _wrRenderRanked('wrDestinationAnalysis',_wrTopCounts(rows,r=>r.destination||'Unknown destination',8),total,'No destination data for active filters.');
+  const months=new Map();
+  (rows||[]).forEach(r=>{const d=_wrText(r.status_date)||_wrText(r.pickup_date)||_wrText(r.order_date);if(/^\d{4}-\d{2}/.test(d)){const k=d.slice(0,7);months.set(k,(months.get(k)||0)+1);}});
+  const trend=Array.from(months.entries()).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12).map(([k,count])=>({label:_wrMonthLabel(k),count}));
+  _wrRenderRanked('wrTrendAnalysis',trend,Math.max(1,trend.reduce((a,x)=>a+x.count,0)),'No dated return rows for active filters.');
+}
 function renderWebsiteReturns(){
   const body=_wrEl('websiteReturnsBody');
   if(!_websiteReturnsData){
-    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="10" class="ops-empty">Website return data has not loaded yet.</td></tr>';
+    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="13" class="ops-empty">Website return data has not loaded yet.</td></tr>';
     return;
   }
-  const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.order_date||b.pickup_date||'').localeCompare(String(a.order_date||a.pickup_date||''))||String(b.pickup_date||'').localeCompare(String(a.pickup_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
+  const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.status_date||b.pickup_date||b.order_date||'').localeCompare(String(a.status_date||a.pickup_date||a.order_date||''))||String(b.order_date||'').localeCompare(String(a.order_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
   _websiteReturnsFilteredRows=rows;
   const cod=rows.filter(r=>_wrPaymentMode(r)==='COD').length;
   const prepaid=rows.filter(r=>_wrPaymentMode(r)==='Prepaid').length;
   const classified=cod+prepaid;
+  const customerKeys=new Set(rows.map(r=>_wrNorm(r.customer_contact)||_wrNorm(r.customer)).filter(Boolean));
+  const reasonCaptured=rows.filter(r=>_wrText(r.rto_reason)).length;
   const k=_wrEl('wrKpis');
   if(k)k.innerHTML=
-    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),'Filtered Website return shipments')+
+    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),'Unique BlueDart return shipments after active filters')+
     _wrKpi('COD Returns',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
-    _wrKpi('Prepaid Returns',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered returns`);
+    _wrKpi('Prepaid Returns',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
+    _wrKpi('Unique Customers',customerKeys.size.toLocaleString('en-IN'),'Contact number used first, customer name as fallback')+
+    _wrKpi('RTO Reason Captured',reasonCaptured.toLocaleString('en-IN'),`${rows.length?(reasonCaptured*100/rows.length).toFixed(1):'0.0'}% of filtered returns`);
 
+  renderWebsiteReturnsAnalytics(rows);
   const show=rows.slice(0,500),note=_wrEl('wrTableNote');
   if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} filtered returns · showing ${show.length.toLocaleString('en-IN')}${rows.length>show.length?' (export includes all filtered rows)':''}`;
   if(body){
-    if(!show.length)body.innerHTML='<tr><td colspan="10" class="ops-empty">No Website returns match the selected filters.</td></tr>';
-    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td style="font-weight:800;min-width:150px">${escHtml(_wrSkuText(r))}</td><td>${escHtml(r.customer||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+    if(!show.length)body.innerHTML='<tr><td colspan="13" class="ops-empty">No Website returns match the selected filters.</td></tr>';
+    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td style="font-weight:800;min-width:150px">${escHtml(_wrSkuText(r))}</td><td style="font-weight:800;min-width:150px">${escHtml(r.customer||'—')}</td><td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
   }
   const src=_wrEl('wrSourceNote');
   if(src){
     const unknown=Math.max(0,rows.length-classified);
     const modeSource=_wrText(_websiteReturnsData.payment_mode_source)||'Website order COD flag';
-    const validWebsite=Number(_websiteReturnsData.source_rows||_websiteReturnsData.unique_shipments||0);
+    const validWebsite=Number(_websiteReturnsData.source_rows||0);
+    const uniqueShipments=Number(_websiteReturnsData.unique_shipments||0);
     const ignoredNonWebsite=Number(_websiteReturnsData.ignored_non_website_rows||0);
     const sheetRows=Number(_websiteReturnsData.sheet_rows_including_header||0);
     const skuLinked=Number(_websiteReturnsData.sku_linked||0);
-    src.innerHTML=`Live source: <b>BlueDart Return</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website return rows</b>${sheetRows?` out of ${sheetRows.toLocaleString('en-IN')} sheet rows (header included)`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/Designer error rows ignored`:''} · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    src.innerHTML=`Live source: <b>BlueDart Return</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b> · Customer Contact, Status Description and Status Date are read directly from BlueDart · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
   }
 }
 async function loadWebsiteReturns(force=false){
   if(_websiteReturnsLoading)return;
   if(_websiteReturnsData&&!force){renderWebsiteReturns();renderSdWebsiteReturns();return;}
   _websiteReturnsLoading=true;
-  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="10" class="ops-empty">Loading live Website return sheet…</td></tr>';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="13" class="ops-empty">Loading live Website return sheet…</td></tr>';
   try{
     const r=await fetch('/api/website-returns'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
     const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
@@ -19515,29 +19566,32 @@ async function loadWebsiteReturns(force=false){
     _wrSetOptions('wrOrigin',d.filters?.origins||[],'All Origins');
     _wrSetDatalist('wrDestinationList',d.filters?.destinations||[]);
     _wrSetDatalist('wrSkuList',d.filters?.skus||[]);
+    _wrSetOptions('wrStatusDescription',d.filters?.status_descriptions||[],'All Statuses');
+    _wrSetOptions('wrStatusGroup',d.filters?.status_groups||[],'All Groups');
     _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
     renderWebsiteReturns();
     renderSdWebsiteReturns();
   }catch(e){
     _websiteReturnsData=null;
-    if(body)body.innerHTML=`<tr><td colspan="10" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="13" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    ['wrReasonAnalysis','wrStatusAnalysis','wrDestinationAnalysis','wrTrendAnalysis'].forEach(id=>{const el=_wrEl(id);if(el)el.innerHTML='<div class="small-note">Live data load failed.</div>';});
     const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
     const sdNote=_wrEl('sdWebsiteReturnsNote');if(sdNote&&_sdWebsiteReturnsFilterActive())sdNote.textContent='Website return sheet could not be loaded. Use Website Returns > Refresh Live Sheet and try again.';
   }finally{_websiteReturnsLoading=false;}
 }
 function resetWebsiteReturnsFilters(){
-  ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
-  ['wrPaymentMode','wrOrigin','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
+  ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
   renderWebsiteReturns();
 }
 const websiteReturnsApply_d=_debounce(()=>renderWebsiteReturns(),160);
 function exportWebsiteReturnsCsv(){
   const rows=_websiteReturnsFilteredRows||[];if(!rows.length){alert('No Website return rows to export.');return;}
-  const headers=['Order ID','Display Order Code','SKU(s)','Customer','Payment','Order Date','Pickup Date','Origin','Destination','RTO Reason'];
-  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',_wrSkuText(r)==='—'?'':_wrSkuText(r),r.customer||'',r.payment||'',r.order_date||'',r.pickup_date||'',r.origin||'',r.destination||'',r.rto_reason||'']);
+  const headers=['Order ID','Display Order Code','SKU(s)','Customer','Customer Contact','Payment','Payment Mode','Order Date','Pickup Date','Status Description','Status Group','Status Date','Origin','Destination','RTO Reason','WayBill No','Reference No'];
+  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',_wrSkuText(r)==='—'?'':_wrSkuText(r),r.customer||'',r.customer_contact||'',r.payment||'',_wrPaymentMode(r),r.order_date||'',r.pickup_date||'',r.status_description||'',r.status_group||'',r.status_date||'',r.origin||'',r.destination||'',r.rto_reason||'',r.waybill_no||'',r.reference_no||'']);
   _dlCsv(headers,vals,'website_returns_filtered');
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
@@ -22351,6 +22405,38 @@ def _wr_col(df, *names, pos=None):
     return None
 
 
+def _wr_col_exact(df, *names, pos=None):
+    """Resolve a BlueDart column by exact normalized header first.
+
+    This deliberately avoids fuzzy matching `Customer` to `Customer Contact`.
+    """
+    wanted = {re.sub(r"[^a-z0-9]", "", str(n).casefold()) for n in names if n}
+    for c in list(df.columns):
+        key = re.sub(r"[^a-z0-9]", "", str(c).casefold())
+        if key in wanted:
+            return c
+    if isinstance(pos, int) and 0 <= pos < len(df.columns):
+        return df.columns[pos]
+    return None
+
+
+def _wr_contact_value(v):
+    """Keep courier contact numbers readable even when pandas infers numerics."""
+    s = _wr_clean_value(v)
+    if not s:
+        return ""
+    if re.fullmatch(r"[+-]?\d+\.0+", s):
+        return s.split(".", 1)[0]
+    if re.fullmatch(r"[+-]?\d+(?:\.\d+)?[eE][+-]?\d+", s):
+        try:
+            n = float(s)
+            if n.is_integer() and abs(n) < 9_000_000_000_000_000:
+                return str(int(n))
+        except Exception:
+            pass
+    return s
+
+
 def _wr_last_nonblank(old, new):
     nv = _wr_clean_value(new)
     return nv if nv else old
@@ -22368,27 +22454,36 @@ def _load_website_returns(force=False):
         if df is None or df.empty:
             raise ValueError("BlueDart Return sheet is empty")
         cols = list(df.columns)
-        c_channel = _wr_col(df, "Channel", pos=0)
-        c_order_date = _wr_col(df, "Order date", "Order Date", pos=1)
-        c_customer = _wr_col(df, "Coustomer", "Customer", pos=2)
-        c_display_order = _wr_col(df, "Display Order Code", pos=3)
-        c_order_id = _wr_col(df, "Order id", "Order ID", pos=4)
-        c_payment = _wr_col(df, "Payment", pos=5)
-        c_waybill = _wr_col(df, "WayBill No", "Waybill No", "Way Bill No", pos=6)
-        c_ref = _wr_col(df, "Reference No", "Reference Number", pos=7)
-        c_pickup = _wr_col(df, "P/U_Date", "P/U Date", "Pickup Date", pos=8)
-        c_origin = _wr_col(df, "Origin Description", pos=9)
-        c_dest = _wr_col(df, "Destination Description", pos=10)
-        c_consignee = _wr_col(df, "Consignee Name", pos=11)
-        c_status_desc = _wr_col(df, "Status Description", pos=12)
-        c_status_group = _wr_col(df, "Status Group", pos=13)
-        c_status_date = _wr_col(df, "Status Date", pos=14)
+        c_channel = _wr_col_exact(df, "Channel", pos=0)
+        c_order_date = _wr_col_exact(df, "Order date", "Order Date", pos=1)
+        # Current BlueDart layout has Customer Contact in physical column C.
+        # Customer name is Consignee Name (L) unless an older explicit Customer/
+        # Coustomer column exists. Exact matching prevents contact numbers from
+        # being mistaken for customer names.
+        c_contact = _wr_col_exact(
+            df, "Customer Contact", "Customer Contact No", "Customer Contact Number",
+            "Contact No", "Contact Number", "Mobile No", "Mobile Number", "Phone",
+            pos=2,
+        )
+        c_customer = _wr_col_exact(df, "Coustomer", "Customer", "Customer Name", "Buyer Name")
+        c_display_order = _wr_col_exact(df, "Display Order Code", pos=3)
+        c_order_id = _wr_col_exact(df, "Order id", "Order ID", pos=4)
+        c_payment = _wr_col_exact(df, "Payment", pos=5)
+        c_waybill = _wr_col_exact(df, "WayBill No", "Waybill No", "Way Bill No", pos=6)
+        c_ref = _wr_col_exact(df, "Reference No", "Reference Number", pos=7)
+        c_pickup = _wr_col_exact(df, "P/U_Date", "P/U Date", "Pickup Date", pos=8)
+        c_origin = _wr_col_exact(df, "Origin Description", pos=9)
+        c_dest = _wr_col_exact(df, "Destination Description", pos=10)
+        c_consignee = _wr_col_exact(df, "Consignee Name", pos=11)
+        c_status_desc = _wr_col_exact(df, "Status Description", pos=12)
+        c_status_group = _wr_col_exact(df, "Status Group", pos=13)
+        c_status_date = _wr_col_exact(df, "Status Date", pos=14)
         c_weight = _wr_col(df, "Weight", pos=22)
         c_pcs = _wr_col(df, "Pcs", "PCS", pos=24)
         c_exp = _wr_col(df, "Exp Delivery Dat", "Exp Delivery Date", "Expected Delivery Date", pos=25)
         c_new_waybill = _wr_col(df, "New Waybill No", "New WayBill No", pos=27)
         c_sender = _wr_col(df, "Sender", pos=28)
-        c_reason = _wr_col(df, "Rto Reason", "RTO Reason", pos=29)
+        c_reason = _wr_col_exact(df, "Rto Reason", "RTO Reason", pos=29)
         c_mode = _wr_col(df, "Mode", pos=32)
 
         # Pandas has already consumed the header row, so len(df) is the number
@@ -22401,7 +22496,7 @@ def _load_website_returns(force=False):
         shipments = {}
         for _, raw in df.iterrows():
             channel = _wr_clean_value(raw.get(c_channel, "")) if c_channel is not None else ""
-            if channel and channel.strip().casefold() != "website":
+            if channel.strip().casefold() != "website":
                 ignored_non_website_rows += 1
                 continue
             order_id = _wr_clean_value(raw.get(c_order_id, "")) if c_order_id is not None else ""
@@ -22414,14 +22509,15 @@ def _load_website_returns(force=False):
             key_raw = waybill or ("ORDER:" + order_id)
             key = re.sub(r"[^a-z0-9]", "", key_raw.casefold()) or key_raw.casefold()
             source_customer = _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else ""
+            customer_contact = _wr_contact_value(raw.get(c_contact, "")) if c_contact is not None else ""
             consignee_name = _wr_clean_value(raw.get(c_consignee, "")) if c_consignee is not None else ""
             rec = {
                 "channel": channel or "Website",
                 "order_date": _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else "",
-                # BlueDart's historical `Coustomer` column is blank on many newer
-                # records.  `Consignee Name` is the actual customer name there, so
-                # use it as the authoritative fallback instead of showing a dash.
+                # Current tracker keeps the customer name in Consignee Name and
+                # the phone/mobile separately in Customer Contact.
                 "customer": source_customer or consignee_name,
+                "customer_contact": customer_contact,
                 "display_order_code": _wr_clean_value(raw.get(c_display_order, "")) if c_display_order is not None else "",
                 "order_id": order_id,
                 "payment": _wr_clean_value(raw.get(c_payment, "")) if c_payment is not None else "",
@@ -22523,6 +22619,8 @@ def api_website_returns():
             "rto_reasons": sorted({r.get("rto_reason", "") for r in enriched_rows if r.get("rto_reason")}),
             "origins": sorted({r.get("origin", "") for r in enriched_rows if r.get("origin")}),
             "destinations": sorted({r.get("destination", "") for r in enriched_rows if r.get("destination")}),
+            "status_descriptions": sorted({r.get("status_description", "") for r in enriched_rows if r.get("status_description")}),
+            "status_groups": sorted({r.get("status_group", "") for r in enriched_rows if r.get("status_group")}),
             "skus": sorted({sku for r in enriched_rows for sku in (r.get("skus") or []) if sku}),
             "payment_modes": [m for m in ("COD", "Prepaid") if any(r.get("payment_mode") == m for r in enriched_rows)],
         }
