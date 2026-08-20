@@ -7667,7 +7667,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div>
         <div class="ops-kicker">LIVE WEBSITE · BACKEND INVENTORY MAPPING</div>
         <div class="ops-title">Website OOS Audit</div>
-        <div class="ops-sub">Crawls every published SKU on cosanostraa.com, keeps only website Out-of-Stock SKUs, and maps each one to backend Inv Stock. No email automation is included.</div>
+        <div class="ops-sub">Crawls every published SKU on cosanostraa.com, keeps only website Out-of-Stock SKUs, and maps each one to backend Inv Stock + WIP. No email automation is included.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteOosExcel()">Export Email Excel</button>
@@ -7697,11 +7697,11 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div><div class="ops-section-title">All Website Out-of-Stock SKUs</div><div class="small-note" id="woTableNote">Live website OOS variants will appear here.</div></div>
     </div>
     <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:720px">
-      <table class="ops-table" id="websiteOosTable" style="min-width:1220px">
+      <table class="ops-table" id="websiteOosTable" style="min-width:1320px">
         <thead><tr>
-          <th>Photo</th><th>SKU Code</th><th>CN Name</th><th>Product URL</th><th>Website Status</th><th>In Stock Inventory</th><th>Website Sold Qty · Last 7 Days</th>
+          <th>Photo</th><th>SKU Code</th><th>CN Name</th><th>Product URL</th><th>Website Status</th><th>In Stock Inventory</th><th>Inv WIP</th><th>Website Sold Qty · Last 7 Days</th>
         </tr></thead>
-        <tbody id="websiteOosBody"><tr><td colspan="7" class="ops-empty">Open this tab to crawl live cosanostraa.com availability.</td></tr></tbody>
+        <tbody id="websiteOosBody"><tr><td colspan="8" class="ops-empty">Open this tab to crawl live cosanostraa.com availability.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -19701,7 +19701,7 @@ function _woFiltered(){
 function renderWebsiteOos(){
   const body=_woEl('websiteOosBody');
   if(!_websiteOosData){
-    if(body&&!_websiteOosLoading)body.innerHTML='<tr><td colspan="7" class="ops-empty">Website OOS data has not loaded yet.</td></tr>';
+    if(body&&!_websiteOosLoading)body.innerHTML='<tr><td colspan="8" class="ops-empty">Website OOS data has not loaded yet.</td></tr>';
     return;
   }
   const threshold=_woThreshold();
@@ -19740,9 +19740,10 @@ function renderWebsiteOos(){
   if(tableNote)tableNote.textContent=`${rows.length.toLocaleString('en-IN')} shown of ${all.length.toLocaleString('en-IN')} Website OOS SKUs. Rows with Inv Stock ≥ ${threshold} are email flags.`;
 
   if(!body)return;
-  if(!rows.length){body.innerHTML='<tr><td colspan="7" class="ops-empty">No Website OOS SKUs match the current filters.</td></tr>';return;}
+  if(!rows.length){body.innerHTML='<tr><td colspan="8" class="ops-empty">No Website OOS SKUs match the current filters.</td></tr>';return;}
   body.innerHTML=rows.map(r=>{
     const stock=Math.round(_woNum(r.inv_stock));
+    const wip=Math.round(_woNum(r.inv_wip));
     const flagged=stock>=threshold;
     const url=String(r.product_url||'');
     const img=String(r.image_url||'').trim();
@@ -19758,6 +19759,7 @@ function renderWebsiteOos(){
       <td>${url?`<a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:#8a651d;font-weight:850;text-decoration:underline">Open Product</a>`:'—'}</td>
       <td><span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#fde9e7;color:#a52018;font-weight:900">${escHtml(r.website_status||'Out of Stock')}</span></td>
       <td class="${stock>0?'gold':'muted'}" style="font-weight:900">${stock.toLocaleString('en-IN')}</td>
+      <td class="${wip>0?'orange':'muted'}" style="font-weight:900">${wip.toLocaleString('en-IN')}</td>
       <td style="font-weight:900;text-align:right">${_woNum(r.website_sold_qty_7d).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
     </tr>`;
   }).join('');
@@ -19777,7 +19779,7 @@ async function loadWebsiteOos(force=false){
     _websiteOosData=d;
     renderWebsiteOos();
   }catch(e){
-    if(body)body.innerHTML=`<tr><td colspan="7" class="ops-empty">Website OOS live sync failed: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="8" class="ops-empty">Website OOS live sync failed: ${escHtml(e?.message||e)}</td></tr>`;
     const note=_woEl('woSourceNote');if(note)note.textContent='Live sync failed. Existing dashboard data is unchanged; use Refresh Live Website to retry.';
   }finally{
     _websiteOosLoading=false;
