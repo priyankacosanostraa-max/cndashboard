@@ -7082,6 +7082,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
   <button class="menu-item" id="m34" onclick="showTab('returns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M9 7 5 11l4 4"/><path d="M5 11h9a5 5 0 0 1 5 5v2"/><path d="M15 5h4v4"/></svg></span><span>Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m35" onclick="showTab('webreturns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/><path d="m15 17 2 2 4-5"/></svg></span><span>Website Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#1d6f42;color:#fff;font-size:7px;font-weight:900">LIVE</span></button>
+  <button class="menu-item" id="m36" onclick="showTab('weboos')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/><path d="M16 4v5M13.5 6.5H18.5"/></svg></span><span>Website OOS Audit</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">LIVE</span></button>
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
@@ -7657,6 +7658,50 @@ select.lg-in option{background:#fff;color:#1a1610}
           <th>Order Date</th><th>Pickup Date</th><th>Status Description</th><th>Status Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
         </tr></thead>
         <tbody id="websiteReturnsBody"><tr><td colspan="13" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
+      </table>
+    </div></div>
+  </div>
+
+  <div id="vWebsiteOos" class="ops-page" style="display:none">
+    <div class="ops-hero" style="align-items:flex-end">
+      <div>
+        <div class="ops-kicker">LIVE WEBSITE · BACKEND INVENTORY MAPPING</div>
+        <div class="ops-title">Website OOS Audit</div>
+        <div class="ops-sub">Crawls every published SKU on cosanostraa.com, keeps only website Out-of-Stock SKUs, and maps each one to backend Inv Stock. No email automation is included.</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteOosExcel()">Export Email Excel</button>
+        <button class="go-btn" id="woRefreshBtn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="loadWebsiteOos(true)">Refresh Live Website</button>
+      </div>
+    </div>
+
+    <div class="filter-box" style="margin:12px 0 14px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+        <div class="fc"><label class="fl">SKU / CN Name Search</label><input class="fi" id="woSearch" type="search" autocomplete="off" placeholder="SKU, CN Name, product title…" oninput="websiteOosApply_d()"></div>
+        <div class="fc"><label class="fl">Stock View</label><select class="fs" id="woStockView" onchange="renderWebsiteOos()"><option value="All">All Website OOS</option><option value="Sufficient">Sufficient Stock Only</option><option value="Below">Below Sufficient Stock</option></select></div>
+        <div class="fc"><label class="fl">Sufficient Stock Minimum</label><input class="fi" id="woThreshold" type="number" min="1" step="1" value="1" oninput="websiteOosApply_d()"></div>
+        <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebsiteOosFilters()">Reset</button></div>
+      </div>
+      <div id="woSourceNote" class="small-note" style="margin-top:10px;white-space:normal">Open this tab to crawl the live website.</div>
+    </div>
+
+    <div id="woKpis" class="ops-kpis" style="margin:0 0 14px"></div>
+
+    <div class="filter-box" style="margin:0 0 14px;padding:14px 16px">
+      <div class="fl" style="margin-bottom:6px">EMAIL SUBJECT PREVIEW</div>
+      <div id="woEmailSubject" style="font-size:16px;font-weight:900;color:#5f4514">—</div>
+      <div class="small-note" style="margin-top:5px">Excel export contains only sufficient-stock website OOS flags and uses the exact requested columns: SKU code, CN Name, Product URL, Website Status, In stock inventory.</div>
+    </div>
+
+    <div class="ops-section-head">
+      <div><div class="ops-section-title">All Website Out-of-Stock SKUs</div><div class="small-note" id="woTableNote">Live website OOS variants will appear here.</div></div>
+    </div>
+    <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:720px">
+      <table class="ops-table" id="websiteOosTable" style="min-width:980px">
+        <thead><tr>
+          <th>SKU Code</th><th>CN Name</th><th>Product URL</th><th>Website Status</th><th>In Stock Inventory</th>
+        </tr></thead>
+        <tbody id="websiteOosBody"><tr><td colspan="5" class="ops-empty">Open this tab to crawl live cosanostraa.com availability.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -10029,6 +10074,7 @@ const MENU_TAB_META = {
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m34: {name:"Returns",          desc:"Top return SKUs with date, SKU/CN Name and channel filters."},
   m35: {name:"Website Returns",  desc:"BlueDart Website returns with customer contact, pickup/status dates, SKU search, COD/Prepaid and return analysis."},
+  m36: {name:"Website OOS Audit", desc:"Live cosanostraa.com OOS SKUs mapped to backend inventory, with email-ready Excel export."},
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
@@ -19622,6 +19668,139 @@ function exportWebsiteReturnsCsv(){
 }
 window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
+/* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
+   Live Shopify availability + backend Inv Stock.  This tab intentionally does
+   NOT send mail; it only produces the exact email-ready Excel data requested. */
+let _websiteOosData = null;
+let _websiteOosFilteredRows = [];
+let _websiteOosLoading = false;
+
+function _woEl(id){ return document.getElementById(id); }
+function _woNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+function _woThreshold(){ return Math.max(1, Math.floor(_woNum(_woEl('woThreshold')?.value)||1)); }
+function _woEmailRows(){
+  const threshold=_woThreshold();
+  return ((_websiteOosData&&_websiteOosData.rows)||[]).filter(r=>_woNum(r.inv_stock)>=threshold);
+}
+function _woFiltered(){
+  const rows=(_websiteOosData&&_websiteOosData.rows)||[];
+  const q=String(_woEl('woSearch')?.value||'').trim().toLowerCase();
+  const view=_woEl('woStockView')?.value||'All';
+  const threshold=_woThreshold();
+  return rows.filter(r=>{
+    const stock=_woNum(r.inv_stock);
+    if(view==='Sufficient' && stock<threshold)return false;
+    if(view==='Below' && stock>=threshold)return false;
+    if(q){
+      const hay=`${r.sku||''} ${r.cn_name||''} ${r.product_title||''} ${r.product_url||''}`.toLowerCase();
+      if(!hay.includes(q))return false;
+    }
+    return true;
+  });
+}
+function renderWebsiteOos(){
+  const body=_woEl('websiteOosBody');
+  if(!_websiteOosData){
+    if(body&&!_websiteOosLoading)body.innerHTML='<tr><td colspan="5" class="ops-empty">Website OOS data has not loaded yet.</td></tr>';
+    return;
+  }
+  const threshold=_woThreshold();
+  const all=(_websiteOosData.rows||[]);
+  const flags=all.filter(r=>_woNum(r.inv_stock)>=threshold);
+  const rows=_woFiltered().sort((a,b)=>_woNum(b.inv_stock)-_woNum(a.inv_stock)||String(a.sku||'').localeCompare(String(b.sku||'')));
+  _websiteOosFilteredRows=rows;
+
+  const kpis=_woEl('woKpis');
+  if(kpis){
+    const matched=all.filter(r=>r.backend_match).length;
+    const below=all.length-flags.length;
+    kpis.innerHTML=`
+      <div class="ops-kpi"><div class="ops-kpi-l">Website SKUs Crawled</div><div class="ops-kpi-v">${Math.round(_woNum(_websiteOosData.website_skus)).toLocaleString('en-IN')}</div><div class="ops-kpi-s">Published variant SKUs</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-l">Website OOS SKUs</div><div class="ops-kpi-v">${all.length.toLocaleString('en-IN')}</div><div class="ops-kpi-s">All live OOS SKUs shown below</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-l">Sufficient Stock Flags</div><div class="ops-kpi-v" style="color:#b3261e">${flags.length.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Backend Inv Stock ≥ ${threshold}</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-l">Below Threshold</div><div class="ops-kpi-v">${below.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Backend Inv Stock &lt; ${threshold}</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-l">Backend SKU Matched</div><div class="ops-kpi-v">${matched.toLocaleString('en-IN')}</div><div class="ops-kpi-s">Exact normalized SKU match</div></div>`;
+  }
+
+  const subj=_woEl('woEmailSubject');
+  if(subj)subj.textContent=`${flags.length} SKUs with Sufficient stock is showing OOS`;
+
+  const note=_woEl('woSourceNote');
+  if(note){
+    const checked=_websiteOosData.checked_at?new Date(_websiteOosData.checked_at).toLocaleString('en-IN'):'';
+    const pages=_woNum(_websiteOosData.website_pages);
+    const products=_woNum(_websiteOosData.website_products);
+    const unknown=_woNum(_websiteOosData.availability_unknown_skus);
+    note.innerHTML=`Live source: <b>cosanostraa.com/products.json</b> · ${products.toLocaleString('en-IN')} products across ${pages.toLocaleString('en-IN')} page${pages===1?'':'s'} · backend source: <b>${escHtml(_websiteOosData.inventory_source||'All Product')}</b> · website availability is read from Shopify variant <b>available</b> · exact SKU mapping after case/space/underscore normalization${unknown?` · ${unknown.toLocaleString('en-IN')} SKU(s) with unknown availability excluded`:''}${checked?` · last live check ${escHtml(checked)}`:''}.`;
+  }
+  const tableNote=_woEl('woTableNote');
+  if(tableNote)tableNote.textContent=`${rows.length.toLocaleString('en-IN')} shown of ${all.length.toLocaleString('en-IN')} Website OOS SKUs. Rows with Inv Stock ≥ ${threshold} are email flags.`;
+
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="5" class="ops-empty">No Website OOS SKUs match the current filters.</td></tr>';return;}
+  body.innerHTML=rows.map(r=>{
+    const stock=Math.round(_woNum(r.inv_stock));
+    const flagged=stock>=threshold;
+    const url=String(r.product_url||'');
+    const sku=String(r.sku||'');
+    const skuEsc=sku.replace(/'/g,"\\'");
+    return `<tr${flagged?' style="background:rgba(179,38,30,.045)"':''}>
+      <td><button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(sku)}</button>${flagged?'<div class="small-note" style="color:#b3261e;font-weight:900;margin-top:3px">SUFFICIENT STOCK FLAG</div>':''}</td>
+      <td>${escHtml(r.cn_name||r.product_title||'—')}</td>
+      <td>${url?`<a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:#8a651d;font-weight:850;text-decoration:underline">Open Product</a>`:'—'}</td>
+      <td><span style="display:inline-flex;padding:4px 8px;border-radius:999px;background:#fde9e7;color:#a52018;font-weight:900">${escHtml(r.website_status||'Out of Stock')}</span></td>
+      <td class="${stock>0?'gold':'muted'}" style="font-weight:900">${stock.toLocaleString('en-IN')}</td>
+    </tr>`;
+  }).join('');
+}
+async function loadWebsiteOos(force=false){
+  if(_websiteOosLoading)return;
+  if(_websiteOosData&&!force){renderWebsiteOos();return;}
+  _websiteOosLoading=true;
+  const body=_woEl('websiteOosBody');
+  const btn=_woEl('woRefreshBtn');
+  if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+  if(body)body.innerHTML='<tr><td colspan="5" class="ops-empty">Crawling live cosanostraa.com SKUs and mapping backend inventory…</td></tr>';
+  try{
+    const r=await fetch('/api/website-oos'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d?.error||`HTTP ${r.status}`);
+    _websiteOosData=d;
+    renderWebsiteOos();
+  }catch(e){
+    if(body)body.innerHTML=`<tr><td colspan="5" class="ops-empty">Website OOS live sync failed: ${escHtml(e?.message||e)}</td></tr>`;
+    const note=_woEl('woSourceNote');if(note)note.textContent='Live sync failed. Existing dashboard data is unchanged; use Refresh Live Website to retry.';
+  }finally{
+    _websiteOosLoading=false;
+    if(btn){btn.disabled=false;btn.textContent='Refresh Live Website';}
+  }
+}
+function resetWebsiteOosFilters(){
+  const q=_woEl('woSearch');if(q)q.value='';
+  const v=_woEl('woStockView');if(v)v.value='All';
+  const t=_woEl('woThreshold');if(t)t.value='1';
+  renderWebsiteOos();
+}
+const websiteOosApply_d=_debounce(()=>renderWebsiteOos(),140);
+async function exportWebsiteOosExcel(){
+  if(!_websiteOosData){await loadWebsiteOos(false);}
+  const threshold=_woThreshold();
+  const rows=_woEmailRows();
+  if(!rows.length){alert(`No Website OOS SKU has backend Inv Stock ≥ ${threshold}.`);return;}
+  try{
+    const resp=await fetch('/api/website-oos/export.xlsx',{method:'POST',headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},body:JSON.stringify({threshold,rows:rows.map(r=>({sku:r.sku,cn_name:r.cn_name||r.product_title||'',product_url:r.product_url||'',website_status:r.website_status||'Out of Stock',inv_stock:Math.round(_woNum(r.inv_stock))}))})});
+    if(!resp.ok){let msg=`HTTP ${resp.status}`;try{const d=await resp.json();msg=d?.error||msg;}catch(_e){}throw new Error(msg);}
+    const blob=await resp.blob();
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`${rows.length}_SKUs_with_Sufficient_stock_showing_OOS.xlsx`;
+    document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+  }catch(e){alert('Excel export failed: '+(e?.message||e));}
+}
+// Keep the visible OOS audit fresh without any email/background automation.
+setInterval(()=>{if(currentTab==='weboos'&&document.visibilityState==='visible'&&!_websiteOosLoading){loadWebsiteOos(true);}},300000);
+window.loadWebsiteOos=loadWebsiteOos;window.renderWebsiteOos=renderWebsiteOos;window.resetWebsiteOosFilters=resetWebsiteOosFilters;window.websiteOosApply_d=websiteOosApply_d;window.exportWebsiteOosExcel=exportWebsiteOosExcel;
+
+
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
   const csv = [headers].concat(rows).map(r => r.map(c => {
@@ -20933,6 +21112,7 @@ showTab = function(t){
     skudetails: {id: 'vSkudetails', btn: 'm5'},
     returns: {id: 'vReturns', btn: 'm34'},
     webreturns: {id: 'vWebsiteReturns', btn: 'm35'},
+    weboos: {id: 'vWebsiteOos', btn: 'm36'},
     insights: {id: 'vInsights', btn: 'm6'},
     target: {id: 'vTarget', btn: 'm10'},
     discount: {id: 'vDiscount', btn: 'm12'},
@@ -20990,6 +21170,7 @@ showTab = function(t){
       skudetails: 'SKU DETAILS',
       returns: 'RETURNS',
       webreturns: 'WEBSITE RETURNS',
+      weboos: 'WEBSITE OOS AUDIT',
       insights: 'INSIGHTS',
       target: 'TARGET',
       discount: 'DISCOUNTS',
@@ -21029,6 +21210,7 @@ showTab = function(t){
   if (t === 'repeat')   setTimeout(()=>{ try{ renderRoSkuChecklist(); applyRO(); }catch(e){console.error(e);} }, 0);
   if (t === 'returns')  setTimeout(()=>{ try{ loadReturns(); }catch(e){console.error(e);} }, 0);
   if (t === 'webreturns') setTimeout(()=>{ try{ loadWebsiteReturns(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'weboos') setTimeout(()=>{ try{ loadWebsiteOos(false); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
@@ -22631,6 +22813,305 @@ def _load_website_returns(force=False):
             return _WEBSITE_RETURNS_CACHE["rows"]
         raise
 
+
+
+# ════════════════════════════════════════════════════════════════
+#  LIVE WEBSITE OOS AUDIT
+#  No email automation: this only crawls the live Shopify catalogue, maps
+#  Website OOS SKUs to backend Inv Stock, serves the dashboard tab, and exports
+#  the exact email-ready Excel format requested by operations.
+# ════════════════════════════════════════════════════════════════
+_WEBSITE_OOS_CACHE = {"payload": None, "ts": 0.0}
+_WEBSITE_OOS_TTL = 180
+_WEBSITE_OOS_LOCK = threading.Lock()
+
+def _website_oos_bool(v):
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return None
+    s = str(v).strip().lower()
+    if s in ("true", "1", "yes", "y", "available", "in stock", "instock"):
+        return True
+    if s in ("false", "0", "no", "n", "unavailable", "out of stock", "outofstock", "sold out"):
+        return False
+    return None
+
+def _website_oos_fetch_live_products():
+    """Fetch the complete public Shopify catalogue with strict completeness.
+
+    Unlike the background CN-name loader, this audit refuses a partial crawl:
+    if any page fails, the API returns an error (or an already cached complete
+    payload) rather than falsely claiming that missing pages have no OOS SKUs.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    products_all = []
+    pages = 0
+    for page in range(1, 61):
+        url = f"{CN_STORE_URL}/products.json?limit=250&page={page}&_={int(time.time())}"
+        r = requests.get(url, headers=headers, timeout=(6, 18))
+        if not r.ok:
+            raise RuntimeError(f"cosanostraa.com products page {page} returned HTTP {r.status_code}")
+        try:
+            payload = r.json() or {}
+        except Exception as e:
+            raise RuntimeError(f"cosanostraa.com products page {page} returned invalid JSON: {e}")
+        products = payload.get("products") or []
+        if not isinstance(products, list):
+            raise RuntimeError(f"cosanostraa.com products page {page} has invalid products payload")
+        pages += 1
+        if not products:
+            return products_all, pages
+        products_all.extend(products)
+        if len(products) < 250:
+            return products_all, pages
+    raise RuntimeError("cosanostraa.com catalogue exceeded 60 pages; audit stopped to avoid incomplete results")
+
+def _build_website_oos_report(force=False):
+    now = time.time()
+    cached = _WEBSITE_OOS_CACHE.get("payload")
+    if (not force and cached is not None and now - float(_WEBSITE_OOS_CACHE.get("ts") or 0) < _WEBSITE_OOS_TTL):
+        return cached
+
+    with _WEBSITE_OOS_LOCK:
+        now = time.time()
+        cached = _WEBSITE_OOS_CACHE.get("payload")
+        if (not force and cached is not None and now - float(_WEBSITE_OOS_CACHE.get("ts") or 0) < _WEBSITE_OOS_TTL):
+            return cached
+        try:
+            products, page_count = _website_oos_fetch_live_products()
+            if not products:
+                raise RuntimeError("cosanostraa.com returned zero products; refusing to publish an empty OOS audit")
+
+            # Manual live refresh also refreshes backend All Product inventory;
+            # ordinary loads can use the short Operations inventory cache.
+            inv_rows, inv_meta = _build_operations_inventory(force=force)
+            inv_map = {}
+            for r in (inv_rows or []):
+                key = _cn_normalize(r.get("sku", ""))
+                if not key:
+                    continue
+                rec = {
+                    "inv_stock": max(0, to_int(r.get("inv_stock", 0))),
+                    "blocked_qty": max(0, to_int(r.get("blocked_qty", 0))),
+                    "inv_wip": max(0, to_int(r.get("inv_wip", 0))),
+                }
+                old = inv_map.get(key)
+                if old:
+                    old["inv_stock"] = max(old["inv_stock"], rec["inv_stock"])
+                    old["blocked_qty"] = max(old["blocked_qty"], rec["blocked_qty"])
+                    old["inv_wip"] = max(old["inv_wip"], rec["inv_wip"])
+                else:
+                    inv_map[key] = rec
+
+            master_map = {}
+            try:
+                master_rows = ((CACHE.get("data") or [None])[0] or [])
+            except Exception:
+                master_rows = []
+            if not master_rows:
+                try:
+                    master_rows = (get_data(False) or [None])[0] or []
+                except Exception:
+                    master_rows = []
+            for item in master_rows:
+                key = _cn_normalize((item or {}).get("sku", ""))
+                if key and key not in master_map:
+                    master_map[key] = item
+
+            # Aggregate duplicate published variant SKUs. A SKU is OOS only if
+            # every published occurrence has a known `available` value and none
+            # of those occurrences is available. This prevents duplicate product
+            # listings from generating a false OOS flag.
+            sku_web = {}
+            for p in products:
+                title = clean((p or {}).get("title", ""))
+                handle = clean((p or {}).get("handle", ""))
+                for v in ((p or {}).get("variants") or []):
+                    sku = clean((v or {}).get("sku", ""))
+                    if not sku:
+                        continue
+                    key = _cn_normalize(sku)
+                    if not key:
+                        continue
+                    variant_id = clean((v or {}).get("id", ""))
+                    if handle:
+                        product_url = f"{CN_STORE_URL}/products/{handle}"
+                        if variant_id:
+                            product_url += f"?variant={variant_id}"
+                    else:
+                        product_url = CN_STORE_URL
+                    available = _website_oos_bool((v or {}).get("available"))
+                    rec = sku_web.get(key)
+                    if rec is None:
+                        rec = {
+                            "sku": sku, "product_title": title, "product_url": product_url,
+                            "occurrences": 0, "availability_known": 0, "any_available": False,
+                        }
+                        sku_web[key] = rec
+                    rec["occurrences"] += 1
+                    if available is not None:
+                        rec["availability_known"] += 1
+                        if available:
+                            rec["any_available"] = True
+                    # Prefer a real handle URL/title if the first duplicate was sparse.
+                    if (not rec.get("product_title")) and title:
+                        rec["product_title"] = title
+                    if (not rec.get("product_url") or rec.get("product_url") == CN_STORE_URL) and handle:
+                        rec["product_url"] = product_url
+
+            oos_rows = []
+            unknown_availability = 0
+            for key, web in sku_web.items():
+                if web["any_available"]:
+                    continue
+                if web["availability_known"] != web["occurrences"]:
+                    unknown_availability += 1
+                    continue
+                inv = inv_map.get(key) or {}
+                master_item = master_map.get(key) or {}
+                cn_name = clean(master_item.get("cn_name", "")) or clean(web.get("product_title", "")) or web.get("sku", "")
+                oos_rows.append({
+                    "sku": web.get("sku", ""),
+                    "cn_name": cn_name,
+                    "product_title": web.get("product_title", ""),
+                    "product_url": web.get("product_url", ""),
+                    "website_status": "Out of Stock",
+                    "inv_stock": max(0, to_int(inv.get("inv_stock", 0))),
+                    "blocked_qty": max(0, to_int(inv.get("blocked_qty", 0))),
+                    "inv_wip": max(0, to_int(inv.get("inv_wip", 0))),
+                    "backend_match": bool(key in inv_map),
+                })
+
+            oos_rows.sort(key=lambda r: (-int(r.get("inv_stock") or 0), str(r.get("sku") or "").upper()))
+            payload = {
+                "rows": oos_rows,
+                "website_products": len(products),
+                "website_pages": page_count,
+                "website_skus": len(sku_web),
+                "website_oos_skus": len(oos_rows),
+                "oos_with_backend_stock": sum(1 for r in oos_rows if int(r.get("inv_stock") or 0) > 0),
+                "oos_without_backend_stock": sum(1 for r in oos_rows if int(r.get("inv_stock") or 0) <= 0),
+                "backend_matched_oos_skus": sum(1 for r in oos_rows if r.get("backend_match")),
+                "availability_unknown_skus": unknown_availability,
+                "inventory_source": str((inv_meta or {}).get("source") or "All Product"),
+                "inventory_stock_column": str((inv_meta or {}).get("stock_column") or "Inv Stock"),
+                "checked_at": datetime.now(TZ).isoformat(),
+                "website_source": f"{CN_STORE_URL}/products.json",
+            }
+            _WEBSITE_OOS_CACHE.update({"payload": payload, "ts": time.time()})
+            return payload
+        except Exception:
+            # A complete previous crawl is safer than a partial new one. Manual
+            # refresh still reports failure if no complete cache exists.
+            if cached is not None and not force:
+                return cached
+            raise
+
+@app.route("/api/website-oos")
+def api_website_oos():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        force = request.args.get("force", "0").strip().lower() in ("1", "true", "yes")
+        return jsonify(_build_website_oos_report(force=force))
+    except Exception as e:
+        return jsonify({"error": "Website OOS live audit failed: " + str(e)[:400]}), 502
+
+@app.route("/api/website-oos/export.xlsx", methods=["POST"])
+def api_website_oos_export_xlsx():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        body = request.get_json(silent=True) or {}
+        threshold = max(1, to_int(body.get("threshold", 1)))
+        raw_rows = body.get("rows") or []
+        rows = []
+        seen = set()
+        for r in raw_rows:
+            sku = clean((r or {}).get("sku", ""))
+            if not sku:
+                continue
+            key = _cn_normalize(sku)
+            if not key or key in seen:
+                continue
+            inv_stock = max(0, to_int((r or {}).get("inv_stock", 0)))
+            if inv_stock < threshold:
+                continue
+            seen.add(key)
+            rows.append({
+                "SKU code": sku,
+                "CN Name": clean((r or {}).get("cn_name", "")),
+                "Product URL": clean((r or {}).get("product_url", "")),
+                "Website Status": clean((r or {}).get("website_status", "")) or "Out of Stock",
+                "In stock inventory": inv_stock,
+            })
+        rows.sort(key=lambda x: (-x["In stock inventory"], x["SKU code"].upper()))
+        if not rows:
+            return jsonify({"error": f"No Website OOS SKU has backend Inv Stock >= {threshold}."}), 404
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "OOS Stock Flags"
+        subject = f"{len(rows)} SKUs with Sufficient stock is showing OOS"
+        ws.merge_cells("A1:E1")
+        ws["A1"] = subject
+        ws["A1"].font = Font(bold=True, size=15, color="7A1C16")
+        ws["A1"].fill = PatternFill("solid", fgColor="FDE9E7")
+        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[1].height = 27
+        ws.merge_cells("A2:E2")
+        ws["A2"] = f"Live Website OOS audit | Sufficient stock threshold: {threshold} | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}"
+        ws["A2"].font = Font(italic=True, size=9, color="6B6258")
+
+        headers = ["SKU code", "CN Name", "Product URL", "Website Status", "In stock inventory"]
+        header_row = 4
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(header_row, c, h)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="8C6A24")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin = Side(style="thin", color="DDD5C5")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        for r_idx, row in enumerate(rows, header_row + 1):
+            for c_idx, h in enumerate(headers, 1):
+                cell = ws.cell(r_idx, c_idx, row[h])
+                cell.border = border
+                cell.alignment = Alignment(vertical="top", wrap_text=(h in ("CN Name", "Product URL")))
+            url_cell = ws.cell(r_idx, 3)
+            if str(url_cell.value or "").startswith(("http://", "https://")):
+                url_cell.hyperlink = str(url_cell.value)
+                url_cell.style = "Hyperlink"
+            ws.cell(r_idx, 5).number_format = "#,##0"
+
+        for cell in ws[header_row]:
+            cell.border = border
+        ws.freeze_panes = "A5"
+        ws.auto_filter.ref = f"A{header_row}:E{header_row + len(rows)}"
+        widths = [18, 42, 60, 20, 20]
+        for i, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"{len(rows)}_SKUs_with_Sufficient_stock_showing_OOS_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+        resp.headers["X-Email-Subject"] = subject
+        return resp
+    except Exception as e:
+        return jsonify({"error": "Website OOS Excel export failed: " + str(e)[:400]}), 500
 
 @app.route("/api/website-returns")
 def api_website_returns():
