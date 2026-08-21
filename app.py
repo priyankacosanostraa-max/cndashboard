@@ -7101,16 +7101,16 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select id="lgRole" hidden aria-hidden="true"><option value="admin">Admin Login</option><option value="employee">Employee Login</option></select>
 
       <label class="lg-label" for="lgUser">Username</label>
-      <input id="lgUser" class="lg-in" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
+      <input id="lgUser" name="username" class="lg-in" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
       <label class="lg-label" for="lgPass">Password</label>
       <div class="lg-pass-wrap">
-        <input id="lgPass" class="lg-in" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="detectLoginCaps(event);if(event.key==='Enter')doLogin()" onkeyup="detectLoginCaps(event)" onblur="hideLoginCaps()">
+        <input id="lgPass" name="password" class="lg-in" type="password" placeholder="Enter password" autocomplete="current-password" onkeydown="detectLoginCaps(event);if(event.key==='Enter')doLogin()" onkeyup="detectLoginCaps(event)" onblur="hideLoginCaps()">
         <button class="lg-show-pass" id="lgShowPass" type="button" aria-label="Show password" onclick="toggleLoginPassword()">Show</button>
       </div>
       <div id="lgCaps" class="lg-caps">Caps Lock is on</div>
 
       <div class="lg-login-options">
-        <label class="lg-remember"><input type="checkbox" checked><span>Remember this device</span></label>
+        <label class="lg-remember"><input id="lgRemember" name="remember" type="checkbox" checked><span>Remember this device</span></label>
         <span class="lg-encrypted"><i aria-hidden="true"></i>Encrypted</span>
       </div>
       <div id="lgErr" class="lg-error" role="status" aria-live="polite"></div>
@@ -13015,12 +13015,44 @@ function startWarmupPoll(){
 }
 function stopWarmupPoll(){ if (_warmPoll){ clearInterval(_warmPoll); _warmPoll = null; } }
 
-// Har refresh/reload par DOBARA login maange — auto-restore hata diya.
-// (Pehle /api/me se session restore ho jati thi; ab nahi.)
-document.addEventListener('DOMContentLoaded', () => {
+// Existing authenticated session ko refresh/reload par automatically restore karo.
+// Remember this device checked ho to server cookie long-lived rehti hai; unchecked
+// ho to browser-session cookie refresh par phir bhi valid rehti hai, browser close
+// hone ke baad expire hoti hai. Password ko localStorage me kabhi store nahi karte.
+function restoreRememberedLoginFields(){
+  try {
+    const remembered = localStorage.getItem('cnRememberDevice') === '1';
+    const rem = document.getElementById('lgRemember');
+    if (rem && remembered) rem.checked = true;
+    if (!remembered) return;
+    const savedUser = localStorage.getItem('cnRememberUser') || '';
+    const savedRole = localStorage.getItem('cnRememberRole') || 'admin';
+    const u = document.getElementById('lgUser');
+    if (u && savedUser && !u.value) u.value = savedUser;
+    if (typeof setLoginRoleChoice === 'function') setLoginRoleChoice(savedRole);
+  } catch(e){}
+}
+
+async function restoreLoginSession(){
   setLoginGateVisible(true);
-  const app = document.getElementById('appRoot');   if (app) app.style.display = 'none';
-});
+  const app = document.getElementById('appRoot');
+  if (app) app.style.display = 'none';
+  restoreRememberedLoginFields();
+  try {
+    const r = await fetch('/api/me', {
+      cache:'no-store', credentials:'same-origin',
+      headers:{'ngrok-skip-browser-warning':'true'}
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && d.role) {
+      enterApp(d.role);
+      return;
+    }
+  } catch(e){}
+}
+
+document.addEventListener('DOMContentLoaded', restoreLoginSession);
 
 function applyRoleUI(){
   const isEmployee = LOGIN_ROLE === 'employee';
@@ -13210,11 +13242,12 @@ async function doLogin(){
   if (submitText) submitText.textContent = 'Verifying access…';
   const u = (document.getElementById('lgUser')?.value || '').trim();
   const p = (document.getElementById('lgPass')?.value || '');
+  const remember = document.getElementById('lgRemember')?.checked !== false;
   const err = document.getElementById('lgErr');
   let ok = false, role = 'admin';
   try{
-    const r = await fetch('/api/login', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},
-      body: JSON.stringify({username:u, password:p})});
+    const r = await fetch('/api/login', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'},
+      body: JSON.stringify({username:u, password:p, remember})});
     const d = await r.json();
     ok = !!d.ok; role = d.role || 'admin';
   } catch(e){ ok = false; }
@@ -13222,6 +13255,17 @@ async function doLogin(){
   if (ok) {
     if (err) err.textContent = '';
     if (submitText) submitText.textContent = 'Access verified';
+    try {
+      if (remember) {
+        localStorage.setItem('cnRememberDevice', '1');
+        localStorage.setItem('cnRememberUser', u);
+        localStorage.setItem('cnRememberRole', role);
+      } else {
+        localStorage.removeItem('cnRememberDevice');
+        localStorage.removeItem('cnRememberUser');
+        localStorage.removeItem('cnRememberRole');
+      }
+    } catch(e){}
     playLoginSuccessSound();
     try { enterApp(role); } catch(e){ console.error('Login flow error:', e); enterApp(role); }
   } else {
@@ -13256,8 +13300,9 @@ window.doLogout = doLogout;
 document.addEventListener('DOMContentLoaded', () => {
   const r = document.getElementById('lgRole'); if (r) r.addEventListener('change', applyRoleUI);
   setLoginRoleChoice('admin');
+  restoreRememberedLoginFields();
   updateLoginDate();
-  const u = document.getElementById('lgUser'); if (u) u.focus();
+  const u = document.getElementById('lgUser'); if (u && !u.value) u.focus();
 
   window.addEventListener('paste', handleFinderPaste);
   window.addEventListener('paste', handleBulkFinderPaste);
@@ -22553,14 +22598,21 @@ app = Flask(__name__)
 # from office Wi-Fi, home Wi-Fi or a mobile hotspot.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
-app.secret_key = os.environ.get("SECRET_KEY", "cosa-nostraa-" + base64.b64encode(os.urandom(18)).decode())
+# IMPORTANT: session signing key must stay stable across refreshes, Railway restarts
+# and multi-worker deployments. A random per-process key invalidates every existing
+# login cookie. Set SECRET_KEY once in production; the stable fallback keeps the
+# dashboard usable even when that environment variable is missing.
+app.secret_key = (
+    os.environ.get("SECRET_KEY")
+    or os.environ.get("FLASK_SECRET_KEY")
+    or "cosa-nostraa-management-stable-session-v1"
+)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = bool(DEPLOY_HOST)
 app.config["PREFERRED_URL_SCHEME"] = "https" if DEPLOY_HOST else "http"
-# Session ab PERMANENT nahi — browser band hote hi / refresh par dobara login.
-# (Frontend bhi har load par login gate dikhata hai.)
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 
 # ── server-side users (production: env vars se override karo) ──
 USERS = {
@@ -22601,17 +22653,26 @@ def api_login():
     d = request.get_json(silent=True) or {}
     u = str(d.get("username") or "").strip()
     pw = str(d.get("password") or "")
+    remember = bool(d.get("remember", True))
     rec = USERS.get(u)
     if rec and rec[0] == pw:
-        session.permanent = False   # browser-session cookie (refresh par dobara login)
+        # Remember checked -> 30-day renewable signed cookie. Unchecked ->
+        # normal browser-session cookie. Both survive an ordinary page refresh.
+        session.permanent = remember
         session["role"] = rec[1]
         session["user"] = u
-        return jsonify({"ok": True, "role": rec[1]})
+        session["remember"] = remember
+        session.modified = True
+        return jsonify({"ok": True, "role": rec[1], "remember": remember})
     return jsonify({"ok": False, "error": "Invalid username or password."}), 401
 
 @app.route("/api/me")
 def api_me():
-    return jsonify({"role": session.get("role"), "user": session.get("user")})
+    return jsonify({
+        "role": session.get("role"),
+        "user": session.get("user"),
+        "remember": bool(session.get("remember", False)),
+    })
 
 @app.route("/api/logout", methods=["POST"])
 def api_logout():
