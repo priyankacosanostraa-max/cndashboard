@@ -9016,6 +9016,19 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
   <div id="drgContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
+      <div class="insights-sub">Website, Amazon, Flipkart, Myntra, Nykaa, Ajio and Tata use their own source-sheet selling-price columns. Remaining channels keep the existing cossa_orderdate revenue logic.</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRGMarketplace()">Export CSV</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDRGMarketplaceExcel()">Export Excel</button>
+    </div>
+  </div>
+  <div id="drgMarketplaceContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -14067,6 +14080,101 @@ function exportDRGExcel(){
   window.location.href = '/api/daily_revenue_glimpse/export.xlsx';
 }
 window.loadDRG = loadDRG; window.exportDRG = exportDRG; window.exportDRGExcel = exportDRGExcel;
+
+
+/* -- DAILY REVENUE GLIMPSE: source-sheet selling price version -- */
+let _drgMarketplaceData = null;
+function loadDRGMarketplace(force=false){
+  const host = document.getElementById('drgMarketplaceContent');
+  if (!host) return;
+  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
+  const url = '/api/daily_revenue_glimpse_marketplace' + (force ? '?fresh=1' : '');
+  fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => {
+      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      _drgMarketplaceData = d;
+      renderDRGMarketplaceTable();
+    })
+    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+}
+function renderDRGMarketplaceTable(){
+  const host = document.getElementById('drgMarketplaceContent');
+  const d = _drgMarketplaceData;
+  if (!host || !d) return;
+  const t = d.totals || {};
+  const pctCell = (tgt, ach) => {
+    if (!tgt) return '';
+    const cls = ach >= 100 ? 'green' : ach >= 70 ? 'orange' : 'red';
+    return `<span class="${cls}" style="font-weight:800">${ach}%</span>`;
+  };
+  const rowsHtml = (d.rows||[]).map(r => `<tr>
+      <td style="font-weight:700">${escHtml(r.channel)}</td>
+      <td style="font-weight:800">${fmt(r.ytd)}</td>
+      <td>${fmt(r.last_month)}</td>
+      <td style="font-weight:800">${fmt(r.mtd)}</td>
+      <td>${fmt(r.day_before)}</td>
+      <td>${fmt(r.yesterday)}</td>
+      <td>${r.mtd_target ? fmt(r.mtd_target) : 'NA'}</td>
+      <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
+    </tr>`).join('');
+  const totalRow = `<tr style="background:#eef7ea;font-weight:900">
+      <td>TOTAL</td>
+      <td>${fmt(t.ytd)}</td>
+      <td>${fmt(t.last_month)}</td>
+      <td>${fmt(t.mtd)}</td>
+      <td>${fmt(t.day_before)}</td>
+      <td>${fmt(t.yesterday)}</td>
+      <td>${t.mtd_target ? fmt(t.mtd_target) : 'NA'}</td>
+      <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
+    </tr>`;
+  const warnings = Array.isArray(d.source_errors) && d.source_errors.length
+    ? `<p style="color:#a33;font-size:.75rem;margin:6px 0 10px"><b>Source warning:</b> ${d.source_errors.map(escHtml).join(' | ')}</p>`
+    : '';
+  host.innerHTML = `
+    <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 6px">
+      YTD: ${escHtml(d.fy_label||'')} &nbsp;|&nbsp; Last Month: ${escHtml(d.last_month_label||'')}
+      &nbsp;|&nbsp; This Month: ${escHtml(d.month_label||'')} &nbsp;|&nbsp; Day Before: ${escHtml(d.day_before_label||'')}
+      &nbsp;|&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
+    </p>
+    <p style="color:var(--cn-mid);font-size:.74rem;margin:0 0 10px">
+      Price source: Website S (Total Price), Amazon/Flipkart R (Selling value), Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
+    </p>
+    ${warnings}
+    <table class="ro" style="width:100%;min-width:920px">
+      <thead><tr>
+        <th>Channel</th><th>YTD</th><th>Last Month</th><th>This Month</th>
+        <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th>
+      </tr></thead>
+      <tbody>${rowsHtml}${totalRow}</tbody>
+    </table>`;
+}
+function exportDRGMarketplace(){
+  const d = _drgMarketplaceData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %'];
+  const titleRow = [d.title_date || '', '', '', '', '', '', '', ''];
+  const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : '']);
+  const t = d.totals||{};
+  rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : '']);
+  const csv = [titleRow, headers].concat(rows).map(r => r.map(c => {
+    const st = String(c==null?'':c);
+    return /[",\n]/.test(st) ? '"'+st.replace(/"/g,'""')+'"' : st;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'daily_revenue_glimpse_marketplace_' + (d.month_label||'').replace(/\s+/g,'_') + '.csv'; a.click();
+}
+function exportDRGMarketplaceExcel(){
+  const d = _drgMarketplaceData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  window.location.href = '/api/daily_revenue_glimpse_marketplace/export.xlsx';
+}
+window.loadDRGMarketplace = loadDRGMarketplace;
+window.exportDRGMarketplace = exportDRGMarketplace;
+window.exportDRGMarketplaceExcel = exportDRGMarketplaceExcel;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -21306,7 +21414,7 @@ showTab = function(t){
   if (t === 'weboos') setTimeout(()=>{ try{ loadWebsiteOos(false); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
-  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); }catch(e){console.error(e);} }, 0);
+  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); loadDRGMarketplace(false); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'rakhiproduction') setTimeout(()=>{ try{ loadRakhiProduction(); }catch(e){console.error(e);} }, 0);
@@ -25875,6 +25983,281 @@ def _drg_bucket(channel, sub_channel, typ):
         return _DRG_OTHER_BUCKET
     return _DRG_OTHER_BUCKET            # koi bhi leftover — safety net (total hamesha match kare)
 
+
+# Source-sheet version of Daily Revenue Glimpse. Named DTC/Ecom channels use
+# the exact user-approved price columns from their native Mayuresh tabs;
+# only the remaining buckets keep the existing cossa_orderdate revenue feed.
+_DRG_MARKETPLACE_SOURCE_CACHE = {"rows": None, "meta": None, "ts": 0}
+_DRG_MARKETPLACE_SOURCE_TTL = 300
+
+
+def _drg_source_position_col(frame, index):
+    try:
+        return (frame.attrs.get("source_position_columns") or {}).get(index)
+    except Exception:
+        return None
+
+
+def _fetch_drg_marketplace_source_rows(force=False):
+    if (not force and _DRG_MARKETPLACE_SOURCE_CACHE["rows"] is not None
+            and time.time() - _DRG_MARKETPLACE_SOURCE_CACHE["ts"] < _DRG_MARKETPLACE_SOURCE_TTL):
+        return _DRG_MARKETPLACE_SOURCE_CACHE["rows"], (_DRG_MARKETPLACE_SOURCE_CACHE["meta"] or {})
+
+    specs = [
+        {
+            "key": "Website", "sheet": "Website", "url": RAKHI_WEBSITE_ADDR_URL,
+            "price_pos": 18, "price_letter": "S", "price_label": "Total Price",
+            "fixed_bucket": "Website", "date_names": ("Order_Date", "Order Date", "OrderDate", "Created"),
+            "status_names": ("Sale Order Status", "Order Status", "Status"),
+            "qty_names": ("Qty", "Quantity"), "cancel_qty_groups": (), "cancel_date_names": (),
+        },
+        {
+            "key": "Amazon/Flipkart", "sheet": "Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "price_pos": 17, "price_letter": "R", "price_label": "Selling value",
+            "fixed_bucket": "", "platform_pos": 9, "platform_names": ("Channel", "Marketplace", "Status", "Type"),
+            "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
+            "status_names": (), "qty_names": ("Qty.", "Qty", "Quantity"),
+            "cancel_qty_groups": (), "cancel_date_names": (),
+        },
+        {
+            "key": "Nykaa", "sheet": "Nykaa", "url": NYKAA_SALES_URL,
+            "price_pos": 44, "price_letter": "AS", "price_label": "SellingPrice",
+            "fixed_bucket": "Nykaa", "date_names": ("OrderDate", "Order_Date", "Order Date", "upddate"),
+            "status_names": ("Status", "Order Status"), "qty_names": ("Order Qty", "Shipped Qty", "Qty"),
+            "cancel_qty_groups": (), "cancel_date_names": ("CancelledDate", "Cancelled Date"),
+        },
+        {
+            "key": "Tata", "sheet": "Tata", "url": TATA_SALES_URL,
+            "price_pos": 13, "price_letter": "N", "price_label": "Price",
+            "fixed_bucket": "Tata", "date_names": ("Order_Date", "Order Date", "OrderDate", "Order Allocate Date"),
+            "status_names": ("OrderStatus", "Order Status", "Status"), "qty_names": ("Order Qty", "Qty", "Net Qty"),
+            "cancel_qty_groups": (), "cancel_date_names": (),
+        },
+        {
+            "key": "Ajio", "sheet": "Ajio", "url": AJIO_SALES_URL,
+            "price_pos": 32, "price_letter": "AG", "price_label": "Selling Price",
+            "fixed_bucket": "Ajio", "date_names": ("Order_Date", "Order Date", "Cust Order Date", "FWD PO Date"),
+            "status_names": ("Status", "Order Status"), "qty_names": ("Order Qty", "Shipped QTY", "Qty"),
+            "cancel_qty_groups": (("Cancelled Qty",), ("Customer Cancelled QTY",), ("Seller Cancelled QTY",)),
+            "cancel_date_names": (),
+        },
+        {
+            "key": "Myntra", "sheet": "Myntra", "url": MYNTRA_SALES_URL,
+            "price_pos": 38, "price_letter": "AM", "price_label": "Seller Price",
+            "fixed_bucket": "Myntra", "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
+            "status_names": ("Status", "Order Status"), "qty_names": ("Qty.", "Qty", "Quantity"),
+            "cancel_qty_groups": (), "cancel_date_names": (),
+        },
+    ]
+
+    out = []
+    meta = {}
+    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata"}
+
+    for spec in specs:
+        source_meta = {
+            "sheet": spec["sheet"], "price_column": spec["price_letter"],
+            "price_label": spec["price_label"], "rows_total": 0, "rows_used": 0,
+            "date_column": "", "error": "",
+        }
+        meta[spec["key"]] = source_meta
+        try:
+            groups = [spec["date_names"]]
+            if spec.get("platform_names"):
+                groups.append(spec["platform_names"])
+            if spec.get("status_names"):
+                groups.append(spec["status_names"])
+            if spec.get("qty_names"):
+                groups.append(spec["qty_names"])
+            if spec.get("cancel_date_names"):
+                groups.append(spec["cancel_date_names"])
+            groups.extend(spec.get("cancel_qty_groups") or ())
+            positions = [spec["price_pos"]]
+            if spec.get("platform_pos") is not None:
+                positions.append(spec["platform_pos"])
+
+            frame = _fetch_csv_fresh(spec["url"], select_groups=groups, select_positions=positions)
+            frame.columns = [str(c).strip() for c in frame.columns]
+            source_meta["rows_total"] = len(frame)
+
+            price_col = _drg_source_position_col(frame, spec["price_pos"])
+            if not price_col or price_col not in frame.columns:
+                price_col = find_col(frame.columns, spec["price_label"], "Selling Price", "SellingPrice", "Selling value", "Total Price", "Price", "Seller Price")
+            date_col = find_col(frame.columns, *spec["date_names"])
+            status_col = find_col(frame.columns, *spec.get("status_names", ())) if spec.get("status_names") else None
+            qty_col = find_col(frame.columns, *spec.get("qty_names", ())) if spec.get("qty_names") else None
+            cancel_date_col = find_col(frame.columns, *spec.get("cancel_date_names", ())) if spec.get("cancel_date_names") else None
+            cancel_qty_cols = []
+            for cg in spec.get("cancel_qty_groups") or ():
+                cc = find_col(frame.columns, *cg)
+                if cc and cc not in cancel_qty_cols:
+                    cancel_qty_cols.append(cc)
+
+            platform_col = None
+            if spec.get("platform_names"):
+                platform_col = find_col(frame.columns, "Channel", "Marketplace")
+                if not platform_col:
+                    pc = _drg_source_position_col(frame, spec.get("platform_pos"))
+                    platform_col = pc if pc in frame.columns else find_col(frame.columns, *spec["platform_names"])
+
+            source_meta["date_column"] = str(date_col or "")
+            source_meta["price_header"] = str(price_col or "")
+            source_meta["platform_column"] = str(platform_col or "")
+            if not price_col:
+                raise ValueError("price column not found")
+            if not date_col:
+                raise ValueError("order date column not found")
+
+            for row in _df_chunks(frame):
+                dt = parse_date_any(row.get(date_col, ""))
+                if dt is None:
+                    continue
+
+                if status_col:
+                    status = str(row.get(status_col, "") or "").strip().casefold()
+                    if any(tok in status for tok in ("cancel", "void", "failed")):
+                        continue
+                if cancel_date_col and clean(row.get(cancel_date_col, "")):
+                    continue
+
+                if qty_col and cancel_qty_cols:
+                    gross_qty = max(0.0, to_num(row.get(qty_col, 0)))
+                    cancelled_qty = sum(max(0.0, to_num(row.get(c, 0))) for c in cancel_qty_cols)
+                    if gross_qty > 0 and cancelled_qty >= gross_qty:
+                        continue
+
+                rev = to_num(row.get(price_col, 0))
+                if rev == 0:
+                    continue
+
+                bucket = spec.get("fixed_bucket") or ""
+                if not bucket:
+                    raw_platform = str(row.get(platform_col, "") if platform_col else "").strip().casefold()
+                    if "amazon" in raw_platform:
+                        bucket = "Amazon"
+                    elif "flipkart" in raw_platform:
+                        bucket = "Flipkart"
+                    else:
+                        continue
+
+                out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "bucket": bucket})
+                source_meta["rows_used"] += 1
+        except Exception as e:
+            source_meta["error"] = str(e)[:240]
+
+    # Channels not represented by dedicated source sheets keep the old
+    # cossa_orderdate revenue logic exactly as before.
+    fallback_used = 0
+    for e in _fetch_drg_source_rows():
+        bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
+        if bucket in named_buckets:
+            continue
+        out.append({"date": e.get("date", ""), "rev": float(e.get("rev") or 0), "bucket": bucket})
+        fallback_used += 1
+    meta["Remaining channels"] = {
+        "sheet": "cossa_orderdate", "price_column": "existing Net Revenue",
+        "price_label": "existing Daily Revenue Glimpse logic", "rows_total": fallback_used,
+        "rows_used": fallback_used, "date_column": "Order Date", "error": "",
+    }
+
+    _DRG_MARKETPLACE_SOURCE_CACHE.update({"rows": out, "meta": meta, "ts": time.time()})
+    return out, meta
+
+
+def _build_daily_revenue_glimpse_marketplace(force=False):
+    src_rows, source_meta = _fetch_drg_marketplace_source_rows(force=force)
+    targets = _fetch_target_rows()
+
+    today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    yest_dt = today_dt - timedelta(days=1)
+    dbef_dt = today_dt - timedelta(days=2)
+    cm_start = today_dt.replace(day=1)
+    cur_month = today_dt.strftime("%Y-%m")
+    lm_end = cm_start - timedelta(days=1)
+    lm_start = lm_end.replace(day=1)
+    fy_label, fy_start_dt, _fy_end_dt = fy_bounds(today_dt.replace(tzinfo=TZ))
+
+    fy_start_iso = fy_start_dt.strftime("%Y-%m-%d")
+    yest_iso = yest_dt.strftime("%Y-%m-%d")
+    dbef_iso = dbef_dt.strftime("%Y-%m-%d")
+    lm_start_iso = lm_start.strftime("%Y-%m-%d")
+    lm_end_iso = lm_end.strftime("%Y-%m-%d")
+    cm_start_iso = cm_start.strftime("%Y-%m-%d")
+    today_iso = today_dt.strftime("%Y-%m-%d")
+
+    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
+               for b in _DRG_ROWS_ORDER}
+    for e in src_rows:
+        d = e.get("date")
+        b = e.get("bucket")
+        if not d or b not in buckets:
+            continue
+        rev = float(e.get("rev") or 0)
+        slot = buckets[b]
+        if fy_start_iso <= d <= today_iso:
+            slot["ytd"] += rev
+        if d == yest_iso:
+            slot["yesterday"] += rev
+        if d == dbef_iso:
+            slot["day_before"] += rev
+        if lm_start_iso <= d <= lm_end_iso:
+            slot["last_month"] += rev
+        if cm_start_iso <= d <= today_iso:
+            slot["mtd"] += rev
+
+    tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
+    for t in targets:
+        if t.get("month") != cur_month:
+            continue
+        ch = str(t.get("channel") or "").strip().lower()
+        matched = None
+        for b, aliases in _DRG_TARGET_ALIASES.items():
+            if ch in aliases:
+                matched = b
+                break
+        tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
+
+    rows = []
+    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
+    for b in _DRG_ROWS_ORDER:
+        slot = buckets[b]
+        mtd_target = tgt.get(b, 0.0)
+        ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
+        rows.append({
+            "channel": _DRG_LABELS.get(b, b), "ytd": slot["ytd"],
+            "last_month": slot["last_month"], "day_before": slot["day_before"],
+            "yesterday": slot["yesterday"], "mtd": slot["mtd"],
+            "mtd_target": mtd_target, "mtd_achievement": ach,
+        })
+        for key in ("ytd", "last_month", "day_before", "yesterday", "mtd"):
+            tot[key] += slot[key]
+        tot["mtd_target"] += mtd_target
+    tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
+    rows.sort(key=lambda r: r["ytd"], reverse=True)
+
+    source_errors = [f"{name}: {m.get('error')}" for name, m in source_meta.items() if m.get("error")]
+    return {
+        "rows": rows, "totals": tot, "fy_label": fy_label,
+        "month_label": today_dt.strftime("%b %Y"),
+        "yesterday_label": yest_dt.strftime("%d-%b"),
+        "day_before_label": dbef_dt.strftime("%d-%b"),
+        "last_month_label": lm_start.strftime("%b %Y"),
+        "title_date": today_dt.strftime("%d - %b - %Y"),
+        "source_meta": source_meta, "source_errors": source_errors,
+    }
+
+
+@app.route("/api/daily_revenue_glimpse_marketplace")
+def api_daily_revenue_glimpse_marketplace():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+        return jsonify(_build_daily_revenue_glimpse_marketplace(force=fresh))
+    except Exception as e:
+        return jsonify({"error": f"marketplace daily revenue glimpse build failed: {e}"}), 500
+
+
 def _build_daily_revenue_glimpse():
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
     Before / Yesterday / This Month Target / Achievement %. Target tab me
@@ -27289,6 +27672,96 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         return resp
     except Exception as e:
         return jsonify({"error": f"Rakhi child/CMB sales Excel export failed: {e}"}), 500
+
+
+
+@app.route("/api/daily_revenue_glimpse_marketplace/export.xlsx")
+def api_daily_revenue_glimpse_marketplace_export_xlsx():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        rep = _build_daily_revenue_glimpse_marketplace(force=False)
+        rows = rep["rows"]
+        tot = rep["totals"]
+        today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        title_txt = today_dt.strftime("%d - %b - %Y")
+        headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
+                   "Yesterday", "This Month Target", "Achievement %"]
+        n_cols = len(headers)
+        NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Marketplace Revenue"
+        title_fill = PatternFill("solid", fgColor="000000")
+        title_font = Font(bold=True, color="FFFFFF", size=12)
+        head_fill = PatternFill("solid", fgColor="C9DAF8")
+        head_font = Font(bold=True)
+        total_fill = PatternFill("solid", fgColor="C9DAF8")
+        total_font = Font(bold=True)
+        thin = Side(style="thin", color="CCCCCC")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center")
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
+        c = ws.cell(row=1, column=1, value=title_txt)
+        c.fill = title_fill; c.font = title_font; c.alignment = center
+        for col in range(1, n_cols + 1):
+            ws.cell(row=1, column=col).fill = title_fill
+        for col, h in enumerate(headers, start=1):
+            c = ws.cell(row=2, column=col, value=h)
+            c.fill = head_fill; c.font = head_font; c.alignment = center; c.border = border
+
+        r_idx = 3
+        for r in rows:
+            ws.cell(row=r_idx, column=1, value=r["channel"]).font = Font(bold=True)
+            ws.cell(row=r_idx, column=2, value=round(r["ytd"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=3, value=round(r["last_month"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=4, value=round(r["mtd"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=5, value=round(r["day_before"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=6, value=round(r["yesterday"])).number_format = NUM_FMT
+            if r["mtd_target"]:
+                ws.cell(row=r_idx, column=7, value=round(r["mtd_target"])).number_format = NUM_FMT
+                ws.cell(row=r_idx, column=8, value=r["mtd_achievement"])
+            else:
+                ws.cell(row=r_idx, column=7, value="NA")
+                ws.cell(row=r_idx, column=8, value="")
+            for col in range(1, n_cols + 1):
+                ws.cell(row=r_idx, column=col).border = border
+            r_idx += 1
+
+        ws.cell(row=r_idx, column=1, value="TOTAL")
+        ws.cell(row=r_idx, column=2, value=round(tot["ytd"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=3, value=round(tot["last_month"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=4, value=round(tot["mtd"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=5, value=round(tot["day_before"])).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=6, value=round(tot["yesterday"])).number_format = NUM_FMT
+        if tot["mtd_target"]:
+            ws.cell(row=r_idx, column=7, value=round(tot["mtd_target"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=8, value=tot["mtd_achievement"])
+        else:
+            ws.cell(row=r_idx, column=7, value="NA")
+            ws.cell(row=r_idx, column=8, value="")
+        for col in range(1, n_cols + 1):
+            cell = ws.cell(row=r_idx, column=col)
+            cell.fill = total_fill; cell.font = total_font; cell.border = border
+
+        widths = [26, 14, 14, 14, 12, 12, 16, 14]
+        for i, width in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = width
+
+        bio = io.BytesIO()
+        wb.save(bio); bio.seek(0)
+        fname = f"daily_revenue_glimpse_marketplace_{today_dt.strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = f"attachment; filename={fname}"
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"marketplace excel export failed: {e}"}), 500
 
 
 @app.route("/api/daily_revenue_glimpse/export.xlsx")
