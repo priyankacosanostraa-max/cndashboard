@@ -1218,12 +1218,12 @@ def _amazon_fba_pos(frame, idx):
 def _fetch_amazon_fba_rows(force=False):
     """Normalize the second Amazon/FBA feed into one compact row format.
 
-    The user supplied physical fallbacks are C=Order Date, D=Dispatch Date,
-    L=SKU, O=Qty, Q=Selling Price and AQ=Net Revenue.  The live workbook can
-    move/rename columns, so semantic headers always win and those letters are
-    retained only as fallbacks.  Current Amazon exports also commonly expose
-    purchase-date, last-updated-date and Payout to Seller; those are supported
-    so text/date/int/mixed-case source changes do not break the dashboard.
+    User-confirmed physical columns are authoritative: C=Order Date,
+    D=Dispatch Date, N=SKU, Q=Qty, S=Selling Price and AS=Net Revenue
+    (currently headed Payout to Seller). Header matching remains a fallback so
+    harmless spelling/case changes do not break the dashboard. Current Amazon
+    exports also expose purchase-date and last-updated-date; those are used only
+    as date fallbacks when C/D are blank.
     """
     now = time.time()
     if (not force and _AMAZON_FBA_CACHE.get("rows") is not None
@@ -1246,15 +1246,24 @@ def _fetch_amazon_fba_rows(force=False):
         ("ship-state", "Ship State", "Shipping State", "Destination State", "State"),
         ("ship-postal-code", "Ship Postal Code", "Shipping Pincode", "Destination Pincode", "Pincode", "PIN Code"),
     ]
-    # User-confirmed physical fallbacks: A order id, C order date, D dispatch,
-    # L SKU, O Qty, Q Selling Price, AQ Net Revenue.  We also keep the live
-    # semantic columns selected via the groups above.
-    positions = [0, 2, 3, 11, 14, 16, 42]
+    # User-confirmed physical mapping (zero-based indexes):
+    # A=order id (0), C=order date (2), D=dispatch date (3), N=SKU (13),
+    # Q=Qty (16), S=Selling Price (18), AS=Net Revenue/Payout to Seller (44).
+    # These physical columns are authoritative; semantic headers are fallbacks.
+    positions = [0, 2, 3, 13, 16, 18, 44]
     try:
         frame = _fetch_csv_fresh(AMAZON_FBA_SALES_URL, select_groups=groups, select_positions=positions)
         frame.columns = [str(c).strip() for c in frame.columns]
 
-        def col(names, pos=None):
+        def col(names, pos=None, prefer_position=False):
+            # FBA has user-confirmed physical source columns. For those fields
+            # use the exact sheet position first; header matching is only a
+            # compatibility fallback if the published export is unexpectedly
+            # shorter/restructured. Other fields remain header-first.
+            if prefer_position and isinstance(pos, int):
+                pc = _amazon_fba_pos(frame, pos)
+                if pc in frame.columns:
+                    return pc
             c = find_col(frame.columns, *names)
             if c:
                 return c
@@ -1264,17 +1273,17 @@ def _fetch_amazon_fba_rows(force=False):
                     return pc
             return None
 
-        c_order = col(("amazon-order-id", "Amazon Order ID", "Order ID", "OrderId", "Order No", "Order Number"), 0)
+        c_order = col(("amazon-order-id", "Amazon Order ID", "Order ID", "OrderId", "Order No", "Order Number"), 0, True)
         c_item = col(("order-item-id", "Order Item ID", "Order Item Id"))
-        c_order_date = col(("Order Date", "Order_Date", "OrderDate"), 2)
+        c_order_date = col(("Order Date", "Order_Date", "OrderDate"), 2, True)
         c_purchase = col(("purchase-date", "Purchase Date", "PurchaseDate", "Created On", "Created At"))
-        c_dispatch = col(("Dispatch Date", "Dispatch_Date", "DispatchDate", "Shipped Date", "Ship Date"), 3)
+        c_dispatch = col(("Dispatch Date", "Dispatch_Date", "DispatchDate", "Shipped Date", "Ship Date"), 3, True)
         c_updated = col(("last-updated-date", "Last Updated Date", "Updated Date"))
         c_status = col(("order-status", "Order Status", "Status", "item-status", "Item Status"))
-        c_sku = col(("sku", "SKU", "Seller SKU", "Seller_sku_code", "SKU No.", "SKU No"), 11)
-        c_qty = col(("quantity", "Qty", "Qty.", "Order Qty", "Sold Qty", "Final Qty"), 14)
-        c_sell = col(("Selling Price", "SellingPrice", "Seller Price", "Selling value", "Item Price"), 16)
-        c_net = col(("Net Revenue", "NetRevenue", "Payout to Seller", "Payout to Sell", "Net Amount", "Settlement Amount"), 42)
+        c_sku = col(("sku", "SKU", "Seller SKU", "Seller_sku_code", "SKU No.", "SKU No"), 13, True)
+        c_qty = col(("quantity", "Qty", "Qty.", "Order Qty", "Sold Qty", "Final Qty"), 16, True)
+        c_sell = col(("Selling Price", "SellingPrice", "Seller Price", "Selling value", "Item Price"), 18, True)
+        c_net = col(("Net Revenue", "NetRevenue", "Payout to Seller", "Payout to Sell", "Net Amount", "Settlement Amount"), 44, True)
         c_city = col(("ship-city", "Ship City", "Shipping City", "Destination City", "City"))
         c_state = col(("ship-state", "Ship State", "Shipping State", "Destination State", "State"))
         c_pin = col(("ship-postal-code", "Ship Postal Code", "Shipping Pincode", "Destination Pincode", "Pincode", "PIN Code"))
@@ -27801,7 +27810,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
 
     # Second Amazon/FBA selling-price rows merge into the existing Amazon row.
     fba_meta = {
-        "sheet": "FBA Sale", "price_column": "Q/header", "price_label": "Selling Price",
+        "sheet": "FBA Sale", "price_column": "S/header", "price_label": "Selling Price",
         "rows_total": 0, "rows_used": 0, "date_column": "Order Date", "error": "",
     }
     meta["Amazon FBA (merged)"] = fba_meta
