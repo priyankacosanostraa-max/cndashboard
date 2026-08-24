@@ -1333,7 +1333,23 @@ def _fetch_amazon_fba_rows(force=False):
 
             order_iso = order_dt.strftime("%Y-%m-%d") if order_dt else ""
             dispatch_iso = dispatch_dt.strftime("%Y-%m-%d") if dispatch_dt else ""
-            dedupe = item_id or "|".join((order_id.casefold(), sku, order_iso, f"{qty:.6f}", f"{selling_total:.2f}", f"{net_revenue:.2f}"))
+
+            # IMPORTANT: FBA's current `order-item-id` export is not a reliable
+            # unique key. Google Sheets is exposing many different lines with the
+            # same rounded/scientific value (for example 66900000000000), so the
+            # old `item_id or ...` key collapsed almost the whole FBA sheet to one
+            # row. Deduplicate on the business row instead: order + SKU + order
+            # date + qty + selling value + payout. Dispatch date is deliberately
+            # not part of identity because a later ship-date update must not turn
+            # one order line into a second sale.
+            dedupe = "|".join((
+                _daily_reporting_order_key(order_id),
+                sku.casefold(),
+                order_iso,
+                f"{qty:.6f}",
+                f"{selling_total:.4f}",
+                f"{net_revenue:.4f}",
+            ))
             if dedupe in seen:
                 continue
             seen.add(dedupe)
@@ -27644,12 +27660,17 @@ def _fetch_drg_source_rows(force=False):
     # Amazon FBA belongs inside the existing Amazon row. For this NET-REVENUE
     # table use the user-confirmed AS column only; Q/S remain Qty/Selling Price.
     for ar in _fetch_amazon_fba_rows(force=force):
-        day = str(ar.get("order_date") or "")
-        rev = float(ar.get("net_revenue") or 0)
+        # Daily Revenue Glimpse is Order-Date based. If a row's C value is blank
+        # or arrives in an unusable format, fall back to D (Dispatch Date) rather
+        # than silently dropping a valid FBA sale. parse_date_any handles text,
+        # Excel serials, timestamps and mixed date formats.
+        fba_dt = parse_date_any(ar.get("order_date") or ar.get("dispatch_date") or "")
+        day = fba_dt.strftime("%Y-%m-%d") if fba_dt else ""
+        rev = to_num(ar.get("net_revenue", 0))
         if not day or rev == 0:
             continue
         out.append({
-            "date": day, "rev": rev,
+            "date": day, "rev": float(rev),
             "channel": "Ecom", "sub_channel": "Amazon", "type": "SOR", "customer": "Amazon",
         })
 
@@ -27847,8 +27868,8 @@ def _fetch_drg_marketplace_source_rows(force=False):
 
     # Second Amazon/FBA selling-price rows merge into the existing Amazon row.
     fba_meta = {
-        "sheet": "FBA Sale", "price_column": "S/header", "price_label": "Selling Price",
-        "rows_total": 0, "rows_used": 0, "date_column": "Order Date", "error": "",
+        "sheet": "FBA Sale", "price_column": "S", "price_label": "Selling Price",
+        "rows_total": 0, "rows_used": 0, "date_column": "C (Order Date; D fallback)", "error": "",
     }
     meta["Amazon FBA (merged)"] = fba_meta
     try:
@@ -27859,11 +27880,15 @@ def _fetch_drg_marketplace_source_rows(force=False):
         fba_meta["rows_total"] = len(fba_rows)
         fba_meta["rows_used"] = 0
         for ar in fba_rows:
-            day = str(ar.get("order_date") or "")
-            value = float(ar.get("selling_price_total") or 0)
+            # Same robust date rule as the Net Revenue table. C (Order Date) is
+            # primary; D (Dispatch Date) is a safe row-level fallback only when C
+            # cannot be parsed. S is the authoritative FBA Selling Price column.
+            fba_dt = parse_date_any(ar.get("order_date") or ar.get("dispatch_date") or "")
+            day = fba_dt.strftime("%Y-%m-%d") if fba_dt else ""
+            value = to_num(ar.get("selling_price_total", 0))
             if not day or value == 0:
                 continue
-            out.append({"date": day, "rev": value, "bucket": "Amazon"})
+            out.append({"date": day, "rev": float(value), "bucket": "Amazon"})
             fba_meta["rows_used"] = int(fba_meta.get("rows_used") or 0) + 1
         if _AMAZON_FBA_CACHE.get("error"):
             fba_meta["error"] = str(_AMAZON_FBA_CACHE.get("error"))[:240]
