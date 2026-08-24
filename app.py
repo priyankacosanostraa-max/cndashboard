@@ -9435,9 +9435,10 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse</div>
+      <div class="insights-sub">Net Revenue view: Amazon includes the FBA Sale feed merged into the same Amazon row using FBA column AS (Net Revenue). Blinkit uses COSA column I (Net Revenue).</div>
     </div>
     <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRG()">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRG(true)">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDRG()">Export CSV</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDRGExcel()">Export Excel</button>
     </div>
@@ -9447,7 +9448,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
-      <div class="insights-sub">Website, Amazon, Flipkart, Myntra, Nykaa, Ajio and Tata use their own source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and Selling Price column H. Remaining channels keep the existing cossa_orderdate revenue logic.</div>
+      <div class="insights-sub">Selling Price view: existing Amazon source + Amazon FBA are merged into the same Amazon row; FBA uses column S (Selling Price). Website, Flipkart, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and column H (Selling Price).</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
@@ -14495,11 +14496,12 @@ window.loadTarget = loadTarget; window.exportTarget = exportTarget;
 
 /* ── DAILY REVENUE GLIMPSE (Target tab, 2nd table) ── */
 let _drgData = null;
-function loadDRG(){
+function loadDRG(force=false){
   const host = document.getElementById('drgContent');
   if (!host) return;
   host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
-  fetch('/api/daily_revenue_glimpse', {headers:{'ngrok-skip-browser-warning':'true'}})
+  const url = '/api/daily_revenue_glimpse' + (force ? '?fresh=1' : '');
+  fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
@@ -27524,13 +27526,14 @@ def api_festival_sales_export_xlsx():
 
 _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 
-def _fetch_drg_source_rows():
+def _fetch_drg_source_rows(force=False):
     """cossa_orderdate sheet ko parse karke normalized rows deta hai
     (date/rev/channel/sub_channel/type) — 10 min cache (sheet bahut badi
     hai, baar baar fetch karna mehenga hai). Date/word kisi bhi format
     (chhote/bade/mixed letters, int/str, date ya date-time) me ho, sab
     parse_date_any()/norm_type()/norm_cust() se handle ho jata hai."""
-    if _DRG_SRC_CACHE["rows"] is not None and (time.time() - _DRG_SRC_CACHE["ts"] < 600):
+    if (not force and _DRG_SRC_CACHE["rows"] is not None
+            and time.time() - _DRG_SRC_CACHE["ts"] < 600):
         return _DRG_SRC_CACHE["rows"]
     df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
     df.columns = [str(c).strip() for c in df.columns]
@@ -27606,7 +27609,9 @@ def _fetch_drg_source_rows():
 
     # The second Amazon/FBA feed is merged into Amazon here too. It is never
     # shown as a separate row; order date drives this order-date table.
-    for ar in _fetch_amazon_fba_rows(force=False):
+    # Amazon FBA belongs inside the existing Amazon row. For this NET-REVENUE
+    # table use the user-confirmed AS column only; Q/S remain Qty/Selling Price.
+    for ar in _fetch_amazon_fba_rows(force=force):
         day = str(ar.get("order_date") or "")
         rev = float(ar.get("net_revenue") or 0)
         if not day or rev == 0:
@@ -27896,7 +27901,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
     # here even if the old bucket logic would call Quick Com / Blinkit "Others",
     # preventing double counting after the dedicated COSA-H mapping above.
     fallback_used = 0
-    for e in _fetch_drg_source_rows():
+    for e in _fetch_drg_source_rows(force=force):
         if "blinkit" in str(e.get("customer") or "").casefold():
             continue
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
@@ -28008,13 +28013,13 @@ def api_daily_revenue_glimpse_marketplace():
         return jsonify({"error": f"marketplace daily revenue glimpse build failed: {e}"}), 500
 
 
-def _build_daily_revenue_glimpse():
+def _build_daily_revenue_glimpse(force=False):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
     Before / Yesterday / This Month Target / Achievement %. Target tab me
     Target vs Actual ke neeche doosra table. Data source: cossa_orderdate
     sheet (Order Date). Rows sorted by YTD revenue (max revenue channel
     sabse upar)."""
-    src_rows = _fetch_drg_source_rows()
+    src_rows = _fetch_drg_source_rows(force=force)
     targets = _fetch_target_rows()
 
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
@@ -28107,7 +28112,8 @@ def api_daily_revenue_glimpse():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
-        rep = _build_daily_revenue_glimpse()
+        fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+        rep = _build_daily_revenue_glimpse(force=fresh)
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
