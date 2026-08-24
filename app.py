@@ -13164,16 +13164,10 @@ function setLoginGateVisible(visible){
 }
 
 const CNX_SAWAN_LAST_SOMWAR_DATE = '2026-08-24';
-const CNX_SAWAN_LAST_SOMWAR_KEY = 'cnxSawanLastSomwarWish:' + CNX_SAWAN_LAST_SOMWAR_DATE;
 
 function maybeShowSawanLastSomwarWish(){
-  // Strict IST date gate: this greeting can only appear on 24 Aug 2026.
+  // Strict IST date gate: show on every authenticated page load/refresh, but only on 24 Aug 2026.
   if (cnxIstDateKey(new Date()) !== CNX_SAWAN_LAST_SOMWAR_DATE) return;
-  try {
-    // Do not repeat on simple page refreshes in the same browser tab.
-    if (sessionStorage.getItem(CNX_SAWAN_LAST_SOMWAR_KEY) === '1') return;
-    sessionStorage.setItem(CNX_SAWAN_LAST_SOMWAR_KEY, '1');
-  } catch(e){}
   const modal = document.getElementById('sawanSomwarWish');
   if (!modal) return;
   modal.style.display = 'flex';
