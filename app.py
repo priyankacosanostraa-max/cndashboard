@@ -288,7 +288,13 @@ from flask import Flask, request, jsonify, render_template_string, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Config ───────────────────────────────────────────────────
-INV_URL   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv"
+# All Product / Inventory source. Prefer the actual live Google Sheet so manual
+# Sync gets the newest stock + Image Link values immediately. The older
+# published-to-web CSV stays as a fallback in case the live sheet is not
+# publicly readable from the deployment host.
+INV_LIVE_SPREADSHEET_ID = os.environ.get("INV_LIVE_SPREADSHEET_ID", "1xCW5ZHlVcyNLZdRw4H-6HZBFowRcujQbgUtkM1kmn-E").strip()
+INV_LIVE_GID = os.environ.get("INV_LIVE_GID", "721993413").strip()   # Final
+INV_URL   = os.environ.get("INV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv").strip()
 COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
 COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
@@ -1133,6 +1139,96 @@ def simple_forecast(entries, days_ahead=30):
 
 
 # ── Data Engine ──────────────────────────────────────────────
+def _inventory_urls():
+    """Fresh-first candidates for the All Product inventory sheet.
+
+    The native Sheet endpoints avoid Publish-to-web CDN lag. If the native
+    workbook is not public on the deployment host, the legacy published CSV
+    remains a safe fallback so the dashboard never loses inventory entirely.
+    """
+    urls = []
+    sid = (INV_LIVE_SPREADSHEET_ID or "").strip()
+    gid = (INV_LIVE_GID or "").strip()
+    if sid and gid:
+        urls.extend([
+            f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq?tqx=out:csv&gid={gid}",
+            f"https://docs.google.com/spreadsheets/d/{sid}/export?format=csv&gid={gid}",
+        ])
+    if INV_URL:
+        urls.append(INV_URL)
+    # Keep order while removing accidental duplicates.
+    out = []
+    for u in urls:
+        if u and u not in out:
+            out.append(u)
+    return out
+
+
+def _normalize_inventory_image_url(value):
+    """Return a browser-renderable product-image URL from messy sheet cells.
+
+    Handles plain URLs, =IMAGE(...), =HYPERLINK(...), Google Drive share links,
+    protocol-relative links and cells containing extra text around one URL.
+    """
+    raw = clean(value, "")
+    if not raw:
+        return ""
+    text = str(raw).strip().strip('"').strip("'")
+
+    # Formula-shaped text can survive some CSV/GViz exports.
+    m = re.search(r'=?(?:image|hyperlink)\s*\(\s*["\']([^"\']+)["\']', text, re.I)
+    if m:
+        text = m.group(1).strip()
+    else:
+        # If a cell has notes/labels plus a URL, preserve only the URL.
+        m = re.search(r'https?://[^\s"\'<>]+', text, re.I)
+        if m:
+            text = m.group(0).strip()
+
+    if text.startswith('//'):
+        text = 'https:' + text
+
+    # Convert Google Drive share/view links to a thumbnail URL that works in
+    # normal <img> tags. Public direct image hosts are left untouched.
+    drive_id = None
+    for pat in (
+        r'drive\.google\.com/file/d/([A-Za-z0-9_-]{20,})',
+        r'drive\.google\.com/(?:open|uc)\?[^#]*[?&]id=([A-Za-z0-9_-]{20,})',
+        r'[?&]id=([A-Za-z0-9_-]{20,})',
+    ):
+        mm = re.search(pat, text, re.I)
+        if mm:
+            drive_id = mm.group(1)
+            break
+    if drive_id:
+        return f"https://drive.google.com/thumbnail?id={drive_id}&sz=w800"
+
+    return text if re.match(r'^https?://', text, re.I) else ""
+
+
+def _fetch_inventory_fresh():
+    """Fetch latest All Product sheet, trying live native endpoints first."""
+    last_err = None
+    for url in _inventory_urls():
+        try:
+            frame = _fetch_csv_fresh(url)
+            if frame is None or frame.empty:
+                raise ValueError("inventory source returned no rows")
+            cols = [str(c).strip() for c in frame.columns]
+            # Guard against login/error HTML parsed as a one-column CSV.
+            sku_col = find_col(cols, "SKU")
+            if sku_col is None and len(cols) < 2:
+                raise ValueError("inventory source did not expose expected columns")
+            frame.attrs["inventory_source_url"] = url
+            return frame
+        except Exception as exc:
+            last_err = exc
+            print("Inventory source failed, trying fallback:", url[:110], str(exc)[:120])
+    if last_err:
+        raise last_err
+    raise ValueError("No inventory source URL configured")
+
+
 def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     """Fetch one published Google CSV without CDN-stale data.
 
@@ -2213,7 +2309,7 @@ def _refresh_data():
         from concurrent.futures import ThreadPoolExecutor
         _wstage("fetching", "Downloading inventory + sales sheets in parallel…")
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix="cn-core-fetch") as ex:
-            f_inv = ex.submit(_fetch_csv_fresh, INV_URL)
+            f_inv = ex.submit(_fetch_inventory_fresh)
             f_cosa = ex.submit(_fetch_csv_fresh, COSA_URL)
             inv = f_inv.result()
             cosa = f_cosa.result()
@@ -2233,8 +2329,15 @@ def _refresh_data():
     # Header matching is primary; physical fallbacks prevent a harmless header
     # spelling change from silently selecting S.No/Image or returning zeros.
     I_SKU = find_col(inv.columns, "SKU") or (inv.columns[1] if len(inv.columns) > 1 else inv.columns[0])
-    I_IMG = (find_col(inv.columns, "Image Link","imagelink") or find_col(inv.columns,"image","img")
-             or (inv.columns[4] if len(inv.columns) > 4 else None))
+    # Image Link is authoritative in physical column E. Prefer an exact
+    # Image-Link header, then E, and only then a generic image-looking field.
+    # This prevents column D (often just named "Image") from being selected
+    # when its cells are blank while column E contains the real URLs.
+    I_IMG = find_col(inv.columns, "Image Link", "Image URL", "ImageLink", "Photo Link", "Photo URL")
+    if I_IMG is None and len(inv.columns) > 4:
+        I_IMG = inv.columns[4]
+    if I_IMG is None:
+        I_IMG = find_col(inv.columns, "image", "img", "photo")
     I_MRP  = find_col(inv.columns, "MRP", "mrp", "m.r.p") or (inv.columns[13] if len(inv.columns) > 13 else None)
     # Bulk tab has an explicit source-of-truth requirement: physical column N
     # (zero-based index 13) from All Product, regardless of header spelling or
@@ -2334,6 +2437,12 @@ def _refresh_data():
     C_CUST  = _at(9)  or find_col(cosa.columns, "Customer Name","customer","client","party")
     C_TYPE  = _at(10) or find_col(cosa.columns, "Type","channel","mode")
 
+    dbg["inventory_source"] = {
+        "url": str(inv.attrs.get("inventory_source_url", INV_URL)),
+        "rows": int(len(inv)),
+        "columns": int(len(inv.columns)),
+        "image_column": str(I_IMG or ""),
+    }
     dbg["resolved"] = {
         "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"blocked":I_BLOCKED,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"cn_name":I_CN_NAME},
         "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
@@ -3582,7 +3691,7 @@ def _refresh_data():
                     launch_iso   = _ld.strftime("%Y-%m-%d")
                     launch_key   = _ld.strftime("%Y-%m")
                     launch_label = _ld.strftime("%B %Y")
-        img   = clean(r.get(I_IMG,""))                  if I_IMG else ""
+        img   = _normalize_inventory_image_url(r.get(I_IMG, "")) if I_IMG else ""
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
         stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
         wip   = to_int(r.get(I_WIP,0))                 if I_WIP else 0
