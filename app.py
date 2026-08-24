@@ -7127,6 +7127,45 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 </div>
 
+<!-- 24 Aug 2026 only: Sawan last Somwar corporate greeting. Hidden on every other IST date. -->
+<div id="sawanSomwarWish" class="cnx-sawan-wish" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sawanSomwarWishTitle" style="display:none">
+  <style>
+    .cnx-sawan-wish{position:fixed;inset:0;z-index:10050;align-items:center;justify-content:center;padding:24px;background:rgba(22,17,11,.58);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);opacity:0;transition:opacity .22s ease}
+    .cnx-sawan-wish.is-open{opacity:1}
+    .cnx-sawan-card{position:relative;width:min(590px,94vw);overflow:hidden;border:1px solid rgba(184,133,40,.36);border-radius:26px;background:linear-gradient(145deg,#fffdf8 0%,#f7eddb 100%);box-shadow:0 38px 100px rgba(28,19,8,.38);color:#231b11;text-align:center;transform:translateY(12px) scale(.985);transition:transform .24s cubic-bezier(.2,.8,.2,1)}
+    .cnx-sawan-wish.is-open .cnx-sawan-card{transform:none}
+    .cnx-sawan-card:before{content:"";position:absolute;inset:10px;border:1px solid rgba(151,105,31,.16);border-radius:19px;pointer-events:none}
+    .cnx-sawan-top{padding:35px 34px 18px;background:radial-gradient(circle at 50% -20%,rgba(218,175,77,.30),transparent 62%)}
+    .cnx-sawan-kicker{font-size:10px;font-weight:950;letter-spacing:2.4px;text-transform:uppercase;color:#9a6a18}
+    .cnx-sawan-symbol{width:62px;height:62px;margin:17px auto 14px;display:grid;place-items:center;border:1px solid rgba(159,112,30,.32);border-radius:50%;background:#fffaf0;color:#8a5c14;font:700 30px/1 Georgia,serif;box-shadow:0 12px 28px rgba(117,78,18,.12)}
+    .cnx-sawan-title{margin:0;color:#21180e;font:800 clamp(30px,5vw,42px)/1.08 'Cormorant Garamond',Georgia,serif;letter-spacing:-.3px}
+    .cnx-sawan-mahadev{margin:12px 0 0;color:#85590f;font-size:15px;font-weight:950;letter-spacing:2px}
+    .cnx-sawan-copy{padding:0 48px 28px;color:#5f5548;font-size:13px;font-weight:650;line-height:1.8}
+    .cnx-sawan-copy strong{color:#34291b}
+    .cnx-sawan-sign{margin-top:13px;color:#8a611b;font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase}
+    .cnx-sawan-actions{padding:0 34px 34px}
+    .cnx-sawan-close{min-width:190px;min-height:46px;padding:0 22px;border:1px solid #8d6218;border-radius:12px;background:linear-gradient(145deg,#2c2113,#775215);color:#fff9eb;font-size:10px;font-weight:950;letter-spacing:1.4px;text-transform:uppercase;cursor:pointer;box-shadow:0 14px 28px rgba(86,57,14,.2)}
+    .cnx-sawan-close:hover{transform:translateY(-1px)}
+    .cnx-sawan-x{position:absolute;z-index:2;right:16px;top:16px;width:34px;height:34px;border:1px solid rgba(127,91,29,.18);border-radius:10px;background:rgba(255,255,255,.55);color:#6e5328;font-size:20px;line-height:30px;cursor:pointer}
+    @media(max-width:560px){.cnx-sawan-top{padding:30px 22px 16px}.cnx-sawan-copy{padding:0 26px 24px;font-size:12px}.cnx-sawan-actions{padding:0 22px 28px}}
+  </style>
+  <div class="cnx-sawan-card">
+    <button class="cnx-sawan-x" type="button" aria-label="Close greeting" onclick="closeSawanLastSomwarWish()">×</button>
+    <div class="cnx-sawan-top">
+      <div class="cnx-sawan-kicker">Cosa Nostraa • Corporate Greetings</div>
+      <div class="cnx-sawan-symbol" aria-hidden="true">ॐ</div>
+      <h2 class="cnx-sawan-title" id="sawanSomwarWishTitle">सावन के अंतिम सोमवार की हार्दिक शुभकामनाएँ</h2>
+      <div class="cnx-sawan-mahadev">हर हर हर महादेव</div>
+    </div>
+    <div class="cnx-sawan-copy">
+      <strong>Cosa Nostraa परिवार की ओर से</strong> आप सभी को सावन के अंतिम सोमवार की मंगलमय शुभकामनाएँ।<br>
+      भगवान शिव की कृपा से हमारे कार्यों में सफलता, टीम में एकता तथा सभी के जीवन में सुख, समृद्धि और उत्तम स्वास्थ्य बना रहे।
+      <div class="cnx-sawan-sign">सादर • Cosa Nostraa</div>
+    </div>
+    <div class="cnx-sawan-actions"><button class="cnx-sawan-close" type="button" onclick="closeSawanLastSomwarWish()">हर हर महादेव</button></div>
+  </div>
+</div>
+
 <div id="appRoot" style="display:none">
 
 <div class="app-bar" id="appBar">
@@ -7719,7 +7758,29 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Every analysis card follows the same active filters as the table and export.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Total Website Orders vs Returns</div><div class="small-note">Order-level view from the Website sheet, with Website Return fields + BlueDart matched by Display Order Code. COD / Prepaid, Order Date, SKU and Customer / Order Search update this comparison.</div></div></div>
+    <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
+      <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
+        <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
+      </div>
+      <div class="filter-box" style="margin:0">
+        <label class="fl" style="display:block;margin-bottom:10px">Order-Level Return Summary</label>
+        <div id="wrOrderSummaryKpis" class="ops-kpis" style="margin:0"></div>
+        <div id="wrOrderSummaryNote" class="small-note" style="margin-top:10px;white-space:normal"></div>
+      </div>
+    </div>
+
+    <div class="ops-section-head"><div><div class="ops-section-title">Order / Customer Investigation</div><div class="small-note" id="wrInvestigationNote">Search an order, customer, contact or SKU above to see the Website order and its full return/RTO trail.</div></div></div>
+    <div class="ro-wrap" style="margin-bottom:16px"><div class="ro-table-wrap" style="max-height:520px">
+      <table class="ops-table" id="websiteReturnInvestigationTable" style="min-width:2500px">
+        <thead><tr>
+          <th>Order ID</th><th>Order Date</th><th>Customer</th><th>Payment</th><th>SKU(s)</th><th>Website Order Status</th><th>Order Qty</th><th>Website Return?</th><th>Return Type</th><th>RTO Qty</th><th>Website Return Date</th><th>Website Return Reason</th><th>Customer Contact</th><th>BlueDart Pickup</th><th>BlueDart Status</th><th>BlueDart Status Date</th><th>BlueDart RTO Reason</th><th>Destination</th><th>WayBill</th><th>Invoice(s)</th><th>Package(s)</th>
+        </tr></thead>
+        <tbody id="wrInvestigationBody"><tr><td colspan="21" class="ops-empty">Use Customer / Contact / Order Search or SKU Search to inspect exact orders.</td></tr></tbody>
+      </table>
+    </div></div>
+
+    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">BlueDart operational analysis follows the active return filters below. The order-level donut above uses the Website order denominator.</div></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top RTO Reasons</label><div id="wrReasonAnalysis"></div></div>
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status Description</label><div id="wrStatusAnalysis"></div></div>
@@ -13102,11 +13163,41 @@ function setLoginGateVisible(visible){
   gate.setAttribute('aria-hidden',visible?'false':'true');
 }
 
+const CNX_SAWAN_LAST_SOMWAR_DATE = '2026-08-24';
+const CNX_SAWAN_LAST_SOMWAR_KEY = 'cnxSawanLastSomwarWish:' + CNX_SAWAN_LAST_SOMWAR_DATE;
+
+function maybeShowSawanLastSomwarWish(){
+  // Strict IST date gate: this greeting can only appear on 24 Aug 2026.
+  if (cnxIstDateKey(new Date()) !== CNX_SAWAN_LAST_SOMWAR_DATE) return;
+  try {
+    // Do not repeat on simple page refreshes in the same browser tab.
+    if (sessionStorage.getItem(CNX_SAWAN_LAST_SOMWAR_KEY) === '1') return;
+    sessionStorage.setItem(CNX_SAWAN_LAST_SOMWAR_KEY, '1');
+  } catch(e){}
+  const modal = document.getElementById('sawanSomwarWish');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden','false');
+  requestAnimationFrame(() => modal.classList.add('is-open'));
+}
+
+function closeSawanLastSomwarWish(){
+  const modal = document.getElementById('sawanSomwarWish');
+  if (!modal) return;
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden','true');
+  setTimeout(() => { modal.style.display = 'none'; }, 220);
+}
+window.closeSawanLastSomwarWish = closeSawanLastSomwarWish;
+window.maybeShowSawanLastSomwarWish = maybeShowSawanLastSomwarWish;
+
 function enterApp(role){
   LOGIN_ROLE = role;
   _loggedIn = true;
   setLoginGateVisible(false);
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'block';
+  // Today's corporate greeting appears immediately after authenticated entry.
+  setTimeout(maybeShowSawanLastSomwarWish, 180);
   // Login overlay ko pehle browser paint karne do. Home rendering and the
   // multi-megabyte data sync run on the next task, so successful sign-in feels
   // instant even on slower machines or a Railway cold start.
@@ -13298,6 +13389,11 @@ async function doLogout(){
 window.doLogout = doLogout;
 
 document.addEventListener('DOMContentLoaded', () => {
+  const wish = document.getElementById('sawanSomwarWish');
+  if (wish) wish.addEventListener('click', (event) => { if (event.target === wish) closeSawanLastSomwarWish(); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('sawanSomwarWish')?.classList.contains('is-open')) closeSawanLastSomwarWish();
+  });
   const r = document.getElementById('lgRole'); if (r) r.addEventListener('change', applyRoleUI);
   setLoginRoleChoice('admin');
   restoreRememberedLoginFields();
@@ -19652,6 +19748,129 @@ window.loadReturns=loadReturns;window.renderReturns=renderReturns;window.resetRe
 let _websiteReturnsData = null;
 let _websiteReturnsFilteredRows = [];
 let _websiteReturnsLoading = false;
+let _websiteReturnsOverview = null;
+let _websiteReturnsOverviewLoading = false;
+let _websiteReturnsOverviewSeq = 0;
+let _websiteReturnsOverviewLastKey = '';
+
+function _wrOverviewParams(force=false){
+  const p=new URLSearchParams();
+  const put=(k,v)=>{const s=_wrText(v);if(s&&s!=='All')p.set(k,s);};
+  put('order_from',_wrEl('wrOrderD1')?.value||'');
+  put('order_to',_wrEl('wrOrderD2')?.value||'');
+  put('payment',_wrEl('wrPaymentMode')?.value||'All');
+  put('sku',_wrEl('wrSku')?.value||'');
+  put('search',_wrEl('wrSearch')?.value||'');
+  put('destination',_wrEl('wrDestination')?.value||'');
+  if(force)p.set('force','1');
+  return p;
+}
+function _wrOverviewKey(){return _wrOverviewParams(false).toString();}
+function _wrYesNo(v){return v?'<span style="font-weight:900;color:#8b3f23">YES</span>':'<span style="color:var(--cn-mid)">No</span>';}
+function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
+  const donut=_wrEl('wrOrderReturnDonut'),kpis=_wrEl('wrOrderSummaryKpis'),note=_wrEl('wrOrderSummaryNote');
+  const invBody=_wrEl('wrInvestigationBody'),invNote=_wrEl('wrInvestigationNote');
+  if(!data){
+    if(donut)donut.innerHTML='<div class="small-note">Website order denominator has not loaded yet.</div>';
+    return;
+  }
+  const s=data.summary||{};
+  const total=Math.max(0,Number(s.total_orders||0));
+  const ret=Math.max(0,Number(s.returned_orders||0));
+  const clean=Math.max(0,Number(s.not_returned_orders||0));
+  const pct=total?Math.min(100,Math.max(0,ret*100/total)):0;
+  if(donut){
+    const ring=total?`conic-gradient(var(--cn-gold) 0 ${pct.toFixed(2)}%, #e6e1d8 ${pct.toFixed(2)}% 100%)`:'conic-gradient(#e6e1d8 0 100%)';
+    donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
+      <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
+        <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
+          <div style="font-size:30px;font-weight:950;line-height:1">${ret.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">Returns</div>
+          <div style="font-size:11px;font-weight:850;margin-top:4px">of ${total.toLocaleString('en-IN')} orders</div>
+        </div>
+      </div>
+      <div style="min-width:160px">
+        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--cn-gold);margin-right:7px"></span>Returned: ${ret.toLocaleString('en-IN')}</div>
+        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e6e1d8;margin-right:7px"></span>Not Returned: ${clean.toLocaleString('en-IN')}</div>
+        <div style="font-size:20px;font-weight:950;margin-top:14px">${pct.toFixed(1)}%</div>
+        <div class="small-note">Return rate</div>
+      </div>
+    </div>`;
+  }
+  if(kpis)kpis.innerHTML=
+    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique Website Display Order Code after active order filters')+
+    _wrKpi('Returned Orders',ret.toLocaleString('en-IN'),`${pct.toFixed(1)}% of matching Website orders`)+
+    _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
+    _wrKpi('BlueDart Returns',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Matched to Website Display Order Code')+
+    _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Deduplicated in Returned Orders');
+  if(note){
+    const pm=_wrEl('wrPaymentMode')?.value||'All';
+    note.innerHTML=`Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Return numerator is the union of <b>Website Return fields + BlueDart</b>, deduplicated by Website Display Order Code.${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+  }
+
+  const detailRows=Array.isArray(data.orders)?data.orders:[];
+  if(!data.details_active){
+    if(invNote)invNote.textContent='Search an order, customer, contact or SKU above to see the Website order and its complete Website + BlueDart return trail.';
+    if(invBody)invBody.innerHTML='<tr><td colspan="21" class="ops-empty">Use Customer / Contact / Order Search or SKU Search to inspect exact orders.</td></tr>';
+    return;
+  }
+  if(invNote)invNote.textContent=`${Number(data.details_total||0).toLocaleString('en-IN')} matching Website order${Number(data.details_total||0)===1?'':'s'}${data.details_limited?' · showing first 500':''}. A non-returned order is also shown, so you can see the exact current scene for the searched customer/order.`;
+  if(!invBody)return;
+  if(!detailRows.length){
+    invBody.innerHTML='<tr><td colspan="21" class="ops-empty">No Website orders match this customer / order / SKU search under the active order filters.</td></tr>';
+    return;
+  }
+  invBody.innerHTML=detailRows.map(r=>`<tr>
+    <td style="font-weight:900">${escHtml(r.display_order_code||'—')}</td>
+    <td>${_wrFmtDate(r.order_date)}</td>
+    <td style="font-weight:800;min-width:170px">${escHtml(r.customer||r.bluedart_customer||'—')}</td>
+    <td style="font-weight:850">${escHtml(r.payment_mode||'Unclassified')}</td>
+    <td style="font-weight:800;min-width:170px">${escHtml(r.sku_text||'—')}</td>
+    <td style="min-width:170px">${escHtml(r.website_order_status||'—')}</td>
+    <td class="ops-num">${Number(r.qty||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+    <td>${_wrYesNo(!!r.website_returned)}</td>
+    <td>${escHtml(r.website_return_type||'—')}</td>
+    <td class="ops-num" style="font-weight:850">${Number(r.rto_qty||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+    <td>${_wrFmtDate(r.website_return_date)}</td>
+    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.website_return_reason||'—')}</td>
+    <td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'—')}</td>
+    <td>${_wrFmtDate(r.bluedart_pickup_date)}</td>
+    <td style="min-width:240px">${escHtml(r.bluedart_status||'—')}</td>
+    <td>${_wrFmtDate(r.bluedart_status_date)}</td>
+    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.bluedart_rto_reason||'—')}</td>
+    <td style="min-width:150px">${escHtml(r.bluedart_destination||r.city||'—')}</td>
+    <td style="white-space:nowrap">${escHtml(r.bluedart_waybill||'—')}</td>
+    <td style="min-width:170px">${escHtml(r.invoices||'—')}</td>
+    <td style="min-width:170px">${escHtml(r.packages||'—')}</td>
+  </tr>`).join('');
+}
+async function loadWebsiteReturnsOverview(force=false){
+  const key=_wrOverviewKey();
+  if(!force&&_websiteReturnsOverview&&key===_websiteReturnsOverviewLastKey){renderWebsiteReturnsOverview();return;}
+  const seq=++_websiteReturnsOverviewSeq;
+  _websiteReturnsOverviewLoading=true;
+  const donut=_wrEl('wrOrderReturnDonut');
+  if(donut&&!_websiteReturnsOverview)donut.innerHTML='<div class="small-note">Loading total Website orders and matching returns…</div>';
+  try{
+    const params=_wrOverviewParams(force);
+    const r=await fetch('/api/website-returns-overview?'+params.toString(),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const d=await r.json();
+    if(seq!==_websiteReturnsOverviewSeq)return;
+    if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
+    _websiteReturnsOverview=d;
+    _websiteReturnsOverviewLastKey=key;
+    renderWebsiteReturnsOverview(d);
+  }catch(e){
+    if(seq!==_websiteReturnsOverviewSeq)return;
+    const msg=escHtml(e?.message||e);
+    if(donut)donut.innerHTML=`<div class="small-note">Could not load Website order denominator: ${msg}</div>`;
+    const n=_wrEl('wrOrderSummaryNote');if(n)n.textContent='Website order-level summary failed to load. BlueDart return table below is still available.';
+  }finally{
+    if(seq===_websiteReturnsOverviewSeq)_websiteReturnsOverviewLoading=false;
+  }
+}
+const websiteReturnsOverviewApply_d=_debounce(()=>loadWebsiteReturnsOverview(false),220);
+function queueWebsiteReturnsOverview(){websiteReturnsOverviewApply_d();}
 
 function _wrEl(id){return document.getElementById(id);}
 function _wrText(v){return String(v==null?'':v).trim();}
@@ -19860,10 +20079,11 @@ function renderWebsiteReturns(){
     const skuLinked=Number(_websiteReturnsData.sku_linked||0);
     src.innerHTML=`Live source: <b>BlueDart Return</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b> · Customer Contact, Status Description and Status Date are read directly from BlueDart · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
   }
+  queueWebsiteReturnsOverview();
 }
 async function loadWebsiteReturns(force=false){
   if(_websiteReturnsLoading)return;
-  if(_websiteReturnsData&&!force){renderWebsiteReturns();renderSdWebsiteReturns();return;}
+  if(_websiteReturnsData&&!force){renderWebsiteReturns();renderSdWebsiteReturns();loadWebsiteReturnsOverview(false);return;}
   _websiteReturnsLoading=true;
   const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="13" class="ops-empty">Loading live Website return sheet…</td></tr>';
   try{
@@ -19878,6 +20098,7 @@ async function loadWebsiteReturns(force=false){
     _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
     renderWebsiteReturns();
     renderSdWebsiteReturns();
+    await loadWebsiteReturnsOverview(force);
   }catch(e){
     _websiteReturnsData=null;
     if(body)body.innerHTML=`<tr><td colspan="13" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
@@ -19889,6 +20110,7 @@ async function loadWebsiteReturns(force=false){
 function resetWebsiteReturnsFilters(){
   ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
   ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  _websiteReturnsOverviewLastKey='';
   renderWebsiteReturns();
 }
 const websiteReturnsApply_d=_debounce(()=>renderWebsiteReturns(),160);
@@ -19898,7 +20120,7 @@ function exportWebsiteReturnsCsv(){
   const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',_wrSkuText(r)==='—'?'':_wrSkuText(r),r.customer||'',r.customer_contact||'',r.payment||'',_wrPaymentMode(r),r.order_date||'',r.pickup_date||'',r.status_description||'',r.status_group||'',r.status_date||'',r.origin||'',r.destination||'',r.rto_reason||'',r.waybill_no||'',r.reference_no||'']);
   _dlCsv(headers,vals,'website_returns_filtered');
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
    Live Shopify availability + backend Inv Stock.  This tab intentionally does
@@ -22829,6 +23051,11 @@ def api_warmup_status():
 _WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None}
 _WEBSITE_RETURNS_TTL = 300
 
+# Order-level Website denominator for the Website Returns dashboard. This keeps
+# the large Website sheet server-side and only returns filtered summaries/details.
+_WEBSITE_ORDER_AUDIT_CACHE = {"orders": None, "ts": 0.0, "error": None, "source_rows": 0}
+_WEBSITE_ORDER_AUDIT_TTL = 300
+
 
 def _wr_clean_value(v):
     if v is None:
@@ -23075,6 +23302,343 @@ def _load_website_returns(force=False):
             return _WEBSITE_RETURNS_CACHE["rows"]
         raise
 
+
+
+def _wr_unique_join(values, sep=" | "):
+    out = []
+    seen = set()
+    for value in values or []:
+        text = _wr_clean_value(value)
+        key = text.casefold()
+        if text and key not in seen:
+            seen.add(key)
+            out.append(text)
+    return sep.join(out)
+
+
+def _wr_website_payment_mode(value):
+    raw = str(value or "").strip().casefold()
+    if raw in ("1", "1.0", "cod", "cash on delivery", "cash-on-delivery", "true", "yes"):
+        return "COD"
+    if raw in ("0", "0.0", "prepaid", "pre-paid", "false", "no"):
+        return "Prepaid"
+    return "Unclassified"
+
+
+def _load_website_order_audit(force=False):
+    """Build a Website Display-Order-level index and merge BlueDart returns.
+
+    The large Website sheet stays on the server. One order is one physical
+    column-A Display Order Code. Website return fields (Return type, RTO Qty,
+    Return Date, Return Reason) are OR/aggregated across all lines in that order.
+    BlueDart rows are then joined to the same order ID, so the dashboard can show
+    a true denominator (all Website orders) and a deduplicated return numerator.
+    """
+    now = time.time()
+    if (not force and _WEBSITE_ORDER_AUDIT_CACHE.get("orders") is not None
+            and now - float(_WEBSITE_ORDER_AUDIT_CACHE.get("ts") or 0) < _WEBSITE_ORDER_AUDIT_TTL):
+        return _WEBSITE_ORDER_AUDIT_CACHE["orders"]
+
+    try:
+        # Reuse the already-loaded Website dataframe when possible. A manual
+        # Website Returns refresh forces a direct fresh CSV read instead.
+        df = None
+        if not force:
+            try:
+                cached_df = _DF_REFS.get("website_repeat")
+                if cached_df is not None and not cached_df.empty:
+                    df = cached_df
+            except Exception:
+                df = None
+        if df is None:
+            df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
+        if df is None or df.empty:
+            raise ValueError("Website sales sheet is empty")
+
+        cols = list(df.columns)
+        def _at(i):
+            return cols[i] if 0 <= i < len(cols) else None
+
+        c_order = _wr_col_exact(df, "Display Order Code", pos=0)
+        c_pin = _wr_col_exact(df, "Shipping Address Pincode", "Shipping Pincode", pos=2)
+        c_name = _wr_col_exact(df, "Billing Address Name", "Customer Name", pos=3)
+        c_addr = _wr_col_exact(df, "Final Billing Address", "Billing Address", pos=4)
+        c_status = _wr_col_exact(df, "Sale Order Status", "Order Status", pos=6)
+        c_sku = _wr_col_exact(df, "New SKU", "SKU", pos=7)
+        c_package = _wr_col_exact(df, "Shipping Package Code", pos=8)
+        c_invoice = _wr_col_exact(df, "Invoice Code", pos=9)
+        c_created = _wr_col_exact(df, "Created", pos=10)
+        c_city = _wr_col_exact(df, "Billing Address City", pos=11)
+        c_cod = _wr_col_exact(df, "COD", pos=12)
+        c_state = _wr_col_exact(df, "Billing Address State", pos=13)
+        c_selling = _wr_col_exact(df, "Selling Price", pos=17)
+        c_total = _wr_col_exact(df, "Total Price", pos=18)
+        c_qty = _wr_col_exact(df, "Qty", "Quantity", pos=21)
+        c_order_date = _wr_col_exact(df, "Order_Date", "Order Date", pos=22)
+        # Physical columns AA:AD in the verified Website sheet.
+        c_return_type = _at(26)
+        c_rto_qty = _at(27)
+        c_return_date = _at(28)
+        c_return_reason = _at(29)
+        c_type = _at(30)
+
+        orders = {}
+        source_rows = 0
+        for _, raw in df.iterrows():
+            order_key = _daily_reporting_order_key(raw.get(c_order, "")) if c_order is not None else ""
+            if not order_key:
+                continue
+            status = _wr_clean_value(raw.get(c_status, "")) if c_status is not None else ""
+            status_l = status.casefold()
+            if status_l and any(x in status_l for x in ("cancel", "void", "failed")):
+                continue
+            source_rows += 1
+
+            order_date = _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else ""
+            if not order_date and c_created is not None:
+                order_date = _wr_iso_date(raw.get(c_created, ""))
+            payment_mode = _wr_website_payment_mode(raw.get(c_cod, "")) if c_cod is not None else "Unclassified"
+            sku = _wr_clean_value(raw.get(c_sku, "")).upper() if c_sku is not None else ""
+            qty = max(0.0, to_num(raw.get(c_qty, 0))) if c_qty is not None else 1.0
+            rto_qty = max(0.0, to_num(raw.get(c_rto_qty, 0))) if c_rto_qty is not None else 0.0
+            return_type = _wr_clean_value(raw.get(c_return_type, "")) if c_return_type is not None else ""
+            return_date = _wr_iso_date(raw.get(c_return_date, "")) if c_return_date is not None else ""
+            return_reason = _wr_clean_value(raw.get(c_return_reason, "")) if c_return_reason is not None else ""
+            website_returned = bool(
+                rto_qty > 0 or return_type or return_date or return_reason
+                or any(x in status_l for x in ("return", "rto", "refund"))
+            )
+
+            rec = orders.get(order_key)
+            if rec is None:
+                rec = {
+                    "display_order_code": order_key,
+                    "order_date": order_date,
+                    "customer": _wr_clean_value(raw.get(c_name, "")) if c_name is not None else "",
+                    "address": _wr_clean_value(raw.get(c_addr, "")) if c_addr is not None else "",
+                    "pincode": _wr_clean_value(raw.get(c_pin, "")) if c_pin is not None else "",
+                    "city": _wr_clean_value(raw.get(c_city, "")) if c_city is not None else "",
+                    "state": _wr_clean_value(raw.get(c_state, "")) if c_state is not None else "",
+                    "payment_mode": payment_mode,
+                    "qty": 0.0,
+                    "selling_price_total": 0.0,
+                    "total_price": 0.0,
+                    "rto_qty": 0.0,
+                    "website_returned": False,
+                    "bluedart_returned": False,
+                    "_skus": [], "_statuses": [], "_packages": [], "_invoices": [],
+                    "_return_types": [], "_return_dates": [], "_return_reasons": [],
+                    "_types": [],
+                    "_bd_contacts": [], "_bd_customers": [], "_bd_pickups": [],
+                    "_bd_statuses": [], "_bd_status_dates": [], "_bd_reasons": [],
+                    "_bd_destinations": [], "_bd_waybills": [], "_bd_refs": [],
+                }
+                orders[order_key] = rec
+            elif order_date and (not rec.get("order_date") or order_date < rec.get("order_date")):
+                rec["order_date"] = order_date
+
+            # Prefer classified payment over unknown. If duplicate lines disagree,
+            # retain COD if any line says COD because M is an order-level flag.
+            if payment_mode == "COD" or rec.get("payment_mode") == "Unclassified":
+                rec["payment_mode"] = payment_mode
+            if not rec.get("customer") and c_name is not None:
+                rec["customer"] = _wr_clean_value(raw.get(c_name, ""))
+            if not rec.get("address") and c_addr is not None:
+                rec["address"] = _wr_clean_value(raw.get(c_addr, ""))
+            if not rec.get("city") and c_city is not None:
+                rec["city"] = _wr_clean_value(raw.get(c_city, ""))
+            if not rec.get("state") and c_state is not None:
+                rec["state"] = _wr_clean_value(raw.get(c_state, ""))
+            if not rec.get("pincode") and c_pin is not None:
+                rec["pincode"] = _wr_clean_value(raw.get(c_pin, ""))
+
+            rec["qty"] += float(qty)
+            rec["rto_qty"] += float(rto_qty)
+            rec["selling_price_total"] += max(0.0, to_num(raw.get(c_selling, 0))) if c_selling is not None else 0.0
+            rec["total_price"] += max(0.0, to_num(raw.get(c_total, 0))) if c_total is not None else 0.0
+            rec["website_returned"] = bool(rec.get("website_returned") or website_returned)
+            if sku: rec["_skus"].append(sku)
+            if status: rec["_statuses"].append(status)
+            if c_package is not None: rec["_packages"].append(raw.get(c_package, ""))
+            if c_invoice is not None: rec["_invoices"].append(raw.get(c_invoice, ""))
+            if return_type: rec["_return_types"].append(return_type)
+            if return_date: rec["_return_dates"].append(return_date)
+            if return_reason: rec["_return_reasons"].append(return_reason)
+            if c_type is not None: rec["_types"].append(raw.get(c_type, ""))
+
+        # Join all BlueDart return shipments to Website column-A Display Order Code.
+        bd_rows = _load_website_returns(force=force)
+        unmatched_bluedart = 0
+        for bd in bd_rows:
+            matched = None
+            for raw_order in (bd.get("display_order_code", ""), bd.get("order_id", "")):
+                key = _daily_reporting_order_key(raw_order)
+                if key and key in orders:
+                    matched = orders[key]
+                    break
+            if matched is None:
+                unmatched_bluedart += 1
+                continue
+            matched["bluedart_returned"] = True
+            matched["_bd_contacts"].append(bd.get("customer_contact", ""))
+            matched["_bd_customers"].append(bd.get("customer", ""))
+            matched["_bd_pickups"].append(bd.get("pickup_date", ""))
+            matched["_bd_statuses"].append(bd.get("status_description", "") or bd.get("status_group", ""))
+            matched["_bd_status_dates"].append(bd.get("status_date", ""))
+            matched["_bd_reasons"].append(bd.get("rto_reason", ""))
+            matched["_bd_destinations"].append(bd.get("destination", ""))
+            matched["_bd_waybills"].append(bd.get("waybill_no", ""))
+            matched["_bd_refs"].append(bd.get("reference_no", ""))
+
+        final_orders = []
+        for rec in orders.values():
+            skus = sorted({x for x in rec.pop("_skus", []) if x})
+            statuses = rec.pop("_statuses", [])
+            packages = rec.pop("_packages", [])
+            invoices = rec.pop("_invoices", [])
+            return_types = rec.pop("_return_types", [])
+            return_dates = sorted({x for x in rec.pop("_return_dates", []) if x})
+            return_reasons = rec.pop("_return_reasons", [])
+            types = rec.pop("_types", [])
+            bd_contacts = rec.pop("_bd_contacts", [])
+            bd_customers = rec.pop("_bd_customers", [])
+            bd_pickups = sorted({x for x in rec.pop("_bd_pickups", []) if x})
+            bd_statuses = rec.pop("_bd_statuses", [])
+            bd_status_dates = sorted({x for x in rec.pop("_bd_status_dates", []) if x})
+            bd_reasons = rec.pop("_bd_reasons", [])
+            bd_destinations = rec.pop("_bd_destinations", [])
+            bd_waybills = rec.pop("_bd_waybills", [])
+            bd_refs = rec.pop("_bd_refs", [])
+
+            rec.update({
+                "skus": skus,
+                "sku_text": ", ".join(skus),
+                "website_order_status": _wr_unique_join(statuses),
+                "packages": _wr_unique_join(packages, ", "),
+                "invoices": _wr_unique_join(invoices, ", "),
+                "website_return_type": _wr_unique_join(return_types),
+                "website_return_date": return_dates[-1] if return_dates else "",
+                "website_return_reason": _wr_unique_join(return_reasons),
+                "website_type": _wr_unique_join(types),
+                "customer_contact": _wr_unique_join(bd_contacts, ", "),
+                "bluedart_customer": _wr_unique_join(bd_customers),
+                "bluedart_pickup_date": bd_pickups[-1] if bd_pickups else "",
+                "bluedart_status": _wr_unique_join(bd_statuses),
+                "bluedart_status_date": bd_status_dates[-1] if bd_status_dates else "",
+                "bluedart_rto_reason": _wr_unique_join(bd_reasons),
+                "bluedart_destination": _wr_unique_join(bd_destinations),
+                "bluedart_waybill": _wr_unique_join(bd_waybills, ", "),
+                "bluedart_reference": _wr_unique_join(bd_refs, ", "),
+            })
+            rec["returned"] = bool(rec.get("website_returned") or rec.get("bluedart_returned"))
+            # Search text is server-only; it allows order/customer/contact/SKU/etc.
+            rec["_search"] = " ".join([
+                str(rec.get("display_order_code", "")), str(rec.get("customer", "")),
+                str(rec.get("bluedart_customer", "")), str(rec.get("customer_contact", "")),
+                str(rec.get("address", "")), str(rec.get("city", "")), str(rec.get("state", "")),
+                str(rec.get("pincode", "")), str(rec.get("sku_text", "")), str(rec.get("packages", "")),
+                str(rec.get("invoices", "")), str(rec.get("website_order_status", "")),
+                str(rec.get("website_return_type", "")), str(rec.get("website_return_reason", "")),
+                str(rec.get("bluedart_status", "")), str(rec.get("bluedart_rto_reason", "")),
+                str(rec.get("bluedart_destination", "")), str(rec.get("bluedart_waybill", "")),
+            ]).casefold()
+            final_orders.append(rec)
+
+        final_orders.sort(key=lambda r: (r.get("order_date") or "", r.get("display_order_code") or ""), reverse=True)
+        _WEBSITE_ORDER_AUDIT_CACHE.update({
+            "orders": final_orders,
+            "ts": now,
+            "error": None,
+            "source_rows": source_rows,
+            "unmatched_bluedart": unmatched_bluedart,
+        })
+        return final_orders
+    except Exception as e:
+        _WEBSITE_ORDER_AUDIT_CACHE["error"] = str(e)
+        if _WEBSITE_ORDER_AUDIT_CACHE.get("orders") is not None:
+            return _WEBSITE_ORDER_AUDIT_CACHE["orders"]
+        raise
+
+
+def _website_returns_overview_payload(force=False):
+    orders = _load_website_order_audit(force=force)
+    order_from = str(request.args.get("order_from", "") or "").strip()
+    order_to = str(request.args.get("order_to", "") or "").strip()
+    payment = str(request.args.get("payment", "All") or "All").strip()
+    sku_q = str(request.args.get("sku", "") or "").strip().upper()
+    search_q = str(request.args.get("search", "") or "").strip().casefold()
+    destination_q = str(request.args.get("destination", "") or "").strip().casefold()
+
+    sku_compact = re.sub(r"[^A-Z0-9]", "", sku_q)
+    matched = []
+    for rec in orders:
+        od = str(rec.get("order_date", "") or "")
+        if order_from and (not od or od < order_from):
+            continue
+        if order_to and (not od or od > order_to):
+            continue
+        if payment in ("COD", "Prepaid") and rec.get("payment_mode") != payment:
+            continue
+        if destination_q:
+            dest_hay = " ".join([
+                str(rec.get("city", "")), str(rec.get("state", "")),
+                str(rec.get("address", "")), str(rec.get("bluedart_destination", "")),
+            ]).casefold()
+            if destination_q not in dest_hay:
+                continue
+        if sku_q:
+            ok = False
+            for sku in rec.get("skus") or []:
+                su = str(sku or "").upper()
+                sc = re.sub(r"[^A-Z0-9]", "", su)
+                if sku_q in su or (sku_compact and sku_compact in sc):
+                    ok = True
+                    break
+            if not ok:
+                continue
+        if search_q and search_q not in str(rec.get("_search", "")):
+            continue
+        matched.append(rec)
+
+    total_orders = len(matched)
+    returned = [r for r in matched if r.get("returned")]
+    website_returns = sum(1 for r in matched if r.get("website_returned"))
+    bluedart_returns = sum(1 for r in matched if r.get("bluedart_returned"))
+    both_returns = sum(1 for r in matched if r.get("website_returned") and r.get("bluedart_returned"))
+    cod_orders = sum(1 for r in matched if r.get("payment_mode") == "COD")
+    prepaid_orders = sum(1 for r in matched if r.get("payment_mode") == "Prepaid")
+
+    details_active = bool(search_q or sku_q)
+    detail_rows = []
+    if details_active:
+        for rec in matched[:500]:
+            # Do not expose the internal search blob or revenue/price fields.
+            # Employee-role browsers must never receive hidden sales-value data.
+            detail_rows.append({
+                k: v for k, v in rec.items()
+                if k not in ("_search", "selling_price_total", "total_price")
+            })
+
+    return {
+        "summary": {
+            "total_orders": total_orders,
+            "returned_orders": len(returned),
+            "not_returned_orders": max(0, total_orders - len(returned)),
+            "return_rate": round((len(returned) * 100.0 / total_orders), 2) if total_orders else 0.0,
+            "website_sheet_returned": website_returns,
+            "bluedart_returned": bluedart_returns,
+            "both_sources": both_returns,
+            "cod_orders": cod_orders,
+            "prepaid_orders": prepaid_orders,
+        },
+        "orders": detail_rows,
+        "details_active": details_active,
+        "details_total": total_orders if details_active else 0,
+        "details_limited": bool(details_active and total_orders > 500),
+        "source_rows": int(_WEBSITE_ORDER_AUDIT_CACHE.get("source_rows") or 0),
+        "unmatched_bluedart": int(_WEBSITE_ORDER_AUDIT_CACHE.get("unmatched_bluedart") or 0),
+        "loaded_at": now_ist().strftime("%d-%b-%Y %H:%M"),
+    }
 
 
 # ════════════════════════════════════════════════════════════════
@@ -23495,6 +24059,15 @@ def api_website_oos_export_xlsx():
         return resp
     except Exception as e:
         return jsonify({"error": "Website OOS Excel export failed: " + str(e)[:400]}), 500
+
+@app.route("/api/website-returns-overview")
+def api_website_returns_overview():
+    force = request.args.get("force", "0").lower() in ("1", "true", "yes")
+    try:
+        return jsonify(_website_returns_overview_payload(force=force))
+    except Exception as e:
+        return jsonify({"error": "Website order/return overview failed: " + str(e)[:400]}), 502
+
 
 @app.route("/api/website-returns")
 def api_website_returns():
