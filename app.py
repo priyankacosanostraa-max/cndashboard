@@ -7641,6 +7641,13 @@ select.lg-in option{background:#fff;color:#1a1610}
             </span>
           </div>
           <div id="skuChecklist" class="sku-checklist"></div>
+          <label class="fl" style="margin-top:12px">Paste multiple SKUs (comma, space, tab, semicolon, or new line)</label>
+          <textarea id="fPasteSkus" class="fi" rows="3" placeholder="e.g.&#10;BH-1179&#10;LP-0280, CF-0253"
+            style="resize:vertical;font-family:monospace" oninput="applyMatrixPastedSkus_d()"></textarea>
+          <div class="small-note" style="display:flex;justify-content:space-between;align-items:center;margin-top:7px;gap:10px;flex-wrap:wrap">
+            <span id="fPasteInfo">Paste SKUs above — results update automatically.</span>
+            <button class="go-btn" type="button" style="width:auto;padding:7px 12px;letter-spacing:1px;background:#eceff4;color:#111" onclick="clearMatrixPastedSkus()">Clear Pasted</button>
+          </div>
         </div>
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="applyF_d()">
@@ -12178,6 +12185,63 @@ function mkCard(item, rev, conf, slow){
 
 let _matrixTxns = [];   // Overall Details drill-down (customer/date filtered) rows — export ke liye
 let _matrixPivot = [];  // Overall Details pivot (strictly one row per SKU) — export ke liye
+let matrixPastedSkuSet = null; // Overview-only pasted SKU filter; null = inactive
+
+function applyMatrixPastedSkus(){
+  const ta = document.getElementById('fPasteSkus');
+  const info = document.getElementById('fPasteInfo');
+  const raw = (ta?.value || '').trim();
+  if (!raw) {
+    matrixPastedSkuSet = null;
+    if (info) { info.textContent = 'Paste SKUs above — results update automatically.'; info.style.color = ''; }
+    applyF();
+    return;
+  }
+
+  // Accept Excel/Sheets paste, comma, space, tab, semicolon, pipe and new-line.
+  const tokens = raw.split(/[\s,;|]+/).map(v => v.trim()).filter(Boolean);
+  const exact = new Map();
+  const normalized = new Map();
+  (master || []).forEach(it => {
+    const sku = String(it?.sku || '').trim();
+    if (!sku) return;
+    exact.set(sku.toUpperCase(), sku);
+    normalized.set(sku.toUpperCase().replace(/[^A-Z0-9]/g,''), sku);
+  });
+
+  const matched = new Set();
+  const notFound = [];
+  tokens.forEach(tok => {
+    const u = String(tok).trim().toUpperCase();
+    const hit = exact.get(u) || normalized.get(u.replace(/[^A-Z0-9]/g,''));
+    if (hit) matched.add(hit);
+    else notFound.push(tok);
+  });
+
+  // Non-empty paste with zero matches must show zero rows, not the whole dashboard.
+  matrixPastedSkuSet = matched.size ? matched : new Set(['__NO_MATCH__']);
+  if (info) {
+    info.textContent = `${matched.size} matched` + (notFound.length ? ` · not found: ${notFound.slice(0,8).join(', ')}${notFound.length > 8 ? '…' : ''}` : '');
+    info.style.color = notFound.length ? '#d97706' : '#15803d';
+  }
+  applyF();
+}
+
+const applyMatrixPastedSkus_d = _debounce(function(){
+  try { applyMatrixPastedSkus(); } catch(e) { console.error(e); }
+}, 120);
+
+function clearMatrixPastedSkus(){
+  matrixPastedSkuSet = null;
+  const ta = document.getElementById('fPasteSkus'); if (ta) ta.value = '';
+  const info = document.getElementById('fPasteInfo');
+  if (info) { info.textContent = 'Paste SKUs above — results update automatically.'; info.style.color = ''; }
+  applyF();
+}
+
+window.applyMatrixPastedSkus_d = applyMatrixPastedSkus_d;
+window.clearMatrixPastedSkus = clearMatrixPastedSkus;
+
 function applyF(){
   const txt = (document.getElementById('fSearch')?.value || '').trim().toLowerCase();
   const cnQ = cnxGlobalCnQuery();
@@ -12202,6 +12266,7 @@ function applyF(){
   const d1 = document.getElementById('fD1')?.value || '';
   const d2 = document.getElementById('fD2')?.value || '';
   const hasSelectedSkus = selectedSkuSet.size > 0;
+  const hasPastedSkus = matrixPastedSkuSet instanceof Set;
   // Rolling sales shown on Overall cards must follow the same active
   // transaction filters (channel/sub-channel/FY/customer/date) as Sold Qty.
   const _overallDaysAgoIso = days => {
@@ -12239,7 +12304,11 @@ function applyF(){
     const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.cn_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
     if (txt && !hay.includes(txt)) return;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return;
-    if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
+    // Pasted SKUs take priority while the paste box is active. This keeps the
+    // old manual-tick selection intact and restores it automatically on Clear Pasted.
+    if (hasPastedSkus) {
+      if (!matrixPastedSkuSet.has(item.sku)) return;
+    } else if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
     if (!cnxCategoryMatches(taxonSel, item.taxon)) return;
     // Authoritative Rel/Non-Rel filter comes only from All Product CN Name.
     // cn_classify_rel_marker() checks Non-Rel before Rel, so names like
@@ -12548,7 +12617,9 @@ window.exportMatrixExcel = exportMatrixExcel;
 window.exportMatrixPDF = exportMatrixPDF;
 
 function resetFilters(){
-  ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  ['fSearch','fCust','fSkuSearch','fPasteSkus','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
+  matrixPastedSkuSet = null;
+  const _fpi = document.getElementById('fPasteInfo'); if (_fpi) { _fpi.textContent = 'Paste SKUs above — results update automatically.'; _fpi.style.color = ''; }
   ['fStatus','fFY','fPlat','fLaunch','fCnTag','fRelClass'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
   cnxResetCategorySelection('fTaxon');
   document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fSubChanChecks input:checked').forEach(c => c.checked = false);
