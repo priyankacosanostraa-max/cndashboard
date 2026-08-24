@@ -298,17 +298,22 @@ MYNTRA_SALES_URL = os.environ.get("MYNTRA_SALES_URL", "https://docs.google.com/s
 # analysis.  Raw order numbers never leave the backend; short SHA-1 tokens are
 # attached to their SKU + Order Date + marketplace instead.
 AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1692691438&single=true&output=csv")
+AMAZON_FBA_SALES_URL = os.environ.get("AMAZON_FBA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vR4KtejvNpI0deESY7Vqh9yiHvdwsyNkLOBPpLT_Zgwplb44rVuZEbMFcEq5x-AIVg79ChWOIOA8HRk/pub?gid=1288468804&single=true&output=csv")
 NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
 TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
 AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
 # Website Returns patch: contact + pickup/status analysis + COD/Prepaid + order-to-SKU join.
 # SKU Details Website filter also shows BlueDart return customers and RTO reasons.
-# Website courier-return tracker (BlueDart Return tab).  This is intentionally
+# Website courier-return tracker (bluedart report -> Bluedart return tab). This is intentionally
 # separate from the sales Website sheet: the Returns dashboard uses this source
 # for Website RTO/return operations and the marketplace Returns tab excludes Website.
+# Website Returns now reads the dedicated "bluedart report" workbook ->
+# "Bluedart return" tab (gid 1316634902). A new env-var name is used on
+# purpose so an old Railway WEBSITE_RETURNS_URL value cannot silently keep the
+# dashboard on the retired source.
 WEBSITE_RETURNS_URL = os.environ.get(
-    "WEBSITE_RETURNS_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSegcNg_GA_w91K0AZzsdmAgb5jwOaD7ciZE8ORpe1dIWiLegdjKWjC4wV7s8ZOEKSu6gZStp3QBTH2/pub?gid=67983640&single=true&output=csv",
+    "BLUEDART_RETURNS_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTeCfLAlN7zrSsahoL4vbtthTCadfRyj5t9hsGrDX_ewFdy9T4qr9hSlgp7_1ncCLM5AfWIljaLJXdm/pub?gid=1316634902&single=true&output=csv",
 )
 # Current Website Order Tracker workbook. The old BlueDart published tab can be
 # unavailable after sheet changes, so Website Returns also reads the live
@@ -1199,6 +1204,162 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     raise last_err
 
 
+_AMAZON_FBA_CACHE = {"rows": None, "ts": 0.0, "error": None, "meta": {}}
+_AMAZON_FBA_TTL = 300
+
+
+def _amazon_fba_pos(frame, idx):
+    try:
+        return (frame.attrs.get("source_position_columns") or {}).get(idx)
+    except Exception:
+        return None
+
+
+def _fetch_amazon_fba_rows(force=False):
+    """Normalize the second Amazon/FBA feed into one compact row format.
+
+    The user supplied physical fallbacks are C=Order Date, D=Dispatch Date,
+    L=SKU, O=Qty, Q=Selling Price and AQ=Net Revenue.  The live workbook can
+    move/rename columns, so semantic headers always win and those letters are
+    retained only as fallbacks.  Current Amazon exports also commonly expose
+    purchase-date, last-updated-date and Payout to Seller; those are supported
+    so text/date/int/mixed-case source changes do not break the dashboard.
+    """
+    now = time.time()
+    if (not force and _AMAZON_FBA_CACHE.get("rows") is not None
+            and now - float(_AMAZON_FBA_CACHE.get("ts") or 0) < _AMAZON_FBA_TTL):
+        return _AMAZON_FBA_CACHE["rows"]
+
+    groups = [
+        ("amazon-order-id", "Amazon Order ID", "Order ID", "OrderId", "Order No", "Order Number"),
+        ("order-item-id", "Order Item ID", "Order Item Id"),
+        ("Order Date", "Order_Date", "OrderDate"),
+        ("purchase-date", "Purchase Date", "PurchaseDate", "Created On", "Created At"),
+        ("Dispatch Date", "Dispatch_Date", "DispatchDate", "Shipped Date", "Ship Date"),
+        ("last-updated-date", "Last Updated Date", "Updated Date"),
+        ("order-status", "Order Status", "Status", "item-status", "Item Status"),
+        ("sku", "SKU", "Seller SKU", "Seller_sku_code", "SKU No.", "SKU No"),
+        ("quantity", "Qty", "Qty.", "Order Qty", "Sold Qty", "Final Qty"),
+        ("Selling Price", "SellingPrice", "Seller Price", "Selling value", "Item Price"),
+        ("Net Revenue", "NetRevenue", "Payout to Seller", "Payout to Sell", "Net Amount", "Settlement Amount"),
+        ("ship-city", "Ship City", "Shipping City", "Destination City", "City"),
+        ("ship-state", "Ship State", "Shipping State", "Destination State", "State"),
+        ("ship-postal-code", "Ship Postal Code", "Shipping Pincode", "Destination Pincode", "Pincode", "PIN Code"),
+    ]
+    # User-confirmed physical fallbacks: A order id, C order date, D dispatch,
+    # L SKU, O Qty, Q Selling Price, AQ Net Revenue.  We also keep the live
+    # semantic columns selected via the groups above.
+    positions = [0, 2, 3, 11, 14, 16, 42]
+    try:
+        frame = _fetch_csv_fresh(AMAZON_FBA_SALES_URL, select_groups=groups, select_positions=positions)
+        frame.columns = [str(c).strip() for c in frame.columns]
+
+        def col(names, pos=None):
+            c = find_col(frame.columns, *names)
+            if c:
+                return c
+            if isinstance(pos, int):
+                pc = _amazon_fba_pos(frame, pos)
+                if pc in frame.columns:
+                    return pc
+            return None
+
+        c_order = col(("amazon-order-id", "Amazon Order ID", "Order ID", "OrderId", "Order No", "Order Number"), 0)
+        c_item = col(("order-item-id", "Order Item ID", "Order Item Id"))
+        c_order_date = col(("Order Date", "Order_Date", "OrderDate"), 2)
+        c_purchase = col(("purchase-date", "Purchase Date", "PurchaseDate", "Created On", "Created At"))
+        c_dispatch = col(("Dispatch Date", "Dispatch_Date", "DispatchDate", "Shipped Date", "Ship Date"), 3)
+        c_updated = col(("last-updated-date", "Last Updated Date", "Updated Date"))
+        c_status = col(("order-status", "Order Status", "Status", "item-status", "Item Status"))
+        c_sku = col(("sku", "SKU", "Seller SKU", "Seller_sku_code", "SKU No.", "SKU No"), 11)
+        c_qty = col(("quantity", "Qty", "Qty.", "Order Qty", "Sold Qty", "Final Qty"), 14)
+        c_sell = col(("Selling Price", "SellingPrice", "Seller Price", "Selling value", "Item Price"), 16)
+        c_net = col(("Net Revenue", "NetRevenue", "Payout to Seller", "Payout to Sell", "Net Amount", "Settlement Amount"), 42)
+        c_city = col(("ship-city", "Ship City", "Shipping City", "Destination City", "City"))
+        c_state = col(("ship-state", "Ship State", "Shipping State", "Destination State", "State"))
+        c_pin = col(("ship-postal-code", "Ship Postal Code", "Shipping Pincode", "Destination Pincode", "Pincode", "PIN Code"))
+
+        if not c_sku:
+            raise ValueError("Amazon FBA SKU column not found")
+        if not c_qty:
+            raise ValueError("Amazon FBA quantity column not found")
+        if not (c_order_date or c_purchase):
+            raise ValueError("Amazon FBA order date column not found")
+
+        rows = []
+        seen = set()
+        for raw in _df_chunks(frame):
+            status = clean(raw.get(c_status, "")) if c_status else ""
+            status_l = status.casefold()
+            if any(tok in status_l for tok in ("cancel", "void", "failed")):
+                continue
+
+            sku = clean(raw.get(c_sku, "")).upper() if c_sku else ""
+            qty = to_num(raw.get(c_qty, 0)) if c_qty else 0.0
+            if not sku or qty <= 0 or qty > 100000:
+                continue
+
+            order_dt = parse_date_any(raw.get(c_order_date, "")) if c_order_date else None
+            if order_dt is None and c_purchase:
+                order_dt = parse_date_any(raw.get(c_purchase, ""))
+
+            dispatch_dt = parse_date_any(raw.get(c_dispatch, "")) if c_dispatch else None
+            # Some Amazon exports leave Dispatch Date blank but mark the line
+            # Shipped. In that case last-updated-date is the safest realised-sale
+            # fallback; pending/unshipped rows are not forced into dispatch views.
+            if dispatch_dt is None and any(tok in status_l for tok in ("shipped", "delivered")):
+                if c_updated:
+                    dispatch_dt = parse_date_any(raw.get(c_updated, ""))
+                if dispatch_dt is None:
+                    dispatch_dt = order_dt
+
+            selling_total = to_num(raw.get(c_sell, 0)) if c_sell else 0.0
+            selling_unit = (selling_total / qty) if qty > 0 and selling_total else 0.0
+            net_revenue = to_num(raw.get(c_net, 0)) if c_net else 0.0
+            order_id = clean(raw.get(c_order, "")) if c_order else ""
+            item_id = clean(raw.get(c_item, "")) if c_item else ""
+            city = clean(raw.get(c_city, "")) if c_city else ""
+            state = clean(raw.get(c_state, "")) if c_state else ""
+            pin = re.sub(r"\D", "", str(raw.get(c_pin, "") or ""))[:6] if c_pin else ""
+
+            order_iso = order_dt.strftime("%Y-%m-%d") if order_dt else ""
+            dispatch_iso = dispatch_dt.strftime("%Y-%m-%d") if dispatch_dt else ""
+            dedupe = item_id or "|".join((order_id.casefold(), sku, order_iso, f"{qty:.6f}", f"{selling_total:.2f}", f"{net_revenue:.2f}"))
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            rows.append({
+                "order_id": order_id,
+                "order_item_id": item_id,
+                "order_date": order_iso,
+                "dispatch_date": dispatch_iso,
+                "sku": sku,
+                "qty": float(qty),
+                "selling_price_total": float(selling_total),
+                "selling_price_unit": float(selling_unit),
+                "net_revenue": float(net_revenue),
+                "status": status,
+                "city": city,
+                "state": state,
+                "pin": pin,
+            })
+
+        _AMAZON_FBA_CACHE.update({
+            "rows": rows, "ts": now, "error": None,
+            "meta": {
+                "rows_total": int(len(frame)), "rows_used": int(len(rows)),
+                "order": str(c_order or ""), "order_date": str(c_order_date or c_purchase or ""),
+                "dispatch_date": str(c_dispatch or ""), "sku": str(c_sku or ""),
+                "qty": str(c_qty or ""), "selling_price": str(c_sell or ""),
+                "net_revenue": str(c_net or ""),
+            },
+        })
+        return rows
+    except Exception as exc:
+        _AMAZON_FBA_CACHE.update({"rows": [], "ts": now, "error": str(exc)[:300], "meta": {}})
+        return []
+
+
 _DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "flipkart", "ajio", "tata", "tata cliq"}
 
 def _daily_reporting_order_key(value):
@@ -1531,7 +1692,7 @@ def _load_channel_order_events(inv_skus_map, dbg):
     marketplace_payment_sku_orders = {}
     marketplace_payment_columns = {p: "" for p in _MARKETPLACE_RETURN_PAYMENT_PLATFORMS}
     marketplace_source_sheet = {
-        "Myntra": "Myntra", "Amazon": "Flipkart", "Flipkart": "Flipkart",
+        "Myntra": "Myntra", "Amazon": "Flipkart + FBA Sale", "Flipkart": "Flipkart",
         "Nykaa": "Nykaa", "Ajio": "Ajio", "Tata": "Tata",
     }
 
@@ -1811,6 +1972,62 @@ def _load_channel_order_events(inv_skus_map, dbg):
             _gc.collect()
 
     fetch_pool.shutdown(wait=True)
+
+    # Merge the second Amazon/FBA feed into the SAME Amazon bucket. It is never
+    # exposed as a separate marketplace in the UI. Exact Amazon order IDs power
+    # AOV/order counts; product selling price feeds SKU Details discount logic.
+    try:
+        fba_rows = _fetch_amazon_fba_rows(force=False)
+        fba_events = 0
+        fba_price_rows = 0
+        for row in fba_rows:
+            raw_sku = clean(row.get("sku", ""))
+            raw_order = clean(row.get("order_id", ""))
+            day = str(row.get("order_date") or "")
+            if not raw_sku or not raw_order or not day:
+                continue
+            normalized_sku = re.sub(r"[^A-Z0-9]", "", raw_sku.upper())
+            mapped_sku = inv_skus_map.get(normalized_sku, raw_sku.upper())
+            order_token = hashlib.sha1(
+                ("amazon|" + raw_order.casefold()).encode("utf-8", errors="ignore")
+            ).hexdigest()[:20]
+            event_key = ("Amazon", day, order_token)
+            event_sets.setdefault(mapped_sku, {})[event_key] = {
+                "d": _si(day), "o": _si(order_token), "p": _si("Amazon")
+            }
+            reporting_order_sets.setdefault(day, set()).add(
+                _daily_reporting_order_token("Amazon", raw_order)
+            )
+            # FBA export does not expose COD/Prepaid. Keep these Amazon orders
+            # in the returns/payment denominator as Unknown rather than dropping
+            # them or guessing a payment mode.
+            pay_key = (day, raw_order.strip().casefold())
+            marketplace_payment_orders.setdefault("Amazon", {}).setdefault(
+                pay_key, {"d": day, "m": "unknown", "r": 0}
+            )
+            sku_pay = marketplace_payment_sku_orders.setdefault(mapped_sku, {}).setdefault("Amazon", {})
+            sku_pay.setdefault(pay_key, {"d": day, "m": "unknown", "r": 0})
+            qty = max(0.0, float(row.get("qty") or 0))
+            unit_sp = max(0.0, float(row.get("selling_price_unit") or 0))
+            if unit_sp > 0:
+                bucket = product_price_sums.setdefault(mapped_sku, {}).setdefault(
+                    (day, "Amazon"), {"q": 0.0, "v": 0.0, "vq": 0.0, "dpv": 0.0, "dpq": 0.0}
+                )
+                weight = qty if qty > 0 else 1.0
+                bucket["q"] += weight
+                bucket["v"] += unit_sp * weight
+                bucket["vq"] += weight
+                fba_price_rows += 1
+            fba_events += 1
+        source_debug["amazon_fba"] = {
+            "rows": len(fba_rows), "events": fba_events,
+            "product_price_rows": fba_price_rows,
+            "source": "FBA Sale", "platform": "Amazon",
+            "error": _AMAZON_FBA_CACHE.get("error") or "",
+        }
+    except Exception as exc:
+        source_debug["amazon_fba"] = {"error": str(exc)[:180]}
+        dbg["errors"].append(f"amazon_fba order IDs: {exc}")
 
     compact = {
         sku: sorted(events.values(), key=lambda event: (event["d"], event["p"], event["o"]))
@@ -2824,6 +3041,63 @@ def _refresh_data():
         sales_exact[mapped_sku]["entries"].append(entry)
         sales_exact[mapped_sku]["total_rev"] += rev
 
+    # Second Amazon/FBA source: merge dispatch-realised rows into the same
+    # Amazon sales entries used by Overview, Repeat Orders, SKU Details,
+    # concentration, discounts and every other master-data view. Pending rows
+    # without a realised dispatch date remain order-date-only below.
+    amazon_fba_rows = []
+    try:
+        amazon_fba_rows = _fetch_amazon_fba_rows(force=False)
+        _fba_dispatch_used = 0
+        for ar in amazon_fba_rows:
+            date_iso = str(ar.get("dispatch_date") or "")
+            if not date_iso:
+                continue
+            try:
+                dt = datetime.strptime(date_iso, "%Y-%m-%d")
+            except Exception:
+                continue
+            d0 = dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            if d0 > today_dt:
+                continue
+            qty = float(ar.get("qty") or 0)
+            rev = float(ar.get("net_revenue") or 0)
+            sp = float(ar.get("selling_price_unit") or 0)
+            raw_sku = clean(ar.get("sku", ""))
+            if not raw_sku or qty <= 0:
+                continue
+            n_key = re.sub(r"[^A-Z0-9]", "", raw_sku.upper())
+            mapped_sku = inv_skus_map.get(n_key, raw_sku.upper())
+            fy = fy_bounds(dt)[0]
+            entry = {
+                "qty": qty, "rev": rev, "sp": sp, "ret": 0.0, "ret_amt": 0.0,
+                "date": _si(date_iso), "order_date": _si(str(ar.get("order_date") or date_iso)),
+                "cust": _si("Amazon"), "type": _si("SOR"),
+                "channel": _si("Ecom"), "sub_channel": _si("Amazon"), "fy": _si(fy),
+            }
+            sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})["entries"].append(entry)
+            sales_exact[mapped_sku]["total_rev"] += rev
+            grand_final_qty += qty
+            grand_net_revenue += rev
+            custs.add("Amazon"); types_.add("SOR"); channels_.add("Ecom"); sub_channels_.add("Amazon"); fyears.add(fy)
+            if d0 == yest_dt:
+                kpi_yesterday += rev
+            if cm_start <= d0 <= today_dt.replace(hour=23, minute=59, second=59):
+                kpi_month += rev
+            mk = d0.strftime("%Y-%m")
+            if mk == lm_key: kpi_last_month += rev
+            if mk == ly_key: kpi_last_year_month += rev
+            if fy == fy_label_cur: kpi_fy += rev
+            elif fy == fy_label_prev: kpi_prev_fy += rev
+            _fba_dispatch_used += 1
+        dbg["amazon_fba_dispatch_rows_used"] = _fba_dispatch_used
+        dbg["amazon_fba_source_meta"] = dict(_AMAZON_FBA_CACHE.get("meta") or {})
+        if _AMAZON_FBA_CACHE.get("error"):
+            dbg["errors"].append("amazon_fba: " + str(_AMAZON_FBA_CACHE.get("error"))[:180])
+    except Exception as exc:
+        dbg["errors"].append(f"amazon_fba dispatch merge: {exc}")
+        amazon_fba_rows = []
+
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
     try:
         del cosa
@@ -3054,6 +3328,60 @@ def _refresh_data():
             pass
         _DF_REFS.pop("cosa_orderdate", None)
         _gc.collect()
+
+    # Merge Amazon FBA order-date rows into the SAME Amazon bucket used by
+    # Sales Comparison, Rakhi and Daily Reporting. This complements (does not
+    # rename or split) the existing Amazon feed.
+    try:
+        _fba_orderdate_used = 0
+        for ar in amazon_fba_rows:
+            day = str(ar.get("order_date") or ar.get("dispatch_date") or "")
+            raw_sku = clean(ar.get("sku", ""))
+            if not day or not raw_sku:
+                continue
+            try:
+                dt_od = datetime.strptime(day, "%Y-%m-%d")
+            except Exception:
+                continue
+            qty = float(ar.get("qty") or 0)
+            rev = float(ar.get("net_revenue") or 0)
+            sp = float(ar.get("selling_price_unit") or 0)
+            if qty <= 0:
+                continue
+            n_key = re.sub(r"[^A-Z0-9]", "", raw_sku.upper())
+            mapped_sku = inv_skus_map.get(n_key, raw_sku.upper())
+            fy = fy_bounds(dt_od)[0]
+            order_entry = {
+                "qty": qty, "rev": rev, "date": _si(day),
+                "cust": _si("Amazon"), "type": _si("SOR"),
+                "channel": _si("Ecom"), "sub_channel": _si("Amazon"),
+            }
+            all_bucket = orderdate_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
+            all_bucket["entries"].append(order_entry)
+            all_bucket["total_rev"] += rev
+            if re.match(r"^(RKH|CMB)", mapped_sku, re.I):
+                rkh_entry = {
+                    "qty": qty, "rev": rev, "sp": sp, "ret": 0.0, "ret_amt": 0.0,
+                    "date": _si(day), "order_date": _si(day),
+                    "cust": _si("Amazon"), "type": _si("SOR"),
+                    "channel": _si("Ecom"), "sub_channel": _si("Amazon"), "fy": _si(fy),
+                }
+                rb = rakhi_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
+                rb["entries"].append(rkh_entry)
+                rb["total_rev"] += rev
+
+            # Daily Reporting marketplace revenue uses the Amazon FBA order date.
+            slot = daily_reporting_daily.setdefault(day, {
+                "dtc": 0.0, "marketplace": 0.0, "qcommerce": 0.0, "total": 0.0,
+                "net": 0.0, "return_amount": 0.0,
+            })
+            slot["marketplace"] += rev
+            slot["total"] += rev
+            slot["net"] += rev
+            _fba_orderdate_used += 1
+        dbg["amazon_fba_orderdate_rows_used"] = _fba_orderdate_used
+    except Exception as exc:
+        dbg["errors"].append(f"amazon_fba order-date merge: {exc}")
 
     daily_reporting_orders = {}
     for _source_order_map in (
@@ -9110,7 +9438,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
-      <div class="insights-sub">Website, Amazon, Flipkart, Myntra, Nykaa, Ajio and Tata use their own source-sheet selling-price columns. Remaining channels keep the existing cossa_orderdate revenue logic.</div>
+      <div class="insights-sub">Website, Amazon, Flipkart, Myntra, Nykaa, Ajio and Tata use their own source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and Selling Price column H. Remaining channels keep the existing cossa_orderdate revenue logic.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
@@ -23088,10 +23416,10 @@ def api_warmup_status():
     return jsonify({**_WARMUP, "ready": bool(CACHE.get("data"))})
 
 # ════════════════════════════════════════════════════════════════
-#  WEBSITE RETURNS — BlueDart Return tracker
+#  WEBSITE RETURNS — bluedart report / Bluedart return tracker
 #  Separate operational source from the Mayuresh Website sales sheet.
 # ════════════════════════════════════════════════════════════════
-_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None, "source": "BlueDart Return", "source_kind": "bluedart", "source_warning": ""}
+_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None, "source": "bluedart report · Bluedart return (gid 1316634902)", "source_kind": "bluedart", "source_warning": ""}
 _WEBSITE_RETURNS_TTL = 300
 
 # Order-level Website denominator for the Website Returns dashboard. This keeps
@@ -23720,12 +24048,26 @@ def _load_website_returns(force=False):
             and now - float(_WEBSITE_RETURNS_CACHE.get("ts") or 0) < _WEBSITE_RETURNS_TTL):
         return _WEBSITE_RETURNS_CACHE["rows"]
     try:
-        # 33 columns / ~1.1k rows: compact enough to load completely. Positional
-        # fallbacks mirror the verified BlueDart Return A:AG layout.
+        # Verified 24-Aug-2026 source: "bluedart report" -> "Bluedart return"
+        # (gid 1316634902), 34 columns A:AH. Read the full published CSV and use
+        # exact headers first; positions are only safety fallbacks.
         df = _wr_fetch_bluedart_source()
         if df is None or df.empty:
-            raise ValueError("BlueDart Return sheet is empty")
+            raise ValueError("Bluedart return sheet is empty")
         cols = list(df.columns)
+        _required_bd_headers = {
+            "Channel", "Order date", "Customer Contact", "Display Order Code",
+            "Order id", "Payment", "WayBill No", "P/U_Date",
+            "Destination Description", "Consignee Name", "Status Description",
+            "Status Group", "Status Date", "Rto Reason", "Mode",
+        }
+        _present_bd_headers = {str(c).strip() for c in cols}
+        _missing_bd_headers = sorted(_required_bd_headers - _present_bd_headers)
+        if _missing_bd_headers:
+            raise ValueError(
+                "Bluedart return source header mismatch; missing: "
+                + ", ".join(_missing_bd_headers)
+            )
         c_channel = _wr_col_exact(df, "Channel", pos=0)
         c_order_date = _wr_col_exact(df, "Order date", "Order Date", pos=1)
         # Current BlueDart layout has Customer Contact in physical column C.
@@ -23843,7 +24185,7 @@ def _load_website_returns(force=False):
             "sheet_data_rows": sheet_data_rows,
             "ignored_non_website_rows": ignored_non_website_rows,
             "error": None,
-            "source": "BlueDart Return + current Website Order Tracker enrichment",
+            "source": "bluedart report · Bluedart return (gid 1316634902) + current Website Order Tracker enrichment",
             "source_kind": "bluedart",
             "source_warning": " | ".join(tracker_meta.get("warnings") or []),
             "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
@@ -27202,6 +27544,10 @@ def _fetch_drg_source_rows():
             continue
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
         cust = norm_cust(r.get(C_CUST, "Unknown")) if C_CUST else "Unknown"
+        # Blinkit is sourced separately from the main COSA Net Revenue column I
+        # below, so skip its cossa_orderdate copy here to prevent double count.
+        if "blinkit" in str(cust or "").casefold():
+            continue
         typ  = norm_type(r.get(C_TYPE, "Regular")) if C_TYPE else "Regular"
         channel = calc_channel(cust, typ)
         sub_channel = calc_sub_channel(cust, channel, typ)
@@ -27211,7 +27557,56 @@ def _fetch_drg_source_rows():
             "channel": channel,
             "sub_channel": sub_channel,
             "type": typ,
+            # Keep Customer Name only so the marketplace-source variant can
+            # exclude Blinkit from its cossa_orderdate fallback. Blinkit is
+            # loaded separately from COSA column H as requested.
+            "customer": cust,
         })
+    # Blinkit for the NET-REVENUE table: COSA A=Dispatch Date,
+    # I=Net Revenue, J=Customer Name. Customer matching is case-insensitive.
+    try:
+        bdf = _fetch_csv_fresh(
+            COSA_URL,
+            select_groups=[
+                ("Dispatch Date", "Date"),
+                ("Net Revenue", "NetRevenue", "net rev", "Revenue"),
+                ("Customer Name", "Customer", "Client", "Party"),
+            ],
+            select_positions=[0, 8, 9],
+        )
+        bdf.columns = [str(c).strip() for c in bdf.columns]
+        b_date = _drg_source_position_col(bdf, 0) or find_col(bdf.columns, "Dispatch Date", "Date")
+        b_rev = find_col(bdf.columns, "Net Revenue", "NetRevenue", "net rev", "Revenue") or _drg_source_position_col(bdf, 8)
+        b_cust = find_col(bdf.columns, "Customer Name", "Customer", "Client", "Party") or _drg_source_position_col(bdf, 9)
+        for row in _df_chunks(bdf):
+            customer = clean(row.get(b_cust, "")) if b_cust else ""
+            if "blinkit" not in customer.casefold():
+                continue
+            dt = parse_date_any(row.get(b_date, "")) if b_date else None
+            if dt is None:
+                continue
+            rev = to_num(row.get(b_rev, 0)) if b_rev else 0.0
+            if rev == 0:
+                continue
+            out.append({
+                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev),
+                "channel": "", "sub_channel": "", "type": "Blinkit", "customer": customer,
+            })
+    except Exception:
+        pass
+
+    # The second Amazon/FBA feed is merged into Amazon here too. It is never
+    # shown as a separate row; order date drives this order-date table.
+    for ar in _fetch_amazon_fba_rows(force=False):
+        day = str(ar.get("order_date") or "")
+        rev = float(ar.get("net_revenue") or 0)
+        if not day or rev == 0:
+            continue
+        out.append({
+            "date": day, "rev": rev,
+            "channel": "Ecom", "sub_channel": "Amazon", "type": "SOR", "customer": "Amazon",
+        })
+
     _DRG_SRC_CACHE["rows"] = out
     _DRG_SRC_CACHE["ts"] = time.time()
     return out
@@ -27242,8 +27637,10 @@ def _drg_bucket(channel, sub_channel, typ):
 
 
 # Source-sheet version of Daily Revenue Glimpse. Named DTC/Ecom channels use
-# the exact user-approved price columns from their native Mayuresh tabs;
-# only the remaining buckets keep the existing cossa_orderdate revenue feed.
+# the exact user-approved price columns from their native Mayuresh tabs.
+# Blinkit is a special approved mapping from the COSA sheet itself:
+# Customer Name contains "Blinkit" and revenue is COSA column H (Selling Price).
+# Only the remaining buckets keep the existing cossa_orderdate revenue feed.
 _DRG_MARKETPLACE_SOURCE_CACHE = {"rows": None, "meta": None, "ts": 0}
 _DRG_MARKETPLACE_SOURCE_TTL = 300
 
@@ -27309,7 +27706,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
 
     out = []
     meta = {}
-    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata"}
+    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit"}
 
     for spec in specs:
         source_meta = {
@@ -27402,10 +27799,97 @@ def _fetch_drg_marketplace_source_rows(force=False):
         except Exception as e:
             source_meta["error"] = str(e)[:240]
 
+    # Second Amazon/FBA selling-price rows merge into the existing Amazon row.
+    fba_meta = {
+        "sheet": "FBA Sale", "price_column": "Q/header", "price_label": "Selling Price",
+        "rows_total": 0, "rows_used": 0, "date_column": "Order Date", "error": "",
+    }
+    meta["Amazon FBA (merged)"] = fba_meta
+    try:
+        fba_rows = _fetch_amazon_fba_rows(force=force)
+        resolved_meta = dict(_AMAZON_FBA_CACHE.get("meta") or {})
+        resolved_meta.pop("rows_total", None); resolved_meta.pop("rows_used", None)
+        fba_meta.update(resolved_meta)
+        fba_meta["rows_total"] = len(fba_rows)
+        fba_meta["rows_used"] = 0
+        for ar in fba_rows:
+            day = str(ar.get("order_date") or "")
+            value = float(ar.get("selling_price_total") or 0)
+            if not day or value == 0:
+                continue
+            out.append({"date": day, "rev": value, "bucket": "Amazon"})
+            fba_meta["rows_used"] = int(fba_meta.get("rows_used") or 0) + 1
+        if _AMAZON_FBA_CACHE.get("error"):
+            fba_meta["error"] = str(_AMAZON_FBA_CACHE.get("error"))[:240]
+    except Exception as e:
+        fba_meta["error"] = str(e)[:240]
+
+    # Blinkit is intentionally sourced from the main COSA sheet, not from
+    # cossa_orderdate. The approved mapping is exact: A = Dispatch Date,
+    # H = Selling Price, J = Customer Name; any Customer Name containing
+    # "blinkit" (case-insensitive) belongs to the Blinkit bucket.
+    blinkit_meta = {
+        "sheet": "cossa", "price_column": "H", "price_label": "Selling Price",
+        "rows_total": 0, "rows_used": 0, "date_column": "", "customer_column": "",
+        "error": "",
+    }
+    meta["Blinkit"] = blinkit_meta
+    try:
+        blinkit_frame = _fetch_csv_fresh(
+            COSA_URL,
+            select_groups=[
+                ("Dispatch Date", "Date"),
+                ("Selling Price", "selling price", "SP"),
+                ("Customer Name", "Customer", "Client", "Party"),
+            ],
+            select_positions=[0, 7, 9],
+        )
+        blinkit_frame.columns = [str(c).strip() for c in blinkit_frame.columns]
+        blinkit_meta["rows_total"] = len(blinkit_frame)
+
+        b_date = _drg_source_position_col(blinkit_frame, 0)
+        if not b_date or b_date not in blinkit_frame.columns:
+            b_date = find_col(blinkit_frame.columns, "Dispatch Date", "Date")
+        b_price = _drg_source_position_col(blinkit_frame, 7)
+        if not b_price or b_price not in blinkit_frame.columns:
+            b_price = find_col(blinkit_frame.columns, "Selling Price", "selling price", "SP", "Unit Price")
+        b_customer = _drg_source_position_col(blinkit_frame, 9)
+        if not b_customer or b_customer not in blinkit_frame.columns:
+            b_customer = find_col(blinkit_frame.columns, "Customer Name", "Customer", "Client", "Party")
+
+        blinkit_meta["date_column"] = str(b_date or "")
+        blinkit_meta["price_header"] = str(b_price or "")
+        blinkit_meta["customer_column"] = str(b_customer or "")
+        if not b_date:
+            raise ValueError("COSA Dispatch Date column A not found")
+        if not b_price:
+            raise ValueError("COSA Selling Price column H not found")
+        if not b_customer:
+            raise ValueError("COSA Customer Name column J not found")
+
+        for row in _df_chunks(blinkit_frame):
+            customer = clean(row.get(b_customer, ""))
+            if "blinkit" not in customer.casefold():
+                continue
+            dt = parse_date_any(row.get(b_date, ""))
+            if dt is None:
+                continue
+            rev = to_num(row.get(b_price, 0))
+            if rev == 0:
+                continue
+            out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "bucket": "Blinkit"})
+            blinkit_meta["rows_used"] += 1
+    except Exception as e:
+        blinkit_meta["error"] = str(e)[:240]
+
     # Channels not represented by dedicated source sheets keep the old
-    # cossa_orderdate revenue logic exactly as before.
+    # cossa_orderdate revenue logic exactly as before. Blinkit rows are skipped
+    # here even if the old bucket logic would call Quick Com / Blinkit "Others",
+    # preventing double counting after the dedicated COSA-H mapping above.
     fallback_used = 0
     for e in _fetch_drg_source_rows():
+        if "blinkit" in str(e.get("customer") or "").casefold():
+            continue
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         if bucket in named_buckets:
             continue
@@ -28526,6 +29010,38 @@ def _fetch_rkh_sku_city_rows(force=False):
             if frame is not None:
                 del frame
             _gc.collect()
+    # Amazon FBA city feed merges into the same Amazon source used by Rakhi
+    # geography. Header matching handles the live ship-city/state/postal fields;
+    # no separate FBA channel is exposed in the UI.
+    fba_city_diag = {"rows_total": 0, "rows_used": 0, "columns_found": True, "error": None}
+    diag["amazon_fba"] = fba_city_diag
+    try:
+        fba_rows = _fetch_amazon_fba_rows(force=force)
+        fba_city_diag["rows_total"] = len(fba_rows)
+        for ar in fba_rows:
+            sku = clean(ar.get("sku", ""))
+            qty = float(ar.get("qty") or 0)
+            if not sku or qty <= 0:
+                continue
+            pin = re.sub(r"\D", "", str(ar.get("pin") or ""))[:6]
+            raw_state = clean(ar.get("state", ""))
+            raw_city = clean(ar.get("city", ""))
+            state = _pincode_to_state(pin) if len(pin) == 6 else _STATE_KEY_TO_NAME.get(_geo_key(raw_state), raw_state.title())
+            if not state:
+                continue
+            city = _normalize_city_for_state(raw_city or state, state, pin)
+            out.append({
+                "sku": sku, "qty": qty, "state": state, "city": city, "pin": pin,
+                "source": "Amazon", "type": "SOR", "channel": "Ecom",
+                "date": str(ar.get("order_date") or ar.get("dispatch_date") or ""),
+                "revenue": round(float(ar.get("net_revenue") or 0), 2),
+            })
+            fba_city_diag["rows_used"] += 1
+        if _AMAZON_FBA_CACHE.get("error"):
+            fba_city_diag["error"] = str(_AMAZON_FBA_CACHE.get("error"))[:300]
+    except Exception as e:
+        fba_city_diag["error"] = str(e)[:300]
+
     _RKH_CITY_CACHE["rows"] = out
     _RKH_CITY_CACHE["diag"] = diag
     _RKH_CITY_CACHE["ts"] = time.time()
