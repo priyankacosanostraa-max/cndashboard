@@ -10359,10 +10359,20 @@ function skuInsightBadge(item){
   return parts.length ? `<span style="display:flex;flex-wrap:wrap;gap:4px;max-width:320px">${parts.join('')}</span>` : '';
 }
 
-function roThumb(url){
-  return (url && String(url).trim() && String(url).toLowerCase() !== 'nan')
-    ? `<img class="sku-thumb" src="${url}" loading="lazy" decoding="async" onerror="this.style.display='none'">`
-    : `<div class="sku-thumb" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:18px">💎</div>`;
+function roThumb(url, sku=''){
+  const cleanUrl = (url && String(url).trim() && String(url).toLowerCase() !== 'nan') ? String(url).trim() : '';
+  const proxyUrl = sku ? `/api/product-image/${encodeURIComponent(String(sku).trim())}` : '';
+  if(cleanUrl){
+    // External host fails/hotlink blocks -> same-origin server proxy retries the exact inventory image.
+    const fallback = proxyUrl
+      ? `this.onerror=null;this.src='${proxyUrl}'`
+      : `this.style.display='none'`;
+    return `<img class="sku-thumb" src="${escHtml(cleanUrl)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="${fallback}">`;
+  }
+  if(proxyUrl){
+    return `<img class="sku-thumb" src="${proxyUrl}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=&quot;sku-thumb&quot; style=&quot;display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:18px&quot;>💎</div>'">`;
+  }
+  return `<div class="sku-thumb" style="display:flex;align-items:center;justify-content:center;color:#cbd5e1;font-size:18px">💎</div>`;
 }
 
 let _cnxGlobalCnQuery = '';
@@ -12510,7 +12520,7 @@ function applyF(){
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
-        master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
+        master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
 
         // ── SKU pivot: EXACTLY one row per SKU, even across many customers/dates. ──
         // Combo-child usage is shown separately in the same SKU row via "In CMBs Sold";
@@ -12536,11 +12546,11 @@ function applyF(){
         const visiblePivot = _matrixPivot.slice(0, MATRIX_RENDER_CAP);
         const rowsHtml = visibleTxns.map(t => {
           const skuEsc = String(t.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[t.sku] || {s:0, w:0, b:0, img:'', cn:''};
+          const iv = invBy[String(t.sku||'').trim().toUpperCase()] || {s:0, w:0, b:0, img:'', cn:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0, blk = parseInt(iv.b) || 0;
           return `<tr>
             <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku, t.sku_name)}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku, t.sku_name)}</button></div></td>
             <td>${safeText(t.cust)}</td>
             <td>${safeText(t.type)}</td>
             <td class="gold">${parseFloat(t.qty) || 0}</td>
@@ -12554,13 +12564,13 @@ function applyF(){
 
         const pivotRowsHtml = visiblePivot.map(p => {
           const skuEsc = String(p.sku).replace(/'/g, "\\\\'");
-          const iv = invBy[p.sku] || {s:0, w:0, img:'', cn:''};
+          const iv = invBy[String(p.sku||'').trim().toUpperCase()] || {s:0, w:0, img:'', cn:''};
           const stk = parseInt(iv.s) || 0, wip = parseInt(iv.w) || 0;
           const pivotCtx = {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,businessChannel:true};
           const pivotItem = _masterSkuMap[String(p.sku||'').trim().toUpperCase()] || {sku:p.sku};
           const pivotCmbSold = cnxSoldSplit(pivotItem,pivotCtx,{allowedParentSkus:hasSelectedSkus?selectedSkuSet:null}).inCmb.sold;
           return `<tr>
-            <td><div class="sku-cell">${roThumb(iv.img)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(p.sku, p.sku_name)}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img,p.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(p.sku, p.sku_name)}</button></div></td>
             <td class="gold" title="${escHtml((p.customer_names||[]).join(', '))}">${Number(p.customer_count||0).toLocaleString('en-IN')}</td>
             <td class="gold">${p.qty}</td>
             <td class="gold">${Math.round(pivotCmbSold)}</td>
@@ -12630,7 +12640,7 @@ function _matrixExportMeta(){
 }
 function _matrixInvLookup(){
   const invBy = {};
-  master.forEach(it => { invBy[it.sku] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
+  master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
   return invBy;
 }
 function _matrixBuildPayload(kind){
@@ -12638,7 +12648,7 @@ function _matrixBuildPayload(kind){
   const invBy = _matrixInvLookup();
   if (kind === 'transactions'){
     return _matrixTxns.map(t => {
-      const iv = invBy[t.sku] || {s:0, w:0, b:0, img:''};
+      const iv = invBy[String(t.sku||'').trim().toUpperCase()] || {s:0, w:0, b:0, img:''};
       return {
         date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
         qty: parseFloat(t.qty) || 0, combo_qty: 0, revenue: showRev ? Math.round(parseFloat(t.rev) || 0) : null,
@@ -12651,7 +12661,7 @@ function _matrixBuildPayload(kind){
   const fyRaw=document.getElementById('fFY')?.value||'All FYs', d1=document.getElementById('fD1')?.value||'', d2=document.getElementById('fD2')?.value||'';
   const scope=selectedSkuSet&&selectedSkuSet.size?selectedSkuSet:null;
   return _matrixPivot.map(p => {
-    const iv = invBy[p.sku] || {s:0, w:0, img:''};
+    const iv = invBy[String(p.sku||'').trim().toUpperCase()] || {s:0, w:0, img:''};
     const item=_masterSkuMap[String(p.sku||'').trim().toUpperCase()]||{sku:p.sku};
     const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
     const comboQty=cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
@@ -23506,6 +23516,68 @@ def add_headers(resp):
     except Exception:
         pass
     return resp
+
+# Small same-origin product-image proxy. Some inventory image hosts intermittently
+# reject browser hotlinks/redirects; Overview falls back here using the SKU.
+_PRODUCT_IMAGE_CACHE = {}
+_PRODUCT_IMAGE_CACHE_LOCK = threading.Lock()
+_PRODUCT_IMAGE_CACHE_TTL = 6 * 3600
+
+@app.route("/api/product-image/<path:sku>")
+def api_product_image(sku):
+    sku_key = re.sub(r"\\s+", "", str(sku or "").strip().upper())
+    if not sku_key:
+        return ("", 404)
+
+    image_url = ""
+    try:
+        data = CACHE.get("data")
+        master_items = data[0] if data and len(data) > 0 else []
+        for it in master_items or []:
+            ik = re.sub(r"\\s+", "", str(it.get("sku", "") or "").strip().upper())
+            if ik == sku_key:
+                image_url = _normalize_inventory_image_url(it.get("image_url", ""))
+                break
+    except Exception:
+        image_url = ""
+    if not image_url:
+        return ("", 404)
+
+    now = time.time()
+    with _PRODUCT_IMAGE_CACHE_LOCK:
+        hit = _PRODUCT_IMAGE_CACHE.get(image_url)
+        if hit and now - hit[0] < _PRODUCT_IMAGE_CACHE_TTL:
+            body, ctype = hit[1], hit[2]
+            return app.response_class(body, mimetype=ctype)
+
+    try:
+        rr = requests.get(
+            image_url, timeout=(6, 18), allow_redirects=True,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                "Referer": "https://cosanostraa.com/",
+            },
+        )
+        rr.raise_for_status()
+        ctype = str(rr.headers.get("Content-Type") or "image/jpeg").split(";",1)[0].strip().lower()
+        if not ctype.startswith("image/") or not rr.content:
+            return ("", 404)
+        body = rr.content
+        if len(body) > 8 * 1024 * 1024:
+            return ("", 413)
+        with _PRODUCT_IMAGE_CACHE_LOCK:
+            if len(_PRODUCT_IMAGE_CACHE) > 600:
+                # bounded memory: discard oldest quarter
+                for k,_v in sorted(_PRODUCT_IMAGE_CACHE.items(), key=lambda kv: kv[1][0])[:150]:
+                    _PRODUCT_IMAGE_CACHE.pop(k, None)
+            _PRODUCT_IMAGE_CACHE[image_url] = (now, body, ctype)
+        resp = app.response_class(body, mimetype=ctype)
+        resp.headers["Cache-Control"] = "public, max-age=21600"
+        return resp
+    except Exception as exc:
+        print("Product image proxy failed:", sku_key, str(exc)[:140])
+        return ("", 404)
 
 @app.route("/")
 def home():
