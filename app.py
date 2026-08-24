@@ -7295,6 +7295,12 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="fSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
+        <div class="fc"><label class="fl">Rel / Non-Rel (CN Name)</label>
+          <select class="fs" id="fRelClass" onchange="applyF()">
+            <option value="All">All</option>
+            <option value="Rel">Rel</option>
+            <option value="Non-Rel">Non-Rel</option>
+          </select></div>
         <div class="fc"><label class="fl">Product Type</label>
           <select class="fs" id="fCnTag" onchange="applyF()">
             <option value="All">All</option>
@@ -7390,6 +7396,12 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rSubChanChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
+        <div class="fc"><label class="fl">Rel / Non-Rel (CN Name)</label>
+          <select class="fs" id="rRelClass" onchange="applyRO()">
+            <option value="All">All</option>
+            <option value="Rel">Rel</option>
+            <option value="Non-Rel">Non-Rel</option>
+          </select></div>
         <div class="fc"><label class="fl">Product Type</label>
           <select class="fs" id="rCnTag" onchange="applyRO()">
             <option value="All">All</option>
@@ -11817,6 +11829,7 @@ function applyF(){
   const chanSel = getSelectedChannels('fChan');
   const subChanSel = getSelectedSubChannels('fSubChan');
   const taxonSel = cnxSelectedCategoryValues('fTaxon');
+  const relClassQ = document.getElementById('fRelClass')?.value || 'All';
   const cnTagQ = document.getElementById('fCnTag')?.value || 'All';
   const statusQ = document.getElementById('fStatus')?.value || 'All';
   const fyQ = document.getElementById('fFY')?.value || 'All FYs';
@@ -11871,6 +11884,10 @@ function applyF(){
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return;
     if (hasSelectedSkus && !selectedSkuSet.has(item.sku)) return;
     if (!cnxCategoryMatches(taxonSel, item.taxon)) return;
+    // Authoritative Rel/Non-Rel filter comes only from All Product CN Name.
+    // cn_classify_rel_marker() checks Non-Rel before Rel, so names like
+    // 'CN Non-Rel ...' can never be misclassified as Rel.
+    if (relClassQ !== 'All' && cnClassOf(item) !== relClassQ) return;
     if (cnTagQ === 'Religious' && !item.is_religious) return;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return;
     if (statusQ !== 'All' && item.status !== statusQ) return;
@@ -12052,7 +12069,7 @@ function applyF(){
   }
   const setTxt = (id, val) => { const el=document.getElementById(id); if (el) el.textContent = fmt(val); };
 
-  const noFilter = !(txt || hasSelectedSkus || taxonSel.length>0 || cnTagQ!=='All' || statusQ!=='All' ||
+  const noFilter = !(txt || hasSelectedSkus || taxonSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || statusQ!=='All' ||
                      fyQ!=='All FYs' || plat!=='All' || mrpRange || launchQ!=='All' || custQ || d1 || d2 ||
                      typeSel.length>0 || chanSel.length>0 || subChanSel.length>0);
   if (noFilter) {
@@ -12175,7 +12192,7 @@ window.exportMatrixPDF = exportMatrixPDF;
 
 function resetFilters(){
   ['fSearch','fCust','fSkuSearch','fD1','fD2'].forEach(id => { const el=document.getElementById(id); if (el) el.value=''; });
-  ['fStatus','fFY','fPlat','fLaunch','fCnTag'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
+  ['fStatus','fFY','fPlat','fLaunch','fCnTag','fRelClass'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
   cnxResetCategorySelection('fTaxon');
   document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fSubChanChecks input:checked').forEach(c => c.checked = false);
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
@@ -12220,6 +12237,7 @@ function applyRO(){
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtx = roInvContext(typeSel, chanSel, subChanSel);
   const taxSel = cnxSelectedCategoryValues('rTaxon');
+  const relClassQ = document.getElementById('rRelClass')?.value || 'All';
   const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const d1 = document.getElementById('rD1')?.value || '';
@@ -12252,6 +12270,8 @@ function applyRO(){
     if (txt && !`${item.sku||''} ${item.sku_name||''} ${item.cn_name||''}`.toLowerCase().includes(txt)) return false;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return false;
     if (!cnxCategoryMatches(taxSel, item.taxon)) return false;
+    // Exact CN Name marker class: Non-Rel wins before Rel.
+    if (relClassQ !== 'All' && cnClassOf(item) !== relClassQ) return false;
     if (cnTagQ === 'Religious' && !item.is_religious) return false;
     if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
@@ -12300,7 +12320,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - Math.max(0,n-1)*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
@@ -12342,7 +12362,7 @@ function applyRO(){
   });
   _setSkuRevenueShareContext('repeat', roRevenueShareMap, roRevenueShareTotal);
 
-  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -12660,6 +12680,7 @@ function applyColFilters(){
     chanSelCF.length > 0 ||
     subChanSelCF.length > 0 ||
     cnxSelectedCategoryValues('rTaxon').length > 0 ||
+    (document.getElementById('rRelClass')?.value || 'All') !== 'All' ||
     (document.getElementById('rCust')?.value  || '').trim() ||
     (document.getElementById('rD1')?.value    || '') ||
     (document.getElementById('rD2')?.value    || '') ||
@@ -12734,6 +12755,7 @@ function resetRO(){
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   cnxResetCategorySelection('rTaxon');
   const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
+  const rrc = document.getElementById('rRelClass'); if (rrc) rrc.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
   const pinfo = document.getElementById('rPasteInfo'); if (pinfo) pinfo.textContent = '';
