@@ -310,6 +310,23 @@ WEBSITE_RETURNS_URL = os.environ.get(
     "WEBSITE_RETURNS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSegcNg_GA_w91K0AZzsdmAgb5jwOaD7ciZE8ORpe1dIWiLegdjKWjC4wV7s8ZOEKSu6gZStp3QBTH2/pub?gid=67983640&single=true&output=csv",
 )
+# Current Website Order Tracker workbook. The old BlueDart published tab can be
+# unavailable after sheet changes, so Website Returns also reads the live
+# RETURN &RTO sheet for return fields and New_Uniware for Notification Mobile.
+WEBSITE_ORDER_TRACKER_SPREADSHEET_ID = os.environ.get(
+    "WEBSITE_ORDER_TRACKER_SPREADSHEET_ID",
+    "107LfGjZTdJFEhYEb47qH5j5VbvZGPfG1P7jYmhxshxA",
+).strip()
+WEBSITE_ORDER_TRACKER_PUBLISHED_ID = os.environ.get(
+    "WEBSITE_ORDER_TRACKER_PUBLISHED_ID",
+    "2PACX-1vSegcNg_GA_w91K0AZzsdmAgb5jwOaD7ciZE8ORpe1dIWiLegdjKWjC4wV7s8ZOEKSu6gZStp3QBTH2",
+).strip()
+WEBSITE_RETURN_RTO_GID = os.environ.get("WEBSITE_RETURN_RTO_GID", "1711242164").strip()
+WEBSITE_UNIWARE_GID = os.environ.get("WEBSITE_UNIWARE_GID", "1485200781").strip()
+# Optional explicit CSV/GViz URLs can be supplied on Railway if sharing settings
+# are ever changed. Defaults below auto-try direct + published Google endpoints.
+WEBSITE_RETURN_RTO_LIVE_URL = os.environ.get("WEBSITE_RETURN_RTO_LIVE_URL", "").strip()
+WEBSITE_UNIWARE_LIVE_URL = os.environ.get("WEBSITE_UNIWARE_LIVE_URL", "").strip()
 # Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
@@ -19826,12 +19843,12 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     <td>${escHtml(r.website_return_type||'—')}</td>
     <td class="ops-num" style="font-weight:850">${Number(r.rto_qty||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
     <td>${_wrFmtDate(r.website_return_date)}</td>
-    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.website_return_reason||'—')}</td>
-    <td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'—')}</td>
+    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.website_return_reason||'Not captured in source')}</td>
+    <td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'Not available')}</td>
     <td>${_wrFmtDate(r.bluedart_pickup_date)}</td>
     <td style="min-width:240px">${escHtml(r.bluedart_status||'—')}</td>
     <td>${_wrFmtDate(r.bluedart_status_date)}</td>
-    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.bluedart_rto_reason||'—')}</td>
+    <td style="min-width:230px;font-weight:800;color:#8b3f23">${escHtml(r.bluedart_rto_reason||r.website_return_reason||'Not captured in source')}</td>
     <td style="min-width:150px">${escHtml(r.bluedart_destination||r.city||'—')}</td>
     <td style="white-space:nowrap">${escHtml(r.bluedart_waybill||'—')}</td>
     <td style="min-width:170px">${escHtml(r.invoices||'—')}</td>
@@ -19967,7 +19984,7 @@ function renderSdWebsiteReturns(){
     body.innerHTML='<tr><td colspan="11" class="ops-empty">No BlueDart Website returns for this SKU under the selected date range.</td></tr>';
     return;
   }
-  body.innerHTML=rows.slice(0,300).map(r=>`<tr><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="font-weight:850">${escHtml(r.customer||'—')}</td><td style="font-weight:800">${escHtml(r.customer_contact||'—')}</td><td>${escHtml(r.order_id||r.display_order_code||'—')}</td><td style="font-weight:800">${escHtml(_wrSkuText(r))}</td><td>${escHtml(_wrPaymentMode(r))}</td><td>${escHtml(r.destination||'—')}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+  body.innerHTML=rows.slice(0,300).map(r=>`<tr><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="font-weight:850">${escHtml(r.customer||'—')}</td><td style="font-weight:800">${escHtml(r.customer_contact||'Not available')}</td><td>${escHtml(r.order_id||r.display_order_code||'—')}</td><td style="font-weight:800">${escHtml(_wrSkuText(r))}</td><td>${escHtml(_wrPaymentMode(r))}</td><td>${escHtml(r.destination||'—')}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'Not captured in source')}</td></tr>`).join('');
 }
 window.renderSdWebsiteReturns=renderSdWebsiteReturns;
 
@@ -20049,7 +20066,7 @@ function renderWebsiteReturns(){
   const reasonCaptured=rows.filter(r=>_wrText(r.rto_reason)).length;
   const k=_wrEl('wrKpis');
   const wrSourceKind=_wrText(_websiteReturnsData?.source_kind)||'bluedart';
-  const wrFallback=wrSourceKind==='website_sheet_fallback';
+  const wrFallback=wrSourceKind!=='bluedart';
   if(k)k.innerHTML=
     _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),wrFallback?'Unique Website returned orders after active filters':'Unique BlueDart return shipments after active filters')+
     _wrKpi('COD Returns',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
@@ -20062,7 +20079,7 @@ function renderWebsiteReturns(){
   if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} filtered returns · showing ${show.length.toLocaleString('en-IN')}${rows.length>show.length?' (export includes all filtered rows)':''}`;
   if(body){
     if(!show.length)body.innerHTML='<tr><td colspan="13" class="ops-empty">No Website returns match the selected filters.</td></tr>';
-    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td style="font-weight:800;min-width:150px">${escHtml(_wrSkuText(r))}</td><td style="font-weight:800;min-width:150px">${escHtml(r.customer||'—')}</td><td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'—')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'—')}</td></tr>`).join('');
+    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td style="font-weight:800;min-width:150px">${escHtml(_wrSkuText(r))}</td><td style="font-weight:800;min-width:150px">${escHtml(r.customer||'—')}</td><td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'Not available')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'Not captured in source')}</td></tr>`).join('');
   }
   const src=_wrEl('wrSourceNote');
   if(src){
@@ -20075,10 +20092,12 @@ function renderWebsiteReturns(){
     const skuLinked=Number(_websiteReturnsData.sku_linked||0);
     const sourceName=_wrText(_websiteReturnsData.source)||'BlueDart Return';
     const sourceKind=_wrText(_websiteReturnsData.source_kind)||'bluedart';
-    if(sourceKind==='website_sheet_fallback'){
-      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} Website return/RTO source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique returned orders`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} Website sheet rows including header`:''} · BlueDart public export is temporarily unavailable, so this tab automatically uses live <b>Return Type, RTO Qty, Return Date and Return Reason</b> from the Website sheet. COD/Prepaid comes from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} orders linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    if(sourceKind!=='bluedart'){
+      const tc=Number(_websiteReturnsData.tracker_contact_orders||0),tr=Number(_websiteReturnsData.tracker_reason_orders||0);
+      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} Website return/RTO source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique returned orders`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} Website sheet rows including header`:''} · Contact number is mapped by <b>Display Order Code → New_Uniware Notification Mobile</b>${tc?` (${tc.toLocaleString('en-IN')} orders available)`:''}. Return reason uses <b>RETURN & RTO → Return Reason</b> and falls back to <b>New_Uniware → Reverse Pickup Reason</b>${tr?` (${tr.toLocaleString('en-IN')} orders with a captured reason)`:''}. COD/Prepaid comes from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} orders linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
     }else{
-      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b> · Customer Contact, Status Description and Status Date are read directly from BlueDart · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+      const tc=Number(_websiteReturnsData.tracker_contact_orders||0),tr=Number(_websiteReturnsData.tracker_reason_orders||0);
+      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b>. Missing contact is backfilled from <b>New_Uniware Notification Mobile</b>${tc?` (${tc.toLocaleString('en-IN')} orders available)`:''}; missing RTO reason is backfilled from <b>RETURN & RTO Return Reason</b> / <b>Reverse Pickup Reason</b>${tr?` (${tr.toLocaleString('en-IN')} orders with captured reason)`:''}. COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
     }
   }
   queueWebsiteReturnsOverview();
@@ -23057,6 +23076,11 @@ _WEBSITE_RETURNS_TTL = 300
 # the large Website sheet server-side and only returns filtered summaries/details.
 _WEBSITE_ORDER_AUDIT_CACHE = {"orders": None, "ts": 0.0, "error": None, "source_rows": 0}
 _WEBSITE_ORDER_AUDIT_TTL = 300
+# Order-code enrichment from the current Website Order Tracker:
+#   New_Uniware  -> Notification Mobile / Email / COD / Reverse Pickup Reason
+#   RETURN &RTO  -> Return type / RTO Qty / Return Date / Return Reason
+_WEBSITE_TRACKER_ENRICH_CACHE = {"data": None, "ts": 0.0, "meta": {}, "error": None}
+_WEBSITE_TRACKER_ENRICH_TTL = 300
 
 
 def _wr_clean_value(v):
@@ -23182,6 +23206,264 @@ def _wr_read_csv_bytes(content):
             io.StringIO(content.decode("utf-8", errors="replace")),
             dtype=str, on_bad_lines="skip",
         )
+
+
+def _wr_fetch_current_tracker_frame(gid, query, explicit_url="", range_hint="", max_bytes=30 * 1024 * 1024):
+    """Fetch a compact current Website Order Tracker view without Google auth.
+
+    We try the direct GViz endpoint, the published GViz endpoint, then bounded CSV
+    exports.  The query selects only the columns needed by Website Returns so the
+    58k-row New_Uniware sheet does not inflate Railway memory.
+    """
+    gid = str(gid or "").strip()
+    if not gid:
+        raise ValueError("tracker gid is blank")
+    headers = {
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard WebsiteReturnsTracker)",
+        "Accept": "text/csv,text/plain,*/*",
+    }
+    stamp = str(int(time.time()))
+    candidates = []
+    if explicit_url:
+        candidates.append(("configured URL", explicit_url, {"_": stamp}))
+    sid = WEBSITE_ORDER_TRACKER_SPREADSHEET_ID
+    pub = WEBSITE_ORDER_TRACKER_PUBLISHED_ID
+    if sid:
+        candidates.append((
+            "direct GViz",
+            f"https://docs.google.com/spreadsheets/d/{sid}/gviz/tq",
+            {"tqx": "out:csv", "gid": gid, "tq": query, "_": stamp},
+        ))
+    if pub:
+        candidates.append((
+            "published GViz",
+            f"https://docs.google.com/spreadsheets/d/e/{pub}/gviz/tq",
+            {"tqx": "out:csv", "gid": gid, "tq": query, "_": stamp},
+        ))
+    if sid:
+        params = {"format": "csv", "gid": gid, "_": stamp}
+        if range_hint:
+            params["range"] = range_hint
+        candidates.append((
+            "direct bounded CSV",
+            f"https://docs.google.com/spreadsheets/d/{sid}/export",
+            params,
+        ))
+    if pub:
+        params = {"gid": gid, "single": "true", "output": "csv", "_": stamp}
+        if range_hint:
+            params["range"] = range_hint
+        candidates.append((
+            "published bounded CSV",
+            f"https://docs.google.com/spreadsheets/d/e/{pub}/pub",
+            params,
+        ))
+
+    errors = []
+    for label, url, params in candidates:
+        try:
+            r = requests.get(url, params=params, headers=headers, timeout=(8, 55), allow_redirects=True)
+            r.raise_for_status()
+            content = r.content
+            if len(content) > max_bytes:
+                raise ValueError(f"response too large ({len(content)} bytes)")
+            head = content[:800].decode("utf-8", errors="replace").lower()
+            if "<html" in head or "accounts.google.com" in str(r.url).lower():
+                raise ValueError("received HTML/login page instead of CSV")
+            frame = _wr_read_csv_bytes(content)
+            if frame is None or frame.empty:
+                raise ValueError("CSV is empty")
+            frame.columns = [str(c).strip() for c in frame.columns]
+            return frame, label
+        except Exception as e:
+            errors.append(f"{label}: {e}")
+    raise RuntimeError("Website Order Tracker fetch failed; " + " | ".join(errors[-4:]))
+
+
+def _wr_tracker_reason(entry):
+    if not entry:
+        return ""
+    return _wr_clean_value(entry.get("return_reason")) or _wr_clean_value(entry.get("reverse_pickup_reason"))
+
+
+def _wr_load_tracker_enrichment(force=False):
+    """Return Display Order Code -> contact + return/RTO enrichment.
+
+    Verified live layout:
+      New_Uniware: B Display Order Code, E Reverse Pickup Reason,
+                    F Notification Email, G Notification Mobile, I COD.
+      RETURN &RTO: A Display Order Code, D Billing Address Name, H New SKU,
+                    AB Return type, AC RTO Qty, AD Return Date, AE Return Reason,
+                    AF SKU No., AG Channel/Name, AI State.
+    """
+    now = time.time()
+    cached = _WEBSITE_TRACKER_ENRICH_CACHE.get("data")
+    if (not force and cached is not None
+            and now - float(_WEBSITE_TRACKER_ENRICH_CACHE.get("ts") or 0) < _WEBSITE_TRACKER_ENRICH_TTL):
+        return cached, dict(_WEBSITE_TRACKER_ENRICH_CACHE.get("meta") or {})
+
+    out = {}
+    meta = {
+        "uniware_rows": 0, "return_rto_rows": 0,
+        "contact_orders": 0, "reason_orders": 0, "return_orders": 0,
+        "uniware_source": "", "return_rto_source": "", "warnings": [],
+    }
+
+    # Compact New_Uniware view: one row per item, deduped below to one order.
+    try:
+        q = "select B,E,F,G,I where B is not null"
+        udf, src = _wr_fetch_current_tracker_frame(
+            WEBSITE_UNIWARE_GID, q, WEBSITE_UNIWARE_LIVE_URL,
+            range_hint="B:I", max_bytes=28 * 1024 * 1024,
+        )
+        meta["uniware_source"] = src
+        meta["uniware_rows"] = int(len(udf))
+        c_order = _wr_col_exact(udf, "Display Order Code", pos=0)
+        c_reverse = _wr_col_exact(udf, "Reverse Pickup Reason", pos=1)
+        c_email = _wr_col_exact(udf, "Notification Email", pos=2)
+        c_mobile = _wr_col_exact(udf, "Notification Mobile", pos=3)
+        c_cod = _wr_col_exact(udf, "COD", pos=4)
+        for _, raw in udf.iterrows():
+            key = _daily_reporting_order_key(raw.get(c_order, "")) if c_order is not None else ""
+            if not key:
+                continue
+            rec = out.setdefault(key, {
+                "order_id": key, "contacts": [], "emails": [], "reverse_reasons": [],
+                "return_types": [], "return_dates": [], "return_reasons": [], "skus": [],
+                "customers": [], "states": [], "rto_qty": 0.0, "payment_modes": [],
+                "has_return": False,
+            })
+            contact = _wr_contact_value(raw.get(c_mobile, "")) if c_mobile is not None else ""
+            email = _wr_clean_value(raw.get(c_email, "")) if c_email is not None else ""
+            reverse = _wr_clean_value(raw.get(c_reverse, "")) if c_reverse is not None else ""
+            if contact: rec["contacts"].append(contact)
+            if email: rec["emails"].append(email)
+            if reverse:
+                rec["reverse_reasons"].append(reverse)
+                rec["has_return"] = True
+            if c_cod is not None:
+                pm = _wr_website_payment_mode(raw.get(c_cod, ""))
+                if pm in ("COD", "Prepaid"): rec["payment_modes"].append(pm)
+    except Exception as e:
+        meta["warnings"].append("New_Uniware unavailable: " + str(e)[:220])
+
+    # Compact RETURN & RTO view. This is the live return-field authority.
+    try:
+        q = "select A,D,H,AB,AC,AD,AE,AF,AG,AI where A is not null"
+        rdf, src = _wr_fetch_current_tracker_frame(
+            WEBSITE_RETURN_RTO_GID, q, WEBSITE_RETURN_RTO_LIVE_URL,
+            range_hint="A:AI", max_bytes=24 * 1024 * 1024,
+        )
+        meta["return_rto_source"] = src
+        meta["return_rto_rows"] = int(len(rdf))
+        c_order = _wr_col_exact(rdf, "Display Order Code", pos=0)
+        c_customer = _wr_col_exact(rdf, "Billing Address Name", pos=1)
+        c_new_sku = _wr_col_exact(rdf, "New SKU", pos=2)
+        c_type = _wr_col_exact(rdf, "Return type", "Return Type", pos=3)
+        c_qty = _wr_col_exact(rdf, "RTO Qty", "Return Qty", pos=4)
+        c_date = _wr_col_exact(rdf, "Return Date", pos=5)
+        c_reason = _wr_col_exact(rdf, "Return Reason", "RTO Reason", pos=6)
+        c_sku = _wr_col_exact(rdf, "SKU No.", "SKU No", "SKU", pos=7)
+        c_name2 = _wr_col_exact(rdf, "Channel/Name", pos=8)
+        c_state = _wr_col_exact(rdf, "State", pos=9)
+        for _, raw in rdf.iterrows():
+            key = _daily_reporting_order_key(raw.get(c_order, "")) if c_order is not None else ""
+            if not key:
+                continue
+            rec = out.setdefault(key, {
+                "order_id": key, "contacts": [], "emails": [], "reverse_reasons": [],
+                "return_types": [], "return_dates": [], "return_reasons": [], "skus": [],
+                "customers": [], "states": [], "rto_qty": 0.0, "payment_modes": [],
+                "has_return": False,
+            })
+            rt = _wr_clean_value(raw.get(c_type, "")) if c_type is not None else ""
+            rq = max(0.0, to_num(raw.get(c_qty, 0))) if c_qty is not None else 0.0
+            rd = _wr_iso_date(raw.get(c_date, "")) if c_date is not None else ""
+            rr = _wr_clean_value(raw.get(c_reason, "")) if c_reason is not None else ""
+            cust = _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else ""
+            cust2 = _wr_clean_value(raw.get(c_name2, "")) if c_name2 is not None else ""
+            state = _wr_clean_value(raw.get(c_state, "")) if c_state is not None else ""
+            for col in (c_new_sku, c_sku):
+                sv = _wr_clean_value(raw.get(col, "")).upper() if col is not None else ""
+                if sv: rec["skus"].append(sv)
+            if rt: rec["return_types"].append(rt)
+            if rd: rec["return_dates"].append(rd)
+            if rr: rec["return_reasons"].append(rr)
+            if cust: rec["customers"].append(cust)
+            elif cust2: rec["customers"].append(cust2)
+            if state: rec["states"].append(state)
+            rec["rto_qty"] += rq
+            if rt or rq > 0 or rd or rr:
+                rec["has_return"] = True
+    except Exception as e:
+        meta["warnings"].append("RETURN & RTO unavailable: " + str(e)[:220])
+
+    # Finalize compact values. COD wins only if duplicate item rows disagree.
+    for key, rec in out.items():
+        rec["customer_contact"] = _wr_unique_join(rec.pop("contacts", []), ", ")
+        rec["customer_email"] = _wr_unique_join(rec.pop("emails", []), ", ")
+        rec["reverse_pickup_reason"] = _wr_unique_join(rec.pop("reverse_reasons", []))
+        rec["return_type"] = _wr_unique_join(rec.pop("return_types", []))
+        dates = sorted({x for x in rec.pop("return_dates", []) if x})
+        rec["return_date"] = dates[-1] if dates else ""
+        rec["return_reason"] = _wr_unique_join(rec.pop("return_reasons", []))
+        rec["sku_text"] = ", ".join(sorted({x for x in rec.pop("skus", []) if x}))
+        rec["customer"] = _wr_unique_join(rec.pop("customers", []))
+        rec["state"] = _wr_unique_join(rec.pop("states", []), ", ")
+        pms = rec.pop("payment_modes", [])
+        rec["payment_mode"] = "COD" if "COD" in pms else ("Prepaid" if "Prepaid" in pms else "Unclassified")
+        rec["reason"] = _wr_tracker_reason(rec)
+
+    meta["contact_orders"] = sum(1 for r in out.values() if r.get("customer_contact"))
+    meta["reason_orders"] = sum(1 for r in out.values() if r.get("reason"))
+    meta["return_orders"] = sum(1 for r in out.values() if r.get("has_return"))
+    _WEBSITE_TRACKER_ENRICH_CACHE.update({
+        "data": out, "ts": time.time(), "meta": meta,
+        "error": " | ".join(meta.get("warnings") or []),
+    })
+    return out, dict(meta)
+
+
+def _wr_enrich_return_row_from_tracker(rec, tracker_map):
+    """Fill missing return row fields by exact Website Display Order Code."""
+    if not rec:
+        return rec
+    key = ""
+    for raw in (rec.get("display_order_code", ""), rec.get("order_id", "")):
+        key = _daily_reporting_order_key(raw)
+        if key and key in tracker_map:
+            break
+    t = tracker_map.get(key) if key else None
+    if not t:
+        return rec
+    if not rec.get("display_order_code"): rec["display_order_code"] = key
+    if not rec.get("order_id"): rec["order_id"] = key
+    if not rec.get("customer") and t.get("customer"): rec["customer"] = t["customer"]
+    if not rec.get("consignee") and t.get("customer"): rec["consignee"] = t["customer"]
+    if not rec.get("customer_contact") and t.get("customer_contact"):
+        rec["customer_contact"] = t["customer_contact"]
+        rec["customer_contact_source"] = "New_Uniware Notification Mobile"
+    if t.get("customer_email"):
+        rec["customer_email"] = t["customer_email"]
+    reason = _wr_tracker_reason(t)
+    if not rec.get("rto_reason") and reason:
+        rec["rto_reason"] = reason
+        rec["rto_reason_source"] = "RETURN & RTO Return Reason" if t.get("return_reason") else "New_Uniware Reverse Pickup Reason"
+    if not rec.get("status_description") and t.get("return_type"):
+        rec["status_description"] = t["return_type"]
+    if not rec.get("status_group") and t.get("return_type"):
+        rec["status_group"] = t["return_type"]
+    if not rec.get("status_date") and t.get("return_date"):
+        rec["status_date"] = t["return_date"]
+    if not rec.get("destination") and t.get("state"):
+        rec["destination"] = t["state"]
+    if not rec.get("mode") and t.get("payment_mode") in ("COD", "Prepaid"):
+        rec["mode"] = t["payment_mode"]
+    if not rec.get("sku_text_fallback") and t.get("sku_text"):
+        rec["sku_text_fallback"] = t["sku_text"]
+    return rec
 
 
 def _wr_fetch_bluedart_source():
@@ -23365,11 +23647,48 @@ def _wr_load_website_sheet_fallback(force=False):
         rec["pcs"] = str(int(rto_total)) if float(rto_total).is_integer() and rto_total else (str(rto_total) if rto_total else rec.get("pcs", ""))
         rows.append(rec)
 
+    # Enrich Website fallback with the current Order Tracker. New_Uniware supplies
+    # Notification Mobile; RETURN & RTO supplies return fields. Also include a
+    # tracker return that is not yet mirrored into the Mayuresh Website sheet.
+    tracker_map, tracker_meta = _wr_load_tracker_enrichment(force=force)
+    existing = {}
+    for rec in rows:
+        _wr_enrich_return_row_from_tracker(rec, tracker_map)
+        key = _daily_reporting_order_key(rec.get("display_order_code") or rec.get("order_id"))
+        if key: existing[key] = rec
+    for key, t in tracker_map.items():
+        if key in existing or not t.get("has_return"):
+            continue
+        reason = _wr_tracker_reason(t)
+        rto_qty = max(0.0, to_num(t.get("rto_qty", 0)))
+        rec = {
+            "channel": "Website", "order_date": "", "customer": t.get("customer", ""),
+            "customer_contact": t.get("customer_contact", ""),
+            "customer_email": t.get("customer_email", ""),
+            "display_order_code": key, "order_id": key, "payment": "",
+            "waybill_no": "", "reference_no": "", "pickup_date": "", "origin": "",
+            "destination": t.get("state", ""), "consignee": t.get("customer", ""),
+            "status_description": t.get("return_type", "") or "Website Return / RTO",
+            "status_group": t.get("return_type", "") or "Return/RTO",
+            "status_date": t.get("return_date", ""), "rto_reason": reason,
+            "weight": "", "pcs": str(int(rto_qty)) if rto_qty and float(rto_qty).is_integer() else (str(rto_qty) if rto_qty else ""),
+            "expected_delivery_date": "", "new_waybill_no": "", "sender": "",
+            "mode": t.get("payment_mode", ""), "source_kind": "website_tracker_fallback",
+            "sku_text_fallback": t.get("sku_text", ""),
+            "customer_contact_source": "New_Uniware Notification Mobile" if t.get("customer_contact") else "",
+            "rto_reason_source": ("RETURN & RTO Return Reason" if t.get("return_reason") else ("New_Uniware Reverse Pickup Reason" if t.get("reverse_pickup_reason") else "")),
+        }
+        rows.append(rec)
+
     rows.sort(key=lambda r: (r.get("status_date") or r.get("order_date") or "", r.get("order_id") or ""), reverse=True)
     return rows, {
         "source_rows": source_rows,
         "sheet_data_rows": int(len(df)),
         "ignored_non_website_rows": 0,
+        "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
+        "tracker_reason_orders": int(tracker_meta.get("reason_orders") or 0),
+        "tracker_return_orders": int(tracker_meta.get("return_orders") or 0),
+        "tracker_warnings": list(tracker_meta.get("warnings") or []),
     }
 
 
@@ -23489,6 +23808,11 @@ def _load_website_returns(force=False):
                 shipments[key] = merged
 
         rows = list(shipments.values())
+        # Even when BlueDart works, fill blank contact/reason from the current
+        # Website Order Tracker by exact Display Order Code.
+        tracker_map, tracker_meta = _wr_load_tracker_enrichment(force=force)
+        for rec in rows:
+            _wr_enrich_return_row_from_tracker(rec, tracker_map)
         rows.sort(key=lambda r: (r.get("status_date") or r.get("order_date") or "", r.get("order_id") or ""), reverse=True)
         _WEBSITE_RETURNS_CACHE.update({
             "rows": rows,
@@ -23497,9 +23821,12 @@ def _load_website_returns(force=False):
             "sheet_data_rows": sheet_data_rows,
             "ignored_non_website_rows": ignored_non_website_rows,
             "error": None,
-            "source": "BlueDart Return",
+            "source": "BlueDart Return + current Website Order Tracker enrichment",
             "source_kind": "bluedart",
-            "source_warning": "",
+            "source_warning": " | ".join(tracker_meta.get("warnings") or []),
+            "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
+            "tracker_reason_orders": int(tracker_meta.get("reason_orders") or 0),
+            "tracker_return_orders": int(tracker_meta.get("return_orders") or 0),
         })
         return rows
     except Exception as e:
@@ -23517,9 +23844,12 @@ def _load_website_returns(force=False):
                 "sheet_data_rows": int(meta.get("sheet_data_rows") or 0),
                 "ignored_non_website_rows": int(meta.get("ignored_non_website_rows") or 0),
                 "error": None,
-                "source": "Website sheet Return/RTO fallback",
-                "source_kind": "website_sheet_fallback",
-                "source_warning": "BlueDart public export unavailable; using live Website return/RTO fields.",
+                "source": "Website + RETURN & RTO + New_Uniware fallback",
+                "source_kind": "website_tracker_fallback",
+                "source_warning": "BlueDart public export unavailable; using Website return fields plus current RETURN & RTO and New_Uniware contact mapping." + ((" | " + " | ".join(meta.get("tracker_warnings") or [])) if meta.get("tracker_warnings") else ""),
+                "tracker_contact_orders": int(meta.get("tracker_contact_orders") or 0),
+                "tracker_reason_orders": int(meta.get("tracker_reason_orders") or 0),
+                "tracker_return_orders": int(meta.get("tracker_return_orders") or 0),
             })
             return fallback_rows
         except Exception as fallback_error:
@@ -23696,6 +24026,32 @@ def _load_website_order_audit(force=False):
             if return_reason: rec["_return_reasons"].append(return_reason)
             if c_type is not None: rec["_types"].append(raw.get(c_type, ""))
 
+        # Current Website Order Tracker enrichment. This is independent of the
+        # BlueDart public export, so contact search and Website-return reasons keep
+        # working even while the old BlueDart published tab is unavailable.
+        tracker_map, tracker_meta = _wr_load_tracker_enrichment(force=force)
+        for order_key, rec in orders.items():
+            t = tracker_map.get(order_key)
+            if not t:
+                continue
+            if not rec.get("customer") and t.get("customer"):
+                rec["customer"] = t["customer"]
+            if rec.get("payment_mode") == "Unclassified" and t.get("payment_mode") in ("COD", "Prepaid"):
+                rec["payment_mode"] = t["payment_mode"]
+            if t.get("sku_text"):
+                rec["_skus"].extend([x.strip() for x in str(t.get("sku_text") or "").split(",") if x.strip()])
+            if t.get("has_return"):
+                rec["website_returned"] = True
+                rec["rto_qty"] = max(float(rec.get("rto_qty") or 0.0), float(t.get("rto_qty") or 0.0))
+                if t.get("return_type"): rec["_return_types"].append(t["return_type"])
+                if t.get("return_date"): rec["_return_dates"].append(t["return_date"])
+                reason = _wr_tracker_reason(t)
+                if reason: rec["_return_reasons"].append(reason)
+            if t.get("customer_contact"): rec["_bd_contacts"].append(t["customer_contact"])
+            if t.get("customer"): rec["_bd_customers"].append(t["customer"])
+            rec["tracker_customer_email"] = t.get("customer_email", "")
+            rec["tracker_reason_source"] = ("RETURN & RTO Return Reason" if t.get("return_reason") else ("New_Uniware Reverse Pickup Reason" if t.get("reverse_pickup_reason") else ""))
+
         # Join genuine BlueDart return shipments to Website column-A Display
         # Order Code. If the operational endpoint is currently using the Website
         # fallback, do not re-label those Website rows as BlueDart events.
@@ -23785,6 +24141,8 @@ def _load_website_order_audit(force=False):
             "error": None,
             "source_rows": source_rows,
             "unmatched_bluedart": unmatched_bluedart,
+            "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
+            "tracker_reason_orders": int(tracker_meta.get("reason_orders") or 0),
         })
         return final_orders
     except Exception as e:
@@ -23871,6 +24229,8 @@ def _website_returns_overview_payload(force=False):
         "details_limited": bool(details_active and total_orders > 500),
         "source_rows": int(_WEBSITE_ORDER_AUDIT_CACHE.get("source_rows") or 0),
         "unmatched_bluedart": int(_WEBSITE_ORDER_AUDIT_CACHE.get("unmatched_bluedart") or 0),
+        "tracker_contact_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("tracker_contact_orders") or 0),
+        "tracker_reason_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("tracker_reason_orders") or 0),
         "loaded_at": now_ist().strftime("%d-%b-%Y %H:%M"),
     }
 
@@ -24369,6 +24729,11 @@ def api_website_returns():
             "source": _WEBSITE_RETURNS_CACHE.get("source") or "BlueDart Return",
             "source_kind": _WEBSITE_RETURNS_CACHE.get("source_kind") or "bluedart",
             "source_warning": _WEBSITE_RETURNS_CACHE.get("source_warning") or "",
+            "tracker_contact_orders": int(_WEBSITE_RETURNS_CACHE.get("tracker_contact_orders") or 0),
+            "tracker_reason_orders": int(_WEBSITE_RETURNS_CACHE.get("tracker_reason_orders") or 0),
+            "tracker_return_orders": int(_WEBSITE_RETURNS_CACHE.get("tracker_return_orders") or 0),
+            "contact_source": "New_Uniware: Display Order Code + Notification Mobile",
+            "return_reason_source": "RETURN & RTO: Return Reason; New_Uniware Reverse Pickup Reason fallback",
         })
     except Exception as e:
         return jsonify({"error": "Website Returns sheet load failed: " + str(e)[:300]}), 502
