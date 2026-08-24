@@ -3083,6 +3083,7 @@ def _refresh_data():
                 "date": _si(date_iso), "order_date": _si(str(ar.get("order_date") or date_iso)),
                 "cust": _si("Amazon"), "type": _si("SOR"),
                 "channel": _si("Ecom"), "sub_channel": _si("Amazon"), "fy": _si(fy),
+                "source_system": _si("amazon_fba"),
             }
             sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})["entries"].append(entry)
             sales_exact[mapped_sku]["total_rev"] += rev
@@ -3364,6 +3365,7 @@ def _refresh_data():
                 "qty": qty, "rev": rev, "date": _si(day),
                 "cust": _si("Amazon"), "type": _si("SOR"),
                 "channel": _si("Ecom"), "sub_channel": _si("Amazon"),
+                "source_system": _si("amazon_fba"),
             }
             all_bucket = orderdate_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
             all_bucket["entries"].append(order_entry)
@@ -3374,6 +3376,7 @@ def _refresh_data():
                     "date": _si(day), "order_date": _si(day),
                     "cust": _si("Amazon"), "type": _si("SOR"),
                     "channel": _si("Ecom"), "sub_channel": _si("Amazon"), "fy": _si(fy),
+                    "source_system": _si("amazon_fba"),
                 }
                 rb = rakhi_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
                 rb["entries"].append(rkh_entry)
@@ -26831,7 +26834,12 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # taaki same month/channel ke KPIs aapas me mismatch na karein. Dispatch-Date
     # rows sirf source-outage fallback hain.
     # Target ka "Channel Type" (SOR, Website, Purchase…) = COSA ka "Type".
+    # Amazon FBA Target actual is sourced explicitly from the FBA sheet so the
+    # main Target vs Actual table follows the same approved mapping as the two
+    # Daily Revenue Glimpse tables: Q = Qty and AS = Net Revenue. FBA remains
+    # inside SOR/Amazon; it is never exposed as a separate target row.
     act = {}
+    fba_comp_fallback = {}
     for it in comp:
         _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
         for e in _target_entries:
@@ -26841,9 +26849,33 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
             mk = d[:7]
             typ = (e.get("type") or "").strip().lower()
             k = (mk, typ)
-            slot = act.setdefault(k, {"rev": 0.0, "qty": 0.0})
+            is_fba = re.sub(r"[^a-z0-9]", "", str(e.get("source_system") or "").casefold()) == "amazonfba"
+            target_map = fba_comp_fallback if is_fba else act
+            slot = target_map.setdefault(k, {"rev": 0.0, "qty": 0.0})
             slot["rev"] += float(e.get("rev") or 0)
             slot["qty"] += float(e.get("qty") or 0)
+
+    # Authoritative FBA contribution for Target: Order Date (C), Qty (Q),
+    # Net Revenue (AS). If the live FBA source is temporarily unavailable,
+    # fall back to the already-compiled tagged FBA entries instead of dropping it.
+    fba_target_rows = _fetch_amazon_fba_rows(force=False)
+    if fba_target_rows:
+        for ar in fba_target_rows:
+            day = str(ar.get("order_date") or "")
+            if not day or len(day) < 7:
+                continue
+            qty = float(ar.get("qty") or 0)
+            rev = float(ar.get("net_revenue") or 0)
+            if qty <= 0 and rev == 0:
+                continue
+            slot = act.setdefault((day[:7], "sor"), {"rev": 0.0, "qty": 0.0})
+            slot["rev"] += rev
+            slot["qty"] += qty
+    else:
+        for k, vals in fba_comp_fallback.items():
+            slot = act.setdefault(k, {"rev": 0.0, "qty": 0.0})
+            slot["rev"] += float(vals.get("rev") or 0)
+            slot["qty"] += float(vals.get("qty") or 0)
 
     rows = []
     lb = {}   # stakeholder -> aggregated
