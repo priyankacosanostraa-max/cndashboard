@@ -7780,7 +7780,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </table>
     </div></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">BlueDart operational analysis follows the active return filters below. The order-level donut above uses the Website order denominator.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Return analysis follows the active filters below. BlueDart is used when available; the live Website return/RTO fields are the automatic fallback. The order-level donut above uses the Website order denominator.</div></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top RTO Reasons</label><div id="wrReasonAnalysis"></div></div>
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status Description</label><div id="wrStatusAnalysis"></div></div>
@@ -20048,8 +20048,10 @@ function renderWebsiteReturns(){
   const customerKeys=new Set(rows.map(r=>_wrNorm(r.customer_contact)||_wrNorm(r.customer)).filter(Boolean));
   const reasonCaptured=rows.filter(r=>_wrText(r.rto_reason)).length;
   const k=_wrEl('wrKpis');
+  const wrSourceKind=_wrText(_websiteReturnsData?.source_kind)||'bluedart';
+  const wrFallback=wrSourceKind==='website_sheet_fallback';
   if(k)k.innerHTML=
-    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),'Unique BlueDart return shipments after active filters')+
+    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),wrFallback?'Unique Website returned orders after active filters':'Unique BlueDart return shipments after active filters')+
     _wrKpi('COD Returns',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
     _wrKpi('Prepaid Returns',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
     _wrKpi('Unique Customers',customerKeys.size.toLocaleString('en-IN'),'Contact number used first, customer name as fallback')+
@@ -20071,7 +20073,13 @@ function renderWebsiteReturns(){
     const ignoredNonWebsite=Number(_websiteReturnsData.ignored_non_website_rows||0);
     const sheetRows=Number(_websiteReturnsData.sheet_rows_including_header||0);
     const skuLinked=Number(_websiteReturnsData.sku_linked||0);
-    src.innerHTML=`Live source: <b>BlueDart Return</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b> · Customer Contact, Status Description and Status Date are read directly from BlueDart · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    const sourceName=_wrText(_websiteReturnsData.source)||'BlueDart Return';
+    const sourceKind=_wrText(_websiteReturnsData.source_kind)||'bluedart';
+    if(sourceKind==='website_sheet_fallback'){
+      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} Website return/RTO source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique returned orders`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} Website sheet rows including header`:''} · BlueDart public export is temporarily unavailable, so this tab automatically uses live <b>Return Type, RTO Qty, Return Date and Return Reason</b> from the Website sheet. COD/Prepaid comes from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} orders linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    }else{
+      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b> · Customer Contact, Status Description and Status Date are read directly from BlueDart · COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+    }
   }
   queueWebsiteReturnsOverview();
 }
@@ -23042,7 +23050,7 @@ def api_warmup_status():
 #  WEBSITE RETURNS — BlueDart Return tracker
 #  Separate operational source from the Mayuresh Website sales sheet.
 # ════════════════════════════════════════════════════════════════
-_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None}
+_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None, "source": "BlueDart Return", "source_kind": "bluedart", "source_warning": ""}
 _WEBSITE_RETURNS_TTL = 300
 
 # Order-level Website denominator for the Website Returns dashboard. This keeps
@@ -23162,6 +23170,209 @@ def _wr_last_nonblank(old, new):
     return nv if nv else old
 
 
+def _wr_read_csv_bytes(content):
+    """Parse CSV bytes safely for the Website Returns source fallbacks."""
+    try:
+        return pd.read_csv(
+            io.BytesIO(content), dtype=str, on_bad_lines="skip",
+            encoding="utf-8", encoding_errors="replace",
+        )
+    except TypeError:
+        return pd.read_csv(
+            io.StringIO(content.decode("utf-8", errors="replace")),
+            dtype=str, on_bad_lines="skip",
+        )
+
+
+def _wr_fetch_bluedart_source():
+    """Fetch BlueDart robustly.
+
+    The normal shared CSV loader adds a cache-busting query parameter. Google
+    occasionally redirects older published-sheet URLs to a googleusercontent
+    endpoint that rejects that redirected request with HTTP 400. For this one
+    operational feed, retry the exact published URL (and a normalized variant)
+    without the extra query parameter before declaring the courier feed down.
+    """
+    errors = []
+    try:
+        return _fetch_csv_fresh(WEBSITE_RETURNS_URL)
+    except Exception as e:
+        errors.append(f"cache-busted fetch: {e}")
+
+    candidates = [WEBSITE_RETURNS_URL]
+    # Older Google publish links do not need single=true. Some redirected export
+    # endpoints are stricter about extra query parameters, so try the equivalent
+    # URL without it as well.
+    if "single=true" in WEBSITE_RETURNS_URL:
+        clean = re.sub(r"([?&])single=true(?:&|$)", r"\1", WEBSITE_RETURNS_URL, flags=re.I)
+        clean = clean.replace("?&", "?").rstrip("?&")
+        if clean and clean not in candidates:
+            candidates.append(clean)
+
+    headers = {
+        "Cache-Control": "no-cache, no-store, max-age=0",
+        "Pragma": "no-cache",
+        "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard WebsiteReturns)",
+        "Accept": "text/csv,text/plain,*/*",
+    }
+    for url in candidates:
+        try:
+            r = requests.get(url, headers=headers, timeout=(8, 45), allow_redirects=True)
+            r.raise_for_status()
+            content = r.content
+            head = content[:512].decode("utf-8", errors="replace").lower()
+            if "<html" in head:
+                raise ValueError("received HTML instead of CSV")
+            frame = _wr_read_csv_bytes(content)
+            if frame is None or frame.empty:
+                raise ValueError("CSV is empty")
+            return frame
+        except Exception as e:
+            errors.append(f"direct fetch: {e}")
+    raise RuntimeError("BlueDart published CSV unavailable; " + " | ".join(errors[-3:]))
+
+
+def _wr_load_website_sheet_fallback(force=False):
+    """Build Website-return rows from the live Website sheet itself.
+
+    This is a safety net only for periods when the separate BlueDart published
+    export is unavailable. It uses the Website sheet's own Return type, RTO Qty,
+    Return Date and Return Reason fields, so the Website Returns tab remains
+    usable instead of failing completely. It deliberately does *not* pretend
+    these rows are BlueDart courier events.
+    """
+    df = None
+    if not force:
+        try:
+            cached_df = _DF_REFS.get("website_repeat")
+            if cached_df is not None and not cached_df.empty:
+                df = cached_df
+        except Exception:
+            df = None
+    if df is None:
+        df = _fetch_csv_fresh(RAKHI_WEBSITE_ADDR_URL)
+    if df is None or df.empty:
+        raise ValueError("Website return/RTO fallback sheet is empty")
+
+    cols = list(df.columns)
+    def _at(i):
+        return cols[i] if 0 <= i < len(cols) else None
+
+    c_order = _wr_col_exact(df, "Display Order Code", pos=0)
+    c_name = _wr_col_exact(df, "Billing Address Name", "Customer Name", pos=3)
+    c_status = _wr_col_exact(df, "Sale Order Status", "Order Status", pos=6)
+    c_sku = _wr_col_exact(df, "New SKU", "SKU", pos=7)
+    c_package = _wr_col_exact(df, "Shipping Package Code", pos=8)
+    c_invoice = _wr_col_exact(df, "Invoice Code", pos=9)
+    c_created = _wr_col_exact(df, "Created", pos=10)
+    c_city = _wr_col_exact(df, "Billing Address City", "City", pos=11)
+    c_cod = _wr_col_exact(df, "COD", pos=12)
+    c_state = _wr_col_exact(df, "Billing Address State", "State", pos=13)
+    c_total = _wr_col_exact(df, "Total Price", pos=18)
+    c_qty = _wr_col_exact(df, "Qty", "Quantity", pos=21)
+    c_order_date = _wr_col_exact(df, "Order_Date", "Order Date", pos=22)
+    c_return_type = _wr_col_exact(df, "Return type", "Return Type", pos=26) or _at(26)
+    c_rto_qty = _wr_col_exact(df, "RTO Qty", "Return Qty", pos=27) or _at(27)
+    c_return_date = _wr_col_exact(df, "Return Date", pos=28) or _at(28)
+    c_return_reason = _wr_col_exact(df, "Return Reason", "RTO Reason", pos=29) or _at(29)
+
+    grouped = {}
+    source_rows = 0
+    for _, raw in df.iterrows():
+        order_key = _daily_reporting_order_key(raw.get(c_order, "")) if c_order is not None else ""
+        if not order_key:
+            continue
+        status = _wr_clean_value(raw.get(c_status, "")) if c_status is not None else ""
+        status_l = status.casefold()
+        if status_l and any(x in status_l for x in ("cancel", "void", "failed")):
+            continue
+        rto_qty = max(0.0, to_num(raw.get(c_rto_qty, 0))) if c_rto_qty is not None else 0.0
+        return_type = _wr_clean_value(raw.get(c_return_type, "")) if c_return_type is not None else ""
+        return_date = _wr_iso_date(raw.get(c_return_date, "")) if c_return_date is not None else ""
+        return_reason = _wr_clean_value(raw.get(c_return_reason, "")) if c_return_reason is not None else ""
+        is_return = bool(
+            rto_qty > 0 or return_type or return_date or return_reason
+            or any(x in status_l for x in ("return", "rto", "refund"))
+        )
+        if not is_return:
+            continue
+        source_rows += 1
+        order_date = _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else ""
+        if not order_date and c_created is not None:
+            order_date = _wr_iso_date(raw.get(c_created, ""))
+        customer = _wr_clean_value(raw.get(c_name, "")) if c_name is not None else ""
+        city = _wr_clean_value(raw.get(c_city, "")) if c_city is not None else ""
+        state = _wr_clean_value(raw.get(c_state, "")) if c_state is not None else ""
+        destination = ", ".join([x for x in (city, state) if x])
+        sku = _wr_clean_value(raw.get(c_sku, "")).upper() if c_sku is not None else ""
+        package = _wr_clean_value(raw.get(c_package, "")) if c_package is not None else ""
+        invoice = _wr_clean_value(raw.get(c_invoice, "")) if c_invoice is not None else ""
+        amount = _wr_clean_value(raw.get(c_total, "")) if c_total is not None else ""
+        pay_mode = _wr_website_payment_mode(raw.get(c_cod, "")) if c_cod is not None else "Unclassified"
+
+        rec = grouped.get(order_key)
+        if rec is None:
+            rec = {
+                "channel": "Website", "order_date": order_date, "customer": customer,
+                "customer_contact": "", "display_order_code": order_key, "order_id": order_key,
+                "payment": amount, "waybill_no": "", "reference_no": invoice,
+                "pickup_date": "", "origin": "", "destination": destination,
+                "consignee": customer, "status_description": return_type or "Website Return / RTO",
+                "status_group": return_type or "Return/RTO", "status_date": return_date,
+                "rto_reason": return_reason, "weight": "", "pcs": str(rto_qty or ""),
+                "expected_delivery_date": "", "new_waybill_no": "", "sender": "",
+                "mode": pay_mode, "source_kind": "website_sheet_fallback",
+                "_skus_fallback": [], "_packages_fallback": [], "_invoices_fallback": [],
+                "_types_fallback": [], "_reasons_fallback": [], "_dates_fallback": [],
+                "_destinations_fallback": [], "_rto_qty_fallback": 0.0,
+            }
+            grouped[order_key] = rec
+        elif order_date and (not rec.get("order_date") or order_date < rec.get("order_date")):
+            rec["order_date"] = order_date
+        if not rec.get("customer") and customer:
+            rec["customer"] = customer
+            rec["consignee"] = customer
+        if not rec.get("payment") and amount:
+            rec["payment"] = amount
+        if sku: rec["_skus_fallback"].append(sku)
+        if package: rec["_packages_fallback"].append(package)
+        if invoice: rec["_invoices_fallback"].append(invoice)
+        if return_type: rec["_types_fallback"].append(return_type)
+        if return_reason: rec["_reasons_fallback"].append(return_reason)
+        if return_date: rec["_dates_fallback"].append(return_date)
+        if destination: rec["_destinations_fallback"].append(destination)
+        rec["_rto_qty_fallback"] += rto_qty
+
+    rows = []
+    for rec in grouped.values():
+        types = rec.pop("_types_fallback", [])
+        reasons = rec.pop("_reasons_fallback", [])
+        dates = sorted({x for x in rec.pop("_dates_fallback", []) if x})
+        destinations = rec.pop("_destinations_fallback", [])
+        invoices = rec.pop("_invoices_fallback", [])
+        packages = rec.pop("_packages_fallback", [])
+        skus = sorted({x for x in rec.pop("_skus_fallback", []) if x})
+        rto_total = rec.pop("_rto_qty_fallback", 0.0)
+        if types:
+            rec["status_group"] = _wr_unique_join(types)
+            rec["status_description"] = _wr_unique_join(types)
+        rec["rto_reason"] = _wr_unique_join(reasons) or rec.get("rto_reason", "")
+        rec["status_date"] = dates[-1] if dates else rec.get("status_date", "")
+        rec["destination"] = _wr_unique_join(destinations, ", ") or rec.get("destination", "")
+        rec["reference_no"] = _wr_unique_join(invoices, ", ") or rec.get("reference_no", "")
+        rec["sku_text_fallback"] = ", ".join(skus)
+        rec["package_text_fallback"] = ", ".join(sorted({x for x in packages if x}))
+        rec["pcs"] = str(int(rto_total)) if float(rto_total).is_integer() and rto_total else (str(rto_total) if rto_total else rec.get("pcs", ""))
+        rows.append(rec)
+
+    rows.sort(key=lambda r: (r.get("status_date") or r.get("order_date") or "", r.get("order_id") or ""), reverse=True)
+    return rows, {
+        "source_rows": source_rows,
+        "sheet_data_rows": int(len(df)),
+        "ignored_non_website_rows": 0,
+    }
+
+
 def _load_website_returns(force=False):
     now = time.time()
     if (not force and _WEBSITE_RETURNS_CACHE.get("rows") is not None
@@ -23170,7 +23381,7 @@ def _load_website_returns(force=False):
     try:
         # 33 columns / ~1.1k rows: compact enough to load completely. Positional
         # fallbacks mirror the verified BlueDart Return A:AG layout.
-        df = _fetch_csv_fresh(WEBSITE_RETURNS_URL)
+        df = _wr_fetch_bluedart_source()
         if df is None or df.empty:
             raise ValueError("BlueDart Return sheet is empty")
         cols = list(df.columns)
@@ -23286,15 +23497,40 @@ def _load_website_returns(force=False):
             "sheet_data_rows": sheet_data_rows,
             "ignored_non_website_rows": ignored_non_website_rows,
             "error": None,
+            "source": "BlueDart Return",
+            "source_kind": "bluedart",
+            "source_warning": "",
         })
         return rows
     except Exception as e:
-        _WEBSITE_RETURNS_CACHE["error"] = str(e)
-        # If the sheet has a temporary network issue, a recent previous snapshot
-        # is safer than returning a blank operational dashboard.
-        if _WEBSITE_RETURNS_CACHE.get("rows") is not None:
-            return _WEBSITE_RETURNS_CACHE["rows"]
-        raise
+        primary_error = str(e)
+        _WEBSITE_RETURNS_CACHE["error"] = primary_error
+        # The BlueDart published export can occasionally return HTTP 400 after a
+        # Google redirect. Do not take the whole Website Returns dashboard down:
+        # fall back to the Website sheet's own live return/RTO fields.
+        try:
+            fallback_rows, meta = _wr_load_website_sheet_fallback(force=force)
+            _WEBSITE_RETURNS_CACHE.update({
+                "rows": fallback_rows,
+                "ts": now,
+                "source_rows": int(meta.get("source_rows") or 0),
+                "sheet_data_rows": int(meta.get("sheet_data_rows") or 0),
+                "ignored_non_website_rows": int(meta.get("ignored_non_website_rows") or 0),
+                "error": None,
+                "source": "Website sheet Return/RTO fallback",
+                "source_kind": "website_sheet_fallback",
+                "source_warning": "BlueDart public export unavailable; using live Website return/RTO fields.",
+            })
+            return fallback_rows
+        except Exception as fallback_error:
+            # Last resort: if a previous successful snapshot exists, keep the tab
+            # usable rather than replacing good data with an error screen.
+            if _WEBSITE_RETURNS_CACHE.get("rows") is not None:
+                return _WEBSITE_RETURNS_CACHE["rows"]
+            raise RuntimeError(
+                "BlueDart source unavailable and Website fallback failed: "
+                + primary_error[:220] + " | " + str(fallback_error)[:220]
+            )
 
 
 
@@ -23460,8 +23696,12 @@ def _load_website_order_audit(force=False):
             if return_reason: rec["_return_reasons"].append(return_reason)
             if c_type is not None: rec["_types"].append(raw.get(c_type, ""))
 
-        # Join all BlueDart return shipments to Website column-A Display Order Code.
+        # Join genuine BlueDart return shipments to Website column-A Display
+        # Order Code. If the operational endpoint is currently using the Website
+        # fallback, do not re-label those Website rows as BlueDart events.
         bd_rows = _load_website_returns(force=force)
+        if _WEBSITE_RETURNS_CACHE.get("source_kind") != "bluedart":
+            bd_rows = []
         unmatched_bluedart = 0
         for bd in bd_rows:
             matched = None
@@ -24126,7 +24366,9 @@ def api_website_returns():
             "payment_mode_source": "Website order COD flag (Display Order Code)",
             "sku_source": "Website sales sheet: Display Order Code + New SKU",
             "loaded_at": now_ist().strftime("%d-%b-%Y %H:%M"),
-            "source": "BlueDart Return",
+            "source": _WEBSITE_RETURNS_CACHE.get("source") or "BlueDart Return",
+            "source_kind": _WEBSITE_RETURNS_CACHE.get("source_kind") or "bluedart",
+            "source_warning": _WEBSITE_RETURNS_CACHE.get("source_warning") or "",
         })
     except Exception as e:
         return jsonify({"error": "Website Returns sheet load failed: " + str(e)[:300]}), 502
