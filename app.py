@@ -1,4 +1,10 @@
 # ============================================================
+# Cosa Nostraa — V23.9 (TARGET AMAZON FROM COSA ORDER)
+# V23.9:
+#   • Target > Daily Revenue Glimpse - Marketplace Sheet Sales now takes
+#     Amazon from cossa_orderdate column H (Selling Price), using Order Date.
+#   • Flipkart remains on the original combined Amazon/Flipkart sheet column R.
+#   • All other dashboard sources and calculations remain unchanged.
 # Cosa Nostraa — V23.8 (AMAZON ORIGINAL SOURCE RESTORED)
 # V23.8:
 #   • Amazon FBA Sale feed removed from every dashboard calculation.
@@ -9236,7 +9242,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
-      <div class="insights-sub">Selling Price view: Amazon and Flipkart use the original combined Amazon/Flipkart source sheet. Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and column H (Selling Price).</div>
+      <div class="insights-sub">Selling Price view: Amazon uses cossa_orderdate column H (Selling Price) with Order Date. Flipkart uses the original combined Amazon/Flipkart source sheet column R (Selling value). Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and column H (Selling Price).</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
@@ -14514,7 +14520,7 @@ function renderDRGMarketplaceTable(){
       &nbsp;|&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
     <p style="color:var(--cn-mid);font-size:.74rem;margin:0 0 10px">
-      Price source: Website S (Total Price), Amazon/Flipkart R (Selling value), Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
+      Price source: Website S (Total Price), Amazon cossa_orderdate H (Selling Price), Flipkart R (Selling value), Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
     </p>
     ${warnings}
     <table class="ro" style="width:100%;min-width:920px">
@@ -27471,7 +27477,9 @@ def _fetch_drg_source_rows(force=False):
               or _at(0) or find_col(df.columns, "Dispatch Date", "date"))
     C_QTY  = (find_col(df.columns, "Final Qty", "final quantity", "final_qty")
               or _at(6) or find_col(df.columns, "qty", "quantity") or _at(5))
-    C_SP   = find_col(df.columns, "Selling Price", "selling price", "sp", "unit price") or _at(7)
+    # User-approved mapping for cosa_order/cossa_orderdate: H = Selling Price.
+    # Physical H is authoritative; header matching is only a compatibility fallback.
+    C_SP   = _at(7) or find_col(df.columns, "Selling Price", "selling price", "unit price")
     C_REV  = _at(8)  or find_col(df.columns, "Net Revenue", "net rev", "revenue")
     C_CUST = _at(9)  or find_col(df.columns, "Customer Name", "customer", "client", "party")
     C_TYPE = _at(10) or find_col(df.columns, "Type", "channel", "mode")
@@ -27482,6 +27490,7 @@ def _fetch_drg_source_rows(force=False):
         if dt is None:
             continue
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
+        selling_price = to_num(r.get(C_SP, 0)) if C_SP else 0.0
         cust = norm_cust(r.get(C_CUST, "Unknown")) if C_CUST else "Unknown"
         # Blinkit is sourced separately from the main COSA Net Revenue column I
         # below, so skip its cossa_orderdate copy here to prevent double count.
@@ -27493,6 +27502,7 @@ def _fetch_drg_source_rows(force=False):
         out.append({
             "date": dt.strftime("%Y-%m-%d"),
             "rev": rev,
+            "sp": selling_price,
             "channel": channel,
             "sub_channel": sub_channel,
             "type": typ,
@@ -27564,10 +27574,11 @@ def _drg_bucket(channel, sub_channel, typ):
 
 
 # Source-sheet version of Daily Revenue Glimpse. Named DTC/Ecom channels use
-# the exact user-approved price columns from their native Mayuresh tabs.
-# Blinkit is a special approved mapping from the COSA sheet itself:
-# Customer Name contains "Blinkit" and revenue is COSA column H (Selling Price).
-# Only the remaining buckets keep the existing cossa_orderdate revenue feed.
+# the exact user-approved price columns from their approved source tabs.
+# TARGET-TAB EXCEPTION: Amazon uses cossa_orderdate A=Order Date and
+# H=Selling Price. Flipkart alone remains on the combined Amazon/Flipkart R feed.
+# Blinkit uses the main COSA sheet: Customer contains Blinkit and H=Selling Price.
+# Only the remaining buckets keep the existing cossa_orderdate Net Revenue feed.
 _DRG_MARKETPLACE_SOURCE_CACHE = {"rows": None, "meta": None, "ts": 0}
 _DRG_MARKETPLACE_SOURCE_TTL = 300
 
@@ -27593,9 +27604,10 @@ def _fetch_drg_marketplace_source_rows(force=False):
             "qty_names": ("Qty", "Quantity"), "cancel_qty_groups": (), "cancel_date_names": (),
         },
         {
-            "key": "Amazon/Flipkart", "sheet": "Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "key": "Flipkart", "sheet": "Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
             "price_pos": 17, "price_letter": "R", "price_label": "Selling value",
-            "fixed_bucket": "", "platform_pos": 9, "platform_names": ("Channel", "Marketplace", "Status", "Type"),
+            "fixed_bucket": "", "allowed_buckets": ("Flipkart",),
+            "platform_pos": 9, "platform_names": ("Channel", "Marketplace", "Status", "Type"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
             "status_names": (), "qty_names": ("Qty.", "Qty", "Quantity"),
             "cancel_qty_groups": (), "cancel_date_names": (),
@@ -27721,10 +27733,49 @@ def _fetch_drg_marketplace_source_rows(force=False):
                     else:
                         continue
 
+                allowed_buckets = set(spec.get("allowed_buckets") or ())
+                if allowed_buckets and bucket not in allowed_buckets:
+                    continue
+
                 out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "bucket": bucket})
                 source_meta["rows_used"] += 1
         except Exception as e:
             source_meta["error"] = str(e)[:240]
+
+    # Amazon for Target > Marketplace Sheet Sales comes ONLY from
+    # cosa_order/cossa_orderdate: A = Order Date, H = Selling Price.  The
+    # already-normalized source rows retain Customer/Type/channel fields, so
+    # mixed case, spaces and minor source formatting changes are handled by the
+    # same channel classifier used by the rest of the dashboard.
+    orderdate_rows = []
+    orderdate_error = ""
+    try:
+        orderdate_rows = _fetch_drg_source_rows(force=force)
+    except Exception as e:
+        orderdate_error = str(e)[:240]
+
+    def _is_amazon_orderdate_row(entry):
+        bucket = _drg_bucket(entry.get("channel"), entry.get("sub_channel"), entry.get("type"))
+        hay = " ".join(str(entry.get(k) or "").casefold()
+                       for k in ("customer", "channel", "sub_channel", "type"))
+        return bucket == "Amazon" or "amazon" in hay
+
+    amazon_meta = {
+        "sheet": "cossa_orderdate", "price_column": "H",
+        "price_label": "Selling Price", "rows_total": len(orderdate_rows),
+        "rows_used": 0, "date_column": "A / Order Date",
+        "customer_column": "J / Customer Name", "error": orderdate_error,
+    }
+    meta["Amazon"] = amazon_meta
+    for entry in orderdate_rows:
+        if not _is_amazon_orderdate_row(entry):
+            continue
+        dt_iso = str(entry.get("date") or "")
+        selling_price = float(to_num(entry.get("sp", 0)))
+        if not dt_iso or selling_price == 0:
+            continue
+        out.append({"date": dt_iso, "rev": selling_price, "bucket": "Amazon"})
+        amazon_meta["rows_used"] += 1
 
     # Blinkit is intentionally sourced from the main COSA sheet, not from
     # cossa_orderdate. The approved mapping is exact: A = Dispatch Date,
@@ -27789,8 +27840,10 @@ def _fetch_drg_marketplace_source_rows(force=False):
     # here even if the old bucket logic would call Quick Com / Blinkit "Others",
     # preventing double counting after the dedicated COSA-H mapping above.
     fallback_used = 0
-    for e in _fetch_drg_source_rows(force=force):
+    for e in orderdate_rows:
         if "blinkit" in str(e.get("customer") or "").casefold():
+            continue
+        if _is_amazon_orderdate_row(e):
             continue
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         if bucket in named_buckets:
@@ -27800,7 +27853,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
     meta["Remaining channels"] = {
         "sheet": "cossa_orderdate", "price_column": "existing Net Revenue",
         "price_label": "existing Daily Revenue Glimpse logic", "rows_total": fallback_used,
-        "rows_used": fallback_used, "date_column": "Order Date", "error": "",
+        "rows_used": fallback_used, "date_column": "Order Date", "error": orderdate_error,
     }
 
     _DRG_MARKETPLACE_SOURCE_CACHE.update({"rows": out, "meta": meta, "ts": time.time()})
