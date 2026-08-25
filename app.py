@@ -1,10 +1,16 @@
 # ============================================================
-# Cosa Nostraa — V23.9 (TARGET AMAZON FROM COSA ORDER)
-# V23.9:
-#   • Target > Daily Revenue Glimpse - Marketplace Sheet Sales now takes
-#     Amazon from cossa_orderdate column H (Selling Price), using Order Date.
-#   • Flipkart remains on the original combined Amazon/Flipkart sheet column R.
-#   • All other dashboard sources and calculations remain unchanged.
+# Cosa Nostraa — V24.0 (AMAZON + AMAZON FBA SOURCE SPLIT)
+# V24.0:
+#   • Standard Amazon in Target > Marketplace Sheet Sales is restored to the
+#     original combined Amazon/Flipkart sheet (J=platform, R=Selling value).
+#   • New Amazon FBA rows in COSA / cossa_orderdate are classified separately
+#     and included across sales tables, filters, Daily Revenue Glimpse and the
+#     Marketplace Sheet Sales table without merging into standard Amazon.
+#   • Amazon FBA matching tolerates spaces, hyphens, underscores and case.
+# ============================================================
+# ============================================================
+# Cosa Nostraa — V23.9 (TARGET AMAZON FROM COSA ORDER — SUPERSEDED BY V24.0)
+# V23.9 history only: its Amazon-from-cossa_orderdate rule is no longer active.
 # Cosa Nostraa — V23.8 (AMAZON ORIGINAL SOURCE RESTORED)
 # V23.8:
 #   • Amazon FBA Sale feed removed from every dashboard calculation.
@@ -894,11 +900,26 @@ def norm_cust(v):  return _canon(v, _CUST_CANON,  "Unknown", title=False)
 #  Bulk->Bulk, warna Type hi.
 _ECOM_TOKENS = ("myntra", "nykaa", "ajio", "tata", "fnp", "fern",
                 "mirraw", "amazon", "flipkart")
+
+def _compact_channel_text(*values):
+    """Case/punctuation-insensitive channel marker used for Amazon FBA.
+
+    Examples treated identically: Amazon FBA, AMAZON-FBA, amazon_fba and
+    `Amazon  FBA`.  Both Customer Name and Type are checked because either
+    column can carry the new source label in COSA/cossa_orderdate.
+    """
+    return re.sub(r"[^a-z0-9]", "", " ".join(str(v or "") for v in values).casefold())
+
+def _is_amazon_fba_value(*values):
+    return "amazonfba" in _compact_channel_text(*values)
+
 def calc_channel(customer, typ):
     c = str(customer or "").lower()
+    t = str(typ or "").strip().lower()
+    if _is_amazon_fba_value(customer, typ):
+        return "Ecom"
     if any(tok in c for tok in _ECOM_TOKENS):
         return "Ecom"
-    t = str(typ or "").strip().lower()
     if t == "sor":        return "SOR"
     if t == "website":    return "D2C"
     if t == "online":     return "D2C"
@@ -908,15 +929,16 @@ def calc_channel(customer, typ):
     return str(typ or "").strip() or "Other"
 
 # Sub-channel = Ecom ke andar KAUNSA marketplace (Myntra/Nykaa/AJIO/Amazon/
-# Flipkart/Tata). D2C/SOR/B2B ke liye abhi granular source data (Meta/Google/
-# Organic) available nahi hai — Type hi sub-channel ban jata hai.
+# Amazon FBA/Flipkart/Tata). D2C/SOR/B2B ke liye granular source data nahi hai.
 _MARKETPLACE_MAP = [
     ("myntra", "Myntra"), ("nykaa", "Nykaa"), ("ajio", "AJIO"),
     ("tata", "Tata CLiQ"), ("fnp", "FNP"), ("fern", "Fern"),
-    ("mirraw", "Mirraw"), ("amazon", "Amazon"), ("flipkart", "Flipkart"),
+    ("mirraw", "Mirraw"), ("flipkart", "Flipkart"), ("amazon", "Amazon"),
 ]
 def calc_sub_channel(customer, channel, typ):
     if channel == "Ecom":
+        if _is_amazon_fba_value(customer, typ):
+            return "Amazon FBA"
         c = str(customer or "").lower()
         for tok, label in _MARKETPLACE_MAP:
             if tok in c:
@@ -1310,7 +1332,7 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     raise last_err
 
 
-_DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "flipkart", "ajio", "tata", "tata cliq"}
+_DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "amazon fba", "flipkart", "ajio", "tata", "tata cliq"}
 
 def _daily_reporting_order_key(value):
     """Canonical exact Order No. key for Daily Reporting only.
@@ -1358,6 +1380,8 @@ def _daily_reporting_platform(group, sub_channel="", typ="", customer=""):
         return "Website"
     hay = " ".join(str(v or "").casefold() for v in (sub_channel, typ, customer))
     if group == "marketplace":
+        if _is_amazon_fba_value(hay):
+            return "Amazon FBA"
         for token, label in (
             ("amazon", "Amazon"), ("flipkart", "Flipkart"),
             ("myntra", "Myntra"), ("nykaa", "Nykaa"),
@@ -3127,6 +3151,10 @@ def _refresh_data():
                 fy = fy_bounds(dt_od)[0]
             channel = calc_channel(cust, typ)
             sub_channel = calc_sub_channel(cust, channel, typ)
+            if _is_amazon_fba_value(cust, typ, sub_channel):
+                channels_.add(channel)
+                sub_channels_.add("Amazon FBA")
+                types_.add(typ)
 
             if str(typ).strip().lower() == "website":
                 cust = "Website"
@@ -8802,7 +8830,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-filters">
         <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="scAovD1" onchange="renderSalesComparisonAov()"></div>
         <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="scAovD2" onchange="renderSalesComparisonAov()"></div>
-        <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+        <div class="fc"><label class="fl">Sales Channel</label><select class="fs" id="scAovChannel" onchange="renderSalesComparisonAov()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option><option value="Amazon FBA">Amazon FBA</option></select></div>
         <div class="fc"><label class="fl">Price / Sales View</label><select class="fs" id="scAovMrpView" onchange="renderSalesComparisonAov()"><option value="low_high">Low Price · High Sales</option><option value="low_low">Low Price · Low Sales</option><option value="high_high">High Price · High Sales</option><option value="high_low">High Price · Low Sales</option></select></div>
         <button class="go-btn" style="width:auto;padding:10px 16px;background:#fffefb;color:#765317;border:1px solid rgba(123,91,33,.16)!important" onclick="resetSalesComparisonAov()">Reset</button>
       </div>
@@ -8818,7 +8846,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
       <div class="ops-filters">
         <div class="fc"><label class="fl">Comparison</label><select class="fs" id="scOrderPreset" onchange="_scOrderPresetChanged()"><option value="days">Yesterday vs Day Before</option><option value="months">Previous Month vs Month Before</option><option value="custom">Custom Two Dates</option></select></div>
-        <div class="fc"><label class="fl">Channel</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+        <div class="fc"><label class="fl">Channel</label><select class="fs" id="scOrderType" onchange="renderSalesComparisonOrders()"><option value="All">All Channels</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option><option value="Amazon FBA">Amazon FBA</option></select></div>
         <div class="fc"><label class="fl">Baseline Date</label><input class="fi" type="date" id="scOrderDateA" onchange="renderSalesComparisonOrders()"></div>
         <div class="fc"><label class="fl">Comparison Date</label><input class="fi" type="date" id="scOrderDateB" onchange="renderSalesComparisonOrders()"></div>
         <div class="fc"><label class="fl">SKU Search</label><input class="fi" type="search" id="scOrderSkuSearch" placeholder="Search SKU or product" oninput="_scOrderSearchChanged()"></div>
@@ -9128,14 +9156,14 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Date From</label><input class="fi" type="date" id="concD1" onchange="renderConcentrationRisk()"></div>
       <div class="fc"><label class="fl">Date To</label><input class="fi" type="date" id="concD2" onchange="renderConcentrationRisk()"></div>
-      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="_concSourceChanged()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+      <div class="fc"><label class="fl">Sales Source</label><select class="fs" id="concSource" onchange="_concSourceChanged()"><option value="Overall" selected>Overall — All Available Sources</option><option value="Website">Website</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Myntra">Myntra</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option><option value="Amazon FBA">Amazon FBA</option></select></div>
       <div class="fc"><label class="fl">Product Group</label><select class="fs" id="concGroup" onchange="renderConcentrationRisk()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
       <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="concTaxon" onchange="renderConcentrationRisk()"><option value="All">All Categories</option></select></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="concType" onchange="renderConcentrationRisk()"><option value="All">All Types</option></select></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="concChannel" onchange="renderConcentrationRisk()"><option value="All">All Channels</option></select></div>
       <div class="fc"><label class="fl">Top Product Share Alert</label><select class="fs" id="concThreshold" onchange="renderConcentrationRisk()"><option value="15">15%+</option><option value="20" selected>20%+</option><option value="25">25%+</option><option value="30">30%+</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="concSearch" placeholder="Search SKU / product…" oninput="renderConcentrationRisk_d()"></div>
-      <div class="fc"><label class="fl">Top 20 Channel</label><select class="fs" id="concTopPlatform" onchange="_concTopPlatformChanged()"><option value="Overall" selected>Overall — Listed Channels</option><option value="Website">Website</option><option value="Myntra">Myntra</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option></select></div>
+      <div class="fc"><label class="fl">Top 20 Channel</label><select class="fs" id="concTopPlatform" onchange="_concTopPlatformChanged()"><option value="Overall" selected>Overall — Listed Channels</option><option value="Website">Website</option><option value="Myntra">Myntra</option><option value="Purchase">Purchase</option><option value="Bulk">Bulk</option><option value="Exhibition">Exhibition</option><option value="Nykaa">Nykaa</option><option value="Ajio">Ajio</option><option value="Tata">Tata</option><option value="Flipkart">Flipkart</option><option value="Amazon">Amazon</option><option value="Amazon FBA">Amazon FBA</option></select></div>
       <div class="fc"><label class="fl">Sort Top 20 By</label><select class="fs" id="concTopRank" onchange="renderConcentrationTop20()"><option value="qty" selected>Sold Qty</option><option value="revenue">Net Revenue</option></select></div>
     </div>
     <div id="concSummary" class="ops-kpis"></div>
@@ -9153,7 +9181,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">Sales Patterns</div>
-        <div class="ops-sub">Uses Order Date across Website, Purchase, Myntra, Nykaa, Ajio, Tata, Flipkart and Amazon to find Monday–Sunday demand, weekend behaviour, payday impact and the best sale day for every SKU.</div>
+        <div class="ops-sub">Uses Order Date across Website, Purchase, Myntra, Nykaa, Ajio, Tata, Flipkart, Amazon and Amazon FBA to find Monday–Sunday demand, weekend behaviour, payday impact and the best sale day for every SKU.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDemandPatterns()">Refresh</button>
@@ -9229,7 +9257,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse</div>
-      <div class="insights-sub">Net Revenue view: Amazon uses the original COSA / cossa_orderdate Amazon data only. Blinkit uses COSA column I (Net Revenue).</div>
+      <div class="insights-sub">Net Revenue view: standard Amazon uses the original combined Amazon/Flipkart sheet column W (Payout to Seller), split by column J. Amazon FBA is a separate row from cossa_orderdate column I (Net Revenue). Blinkit uses COSA column I.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRG(true)">Refresh</button>
@@ -9242,7 +9270,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
-      <div class="insights-sub">Selling Price view: Amazon uses cossa_orderdate column H (Selling Price) with Order Date. Flipkart uses the original combined Amazon/Flipkart source sheet column R (Selling value). Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet selling-price columns. Blinkit uses COSA Customer Name = Blinkit and column H (Selling Price).</div>
+      <div class="insights-sub">Selling Price view: standard Amazon and Flipkart use the original combined Amazon/Flipkart sheet column R (Selling value), split by column J. Amazon FBA is a separate row from cossa_orderdate column H (Selling Price). Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet columns. Blinkit uses COSA column H.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
@@ -10572,23 +10600,32 @@ function goBackFromDetails(){
   showTab(lastTab || 'home');
 }
 
-// SKU Details marketplace filters: these are read directly from COSA's
-// Customer Name, but ONLY when the transaction Type is SOR. Every remaining
-// SOR customer is grouped under Other SOR.
+function _isAmazonFbaText(...values){
+  const compact=values.map(v=>String(v??'')).join(' ').toLowerCase().replace(/[^a-z0-9]/g,'');
+  return compact.includes('amazonfba');
+}
+
+// SKU Details marketplace filters: Customer Name / Type / sub-channel are all
+// checked because Amazon FBA can be written in either COSA field.
 const _SD_SOR_MARKETPLACES = [
-  {key:'Myntra',   token:'myntra'},
-  {key:'Nykaa',    token:'nykaa'},
-  {key:'Amazon',   token:'amazon'},
-  {key:'Flipkart', token:'flipkart'},
-  {key:'Ajio',     token:'ajio'},
-  {key:'Tata',     token:'tata'},
+  {key:'Myntra',     token:'myntra'},
+  {key:'Nykaa',      token:'nykaa'},
+  {key:'Amazon FBA', token:'amazonfba', compact:true},
+  {key:'Amazon',     token:'amazon'},
+  {key:'Flipkart',   token:'flipkart'},
+  {key:'Ajio',       token:'ajio'},
+  {key:'Tata',       token:'tata'},
 ];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
-  if (typ !== 'sor') return '';
+  const channel = String(entry?.channel || '').trim().toLowerCase();
+  const sub = String(entry?.sub_channel || '').trim().toLowerCase();
   const cust = String(entry?.cust || '').trim().toLowerCase();
+  if (_isAmazonFbaText(cust,typ,sub,channel)) return 'Amazon FBA';
+  if (typ !== 'sor' && channel !== 'ecom') return '';
+  const compact=cust.replace(/[^a-z0-9]/g,'');
   for (const m of _SD_SOR_MARKETPLACES){
-    if (cust.includes(m.token)) return m.key;
+    if (m.compact ? compact.includes(m.token) : cust.includes(m.token)) return m.key;
   }
   return 'Other SOR';
 }
@@ -10677,7 +10714,10 @@ function _sdRakhiChannelsFromEntries(ents){
     const typ = String(e?.type || '').trim().toLowerCase();
     const hay = `${e?.cust||''} ${e?.channel||''} ${e?.sub_channel||''} ${e?.type||''}`.toLowerCase();
     if (typ === 'website' || hay.includes('website')) channels.add('Website');
+    const isFba=_isAmazonFbaText(hay);
+    if(isFba)channels.add('Amazon FBA');
     ['Blinkit','Instamart','Myntra','Nykaa','IGP','Flipkart','Amazon','Ajio'].forEach(ch => {
+      if(ch==='Amazon'&&isFba)return;
       if (hay.includes(ch.toLowerCase())) channels.add(ch);
     });
   });
@@ -10690,8 +10730,8 @@ function _sdLaunchDateDisplay(item, ents){
   const selectedMps = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||''));
   if (selectedTypes.includes('Website')) channels.add('Website');
   selectedMps.forEach(mp => channels.add(mp));
-  if (!channels.size && selectedTypes.includes('SOR')) ['Myntra','Nykaa','Amazon','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
-  if (!channels.size) ['Website','IGP','Amazon','Flipkart','Myntra','Nykaa','Instamart'].forEach(ch=>channels.add(ch));
+  if (!channels.size && selectedTypes.includes('SOR')) ['Myntra','Nykaa','Amazon','Amazon FBA','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
+  if (!channels.size) ['Website','IGP','Amazon','Amazon FBA','Flipkart','Myntra','Nykaa','Instamart'].forEach(ch=>channels.add(ch));
   const parts = Array.from(channels).map(ch => {
     const iso = _sdTargetLaunchIso(ch);
     return iso ? `${ch}: ${_sdDisplayDate(iso)}` : '';
@@ -10836,7 +10876,7 @@ function _sdUsageContext(item){
 function _sdOrderStats(usage){
   const websiteIndex = _scOrderSessionIndex();
   const marketplaceIndex = _scChannelOrderSessionIndex();
-  const marketplaceNames = new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
+  const marketplaceNames = new Set(['Myntra','Amazon','Amazon FBA','Flipkart','Nykaa','Tata','Ajio']);
   const orderKeys = new Set(), fallbackKeys = new Set();
   (usage?.rows || []).forEach((row, rowNo) => {
     const e = row.entry || {};
@@ -14520,7 +14560,7 @@ function renderDRGMarketplaceTable(){
       &nbsp;|&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
     <p style="color:var(--cn-mid);font-size:.74rem;margin:0 0 10px">
-      Price source: Website S (Total Price), Amazon cossa_orderdate H (Selling Price), Flipkart R (Selling value), Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
+      Price source: Website S (Total Price), Amazon + Flipkart R (Selling value from the combined sheet), Amazon FBA cossa_orderdate H (Selling Price), Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
     </p>
     ${warnings}
     <table class="ro" style="width:100%;min-width:920px">
@@ -15821,7 +15861,7 @@ window.rkhOnTypeFilterChange = rkhOnTypeFilterChange;
    SP/Qty Target-Aug, SP/Qty Target-Jul — same layout as the sheet). Short%
    is measured against the Aug target since that's the only column with a
    figure for every channel (it's also the full-season total). */
-const RAKHI_CHANNEL_ORDER = ['Website', 'Blinkit', 'Instamart', 'Myntra', 'Nykaa', 'IGP', 'Flipkart', 'Amazon', 'Ajio', 'Others'];
+const RAKHI_CHANNEL_ORDER = ['Website', 'Blinkit', 'Instamart', 'Myntra', 'Nykaa', 'IGP', 'Flipkart', 'Amazon', 'Amazon FBA', 'Ajio', 'Others'];
 const RAKHI_TARGETS = {
   'Website':   {launch: '22nd July', spAug: 20000000, qtyAug: 13079, spJul: 2200800, qtyJul: 1572},
   'Blinkit':   {launch: '',          spAug: 9427600,  qtyAug: 4900,  spJul: 0,       qtyJul: 0},
@@ -15868,15 +15908,17 @@ const _RKH_CH_TOKENS = [
   ['nykaa', 'Nykaa'],
   ['indian gift portal', 'IGP'], ['indiangiftportal', 'IGP'], ['igp', 'IGP'],
   ['flipkart', 'Flipkart'],
+  ['amazon fba', 'Amazon FBA'], ['amazon_fba', 'Amazon FBA'], ['amazon-fba', 'Amazon FBA'],
   ['amazon', 'Amazon'],
   ['ajio', 'Ajio']
 ];
 function _rkhChannelOf(row){
   const typ = String((row && row.type) || '').trim().toLowerCase();
   if (typ === 'website') return 'Website';
-  const cust = String((row && row.cust) || '').toLowerCase();
+  const hay = `${row&&row.cust||''} ${row&&row.sub_channel||''} ${row&&row.channel||''} ${typ}`.toLowerCase();
+  if(_isAmazonFbaText(hay))return 'Amazon FBA';
   for (const [tok, label] of _RKH_CH_TOKENS){
-    if (cust.includes(tok)) return label;
+    if (hay.includes(tok)) return label;
   }
   return 'Others';
 }
@@ -20612,7 +20654,7 @@ function _fillInsightsChannelFilter(){
       if(key && !seen.has(key))seen.set(key,v);
     });
   }));
-  const preferred=['Website','Purchase','Bulk','Exhibition','Ecom','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Other Marketplace'];
+  const preferred=['Website','Purchase','Bulk','Exhibition','Ecom','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Amazon FBA','Other Marketplace'];
   const rank=new Map(preferred.map((v,i)=>[v.toLocaleLowerCase('en-US'),i]));
   const values=Array.from(seen.values()).sort((a,b)=>{
     const ak=a.toLocaleLowerCase('en-US'),bk=b.toLocaleLowerCase('en-US');
@@ -21296,6 +21338,7 @@ function _scAovInit(){
 function _scAovChannel(e){
   const hay=`${e&&e.subChannel||e&&e.sub_channel||''} ${e&&e.type||''} ${e&&e.channel||''} ${e&&e.customer||e&&e.cust||''}`.toLowerCase();
   if(/myntra/.test(hay))return 'Myntra';
+  if(_isAmazonFbaText(hay))return 'Amazon FBA';
   if(/amazon/.test(hay))return 'Amazon';
   if(/nykaa/.test(hay))return 'Nykaa';
   if(/ajio/.test(hay))return 'Ajio';
@@ -21473,7 +21516,7 @@ function _scChannelOrderSessionIndex(){
 }
 function _scOrderPeriod(from,to,channelFilter){
   const sessionIndex=_scOrderSessionIndex(),channelOrderIndex=_scChannelOrderSessionIndex();
-  const marketplaceNames=new Set(['Myntra','Amazon','Flipkart','Nykaa','Tata','Ajio']);
+  const marketplaceNames=new Set(['Myntra','Amazon','Amazon FBA','Flipkart','Nykaa','Tata','Ajio']);
   const skuMap=new Map(),allOrders=new Set(),websiteExactOrders=new Set(),marketplaceOrders=new Set(),purchaseOrders=new Set();
   const websiteFallbackOrders=new Set(),marketplaceFallbackOrders=new Set(),purchaseFallbackOrders=new Set(),otherIdentityOrders=new Set(),otherFallbackOrders=new Set();
   _scOrderEvents().forEach((e,index)=>{
@@ -22383,6 +22426,7 @@ function _concSalesPlatform(e){
   if(/ajio/.test(hay))return 'Ajio';
   if(/tata|cliq/.test(hay))return 'Tata';
   if(/flipkart/.test(hay))return 'Flipkart';
+  if(_isAmazonFbaText(hay))return 'Amazon FBA';
   if(/amazon/.test(hay))return 'Amazon';
   if(/website|online|d2c|direct/.test(hay))return 'Website';
   if(/purchase/.test(hay))return 'Purchase';
@@ -22394,7 +22438,7 @@ function _concBuildTop20(){
   const predicate=_bizBaseFilter('conc',true);
   const platform=document.getElementById('concSource')?.value||'Overall';
   const rankBy=document.getElementById('concTopRank')?.value||'qty';
-  const allowed=new Set(['Website','Myntra','Purchase','Bulk','Exhibition','Nykaa','Ajio','Tata','Flipkart','Amazon']);
+  const allowed=new Set(['Website','Myntra','Purchase','Bulk','Exhibition','Nykaa','Ajio','Tata','Flipkart','Amazon','Amazon FBA']);
   const map=new Map(), filteredEvents=[];
   _bizEvents().forEach(e=>{
     if(!predicate(e))return;
@@ -22555,7 +22599,7 @@ function _dpOrderEvents(){
 function _dpBaseEvents(includeDates=true){return _dpOrderEvents().filter(_bizBaseFilter('dp',includeDates));}
 function loadDemandPatterns(){
   _bizInitFilters('dp');
-  _bizSetSelect('dpChannel',['Website','Purchase','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon'],'All Channels');
+  _bizSetSelect('dpChannel',['Website','Purchase','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Amazon FBA'],'All Channels');
   const fromEl=document.getElementById('dpD1'),toEl=document.getElementById('dpD2');
   const datesWereBlank=!(fromEl?.value||toEl?.value);
   _bizInitDateRange('dpD1','dpD2',180);
@@ -26762,8 +26806,8 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # taaki same month/channel ke KPIs aapas me mismatch na karein. Dispatch-Date
     # rows sirf source-outage fallback hain.
     # Target ka "Channel Type" (SOR, Website, Purchase…) = COSA ka "Type".
-    # Amazon is now sourced exactly as before: only the original compiled
-    # Amazon/COSA data is used; no separate FBA feed is added.
+    # Standard Amazon keeps the original source logic. Amazon FBA is now a
+    # separate COSA/cossa_orderdate marketplace and is never merged into Amazon.
     act = {}
     for it in comp:
         _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
@@ -27278,7 +27322,7 @@ def api_daily_reporting_export_xlsx():
 #  table. Channel-wise: Last Month, Day Before, Yesterday, MTD,
 #  MTD Target (Target sheet se), MTD Achievement %.
 #
-#  Rows/Buckets: Website(DTC), Amazon, Flipkart, Myntra, Nykaa, Ajio,
+#  Rows/Buckets: Website(DTC), Amazon, Amazon FBA, Flipkart, Myntra, Nykaa, Ajio,
 #  Tata, Blinkit, Instamart, Other SOR Channels, Others (Purchase,
 #  Exhibition, Bulk).
 #
@@ -27287,13 +27331,13 @@ def api_daily_reporting_export_xlsx():
 #      hota hai, asli channel Customer naam se pehchana jata hai
 #      (calc_channel/calc_sub_channel already yeh kar chuke hain —
 #      entry ka "channel"="Ecom" + "sub_channel"="Myntra"/"Nykaa"/
-#      "Amazon"/"Flipkart"/"AJIO"/"Tata CLiQ" seedhe use karte hain).
+#      "Amazon"/"Amazon FBA"/"Flipkart"/"AJIO"/"Tata CLiQ" use karte hain).
 #    - Website (DTC): COSA "Type" = Website/Online → channel="D2C".
 #    - Blinkit/Instamart: COSA "Type" me seedhe waisa hi likha
 #      hota hai (abhi sheet me data nahi hai to 0 hi aayega, jaise
 #      hi data aayega apne aap bharna shuru ho jayega).
 #    - Other SOR Channels: Type=SOR ho lekin marketplace na ho (na
-#      Myntra/Nykaa/Amazon/Flipkart/Ajio/Tata), ya koi aur chhoti
+#      Myntra/Nykaa/Amazon/Amazon FBA/Flipkart/Ajio/Tata), ya koi aur chhoti
 #      marketplace (FNP/Fern/Mirraw).
 #    - Others (Purchase, Exhibition, Bulk): sirf in teeno Type ka
 #      data, + koi bhi truly unclassified row (safety net, taaki
@@ -27304,7 +27348,7 @@ def api_daily_reporting_export_xlsx():
 #  date parsing already parse_date_any() se hoti hai jo string/int/
 #  date/datetime — sab format handle karta hai.
 # ════════════════════════════════════════════════════════════════
-_DRG_ROWS_ORDER = ["Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata",
+_DRG_ROWS_ORDER = ["Website", "Amazon", "Amazon FBA", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata",
                    "Blinkit", "Instamart",
                    "Other SOR Channels", "Others (Purchase, Exhibition, Bulk)"]
 _DRG_LABELS = {"Website": "Website (DTC)"}
@@ -27316,6 +27360,7 @@ _DRG_LABELS = {"Website": "Website (DTC)"}
 _DRG_TARGET_ALIASES = {
     "Website":                          {"website", "d2c", "online"},
     "Amazon":                           {"amazon"},
+    "Amazon FBA":                       {"amazon fba", "amazon-fba", "amazon_fba", "amazonfba"},
     "Flipkart":                         {"flipkart"},
     "Myntra":                           {"myntra"},
     "Nykaa":                            {"nykaa"},
@@ -27328,14 +27373,13 @@ _DRG_TARGET_ALIASES = {
 }
 _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
 
-# Daily Revenue Glimpse ka apna source: "cossa_orderdate" sheet — layout
-# COSA jaisa hi hai (SKU, MRP, Total Qty, Return Qty, Final Qty, Selling
-# Price, Net Revenue, Customer Name, Type, Wooden Box No), sirf column A
-# "Order Date" hai (Dispatch Date nahi). Baaki dashboard (Target vs Actual,
-# Inventory, etc.) COSA (dispatch date) wale se hi chalta rahega — sirf
-# yeh ek feature Order Date wali sheet use karta hai.
+# Daily Revenue Glimpse source mix:
+#   • Standard Amazon: original Amazon/Flipkart sheet (J marketplace;
+#     W Payout to Seller for Net Revenue, R Selling value for Marketplace view).
+#   • Amazon FBA: cossa_orderdate (I Net Revenue / H Selling Price), separate row.
+#   • Remaining channels: their existing approved source logic.
 # COSA_ORDERDATE_URL is configured with the main sheet URLs near the top so
-# Rakhi and Daily Revenue Glimpse share the same dedicated Order Date source.
+# Rakhi and the order-date tables share the same dedicated source.
 
 @app.route("/api/festival-sales/export.xlsx", methods=["POST"])
 def api_festival_sales_export_xlsx():
@@ -27460,11 +27504,13 @@ def api_festival_sales_export_xlsx():
 _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 
 def _fetch_drg_source_rows(force=False):
-    """cossa_orderdate sheet ko parse karke normalized rows deta hai
-    (date/rev/channel/sub_channel/type) — 10 min cache (sheet bahut badi
-    hai, baar baar fetch karna mehenga hai). Date/word kisi bhi format
-    (chhote/bade/mixed letters, int/str, date ya date-time) me ho, sab
-    parse_date_any()/norm_type()/norm_cust() se handle ho jata hai."""
+    """Daily Revenue Glimpse ke normalized Net Revenue rows.
+
+    Most channels come from cossa_orderdate. Standard Amazon is deliberately
+    replaced by the original combined Amazon/Flipkart source (J=platform,
+    W=Payout to Seller); Amazon FBA remains separate from cossa_orderdate
+    column I. Date/word values may be text, numbers or date-times and are
+    normalized through parse_date_any()/norm_type()/norm_cust()."""
     if (not force and _DRG_SRC_CACHE["rows"] is not None
             and time.time() - _DRG_SRC_CACHE["ts"] < 600):
         return _DRG_SRC_CACHE["rows"]
@@ -27499,6 +27545,11 @@ def _fetch_drg_source_rows(force=False):
         typ  = norm_type(r.get(C_TYPE, "Regular")) if C_TYPE else "Regular"
         channel = calc_channel(cust, typ)
         sub_channel = calc_sub_channel(cust, channel, typ)
+        # Standard Amazon must come only from the original Amazon/Flipkart
+        # sheet in the Target-tab revenue tables. Keep Amazon FBA because it is
+        # a distinct new COSA/cossa_orderdate channel.
+        if str(sub_channel or "").strip().casefold() == "amazon" and not _is_amazon_fba_value(cust, typ):
+            continue
         out.append({
             "date": dt.strftime("%Y-%m-%d"),
             "rev": rev,
@@ -27506,11 +27557,68 @@ def _fetch_drg_source_rows(force=False):
             "channel": channel,
             "sub_channel": sub_channel,
             "type": typ,
-            # Keep Customer Name only so the marketplace-source variant can
-            # exclude Blinkit from its cossa_orderdate fallback. Blinkit is
-            # loaded separately from COSA column H as requested.
+            # Keep Customer Name so the marketplace-source variant can identify
+            # Amazon FBA and exclude Blinkit from its cossa_orderdate fallback.
             "customer": cust,
         })
+    # Standard Amazon for the NET-REVENUE table: original combined
+    # Amazon/Flipkart source only. J identifies AMAZON/FLIPKART, S (Created On)
+    # is Order Date and W is Payout to Seller. Returned lines whose payout is
+    # zero naturally contribute zero; non-zero negative adjustments are kept.
+    try:
+        amazon_df = _fetch_csv_fresh(
+            AMAZON_FLIPKART_SALES_URL,
+            select_groups=[
+                ("Created On", "Order_Date", "Order Date", "OrderDate", "Packed On"),
+                ("Payout to Seller", "Net Revenue", "NetRevenue", "Settlement Amount"),
+                ("Status", "Type", "Channel", "Marketplace"),
+            ],
+            # J=platform, S=Created On and W=Payout to Seller.
+            select_positions=[9, 18, 22],
+        )
+        amazon_df.columns = [str(c).strip() for c in amazon_df.columns]
+        amazon_date = (find_col(
+            amazon_df.columns, "Created On", "Order_Date", "Order Date",
+            "OrderDate", "Packed On"
+        ) or _drg_source_position_col(amazon_df, 18))
+        amazon_platform = _drg_source_position_col(amazon_df, 9)
+        if not amazon_platform or amazon_platform not in amazon_df.columns:
+            amazon_platform = find_col(amazon_df.columns, "Channel", "Marketplace", "Status", "Type")
+        amazon_payout = _drg_source_position_col(amazon_df, 22)
+        if not amazon_payout or amazon_payout not in amazon_df.columns:
+            amazon_payout = find_col(
+                amazon_df.columns, "Payout to Seller", "Net Revenue",
+                "NetRevenue", "Settlement Amount"
+            )
+        if not amazon_date:
+            raise ValueError("Amazon/Flipkart order date column not found")
+        if not amazon_platform:
+            raise ValueError("Amazon/Flipkart platform column J not found")
+        if not amazon_payout:
+            raise ValueError("Amazon/Flipkart payout column W not found")
+
+        for row in _df_chunks(amazon_df):
+            platform = clean(row.get(amazon_platform, ""))
+            platform_key = re.sub(r"[^a-z0-9]", "", platform.casefold())
+            if "amazon" not in platform_key or "flipkart" in platform_key:
+                continue
+            dt = parse_date_any(row.get(amazon_date, ""))
+            if dt is None:
+                continue
+            payout = to_num(row.get(amazon_payout, 0))
+            if payout == 0:
+                continue
+            out.append({
+                "date": dt.strftime("%Y-%m-%d"), "rev": float(payout), "sp": 0.0,
+                "channel": "Ecom", "sub_channel": "Amazon", "type": "SOR",
+                "customer": "Amazon",
+            })
+    except Exception as exc:
+        # Keep every other channel available even if this one source is
+        # temporarily unreachable. Standard Amazon is intentionally not
+        # replaced by cossa_orderdate because the approved source is fixed.
+        print("Daily Revenue Glimpse Amazon source failed:", str(exc)[:180])
+
     # Blinkit for the NET-REVENUE table: COSA A=Dispatch Date,
     # I=Net Revenue, J=Customer Name. Customer matching is case-insensitive.
     try:
@@ -27549,11 +27657,14 @@ def _fetch_drg_source_rows(force=False):
     return out
 
 def _drg_bucket(channel, sub_channel, typ):
-    """Har entry (channel/sub_channel/type — already normalized, case
-    kuch bhi ho) ko humare 11 row-buckets me se ek me daalta hai."""
+    """Har normalized entry ko Daily Revenue Glimpse ke row-bucket me daalta hai.
+    Amazon FBA is checked before generic Amazon so it can never leak into the
+    standard Amazon or Other SOR rows."""
     ch_l  = str(channel or "").strip().lower()
     sub_l = str(sub_channel or "").strip().lower()
     t_l   = str(typ or "").strip().lower()
+    if _is_amazon_fba_value(ch_l, sub_l, t_l):
+        return "Amazon FBA"
     if ch_l == "ecom":
         if sub_l == "myntra":    return "Myntra"
         if sub_l == "nykaa":     return "Nykaa"
@@ -27575,9 +27686,9 @@ def _drg_bucket(channel, sub_channel, typ):
 
 # Source-sheet version of Daily Revenue Glimpse. Named DTC/Ecom channels use
 # the exact user-approved price columns from their approved source tabs.
-# TARGET-TAB EXCEPTION: Amazon uses cossa_orderdate A=Order Date and
-# H=Selling Price. Flipkart alone remains on the combined Amazon/Flipkart R feed.
-# Blinkit uses the main COSA sheet: Customer contains Blinkit and H=Selling Price.
+# Standard Amazon + Flipkart use the combined Amazon/Flipkart source:
+# J identifies the marketplace and R is Selling value. Amazon FBA is separate
+# and uses cossa_orderdate A=Order Date + H=Selling Price. Blinkit uses COSA H.
 # Only the remaining buckets keep the existing cossa_orderdate Net Revenue feed.
 _DRG_MARKETPLACE_SOURCE_CACHE = {"rows": None, "meta": None, "ts": 0}
 _DRG_MARKETPLACE_SOURCE_TTL = 300
@@ -27604,9 +27715,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
             "qty_names": ("Qty", "Quantity"), "cancel_qty_groups": (), "cancel_date_names": (),
         },
         {
-            "key": "Flipkart", "sheet": "Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "key": "Amazon / Flipkart", "sheet": "Amazon/Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
             "price_pos": 17, "price_letter": "R", "price_label": "Selling value",
-            "fixed_bucket": "", "allowed_buckets": ("Flipkart",),
+            "fixed_bucket": "", "allowed_buckets": ("Amazon", "Flipkart"),
             "platform_pos": 9, "platform_names": ("Channel", "Marketplace", "Status", "Type"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
             "status_names": (), "qty_names": ("Qty.", "Qty", "Quantity"),
@@ -27645,7 +27756,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
 
     out = []
     meta = {}
-    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit"}
+    named_buckets = {"Website", "Amazon", "Amazon FBA", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit"}
 
     for spec in specs:
         source_meta = {
@@ -27742,11 +27853,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
         except Exception as e:
             source_meta["error"] = str(e)[:240]
 
-    # Amazon for Target > Marketplace Sheet Sales comes ONLY from
-    # cosa_order/cossa_orderdate: A = Order Date, H = Selling Price.  The
-    # already-normalized source rows retain Customer/Type/channel fields, so
-    # mixed case, spaces and minor source formatting changes are handled by the
-    # same channel classifier used by the rest of the dashboard.
+    # Standard Amazon and Flipkart were loaded above from the original combined
+    # source sheet.  Only the NEW Amazon FBA channel is read from cossa_orderdate
+    # here, using A=Order Date and H=Selling Price.  It remains a separate row.
     orderdate_rows = []
     orderdate_error = ""
     try:
@@ -27754,28 +27863,23 @@ def _fetch_drg_marketplace_source_rows(force=False):
     except Exception as e:
         orderdate_error = str(e)[:240]
 
-    def _is_amazon_orderdate_row(entry):
-        bucket = _drg_bucket(entry.get("channel"), entry.get("sub_channel"), entry.get("type"))
-        hay = " ".join(str(entry.get(k) or "").casefold()
-                       for k in ("customer", "channel", "sub_channel", "type"))
-        return bucket == "Amazon" or "amazon" in hay
-
-    amazon_meta = {
+    amazon_fba_meta = {
         "sheet": "cossa_orderdate", "price_column": "H",
         "price_label": "Selling Price", "rows_total": len(orderdate_rows),
         "rows_used": 0, "date_column": "A / Order Date",
         "customer_column": "J / Customer Name", "error": orderdate_error,
     }
-    meta["Amazon"] = amazon_meta
+    meta["Amazon FBA"] = amazon_fba_meta
     for entry in orderdate_rows:
-        if not _is_amazon_orderdate_row(entry):
+        bucket = _drg_bucket(entry.get("channel"), entry.get("sub_channel"), entry.get("type"))
+        if bucket != "Amazon FBA":
             continue
         dt_iso = str(entry.get("date") or "")
         selling_price = float(to_num(entry.get("sp", 0)))
         if not dt_iso or selling_price == 0:
             continue
-        out.append({"date": dt_iso, "rev": selling_price, "bucket": "Amazon"})
-        amazon_meta["rows_used"] += 1
+        out.append({"date": dt_iso, "rev": selling_price, "bucket": "Amazon FBA"})
+        amazon_fba_meta["rows_used"] += 1
 
     # Blinkit is intentionally sourced from the main COSA sheet, not from
     # cossa_orderdate. The approved mapping is exact: A = Dispatch Date,
@@ -27842,8 +27946,6 @@ def _fetch_drg_marketplace_source_rows(force=False):
     fallback_used = 0
     for e in orderdate_rows:
         if "blinkit" in str(e.get("customer") or "").casefold():
-            continue
-        if _is_amazon_orderdate_row(e):
             continue
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         if bucket in named_buckets:
@@ -27956,10 +28058,10 @@ def api_daily_revenue_glimpse_marketplace():
 
 def _build_daily_revenue_glimpse(force=False):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
-    Before / Yesterday / This Month Target / Achievement %. Target tab me
-    Target vs Actual ke neeche doosra table. Data source: cossa_orderdate
-    sheet (Order Date). Rows sorted by YTD revenue (max revenue channel
-    sabse upar)."""
+    Before / Yesterday / This Month Target / Achievement %. Standard Amazon
+    uses the original Amazon/Flipkart sheet W (Payout to Seller); Amazon FBA
+    uses cossa_orderdate I (Net Revenue); remaining channels keep their approved
+    sources. Rows are sorted by YTD revenue descending."""
     src_rows = _fetch_drg_source_rows(force=force)
     targets = _fetch_target_rows()
 
