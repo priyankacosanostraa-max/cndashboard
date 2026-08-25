@@ -174,7 +174,7 @@
 #     + key par available image models auto-discover hote hain.
 #   • SKU cards sirf SKU-related answers ke saath dikhte hain
 #     (totals/summary/chat ke saath nahi).
-#   • Transaction-level questions: "SOR me June 2025 ka revenue?",
+#   • Transaction-level questions: "Marketplace me June 2025 ka revenue?",
 #     "kal kya kya SKU bika?", "aaj ki sale", specific month/date/FY,
 #     sales Type (channel) aur customer-wise — sab supported.
 # ============================================================
@@ -871,7 +871,28 @@ def _canon(v, store, default, title=True):
         store[k] = s.strip().title() if title else s.strip()
     return store[k]
 
-def norm_type(v):  return _canon(v, _TYPE_CANON,  "Regular")
+_SOR_TOKEN_RE = re.compile(r"(?i)(?<![a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?![a-z0-9])")
+
+def _is_marketplace_type(v):
+    """Accept legacy SOR and the new Marketplace label as the same channel type."""
+    s = str(v or "").strip()
+    if not s:
+        return False
+    compact = re.sub(r"[^a-z0-9]", "", s.casefold())
+    return compact == "marketplace" or bool(_SOR_TOKEN_RE.search(s))
+
+def _marketplace_display_text(v, default=""):
+    """Replace the legacy standalone SOR label without touching words like processor."""
+    s = clean(v, default)
+    if not s:
+        return default
+    return _SOR_TOKEN_RE.sub("Marketplace", s)
+
+def norm_type(v):
+    s = clean(v, "Regular")
+    if _is_marketplace_type(s):
+        return "Marketplace"
+    return _canon(s, _TYPE_CANON, "Regular")
 
 _TAXON_ALIASES = {
     "cufflink":  "Cufflinks",
@@ -896,7 +917,7 @@ def norm_cust(v):  return _canon(v, _CUST_CANON,  "Unknown", title=False)
 
 # Channel = Customer Name + Type se (user formula):
 #  Customer me Myntra/Nykaa/AJIO/Tata/FNP/Fern/Mirraw/Amazon/Flipkart -> Ecom
-#  Type: SOR->SOR, Website/Online->D2C, Purchase->B2B, Exhibition->Exhibition,
+#  Type: SOR/Marketplace->Marketplace, Website/Online->D2C, Purchase->B2B, Exhibition->Exhibition,
 #  Bulk->Bulk, warna Type hi.
 _ECOM_TOKENS = ("myntra", "nykaa", "ajio", "tata", "fnp", "fern",
                 "mirraw", "amazon", "flipkart")
@@ -920,7 +941,7 @@ def calc_channel(customer, typ):
         return "Ecom"
     if any(tok in c for tok in _ECOM_TOKENS):
         return "Ecom"
-    if t == "sor":        return "SOR"
+    if _is_marketplace_type(t): return "Marketplace"
     if t == "website":    return "D2C"
     if t == "online":     return "D2C"
     if t == "purchase":   return "B2B"
@@ -929,7 +950,7 @@ def calc_channel(customer, typ):
     return str(typ or "").strip() or "Other"
 
 # Sub-channel = Ecom ke andar KAUNSA marketplace (Myntra/Nykaa/AJIO/Amazon/
-# Amazon FBA/Flipkart/Tata). D2C/SOR/B2B ke liye granular source data nahi hai.
+# Amazon FBA/Flipkart/Tata). D2C/Marketplace/B2B ke liye granular source data nahi hai.
 _MARKETPLACE_MAP = [
     ("myntra", "Myntra"), ("nykaa", "Nykaa"), ("ajio", "AJIO"),
     ("tata", "Tata CLiQ"), ("fnp", "FNP"), ("fern", "Fern"),
@@ -944,7 +965,7 @@ def calc_sub_channel(customer, channel, typ):
             if tok in c:
                 return label
         return "Other Marketplace"
-    return channel  # D2C/SOR/B2B/Exhibition/Bulk: sub-channel = channel hi
+    return channel  # D2C/Marketplace/B2B/Exhibition/Bulk: sub-channel = channel hi
 
 def find_col(cols, *cands):
     norm = {re.sub(r"[^a-z0-9]","", str(c).lower()): c for c in cols}
@@ -2886,7 +2907,7 @@ def _refresh_data():
             d0_candidate = dt.replace(hour=0, minute=0, second=0, microsecond=0)
             if d0_candidate > today_dt:
                 # Dispatch Date is the realised-sale clock for the main COSA
-                # feed. Future dated SOR/advance rows are plans, not sales yet.
+                # feed. Future dated Marketplace/advance rows are plans, not sales yet.
                 _future_dispatch_rows_skipped += 1
                 _future_dispatch_qty_skipped += qty
                 _future_dispatch_revenue_skipped += rev
@@ -3649,7 +3670,7 @@ def _refresh_data():
     # Stone Details (combo_skus) me jo SKUs likhe hain, un sabki Inv Stock + WIP
     # nikaal ke saath jod do. Gift Set / combo SKUs me ye details dikhengi.
     # WIP channel-wise bhi store hoti hai taaki Type filter par us channel ki
-    # WIP dikhe (Website/SOR/Designer), warna total.
+    # WIP dikhe (Website/Marketplace/Designer), warna total.
     _stock_map = {}
     _item_map = {}
     for it in compiled:
@@ -7755,12 +7776,12 @@ select.lg-in option{background:#fff;color:#1a1610}
             <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdAll()"></div>
             <div class="fc"><label class="fl">Type (tick one or more)</label>
               <div id="sdTypeChecks" class="type-checks"></div></div>
-            <div class="fc"><label class="fl">Marketplace (Type = SOR)</label>
+            <div class="fc"><label class="fl">Marketplace</label>
               <div id="sdMarketplaceChecks" class="type-checks"></div></div>
           </div>
           <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetSdFilters()">Reset Filters</button>
         </div>
-        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, sales/return trend charts, net-revenue contribution, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is SOR.</div>
+        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, sales/return trend charts, net-revenue contribution, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is Marketplace.</div>
       </div>
 
       <div class="sd-head">
@@ -9718,6 +9739,19 @@ function exportSkuName(sku, name){
 }
 window.exportSkuName = exportSkuName;
 
+function isMarketplaceTypeValue(value){
+  const raw=String(value??'').trim();
+  if(!raw)return false;
+  const compact=raw.toLowerCase().replace(/[^a-z0-9]/g,'');
+  return compact==='marketplace'||/(^|[^a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?=$|[^a-z0-9])/i.test(raw);
+}
+function marketplaceDisplayText(value){
+  const raw=String(value??'');
+  return raw.replace(/(^|[^a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?=$|[^a-z0-9])/gi,(m,prefix)=>prefix+'Marketplace');
+}
+window.isMarketplaceTypeValue=isMarketplaceTypeValue;
+window.marketplaceDisplayText=marketplaceDisplayText;
+
 function roInvContext(typeSel, chanSel, subChanSel){
   const words = []
     .concat(typeSel || [])
@@ -9728,7 +9762,7 @@ function roInvContext(typeSel, chanSel, subChanSel){
     .join(' ');
   if (!words) return {mode:'overall', wipLabel:'WIP'};
   if (/(website|d2c|direct\s*to\s*consumer|online)/i.test(words)) return {mode:'website', wipLabel:'WIP (Website Repeat)'};
-  if (/(s\.?\s*o\.?\s*r|sor|3p|ecom|marketplace|myntra|nykaa|amazon|flipkart|ajio|tata|blinkit|instamart)/i.test(words)) return {mode:'sor', wipLabel:'WIP (SOR)'};
+  if (/(s\.?\s*o\.?\s*r|sor|3p|ecom|marketplace|myntra|nykaa|amazon|flipkart|ajio|tata|blinkit|instamart)/i.test(words)) return {mode:'sor', wipLabel:'WIP (Marketplace)'};
   if (/(customize|customise|customized|customised)/i.test(words)) return {mode:'customize', wipLabel:'WIP (Customize)'};
   if (/(customer)/i.test(words)) return {mode:'customer', wipLabel:'WIP (Customer)'};
   if (/(designer|purchase)/i.test(words)) return {mode:'designer', wipLabel:'WIP (Designer)'};
@@ -9862,7 +9896,7 @@ function cnxBusinessChannelOfEntry(e){
   if (typ === 'purchase') return 'B2B';
   if (typ === 'bulk') return 'Bulk';
   if (typ === 'exhibition') return 'Exhibition';
-  if (typ === 'sor') return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'SOR';
+  if (isMarketplaceTypeValue(typ)) return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'Marketplace';
   return String(e && e.channel || '').trim();
 }
 function cnxSaleEntryDate(e, ctx){
@@ -10153,7 +10187,7 @@ function renderChannelChecks(){
     const onChange = cid === 'fChanChecks' ? 'applyF()' : 'applyRO()';
     box.innerHTML = (allChannels || []).map(t => {
       const safe = String(t).replace(/"/g, '&quot;');
-      const label = (cid === 'fChanChecks' && String(t).trim().toUpperCase() === 'SOR') ? 'Other MP' : t;
+      const label = escHtml(marketplaceDisplayText(t));
       return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${label}</span></label>`;
     }).join('') || '<span class="small-note">No channels</span>';
   });
@@ -10622,12 +10656,12 @@ function _sdSorMarketplace(entry){
   const sub = String(entry?.sub_channel || '').trim().toLowerCase();
   const cust = String(entry?.cust || '').trim().toLowerCase();
   if (_isAmazonFbaText(cust,typ,sub,channel)) return 'Amazon FBA';
-  if (typ !== 'sor' && channel !== 'ecom') return '';
+  if (!isMarketplaceTypeValue(typ) && channel !== 'ecom') return '';
   const compact=cust.replace(/[^a-z0-9]/g,'');
   for (const m of _SD_SOR_MARKETPLACES){
     if (m.compact ? compact.includes(m.token) : cust.includes(m.token)) return m.key;
   }
-  return 'Other SOR';
+  return 'Other Marketplace';
 }
 const _SD_PRODUCT_DISCOUNT_MARKETPLACES = new Set(['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata']);
 function _sdPickedMarketplaces(){
@@ -10730,7 +10764,7 @@ function _sdLaunchDateDisplay(item, ents){
   const selectedMps = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||''));
   if (selectedTypes.includes('Website')) channels.add('Website');
   selectedMps.forEach(mp => channels.add(mp));
-  if (!channels.size && selectedTypes.includes('SOR')) ['Myntra','Nykaa','Amazon','Amazon FBA','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
+  if (!channels.size && selectedTypes.some(isMarketplaceTypeValue)) ['Myntra','Nykaa','Amazon','Amazon FBA','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
   if (!channels.size) ['Website','IGP','Amazon','Amazon FBA','Flipkart','Myntra','Nykaa','Instamart'].forEach(ch=>channels.add(ch));
   const parts = Array.from(channels).map(ch => {
     const iso = _sdTargetLaunchIso(ch);
@@ -10920,7 +10954,7 @@ function _customerRepeatStatsForSkus(rawSkus, options={}){
     if(!types.size)return true;
     if(pl==='website')return types.has('website')||types.has('online');
     if(pl==='purchase')return types.has('purchase')||types.has('b2b');
-    return types.has('sor')||types.has(pl);
+    return types.has('sor')||types.has('marketplace')||types.has(pl);
   };
   const add=(platform,date,order,customer)=>{
     const p=String(platform||'').trim(),d=String(date||''),o=String(order||'').trim(),c=String(customer||'').trim();
@@ -11075,7 +11109,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
     bd.innerHTML = types.length ? types.map(t => {
       const v = byType[t];
       const avgSp = v.qty ? (v.rev / v.qty) : 0;
-      const sourceDiscActive = productDiscountContext?.active && String(t||'').trim().toLowerCase()==='sor';
+      const sourceDiscActive = productDiscountContext?.active && isMarketplaceTypeValue(t);
       const dPct = sourceDiscActive ? (Number.isFinite(productDiscountContext.pct)?productDiscountContext.pct:null) : ((mrp > 0 && avgSp > 0 && avgSp < mrp) ? Math.round((mrp - avgSp) / mrp * 100 * 10) / 10 : 0);
       return `<div class="td-card">
         <div class="td-type">${escHtml(t)}</div>
@@ -11202,7 +11236,7 @@ function renderSkuDetails(sku){
   }
   const mc = document.getElementById('sdMarketplaceChecks');
   if (mc) {
-    const marketplaceOptions = _SD_SOR_MARKETPLACES.map(m => m.key).concat(['Other SOR']);
+    const marketplaceOptions = _SD_SOR_MARKETPLACES.map(m => m.key).concat(['Other Marketplace']);
     mc.innerHTML = marketplaceOptions.map(m => `<label class="type-opt"><input type="checkbox" value="${m}" onchange="renderSdAll()"><span>${m}</span></label>`).join('');
   }
 
@@ -12103,8 +12137,8 @@ function applyF(){
     if (typ === 'purchase') return 'B2B';
     if (typ === 'bulk') return 'Bulk';
     if (typ === 'exhibition') return 'Exhibition';
-    if (typ === 'sor') {
-      return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'SOR';
+    if (isMarketplaceTypeValue(typ)) {
+      return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'Marketplace';
     }
     return String(e?.channel || '').trim();
   };
@@ -14051,7 +14085,7 @@ function renderHome(){
   // THIS YEAR = abhi wala calendar saal (e.g. 2026): YYYY se match.
   const yrKey = String(today.getFullYear());
 
-  // Home Type filter (e.g. SOR/Website/Purchase) — selected hone par sirf us
+  // Home Type filter (e.g. Marketplace/Website/Purchase) — selected hone par sirf us
   // type ki sales se top SKU nikalta hai. Default: All Types.
   const homeType = (document.getElementById('homeTypeFilter')?.value || '').trim();
 
@@ -14388,7 +14422,7 @@ function exportTarget(){
   const d = _tgtData;
   if (!d || !d.leaderboard || !d.leaderboard.length){ alert('No target data to export.'); return; }
   const headers = ['Rank','Stake Holder','Channel','SP Target','SP Achieved','SP Short','% Achieved','% Projected'];
-  const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, L.channel||'', Math.round(L.sp_target),
+  const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, marketplaceDisplayText(L.channel||''), Math.round(L.sp_target),
     Math.round(L.sp_actual), Math.round(L.sp_short), L.pct_achieved, L.proj_pct]);
   const t = d.totals||{};
   rows.push(['', 'TOTAL', '', Math.round(t.sp_target||0), Math.round(t.sp_actual||0),
@@ -18910,7 +18944,7 @@ function _anomChannelChoices(){
       if(_anomNorm(ch)==='ecom' && sub && _anomNorm(sub)!=='ecom' && !marketplaces.has(_anomNorm(sub))) marketplaces.set(_anomNorm(sub),sub);
     }
   }
-  const preferred=['d2c','ecom','b2b','sor','bulk','exhibition'];
+  const preferred=['d2c','ecom','b2b','marketplace','sor','bulk','exhibition'];
   const chRows=Array.from(channels.entries()).sort((a,b)=>{
     const ai=preferred.indexOf(a[0]), bi=preferred.indexOf(b[0]);
     if(ai>=0||bi>=0){if(ai<0)return 1;if(bi<0)return -1;if(ai!==bi)return ai-bi;}
@@ -20564,7 +20598,9 @@ window.loadWebsiteOos=loadWebsiteOos;window.renderWebsiteOos=renderWebsiteOos;wi
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
-  const csv = [headers].concat(rows).map(r => r.map(c => {
+  const labelCols=new Set((headers||[]).map((h,i)=>/(^|\s)(channel|channels|type|types|marketplace|platform|where sold|source)(\s|$)/i.test(String(h||''))?i:-1).filter(i=>i>=0));
+  const prepared=[headers].concat((rows||[]).map(r=>(r||[]).map((c,i)=>labelCols.has(i)?marketplaceDisplayText(c):c)));
+  const csv = prepared.map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
   }).join(',')).join('\n');
@@ -21346,7 +21382,7 @@ function _scAovChannel(e){
   if(/flipkart/.test(hay))return 'Flipkart';
   if(/purchase/.test(hay))return 'Purchase';
   if(/website|online|d2c|direct/.test(hay))return 'Website';
-  return 'Other SOR Channels';
+  return 'Other Marketplace Channels';
 }
 function _scMedian(values){
   const a=(values||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y);
@@ -22327,7 +22363,7 @@ function _concCityRanks(filterMeta,totalRevenue){
     const evSource=String(ev.source||'Website');
     if(source!=='Overall'&&evSource!==source)return;
     const date=_bizIso(ev.date||ev.d); if(d1&&(!date||date<d1))return;if(d2&&(!date||date>d2))return;
-    const evType=String(ev.type||((evSource==='Website')?'Website':'SOR'));
+    const evType=marketplaceDisplayText(ev.type||((evSource==='Website')?'Website':'Marketplace'));
     const evChannel=String(ev.channel||((evSource==='Website')?'D2C':'Ecom'));
     if(type!=='All'&&evType!==type)return;
     if(channel!=='All'&&evChannel!==channel)return;
@@ -25152,7 +25188,7 @@ def _fetch_target_rows():
             continue
         mk = dt.strftime("%Y-%m")
         sh = clean(r.get(C_SH, "")) if C_SH else ""
-        ch = clean(r.get(C_CH, "")) if C_CH else ""
+        ch = _marketplace_display_text(r.get(C_CH, "")) if C_CH else ""
         qt = to_num(r.get(C_QT, 0)) if C_QT else 0.0
         st = to_num(r.get(C_ST, 0)) if C_ST else 0.0
         if not sh and not ch:
@@ -25956,8 +25992,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "date_disp": dt.strftime("%d-%b-%Y") if dt else "",
                 "order_no":  order_no,
                 "sku":       sku,
-                "order_type": clean(r.get(C_TYPE, "")) if C_TYPE else "",
-                "channel":   clean(r.get(C_CHAN, "")) if C_CHAN else "",
+                "order_type": _marketplace_display_text(r.get(C_TYPE, "")) if C_TYPE else "",
+                "channel":   _marketplace_display_text(r.get(C_CHAN, "")) if C_CHAN else "",
                 "order_qty": to_num(r.get(C_OQTY, 0)) if C_OQTY else 0.0,
                 "recv_qty":  to_num(r.get(C_RQTY, 0)) if C_RQTY else 0.0,
                 "bal_qty":   to_num(r.get(C_BQTY, 0)) if C_BQTY else 0.0,
@@ -26021,7 +26057,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     def _prod_inv_stock(sku):
         # Blank channel/type filter = normal overall inventory. SOR/3P channels
         # use the All Product sheet's "Inv. Stock _3P" when it exists.
-        if inv_filter_ctx and ("sor" in inv_filter_ctx or "3p" in inv_filter_ctx):
+        if inv_filter_ctx and ("sor" in inv_filter_ctx or "marketplace" in inv_filter_ctx or "3p" in inv_filter_ctx):
             k = _prod_meta_key(sku)
             return stock_3p_map.get(k, stock_map.get(k, 0)) or 0
         k = _prod_meta_key(sku)
@@ -26038,7 +26074,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 return wip_customize_map.get(k, 0) or 0
             if "customer" in inv_filter_ctx:
                 return wip_customer_map.get(k, 0) or 0
-            if "sor" in inv_filter_ctx or "3p" in inv_filter_ctx:
+            if "sor" in inv_filter_ctx or "marketplace" in inv_filter_ctx or "3p" in inv_filter_ctx:
                 return wip_sor_map.get(k, 0) or 0
         return wip_map.get(k, 0) or 0
     rows = []
@@ -26356,7 +26392,7 @@ def _build_rakhi_production_tracker(force_rakhi_receipts=False):
     # newer than that SKU's baseline order. For component SKUs that were not in
     # the baseline file, require a Rakhi-labelled production order and compare
     # against the latest direct-Rakhi baseline order. This excludes old customer /
-    # SOR receipts such as historical rows while automatically including 1427,
+    # Marketplace receipts such as historical rows while automatically including 1427,
     # 1428 and future Rakhi repeat orders.
     post_receipts_by_sku = {}
     for (order_key, sk), lv in live.items():
@@ -26805,7 +26841,7 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # aur isi tab ka Daily Revenue Glimpse dono Order Date basis use karte hain,
     # taaki same month/channel ke KPIs aapas me mismatch na karein. Dispatch-Date
     # rows sirf source-outage fallback hain.
-    # Target ka "Channel Type" (SOR, Website, Purchase…) = COSA ka "Type".
+    # Target ka "Channel Type" (Marketplace, Website, Purchase…) = COSA ka "Type".
     # Standard Amazon keeps the original source logic. Amazon FBA is now a
     # separate COSA/cossa_orderdate marketplace and is never merged into Amazon.
     act = {}
@@ -27323,11 +27359,11 @@ def api_daily_reporting_export_xlsx():
 #  MTD Target (Target sheet se), MTD Achievement %.
 #
 #  Rows/Buckets: Website(DTC), Amazon, Amazon FBA, Flipkart, Myntra, Nykaa, Ajio,
-#  Tata, Blinkit, Instamart, Other SOR Channels, Others (Purchase,
+#  Tata, Blinkit, Instamart, Other Marketplace Channels, Others (Purchase,
 #  Exhibition, Bulk).
 #
 #  Channel logic (COSA "Type" + "Customer" par based):
-#    - Amazon/Flipkart/Myntra/Nykaa/Ajio/Tata: COSA me "Type" = SOR
+#    - Amazon/Flipkart/Myntra/Nykaa/Ajio/Tata: COSA me "Type" = Marketplace
 #      hota hai, asli channel Customer naam se pehchana jata hai
 #      (calc_channel/calc_sub_channel already yeh kar chuke hain —
 #      entry ka "channel"="Ecom" + "sub_channel"="Myntra"/"Nykaa"/
@@ -27336,7 +27372,7 @@ def api_daily_reporting_export_xlsx():
 #    - Blinkit/Instamart: COSA "Type" me seedhe waisa hi likha
 #      hota hai (abhi sheet me data nahi hai to 0 hi aayega, jaise
 #      hi data aayega apne aap bharna shuru ho jayega).
-#    - Other SOR Channels: Type=SOR ho lekin marketplace na ho (na
+#    - Other Marketplace Channels: Type=Marketplace ho lekin marketplace na ho (na
 #      Myntra/Nykaa/Amazon/Amazon FBA/Flipkart/Ajio/Tata), ya koi aur chhoti
 #      marketplace (FNP/Fern/Mirraw).
 #    - Others (Purchase, Exhibition, Bulk): sirf in teeno Type ka
@@ -27344,13 +27380,13 @@ def api_daily_reporting_export_xlsx():
 #      TOTAL hamesha grand actual revenue se match kare).
 #
 #  Type/word matching poori tarah case-insensitive hai (Website/
-#  WEBSITE/website, Sor/SOR/sor — sab ek jaisa treat hota hai) aur
+#  WEBSITE/website, Marketplace/SOR/sor — sab ek jaisa treat hota hai) aur
 #  date parsing already parse_date_any() se hoti hai jo string/int/
 #  date/datetime — sab format handle karta hai.
 # ════════════════════════════════════════════════════════════════
 _DRG_ROWS_ORDER = ["Website", "Amazon", "Amazon FBA", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata",
                    "Blinkit", "Instamart",
-                   "Other SOR Channels", "Others (Purchase, Exhibition, Bulk)"]
+                   "Other Marketplace Channels", "Others (Purchase, Exhibition, Bulk)"]
 _DRG_LABELS = {"Website": "Website (DTC)"}
 
 # Target sheet ki "Channel Type" ko in row-buckets se match karne ke
@@ -27368,7 +27404,7 @@ _DRG_TARGET_ALIASES = {
     "Tata":                             {"tata", "tata cliq"},
     "Blinkit":                          {"blinkit"},
     "Instamart":                        {"instamart", "swiggy instamart", "swiggy"},
-    "Other SOR Channels":               {"sor"},
+    "Other Marketplace Channels":       {"sor", "marketplace"},
     "Others (Purchase, Exhibition, Bulk)": {"purchase", "bulk", "exhibition"},
 }
 _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
@@ -27610,7 +27646,7 @@ def _fetch_drg_source_rows(force=False):
                 continue
             out.append({
                 "date": dt.strftime("%Y-%m-%d"), "rev": float(payout), "sp": 0.0,
-                "channel": "Ecom", "sub_channel": "Amazon", "type": "SOR",
+                "channel": "Ecom", "sub_channel": "Amazon", "type": "Marketplace",
                 "customer": "Amazon",
             })
     except Exception as exc:
@@ -27659,7 +27695,7 @@ def _fetch_drg_source_rows(force=False):
 def _drg_bucket(channel, sub_channel, typ):
     """Har normalized entry ko Daily Revenue Glimpse ke row-bucket me daalta hai.
     Amazon FBA is checked before generic Amazon so it can never leak into the
-    standard Amazon or Other SOR rows."""
+    standard Amazon or Other Marketplace rows."""
     ch_l  = str(channel or "").strip().lower()
     sub_l = str(sub_channel or "").strip().lower()
     t_l   = str(typ or "").strip().lower()
@@ -27672,11 +27708,11 @@ def _drg_bucket(channel, sub_channel, typ):
         if sub_l == "flipkart":  return "Flipkart"
         if sub_l == "ajio":      return "Ajio"
         if sub_l == "tata cliq": return "Tata"
-        return "Other SOR Channels"     # FNP / Fern / Mirraw / Other Marketplace
+        return "Other Marketplace Channels"     # FNP / Fern / Mirraw / Other Marketplace
     if ch_l == "d2c":
         return "Website"
-    if ch_l == "sor":
-        return "Other SOR Channels"     # SOR type, koi named marketplace nahi
+    if ch_l in ("sor", "marketplace"):
+        return "Other Marketplace Channels"     # Marketplace type, koi named marketplace nahi
     if t_l == "blinkit":   return "Blinkit"
     if t_l == "instamart": return "Instamart"
     if t_l in ("purchase", "bulk", "exhibition"):
@@ -28884,7 +28920,7 @@ def _fetch_rkh_sku_city_rows(force=False):
                     revenue *= qty / gross_qty
                 out.append({"sku": sku, "qty": float(qty), "state": state,
                             "city": city, "pin": pin, "source": "Myntra",
-                            "type": "SOR", "channel": "Ecom",
+                            "type": "Marketplace", "channel": "Ecom",
                             "date": dt.strftime("%Y-%m-%d") if dt else "",
                             "revenue": round(float(revenue), 2) if revenue > 0 else 0.0})
                 diag["myntra_rows_used"] += 1
@@ -29056,7 +29092,7 @@ def _fetch_rkh_sku_city_rows(force=False):
                 out.append({
                     "sku": sku, "qty": float(qty), "state": state, "city": city,
                     "pin": pin, "source": source,
-                    "type": "SOR", "channel": "Ecom",
+                    "type": "Marketplace", "channel": "Ecom",
                     "date": dt.strftime("%Y-%m-%d") if dt else "",
                     "revenue": round(float(revenue), 2) if revenue > 0 else 0.0,
                 })
@@ -29711,7 +29747,7 @@ def api_overall_export_xlsx():
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
             else:
-                line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
@@ -29837,7 +29873,7 @@ def api_overall_export_pdf():
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
             else:
-                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), r.get("type", ""), r.get("qty", 0), r.get("combo_qty", 0)]
+                line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0)]
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
@@ -30156,8 +30192,8 @@ def api_production_export_xlsx():
             ("Rows with Balance", report.get("pending_rows", 0)),
             ("Balance Qty Source", "Production sheet column K"),
             ("Exported At", now_ist().strftime("%d-%b-%Y %I:%M %p")),
-            ("Channel Filter", filters.get("channel_filter") or "All"),
-            ("Type Filter", filters.get("type_filter") or "All"),
+            ("Channel Filter", _marketplace_display_text(filters.get("channel_filter") or "All")),
+            ("Type Filter", _marketplace_display_text(filters.get("type_filter") or "All")),
             ("Category Filter", ", ".join(filters.get("taxon_filter") or []) or "All"),
             ("SKU Search", filters.get("sku_query") or "All"),
             ("Order No. Search", filters.get("order_query") or "All"),
