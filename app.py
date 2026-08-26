@@ -1,4 +1,13 @@
 # ============================================================
+# Cosa Nostraa — V24.1 (WEBSITE RETURNS FILTER SYNC)
+# V24.1:
+#   • Every Website Returns filter now refreshes shipment KPIs, analysis cards,
+#     filtered table, order-level donut and order-summary KPIs together.
+#   • Pickup/Status dates, payment range, origin, destination, status/reason,
+#     COD/Prepaid, order dates, SKU (including CMB child) and search are synced.
+#   • Return-only filters change the returned-order numerator while preserving
+#     the valid Website-order denominator, preventing false 100% return rates.
+# ============================================================
 # Cosa Nostraa — V24.0 (AMAZON + AMAZON FBA SOURCE SPLIT)
 # V24.0:
 #   • Standard Amazon in Target > Marketplace Sheet Sales is restored to the
@@ -7944,20 +7953,20 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="filter-box" style="margin:12px 0 14px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end">
-        <div class="fc"><label class="fl">Order From</label><input class="fi" id="wrOrderD1" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Status From</label><input class="fi" id="wrStatusD1" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Status To</label><input class="fi" id="wrStatusD2" type="date" onchange="renderWebsiteReturns()"></div>
-        <div class="fc"><label class="fl">Payment Mode</label><select class="fs" id="wrPaymentMode" onchange="renderWebsiteReturns()"><option value="All">All</option><option value="COD">COD</option><option value="Prepaid">Prepaid</option></select></div>
+        <div class="fc"><label class="fl">Order From</label><input class="fi" id="wrOrderD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Status From</label><input class="fi" id="wrStatusD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Status To</label><input class="fi" id="wrStatusD2" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Payment Mode</label><select class="fs" id="wrPaymentMode" onchange="applyWebsiteReturnsFilters()"><option value="All">All</option><option value="COD">COD</option><option value="Prepaid">Prepaid</option></select></div>
         <div class="fc"><label class="fl">Min Payment</label><input class="fi" id="wrPayMin" type="number" min="0" step="1" placeholder="0" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><label class="fl">Max Payment</label><input class="fi" id="wrPayMax" type="number" min="0" step="1" placeholder="No limit" oninput="websiteReturnsApply_d()"></div>
-        <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="renderWebsiteReturns()"><option value="All">All Origins</option></select></div>
+        <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="applyWebsiteReturnsFilters()"><option value="All">All Origins</option></select></div>
         <div class="fc"><label class="fl">Destination Search</label><input class="fi" id="wrDestination" type="search" list="wrDestinationList" autocomplete="off" placeholder="Type city / destination…" oninput="websiteReturnsApply_d()"><datalist id="wrDestinationList"></datalist></div>
-        <div class="fc"><label class="fl">Status Description</label><select class="fs" id="wrStatusDescription" onchange="renderWebsiteReturns()"><option value="All">All Statuses</option></select></div>
-        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="renderWebsiteReturns()"><option value="All">All Groups</option></select></div>
-        <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="renderWebsiteReturns()"><option value="All">All Reasons</option></select></div>
+        <div class="fc"><label class="fl">Status Description</label><select class="fs" id="wrStatusDescription" onchange="applyWebsiteReturnsFilters()"><option value="All">All Statuses</option></select></div>
+        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="applyWebsiteReturnsFilters()"><option value="All">All Groups</option></select></div>
+        <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="applyWebsiteReturnsFilters()"><option value="All">All Reasons</option></select></div>
         <div class="fc"><label class="fl">SKU Search</label><input class="fi" id="wrSku" type="search" list="wrSkuList" autocomplete="off" placeholder="SKU or child SKU inside CMB…" oninput="websiteReturnsApply_d()"><datalist id="wrSkuList"></datalist></div>
         <div class="fc"><label class="fl">Customer / Contact / Order Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Name, contact, order ID, display code…" oninput="websiteReturnsApply_d()"></div>
         <div class="fc"><button class="go-btn" style="width:100%;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebsiteReturnsFilters()">Reset</button></div>
@@ -7967,7 +7976,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Total Website Orders vs Returns</div><div class="small-note">Order-level view from the Website sheet, with Website Return fields + BlueDart matched by Display Order Code. COD / Prepaid, Order Date, SKU and Customer / Order Search update this comparison.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Total Website Orders vs Returns</div><div class="small-note">Order-level view from the Website sheet, with Website Return fields + BlueDart matched by Display Order Code. Every active filter above—including Order, Pickup and Status dates—updates this donut and all summary KPIs.</div></div></div>
     <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
         <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
@@ -20073,12 +20082,26 @@ let _websiteReturnsOverviewLastKey = '';
 function _wrOverviewParams(force=false){
   const p=new URLSearchParams();
   const put=(k,v)=>{const s=_wrText(v);if(s&&s!=='All')p.set(k,s);};
+  // Keep the order-level donut/summary on the exact same filter state as the
+  // Website Returns table, KPIs and analysis cards. Previously only Order Date,
+  // Payment Mode, SKU, Search and Destination were sent to the backend, so
+  // Pickup/Status dates and the other return filters left the overview stale.
   put('order_from',_wrEl('wrOrderD1')?.value||'');
   put('order_to',_wrEl('wrOrderD2')?.value||'');
+  put('pickup_from',_wrEl('wrD1')?.value||'');
+  put('pickup_to',_wrEl('wrD2')?.value||'');
+  put('status_from',_wrEl('wrStatusD1')?.value||'');
+  put('status_to',_wrEl('wrStatusD2')?.value||'');
   put('payment',_wrEl('wrPaymentMode')?.value||'All');
+  put('payment_min',_wrEl('wrPayMin')?.value||'');
+  put('payment_max',_wrEl('wrPayMax')?.value||'');
+  put('origin',_wrEl('wrOrigin')?.value||'All');
+  put('destination',_wrEl('wrDestination')?.value||'');
+  put('status_description',_wrEl('wrStatusDescription')?.value||'All');
+  put('status_group',_wrEl('wrStatusGroup')?.value||'All');
+  put('reason',_wrEl('wrReason')?.value||'All');
   put('sku',_wrEl('wrSku')?.value||'');
   put('search',_wrEl('wrSearch')?.value||'');
-  put('destination',_wrEl('wrDestination')?.value||'');
   if(force)p.set('force','1');
   return p;
 }
@@ -20122,7 +20145,8 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Deduplicated in Returned Orders');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
-    note.innerHTML=`Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Return numerator is the union of <b>Website Return fields + BlueDart</b>, deduplicated by Website Display Order Code.${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    const activeFilters=Number(data.active_filter_count||0);
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Return numerator is the union of <b>Website Return fields + BlueDart</b>, deduplicated by Website Display Order Code.${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   const detailRows=Array.isArray(data.orders)?data.orders:[];
@@ -20170,7 +20194,7 @@ async function loadWebsiteReturnsOverview(force=false){
   if(donut&&!_websiteReturnsOverview)donut.innerHTML='<div class="small-note">Loading total Website orders and matching returns…</div>';
   try{
     const params=_wrOverviewParams(force);
-    const r=await fetch('/api/website-returns-overview?'+params.toString(),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const r=await fetch('/api/website-returns-overview?'+params.toString(),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
     const d=await r.json();
     if(seq!==_websiteReturnsOverviewSeq)return;
     if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
@@ -20414,7 +20438,7 @@ async function loadWebsiteReturns(force=false){
   _websiteReturnsLoading=true;
   const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="13" class="ops-empty">Loading live Website return sheet…</td></tr>';
   try{
-    const r=await fetch('/api/website-returns'+(force?'?force=1':''),{headers:{'ngrok-skip-browser-warning':'true'}});
+    const r=await fetch('/api/website-returns'+(force?'?force=1':''),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
     const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
     _websiteReturnsData=d;
     _wrSetOptions('wrOrigin',d.filters?.origins||[],'All Origins');
@@ -20434,20 +20458,30 @@ async function loadWebsiteReturns(force=false){
     const sdNote=_wrEl('sdWebsiteReturnsNote');if(sdNote&&_sdWebsiteReturnsFilterActive())sdNote.textContent='Website return sheet could not be loaded. Use Website Returns > Refresh Live Sheet and try again.';
   }finally{_websiteReturnsLoading=false;}
 }
+function applyWebsiteReturnsFilters(){
+  // One entry-point for every Website Returns filter. It synchronously updates
+  // shipment KPIs, all analysis cards and the table, then renderWebsiteReturns()
+  // queues the order-level donut/summary request with the same filter state.
+  if(!_websiteReturnsData){
+    if(!_websiteReturnsLoading)loadWebsiteReturns(false);
+    return;
+  }
+  renderWebsiteReturns();
+}
 function resetWebsiteReturnsFilters(){
   ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
   ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
   _websiteReturnsOverviewLastKey='';
-  renderWebsiteReturns();
+  applyWebsiteReturnsFilters();
 }
-const websiteReturnsApply_d=_debounce(()=>renderWebsiteReturns(),160);
+const websiteReturnsApply_d=_debounce(()=>applyWebsiteReturnsFilters(),160);
 function exportWebsiteReturnsCsv(){
   const rows=_websiteReturnsFilteredRows||[];if(!rows.length){alert('No Website return rows to export.');return;}
   const headers=['Order ID','Display Order Code','SKU(s)','Customer','Customer Contact','Payment','Payment Mode','Order Date','Pickup Date','Status Description','Status Group','Status Date','Origin','Destination','RTO Reason','WayBill No','Reference No'];
   const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',_wrSkuText(r)==='—'?'':_wrSkuText(r),r.customer||'',r.customer_contact||'',r.payment||'',_wrPaymentMode(r),r.order_date||'',r.pickup_date||'',r.status_description||'',r.status_group||'',r.status_date||'',r.origin||'',r.destination||'',r.rto_reason||'',r.waybill_no||'',r.reference_no||'']);
   _dlCsv(headers,vals,'website_returns_filtered');
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
    Live Shopify availability + backend Inv Stock.  This tab intentionally does
@@ -24538,18 +24572,191 @@ def _load_website_order_audit(force=False):
         raise
 
 
-def _website_returns_overview_payload(force=False):
-    orders = _load_website_order_audit(force=force)
-    order_from = str(request.args.get("order_from", "") or "").strip()
-    order_to = str(request.args.get("order_to", "") or "").strip()
-    payment = str(request.args.get("payment", "All") or "All").strip()
-    sku_q = str(request.args.get("sku", "") or "").strip().upper()
-    search_q = str(request.args.get("search", "") or "").strip().casefold()
-    destination_q = str(request.args.get("destination", "") or "").strip().casefold()
+def _website_returns_combo_child_map():
+    """Compact parent-CMB -> child-SKU map for the Website Returns SKU filter.
 
+    The browser filter already treats a child SKU query as a match for a returned
+    parent CMB. The order-level donut must use the same rule. Cache the compact
+    map against the main dashboard snapshot timestamp so typing in SKU Search
+    does not rebuild the full catalogue on every keystroke.
+    """
+    stamp = float(CACHE.get("ts") or 0.0)
+    cached = CACHE.get("website_returns_combo_child_map") or {}
+    if cached.get("ts") == stamp and isinstance(cached.get("map"), dict):
+        return cached["map"]
+
+    try:
+        master_rows = ((CACHE.get("data") or [None])[0] or [])
+    except Exception:
+        master_rows = []
+    mapping = {}
+    for item in master_rows:
+        parent_raw = str((item or {}).get("sku") or "").strip().upper()
+        parent_compact = re.sub(r"[^A-Z0-9]", "", parent_raw)
+        if not parent_compact:
+            continue
+        children = []
+        for child in ((item or {}).get("combo_details") or []):
+            child_raw = str((child or {}).get("sku") or "").strip().upper()
+            child_compact = re.sub(r"[^A-Z0-9]", "", child_raw)
+            if child_raw and child_compact:
+                children.append((child_raw, child_compact))
+        if children:
+            mapping[parent_compact] = tuple(children)
+    CACHE["website_returns_combo_child_map"] = {"ts": stamp, "map": mapping}
+    return mapping
+
+
+def _website_returns_overview_payload(force=False):
+    """Return the order-level Website denominator under the active UI filters.
+
+    The Website Returns screen has two grains:
+      * shipment-level BlueDart/Website-return rows for the top KPIs, charts and table;
+      * unique Website Display Order Code for the donut and order-summary KPIs.
+
+    All filters must update both grains. Return-specific filters (pickup/status
+    dates, payment amount, origin, destination, status and reason) are first
+    applied to the live return rows, then their matching Website order keys are
+    used to constrain the order-level denominator. Order Date, COD/Prepaid, SKU
+    and search are applied to the Website order audit itself.
+    """
+    orders = _load_website_order_audit(force=force)
+
+    def _arg(name, default=""):
+        return str(request.args.get(name, default) or default).strip()
+
+    order_from = _arg("order_from")
+    order_to = _arg("order_to")
+    pickup_from = _arg("pickup_from")
+    pickup_to = _arg("pickup_to")
+    status_from = _arg("status_from")
+    status_to = _arg("status_to")
+    payment = _arg("payment", "All") or "All"
+    pay_min_raw = _arg("payment_min")
+    pay_max_raw = _arg("payment_max")
+    pay_min = float(to_num(pay_min_raw)) if pay_min_raw else None
+    pay_max = float(to_num(pay_max_raw)) if pay_max_raw else None
+    origin = _arg("origin", "All") or "All"
+    destination_q = _arg("destination").casefold()
+    status_description = _arg("status_description", "All") or "All"
+    status_group = _arg("status_group", "All") or "All"
+    reason = _arg("reason", "All") or "All"
+    sku_q = _arg("sku").upper()
+    search_q = _arg("search").casefold()
+
+    origin_cf = origin.casefold()
+    status_description_cf = status_description.casefold()
+    status_group_cf = status_group.casefold()
+    reason_cf = reason.casefold()
     sku_compact = re.sub(r"[^A-Z0-9]", "", sku_q)
-    matched = []
+    combo_child_map = _website_returns_combo_child_map() if sku_q else {}
+
+    orders_by_key = {}
     for rec in orders:
+        key = _daily_reporting_order_key(rec.get("display_order_code", ""))
+        if key:
+            orders_by_key[key] = rec
+    valid_order_keys = set(orders_by_key)
+
+    return_filter_active = any((
+        pickup_from, pickup_to, status_from, status_to,
+        pay_min_raw, pay_max_raw, destination_q,
+        origin not in ("", "All"),
+        status_description not in ("", "All"),
+        status_group not in ("", "All"),
+        reason not in ("", "All"),
+    ))
+    return_match_keys = set()
+    return_search_keys = set()
+
+    def _row_order_keys(row):
+        out = []
+        for raw_order in (row.get("display_order_code", ""), row.get("order_id", "")):
+            key = _daily_reporting_order_key(raw_order)
+            if key and key in valid_order_keys and key not in out:
+                out.append(key)
+        return out
+
+    def _date_ok(value, start_value, end_value):
+        d = str(value or "").strip()
+        if start_value and (not d or d < start_value):
+            return False
+        if end_value and (not d or d > end_value):
+            return False
+        return True
+
+    def _payment_number(value):
+        raw = str(value or "").strip()
+        if not raw or not re.search(r"\d", raw):
+            return None
+        return float(to_num(raw))
+
+    # _load_website_order_audit(force=True) already refreshes the return source,
+    # so use its cache here and avoid downloading the same live sheet twice.
+    if return_filter_active or search_q:
+        for row in _load_website_returns(force=False):
+            row_keys = _row_order_keys(row)
+            if not row_keys:
+                continue
+
+            row_ok = True
+            if not _date_ok(row.get("pickup_date", ""), pickup_from, pickup_to):
+                row_ok = False
+            if row_ok and not _date_ok(row.get("status_date", ""), status_from, status_to):
+                row_ok = False
+
+            pay_value = _payment_number(row.get("payment", ""))
+            if row_ok and pay_min is not None and (pay_value is None or pay_value < pay_min):
+                row_ok = False
+            if row_ok and pay_max is not None and (pay_value is None or pay_value > pay_max):
+                row_ok = False
+
+            if row_ok and origin not in ("", "All"):
+                if str(row.get("origin", "") or "").strip().casefold() != origin_cf:
+                    row_ok = False
+            if row_ok and destination_q:
+                if destination_q not in str(row.get("destination", "") or "").casefold():
+                    row_ok = False
+            if row_ok and status_description not in ("", "All"):
+                if str(row.get("status_description", "") or "").strip().casefold() != status_description_cf:
+                    row_ok = False
+            if row_ok and status_group not in ("", "All"):
+                if str(row.get("status_group", "") or "").strip().casefold() != status_group_cf:
+                    row_ok = False
+            if row_ok and reason not in ("", "All"):
+                if str(row.get("rto_reason", "") or "").strip().casefold() != reason_cf:
+                    row_ok = False
+
+            if row_ok:
+                return_match_keys.update(row_keys)
+
+            if search_q and row_ok:
+                audit_bits = []
+                for key in row_keys:
+                    audit = orders_by_key.get(key) or {}
+                    audit_bits.extend((
+                        audit.get("sku_text", ""), audit.get("payment_mode", ""),
+                        audit.get("customer", ""), audit.get("city", ""),
+                        audit.get("state", ""), audit.get("pincode", ""),
+                    ))
+                row_search_hay = " ".join(str(v or "") for v in (
+                    row.get("order_id", ""), row.get("display_order_code", ""),
+                    row.get("customer", ""), row.get("customer_contact", ""),
+                    row.get("payment", ""), row.get("origin", ""),
+                    row.get("destination", ""), row.get("status_description", ""),
+                    row.get("status_group", ""), row.get("status_date", ""),
+                    row.get("rto_reason", ""), row.get("waybill_no", ""),
+                    row.get("reference_no", ""), *audit_bits,
+                )).casefold()
+                if search_q in row_search_hay:
+                    return_search_keys.update(row_keys)
+
+    # Base denominator: all Website orders under order-level filters. Return-only
+    # filters must change the return numerator, not collapse the denominator to
+    # returned orders (which would incorrectly force the donut to 100%).
+    base_orders = []
+    for rec in orders:
+        rec_key = _daily_reporting_order_key(rec.get("display_order_code", ""))
         od = str(rec.get("order_date", "") or "")
         if order_from and (not od or od < order_from):
             continue
@@ -24557,13 +24764,6 @@ def _website_returns_overview_payload(force=False):
             continue
         if payment in ("COD", "Prepaid") and rec.get("payment_mode") != payment:
             continue
-        if destination_q:
-            dest_hay = " ".join([
-                str(rec.get("city", "")), str(rec.get("state", "")),
-                str(rec.get("address", "")), str(rec.get("bluedart_destination", "")),
-            ]).casefold()
-            if destination_q not in dest_hay:
-                continue
         if sku_q:
             ok = False
             for sku in rec.get("skus") or []:
@@ -24572,30 +24772,63 @@ def _website_returns_overview_payload(force=False):
                 if sku_q in su or (sku_compact and sku_compact in sc):
                     ok = True
                     break
+                # A returned CMB also matches a searched child SKU, exactly like
+                # the shipment table's client-side combo-aware filter.
+                for child_raw, child_compact in combo_child_map.get(sc, ()):
+                    if sku_q in child_raw or (sku_compact and sku_compact in child_compact):
+                        ok = True
+                        break
+                if ok:
+                    break
             if not ok:
                 continue
-        if search_q and search_q not in str(rec.get("_search", "")):
-            continue
-        matched.append(rec)
+        if search_q:
+            direct_match = search_q in str(rec.get("_search", ""))
+            if not direct_match and rec_key not in return_search_keys:
+                continue
+        base_orders.append(rec)
 
-    total_orders = len(matched)
-    returned = [r for r in matched if r.get("returned")]
-    website_returns = sum(1 for r in matched if r.get("website_returned"))
-    bluedart_returns = sum(1 for r in matched if r.get("bluedart_returned"))
-    both_returns = sum(1 for r in matched if r.get("website_returned") and r.get("bluedart_returned"))
-    cod_orders = sum(1 for r in matched if r.get("payment_mode") == "COD")
-    prepaid_orders = sum(1 for r in matched if r.get("payment_mode") == "Prepaid")
+    base_keys = {
+        _daily_reporting_order_key(r.get("display_order_code", ""))
+        for r in base_orders
+        if _daily_reporting_order_key(r.get("display_order_code", ""))
+    }
+    if return_filter_active:
+        returned = [
+            r for r in base_orders
+            if _daily_reporting_order_key(r.get("display_order_code", "")) in return_match_keys
+        ]
+    else:
+        returned = [r for r in base_orders if r.get("returned")]
+
+    total_orders = len(base_orders)
+    website_returns = sum(1 for r in returned if r.get("website_returned"))
+    bluedart_returns = sum(1 for r in returned if r.get("bluedart_returned"))
+    both_returns = sum(1 for r in returned if r.get("website_returned") and r.get("bluedart_returned"))
+    cod_orders = sum(1 for r in base_orders if r.get("payment_mode") == "COD")
+    prepaid_orders = sum(1 for r in base_orders if r.get("payment_mode") == "Prepaid")
 
     details_active = bool(search_q or sku_q)
+    detail_source = returned if return_filter_active else base_orders
     detail_rows = []
     if details_active:
-        for rec in matched[:500]:
-            # Do not expose the internal search blob or revenue/price fields.
-            # Employee-role browsers must never receive hidden sales-value data.
+        for rec in detail_source[:500]:
+            # Do not expose server-only search/filter helpers or hidden prices.
             detail_rows.append({
                 k: v for k, v in rec.items()
-                if k not in ("_search", "selling_price_total", "total_price")
+                if not str(k).startswith("_")
+                and k not in ("selling_price_total", "total_price")
             })
+
+    active_filter_count = sum(bool(v) for v in (
+        order_from, order_to, pickup_from, pickup_to, status_from, status_to,
+        pay_min_raw, pay_max_raw, destination_q, sku_q, search_q,
+        "" if payment == "All" else payment,
+        "" if origin == "All" else origin,
+        "" if status_description == "All" else status_description,
+        "" if status_group == "All" else status_group,
+        "" if reason == "All" else reason,
+    ))
 
     return {
         "summary": {
@@ -24611,8 +24844,11 @@ def _website_returns_overview_payload(force=False):
         },
         "orders": detail_rows,
         "details_active": details_active,
-        "details_total": total_orders if details_active else 0,
-        "details_limited": bool(details_active and total_orders > 500),
+        "details_total": len(detail_source) if details_active else 0,
+        "details_limited": bool(details_active and len(detail_source) > 500),
+        "active_filter_count": active_filter_count,
+        "return_filter_active": bool(return_filter_active),
+        "return_filter_orders": len(base_keys.intersection(return_match_keys)) if return_filter_active else 0,
         "source_rows": int(_WEBSITE_ORDER_AUDIT_CACHE.get("source_rows") or 0),
         "unmatched_bluedart": int(_WEBSITE_ORDER_AUDIT_CACHE.get("unmatched_bluedart") or 0),
         "tracker_contact_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("tracker_contact_orders") or 0),
