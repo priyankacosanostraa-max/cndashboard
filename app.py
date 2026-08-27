@@ -25,6 +25,12 @@
 #   • Amazon FBA Sale feed removed from every dashboard calculation.
 #   • Amazon now uses only the original Amazon/Flipkart + COSA sources.
 #   • Overview multi-SKU paste and inventory-photo fixes are preserved.
+# Cosa Nostraa — V23.8 (FAST BOOT / LOW-RAM RESPONSE CACHE)
+# V23.8:
+#   • Public link serves immediately; heavy sheet warm-up starts after the server binds.
+#   • Static HTML and product images now use proper browser caching instead of no-store.
+#   • /api/data JSON is gzip-streamed in low-memory mode to avoid Railway/Render OOM.
+#   • Catalogue refresh is staggered so it cannot compete with the first dashboard load.
 # Cosa Nostraa — V23.7 (SIMPLE SEARCHABLE MENU)
 # V23.7:
 #   • Menu tab names are simpler; every item explains what the tab contains.
@@ -260,6 +266,10 @@ CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
 import os, re, io, sys, time, glob, base64, pickle, shutil, threading, subprocess, difflib, uuid, json, hashlib
 import gzip as _gzip_mod
 import gc as _gc
+try:
+    import orjson as _orjson_mod
+except Exception:
+    _orjson_mod = None
 from sys import intern as _intern_raw
 def _si(v):
     """Repeated chhote strings (customer, type, FY, dates...) ek hi object share karein — RAM bachat."""
@@ -453,10 +463,18 @@ DEPLOY_HOST = bool(os.environ.get("DEPLOY") or os.environ.get("RENDER")
 # kha raha tha — 55k/59k pe atak jata tha). Exact + normalized match phir bhi
 # chalega (99% SKUs cover). Managed host par default ON. Env FAST_LOAD=0 se band.
 FAST_LOAD = (os.environ.get("FAST_LOAD", "1" if DEPLOY_HOST else "0") == "1")
+# Managed 512-MB hosts need a low-peak-memory serializer. Override with
+# LOW_MEMORY_MODE=0 only on a larger machine.
+LOW_MEMORY_MODE = (os.environ.get("LOW_MEMORY_MODE", "1" if DEPLOY_HOST else "0") == "1")
+STARTUP_GRACE_SECONDS = max(0, int(os.environ.get("STARTUP_GRACE_SECONDS", "6") or 6))
+CN_CATALOG_START_DELAY = max(0, int(os.environ.get("CN_CATALOG_START_DELAY", "90") or 90))
+DATA_HTTP_CACHE_SECONDS = max(0, int(os.environ.get("DATA_HTTP_CACHE_SECONDS", "120") or 120))
 CACHE_TTL = 900   # bg refresher (600s) hamesha pehle chal jata hai — users ko inline refresh kabhi nahi jhelni padti
 TZ        = ZoneInfo("Asia/Kolkata")
 
 CACHE    = {"data": None, "ts": 0, "debug": {}}
+# Normalized SKU -> image URL, rebuilt atomically with each data refresh.
+_PRODUCT_IMAGE_URL_BY_SKU = {}
 UPLOAD_REPORTS = {}
 AI_READY = False
 db_data, processor, dino_model, client = None, None, None, None
@@ -1748,10 +1766,11 @@ def _load_channel_order_events(inv_skus_map, dbg):
             select_positions=select_positions,
         )
 
+    _channel_workers_default = "2" if LOW_MEMORY_MODE else "3"
     try:
-        _channel_workers = int(os.environ.get("CHANNEL_FETCH_WORKERS", "3"))
+        _channel_workers = int(os.environ.get("CHANNEL_FETCH_WORKERS", _channel_workers_default))
     except Exception:
-        _channel_workers = 3
+        _channel_workers = int(_channel_workers_default)
     worker_count = max(1, min(len(sources), _channel_workers))
     _wstage("fetching", f"Downloading {len(sources)} marketplace order feeds in parallel…")
     fetch_pool = ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="cn-channel-fetch")
@@ -1759,8 +1778,15 @@ def _load_channel_order_events(inv_skus_map, dbg):
 
     for spec in sources:
         frame = None
+        future = None
         try:
-            frame = source_futures[spec["key"]].result()
+            # Pop before result(): Future objects retain their DataFrame result.
+            # Keeping all five futures in the dict defeated del frame and caused
+            # a large cold-start RAM spike on 512-MB hosts.
+            future = source_futures.pop(spec["key"])
+            frame = future.result()
+            del future
+            future = None
             frame.columns = [str(c).strip() for c in frame.columns]
             src_cols = list(frame.columns)
             source_positions = frame.attrs.get("source_position_columns", {})
@@ -1973,8 +1999,11 @@ def _load_channel_order_events(inv_skus_map, dbg):
         finally:
             if frame is not None:
                 del frame
+            if future is not None:
+                del future
             _gc.collect()
 
+    source_futures.clear()
     fetch_pool.shutdown(wait=True)
 
     compact = {
@@ -2127,7 +2156,7 @@ def get_data(force=False):
         _DATA_LOCK.release()
 
 def _refresh_data():
-    global CACHE
+    global CACHE, _PRODUCT_IMAGE_URL_BY_SKU
     dbg = {"errors": []}
     try:
         # Inventory and the main sales sheet are independent. Downloading them
@@ -3830,6 +3859,14 @@ def _refresh_data():
             if _ci:
                 _child["forecast_60d"] = _ci.get("forecast_60d", 0)
                 _child["reorder_qty"] = _ci.get("reorder_qty", 0)
+
+    _new_image_map = {}
+    for _img_item in compiled:
+        _img_sku = re.sub(r"\s+", "", str(_img_item.get("sku", "") or "").strip().upper())
+        _img_url = _normalize_inventory_image_url(_img_item.get("image_url", ""))
+        if _img_sku and _img_url:
+            _new_image_map[_img_sku] = _img_url
+    _PRODUCT_IMAGE_URL_BY_SKU = _new_image_map
 
     CACHE["data"] = (
         compiled,
@@ -11869,7 +11906,7 @@ function loadData(force){
   const timeoutMs = 120000;
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
-  fetch('/api/data?force=' + force + '&role=' + encodeURIComponent(LOGIN_ROLE || 'admin'), {headers:{'ngrok-skip-browser-warning':'true'}, signal: ctrl.signal})
+  fetch('/api/data?force=' + force + '&role=' + encodeURIComponent(LOGIN_ROLE || 'admin'), {headers:{'ngrok-skip-browser-warning':'true'}, signal: ctrl.signal, cache: force ? 'no-store' : 'default'})
     .then(r => { if (r.status === 401) { setLoginGateVisible(true); const a=document.getElementById('appRoot'); if(a) a.style.display='none'; throw new Error('Session expired — please sign in again.'); } return r; })
     .then(r => {
       // 202 = server abhi data warm kar raha hai. Error mat do — thodi der baad
@@ -23199,7 +23236,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = bool(DEPLOY_HOST)
 app.config["PREFERRED_URL_SCHEME"] = "https" if DEPLOY_HOST else "http"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
-app.config["SESSION_REFRESH_EACH_REQUEST"] = True
+app.config["SESSION_REFRESH_EACH_REQUEST"] = False
 
 # ── server-side users (production: env vars se override karo) ──
 USERS = {
@@ -23268,25 +23305,49 @@ def api_logout():
 
 @app.after_request
 def add_headers(resp):
-    resp.headers['ngrok-skip-browser-warning'] = 'true'
-    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-    resp.headers['Pragma'] = 'no-cache'
-    resp.headers['Expires'] = '0'
+    """Apply cheap, route-aware caching and compression.
+
+    The old middleware forced ``no-store`` on *every* response, including the
+    1+ MB HTML shell, the multi-MB /api/data payload and every product photo.
+    That made each reopen download/parse everything again and also compressed
+    JPEG/PNG bytes repeatedly. Explicit route headers are now preserved.
+    """
+    resp.headers["ngrok-skip-browser-warning"] = "true"
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+
+    # Preserve route-specific cache policies (/api/data, product images, shell).
+    if "Cache-Control" not in resp.headers:
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+
     try:
-        accepts = request.headers.get('Accept-Encoding', '')
-        if ('gzip' in accepts.lower()
-                and resp.content_length is not None and resp.content_length > 1024
-                and 'Content-Encoding' not in resp.headers
-                and resp.status_code == 200
-                and resp.direct_passthrough is False):
-            import gzip as _gzip
+        accepts = (request.headers.get("Accept-Encoding") or "").lower()
+        ctype = (resp.headers.get("Content-Type") or "").lower()
+        already_compressed = any(ctype.startswith(x) for x in (
+            "image/", "video/", "audio/", "application/zip",
+            "application/pdf", "application/gzip", "application/octet-stream",
+        ))
+        if (
+            "gzip" in accepts
+            and not already_compressed
+            and resp.content_length is not None
+            and resp.content_length > 1024
+            and "Content-Encoding" not in resp.headers
+            and resp.status_code == 200
+            and resp.direct_passthrough is False
+        ):
             data = resp.get_data()
-            comp = _gzip.compress(data, 6)
+            # Level 2 is materially cheaper on a small CPU and is nearly the
+            # same size for JSON/HTML as the previous level 6.
+            comp = _gzip_mod.compress(data, compresslevel=2, mtime=0)
             if len(comp) < len(data):
                 resp.set_data(comp)
-                resp.headers['Content-Encoding'] = 'gzip'
-                resp.headers['Content-Length'] = str(len(comp))
-                resp.headers['Vary'] = 'Accept-Encoding'
+                resp.headers["Content-Encoding"] = "gzip"
+                resp.headers["Content-Length"] = str(len(comp))
+                vary = {v.strip() for v in (resp.headers.get("Vary") or "").split(",") if v.strip()}
+                vary.add("Accept-Encoding")
+                resp.headers["Vary"] = ", ".join(sorted(vary))
     except Exception:
         pass
     return resp
@@ -23296,6 +23357,28 @@ def add_headers(resp):
 _PRODUCT_IMAGE_CACHE = {}
 _PRODUCT_IMAGE_CACHE_LOCK = threading.Lock()
 _PRODUCT_IMAGE_CACHE_TTL = 6 * 3600
+_PRODUCT_IMAGE_CACHE_MAX_ITEMS = max(16, int(os.environ.get("PRODUCT_IMAGE_CACHE_MAX_ITEMS", "96") or 96))
+_PRODUCT_IMAGE_CACHE_MAX_BYTES = max(4 * 1024 * 1024, int(os.environ.get("PRODUCT_IMAGE_CACHE_MAX_MB", "32") or 32) * 1024 * 1024)
+_PRODUCT_IMAGE_CACHE_BYTES = 0
+
+def _product_image_cache_put(image_url, body, ctype, now):
+    """Memory-bounded LRU cache; prevents hundreds of photos from OOMing 512 MB."""
+    global _PRODUCT_IMAGE_CACHE_BYTES
+    if not body or len(body) > min(3 * 1024 * 1024, _PRODUCT_IMAGE_CACHE_MAX_BYTES // 2):
+        return
+    old = _PRODUCT_IMAGE_CACHE.pop(image_url, None)
+    if old:
+        _PRODUCT_IMAGE_CACHE_BYTES = max(0, _PRODUCT_IMAGE_CACHE_BYTES - len(old[1]))
+    _PRODUCT_IMAGE_CACHE[image_url] = (now, body, ctype)
+    _PRODUCT_IMAGE_CACHE_BYTES += len(body)
+    while (_PRODUCT_IMAGE_CACHE and (
+        len(_PRODUCT_IMAGE_CACHE) > _PRODUCT_IMAGE_CACHE_MAX_ITEMS
+        or _PRODUCT_IMAGE_CACHE_BYTES > _PRODUCT_IMAGE_CACHE_MAX_BYTES
+    )):
+        oldest_key = min(_PRODUCT_IMAGE_CACHE, key=lambda k: _PRODUCT_IMAGE_CACHE[k][0])
+        ev = _PRODUCT_IMAGE_CACHE.pop(oldest_key, None)
+        if ev:
+            _PRODUCT_IMAGE_CACHE_BYTES = max(0, _PRODUCT_IMAGE_CACHE_BYTES - len(ev[1]))
 
 @app.route("/api/product-image/<path:sku>")
 def api_product_image(sku):
@@ -23303,17 +23386,22 @@ def api_product_image(sku):
     if not sku_key:
         return ("", 404)
 
-    image_url = ""
-    try:
-        data = CACHE.get("data")
-        master_items = data[0] if data and len(data) > 0 else []
-        for it in master_items or []:
-            ik = re.sub(r"\s+", "", str(it.get("sku", "") or "").strip().upper())
-            if ik == sku_key:
-                image_url = _normalize_inventory_image_url(it.get("image_url", ""))
-                break
-    except Exception:
-        image_url = ""
+    image_url = _PRODUCT_IMAGE_URL_BY_SKU.get(sku_key, "")
+    if not image_url:
+        # Defensive fallback for an old in-memory snapshot created before the
+        # lookup map existed. Normal refreshed requests are O(1).
+        try:
+            data = CACHE.get("data")
+            master_items = data[0] if data and len(data) > 0 else []
+            for it in master_items or []:
+                ik = re.sub(r"\s+", "", str(it.get("sku", "") or "").strip().upper())
+                if ik == sku_key:
+                    image_url = _normalize_inventory_image_url(it.get("image_url", ""))
+                    if image_url:
+                        _PRODUCT_IMAGE_URL_BY_SKU[sku_key] = image_url
+                    break
+        except Exception:
+            image_url = ""
     if not image_url:
         return ("", 404)
 
@@ -23322,7 +23410,11 @@ def api_product_image(sku):
         hit = _PRODUCT_IMAGE_CACHE.get(image_url)
         if hit and now - hit[0] < _PRODUCT_IMAGE_CACHE_TTL:
             body, ctype = hit[1], hit[2]
-            return app.response_class(body, mimetype=ctype)
+            # Touch for LRU order without copying image bytes.
+            _PRODUCT_IMAGE_CACHE[image_url] = (now, body, ctype)
+            resp = app.response_class(body, mimetype=ctype)
+            resp.headers["Cache-Control"] = "public, max-age=21600, immutable"
+            return resp
 
     try:
         rr = requests.get(
@@ -23341,24 +23433,38 @@ def api_product_image(sku):
         if len(body) > 8 * 1024 * 1024:
             return ("", 413)
         with _PRODUCT_IMAGE_CACHE_LOCK:
-            if len(_PRODUCT_IMAGE_CACHE) > 600:
-                # bounded memory: discard oldest quarter
-                for k,_v in sorted(_PRODUCT_IMAGE_CACHE.items(), key=lambda kv: kv[1][0])[:150]:
-                    _PRODUCT_IMAGE_CACHE.pop(k, None)
-            _PRODUCT_IMAGE_CACHE[image_url] = (now, body, ctype)
+            _product_image_cache_put(image_url, body, ctype, now)
         resp = app.response_class(body, mimetype=ctype)
-        resp.headers["Cache-Control"] = "public, max-age=21600"
+        resp.headers["Cache-Control"] = "public, max-age=21600, immutable"
         return resp
     except Exception as exc:
         print("Product image proxy failed:", sku_key, str(exc)[:140])
         return ("", 404)
 
+_HTML_RAW_FOR_HASH = HTML.encode("utf-8")
+_HTML_ETAG = hashlib.sha1(_HTML_RAW_FOR_HASH).hexdigest()
+_HTML_GZIP = _gzip_mod.compress(_HTML_RAW_FOR_HASH, compresslevel=1, mtime=0)
+del _HTML_RAW_FOR_HASH
+
 @app.route("/")
 def home():
-    # HTML is a complete static dashboard shell. Serving it directly prevents
-    # Jinja from interpreting valid CSS/JavaScript brace sequences such as
-    # "{#selector" as template comments.
-    return app.response_class(HTML, mimetype="text/html")
+    # The shell is static; login/data are fetched from authenticated APIs.
+    # Precompressed bytes + ETag make the public link open immediately even
+    # while the large dataset is still warming in the background.
+    _html_wants_gzip = "gzip" in (request.headers.get("Accept-Encoding") or "").lower()
+    _html_etag = _HTML_ETAG + ("-gz" if _html_wants_gzip else "-id")
+    if request.if_none_match and request.if_none_match.contains(_html_etag):
+        resp = app.response_class(status=304)
+    elif _html_wants_gzip:
+        resp = app.response_class(_HTML_GZIP, mimetype="text/html")
+        resp.headers["Content-Encoding"] = "gzip"
+        resp.headers["Content-Length"] = str(len(_HTML_GZIP))
+    else:
+        resp = app.response_class(HTML, mimetype="text/html")
+    resp.set_etag(_html_etag)
+    resp.headers["Cache-Control"] = "public, max-age=120, must-revalidate"
+    resp.headers["Vary"] = "Accept-Encoding"
+    return resp
 
 REV_ITEM_KEYS = ("total_net_revenue", "rev_yesterday", "rev_month", "rev_fy", "rev_prev_fy",
                  "avg_selling_price", "last_selling_price", "website_selling_price", "return_amount",
@@ -23387,6 +23493,42 @@ def _employee_view(comp, period_kpis):
                                 "last_month", "last_year_month", "mom_yoy_pct") else v)
                  for k, v in (period_kpis or {}).items()}
     return safe_comp, safe_kpis
+
+def _json_payload_gzip(payload):
+    """Serialize directly into gzip on small hosts to avoid a giant raw JSON copy."""
+    if not LOW_MEMORY_MODE and _orjson_mod is not None:
+        try:
+            raw = _orjson_mod.dumps(
+                payload,
+                option=getattr(_orjson_mod, "OPT_SERIALIZE_NUMPY", 0),
+                default=lambda obj: str(obj),
+            )
+            try:
+                return _gzip_mod.compress(raw, compresslevel=2, mtime=0)
+            finally:
+                del raw
+        except Exception:
+            pass
+
+    out = io.BytesIO()
+    encoder = json.JSONEncoder(
+        ensure_ascii=False, separators=(",", ":"), default=str, allow_nan=True
+    )
+    with _gzip_mod.GzipFile(fileobj=out, mode="wb", compresslevel=1, mtime=0) as zf:
+        batch = []
+        batch_size = 0
+        for chunk in encoder.iterencode(payload):
+            b = chunk.encode("utf-8")
+            batch.append(b)
+            batch_size += len(b)
+            if batch_size >= 64 * 1024:
+                zf.write(b"".join(batch))
+                batch.clear()
+                batch_size = 0
+        if batch:
+            zf.write(b"".join(batch))
+    return out.getvalue()
+
 
 def _build_role_gz(role, force=False):
     """Role ke liye gzipped /api/data response banao (ya cache se lo).
@@ -23432,9 +23574,7 @@ def _build_role_gz(role, force=False):
     with _RESP_LOCK:                      # do builders ek saath na chalein (RAM spike)
         gz = _RESP_CACHE.get(key)
         if gz is None:
-            raw = json.dumps(payload, default=str).encode("utf-8")
-            gz = _gzip_mod.compress(raw, 2)
-            del raw
+            gz = _json_payload_gzip(payload)
             for _k in [k for k in _RESP_CACHE if k[1] != CACHE["ts"]]:
                 _RESP_CACHE.pop(_k, None)      # purane snapshots ke gz turant hatao
             _RESP_CACHE[key] = gz
@@ -23447,24 +23587,43 @@ def _build_role_gz(role, force=False):
 
 @app.route("/api/data")
 def api_data():
-    force = request.args.get("force","false").lower() == "true"
-    role  = session.get("role") or request.args.get("role", "admin")
-    # Agar data abhi warm ho raha hai (pehli baar / refresh), to BLOCK mat karo —
-    # 202 "warming" do taaki frontend warmup-status poll kare, reload-loop na bane.
+    force = request.args.get("force", "false").lower() == "true"
+    role = session.get("role") or request.args.get("role", "admin")
+    # If data is still warming, never block the web worker. The static shell and
+    # login remain available while the browser polls this lightweight status.
     if CACHE.get("data") is None:
-        return jsonify({"warming": True, "stage": _WARMUP.get("stage"),
-                        "detail": _WARMUP.get("detail"),
-                        "done": _WARMUP.get("done"), "total": _WARMUP.get("total")}), 202
+        return jsonify({
+            "warming": True, "stage": _WARMUP.get("stage"),
+            "detail": _WARMUP.get("detail"),
+            "done": _WARMUP.get("done"), "total": _WARMUP.get("total"),
+        }), 202
+
+    _data_encoding = "gz" if "gzip" in (request.headers.get("Accept-Encoding") or "").lower() else "id"
+    etag = hashlib.sha1(
+        f"{role}|{CACHE.get('ts', 0):.6f}|{_data_encoding}".encode("utf-8")
+    ).hexdigest()
+    if not force and request.if_none_match and request.if_none_match.contains(etag):
+        resp = app.response_class(status=304)
+        resp.set_etag(etag)
+        resp.headers["Cache-Control"] = f"private, max-age={DATA_HTTP_CACHE_SECONDS}"
+        resp.headers["Vary"] = "Accept-Encoding, Cookie"
+        return resp
+
     gz = _build_role_gz(role, force=force)
-    if "gzip" in (request.headers.get("Accept-Encoding") or ""):
+    if "gzip" in (request.headers.get("Accept-Encoding") or "").lower():
         resp = app.response_class(gz, mimetype="application/json")
         resp.headers["Content-Encoding"] = "gzip"
-        resp.headers["Vary"] = "Accept-Encoding, Cookie"
-        resp.headers["Cache-Control"] = "no-store" if force else "private, max-age=60"
-        return resp
-    resp = app.response_class(_gzip_mod.decompress(gz), mimetype="application/json")
-    resp.headers["Cache-Control"] = "no-store" if force else "private, max-age=60"
-    resp.headers["Vary"] = "Cookie"
+        resp.headers["Content-Length"] = str(len(gz))
+    else:
+        resp = app.response_class(_gzip_mod.decompress(gz), mimetype="application/json")
+    resp.set_etag(etag)
+    if force:
+        resp.headers["Cache-Control"] = "no-store"
+    else:
+        resp.headers["Cache-Control"] = (
+            f"private, max-age={DATA_HTTP_CACHE_SECONDS}, stale-while-revalidate=300"
+        )
+    resp.headers["Vary"] = "Accept-Encoding, Cookie"
     return resp
 
 @app.route("/api/warmup-status")
@@ -32685,24 +32844,31 @@ def _keepalive_loop():
             pass
 
 def _warmup_and_refresh_loop():
-    """Server start hote hi data taiyaar; phir har REFRESH_INTERVAL par
-    background mein fresh. MEMORY: sirf ek role ka response prebuild.
-    Agar pehli baar fail ho (sheet fetch slow/timeout), to jaldi retry karo
-    — 10 min tak "loading" pe atkne mat do."""
-    # Initial load — fail ho to jaldi-jaldi retry (10 min wait nahi)
+    """Warm data after a short boot grace, then refresh in the background.
+
+    The grace period is deliberate: Flask/Gunicorn can bind its public port and
+    answer Railway/Render health checks before pandas starts the heavy build.
+    """
+    if STARTUP_GRACE_SECONDS:
+        _wstage("starting", f"Server online; data warm-up starts in {STARTUP_GRACE_SECONDS}s")
+        time.sleep(STARTUP_GRACE_SECONDS)
+
     ok = False
-    for attempt in range(6):   # ~6 quick tries
+    for attempt in range(3):
         try:
-            _wstage("loading", f"Loading data (try {attempt+1})…")
+            _wstage("loading", f"Loading data (try {attempt + 1}/3)…")
             get_data(True)
+            if CACHE.get("data") is None:
+                raise RuntimeError("data build returned without a usable cache")
             ok = True
             break
         except Exception as e:
-            print(f"WARMUP try {attempt+1} failed:", str(e)[:160])
-            time.sleep(8)      # 8s baad phir try
+            print(f"WARMUP try {attempt + 1} failed:", str(e)[:160])
+            time.sleep(10 * (attempt + 1))
     if ok:
+        _wstage("serializing", "Preparing compressed dashboard response…")
         try:
-            _build_role_gz("admin")          # sirf admin prebuild (RAM bachat)
+            _build_role_gz("admin")          # only admin prebuild (RAM saving)
         except Exception as e:
             print("prebuild admin failed:", str(e)[:100])
         _wstage("ready", "Ready")
@@ -32733,12 +32899,11 @@ def _warmup_and_refresh_loop():
             print("BG refresh error:", str(e)[:140])
 
 def _cn_catalog_loop():
-    """Refresh cosanostraa.com names/prices without forcing a second sheet sync.
-
-    This thread is deliberately decoupled from the heavy sales/inventory data
-    refresh. Catalogue changes are patched into the current compiled snapshot;
-    the normal background sheet refresh remains the source of truth for data.
-    """
+    """Refresh website names/prices without competing with cold-start warm-up."""
+    while CACHE.get("data") is None:
+        time.sleep(5)
+    if CN_CATALOG_START_DELAY:
+        time.sleep(CN_CATALOG_START_DELAY)
     try:
         cn_build_catalog(force=True)
         try:
@@ -32776,6 +32941,9 @@ _LAUNCHED = False
 def _start_background_threads():
     global _LAUNCHED
     if _LAUNCHED:
+        return
+    if os.environ.get("DISABLE_BACKGROUND_THREADS", "0") == "1":
+        _wstage("idle", "Background warm-up disabled by environment")
         return
     _LAUNCHED = True
     threading.Thread(target=_warmup_and_refresh_loop, daemon=True).start()
