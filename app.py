@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.7 (WEBSITE ORDER DATE KPI/PIE FILTER SYNC)
+# Order Date changes now refresh return KPIs, status pie, order summary KPIs and all-orders table immediately.
 # ============================================================
 # Cosa Nostraa — V24.7 (WEBSITE ALL ORDERS + STATUS PIE)
 # V24.7:
@@ -8008,8 +8010,8 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="filter-box" style="margin:12px 0 14px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end">
-        <div class="fc"><label class="fl">Order From</label><input class="fi" id="wrOrderD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
-        <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" onchange="applyWebsiteReturnsFilters()"></div>
+        <div class="fc"><label class="fl">Order From</label><input class="fi" id="wrOrderD1" type="date" oninput="websiteReturnsOrderDateChanged()" onchange="websiteReturnsOrderDateChanged()"></div>
+        <div class="fc"><label class="fl">Order To</label><input class="fi" id="wrOrderD2" type="date" oninput="websiteReturnsOrderDateChanged()" onchange="websiteReturnsOrderDateChanged()"></div>
         <div class="fc"><label class="fl">Pickup From</label><input class="fi" id="wrD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
         <div class="fc"><label class="fl">Pickup To</label><input class="fi" id="wrD2" type="date" onchange="applyWebsiteReturnsFilters()"></div>
         <div class="fc"><label class="fl">Status From</label><input class="fi" id="wrStatusD1" type="date" onchange="applyWebsiteReturnsFilters()"></div>
@@ -20471,11 +20473,30 @@ let _websiteReturnsOverview = null;
 let _websiteReturnsOverviewLoading = false;
 let _websiteReturnsOverviewSeq = 0;
 let _websiteReturnsOverviewLastKey = '';
+let _websiteReturnsOverviewLoadingKey = '';
+let _websiteReturnsOverviewRequestNonce = 0;
 let _websiteReturnsTablePage = 1;
 let _websiteReturnsTablePageSize = 250;
 let _websiteReturnsTableRows = [];
 let _websiteReturnsTableTotal = 0;
 
+function _wrInputDateIso(id){
+  const el=_wrEl(id); if(!el)return '';
+  const raw=_wrText(el.value||'');
+  if(!raw)return '';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(raw))return raw;
+  // Defensive fallback for browsers/wrappers that surface a localized date.
+  let m=raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if(m){
+    const mm=String(Number(m[1])).padStart(2,'0'),dd=String(Number(m[2])).padStart(2,'0');
+    return `${m[3]}-${mm}-${dd}`;
+  }
+  try{
+    const d=el.valueAsDate;
+    if(d&&!Number.isNaN(d.getTime()))return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+  }catch(_e){}
+  return raw;
+}
 function _wrOverviewParams(force=false){
   const p=new URLSearchParams();
   const put=(k,v)=>{const s=_wrText(v);if(s&&s!=='All')p.set(k,s);};
@@ -20483,12 +20504,12 @@ function _wrOverviewParams(force=false){
   // Website Returns table, KPIs and analysis cards. Previously only Order Date,
   // Payment Mode, SKU, Search and Destination were sent to the backend, so
   // Pickup/Status dates and the other return filters left the overview stale.
-  put('order_from',_wrEl('wrOrderD1')?.value||'');
-  put('order_to',_wrEl('wrOrderD2')?.value||'');
-  put('pickup_from',_wrEl('wrD1')?.value||'');
-  put('pickup_to',_wrEl('wrD2')?.value||'');
-  put('status_from',_wrEl('wrStatusD1')?.value||'');
-  put('status_to',_wrEl('wrStatusD2')?.value||'');
+  put('order_from',_wrInputDateIso('wrOrderD1'));
+  put('order_to',_wrInputDateIso('wrOrderD2'));
+  put('pickup_from',_wrInputDateIso('wrD1'));
+  put('pickup_to',_wrInputDateIso('wrD2'));
+  put('status_from',_wrInputDateIso('wrStatusD1'));
+  put('status_to',_wrInputDateIso('wrStatusD2'));
   put('payment',_wrEl('wrPaymentMode')?.value||'All');
   put('payment_min',_wrEl('wrPayMin')?.value||'');
   put('payment_max',_wrEl('wrPayMax')?.value||'');
@@ -20663,13 +20684,24 @@ function websiteOrdersPageSizeChanged(){
 async function loadWebsiteReturnsOverview(force=false){
   const key=_wrOverviewKey();
   if(!force&&_websiteReturnsOverview&&key===_websiteReturnsOverviewLastKey){renderWebsiteReturnsOverview();return;}
+  // If the exact same filter request is already running, do not duplicate it.
+  // A different filter key is allowed to start immediately; sequence protection
+  // below guarantees an older response can never overwrite the newer one.
+  if(!force&&_websiteReturnsOverviewLoading&&key===_websiteReturnsOverviewLoadingKey)return;
   const seq=++_websiteReturnsOverviewSeq;
   _websiteReturnsOverviewLoading=true;
+  _websiteReturnsOverviewLoadingKey=key;
   const donut=_wrEl('wrOrderReturnDonut');
   if(donut&&!_websiteReturnsOverview)donut.innerHTML='<div class="small-note">Loading total Website orders and matching returns…</div>';
   try{
     const params=_wrOverviewParams(force);
-    const r=await fetch('/api/website-returns-overview?'+params.toString(),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
+    // Cache-buster is intentionally excluded from _wrOverviewKey(); it only
+    // prevents browser/proxy/CDN reuse of a previous filter response.
+    params.set('_wr_req',`${Date.now()}_${++_websiteReturnsOverviewRequestNonce}`);
+    const r=await fetch('/api/website-returns-overview?'+params.toString(),{
+      cache:'no-store',credentials:'same-origin',
+      headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache, no-store','Pragma':'no-cache'}
+    });
     const d=await r.json();
     if(seq!==_websiteReturnsOverviewSeq)return;
     if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
@@ -20682,7 +20714,10 @@ async function loadWebsiteReturnsOverview(force=false){
     if(donut)donut.innerHTML=`<div class="small-note">Could not load Website order denominator: ${msg}</div>`;
     const n=_wrEl('wrOrderSummaryNote');if(n)n.textContent='Website order-level summary failed to load. Return analysis may still be available; retry Refresh Live Sheet.';
   }finally{
-    if(seq===_websiteReturnsOverviewSeq)_websiteReturnsOverviewLoading=false;
+    if(seq===_websiteReturnsOverviewSeq){
+      _websiteReturnsOverviewLoading=false;
+      _websiteReturnsOverviewLoadingKey='';
+    }
   }
 }
 const websiteReturnsOverviewApply_d=_debounce(()=>loadWebsiteReturnsOverview(false),220);
@@ -20795,9 +20830,9 @@ window.renderSdWebsiteReturns=renderSdWebsiteReturns;
 
 function _websiteReturnsFilterRows(){
   const rows=(_websiteReturnsData&&_websiteReturnsData.rows)||[];
-  const od1=_wrEl('wrOrderD1')?.value||'',od2=_wrEl('wrOrderD2')?.value||'';
-  const d1=_wrEl('wrD1')?.value||'',d2=_wrEl('wrD2')?.value||'';
-  const sd1=_wrEl('wrStatusD1')?.value||'',sd2=_wrEl('wrStatusD2')?.value||'';
+  const od1=_wrInputDateIso('wrOrderD1'),od2=_wrInputDateIso('wrOrderD2');
+  const d1=_wrInputDateIso('wrD1'),d2=_wrInputDateIso('wrD2');
+  const sd1=_wrInputDateIso('wrStatusD1'),sd2=_wrInputDateIso('wrStatusD2');
   const mode=_wrEl('wrPaymentMode')?.value||'All';
   const origin=_wrEl('wrOrigin')?.value||'All',destQ=_wrNorm(_wrEl('wrDestination')?.value||'');
   const statusDesc=_wrEl('wrStatusDescription')?.value||'All',statusGroup=_wrEl('wrStatusGroup')?.value||'All';
@@ -20931,8 +20966,8 @@ async function loadWebsiteReturns(force=false){
   }finally{_websiteReturnsLoading=false;}
 }
 function applyWebsiteReturnsFilters(resetPage=true){
-  // One entry-point for every Website filter. Return cards update locally while
-  // the all-orders table + status pie are refreshed server-side on the same state.
+  // One entry-point for every Website filter. Return cards update locally and
+  // the order-level KPIs/pie/table refresh immediately on the exact same state.
   if(resetPage){
     _websiteReturnsTablePage=1;
     _websiteReturnsOverviewLastKey='';
@@ -20942,6 +20977,13 @@ function applyWebsiteReturnsFilters(resetPage=true){
     return;
   }
   renderWebsiteReturns();
+  // Do not rely only on the debounced queue inside renderWebsiteReturns(). Date
+  // filters must refresh the server-side denominator immediately.
+  loadWebsiteReturnsOverview(false);
+}
+function websiteReturnsOrderDateChanged(){
+  _websiteReturnsOverviewLastKey='';
+  applyWebsiteReturnsFilters(true);
 }
 function resetWebsiteReturnsFilters(){
   ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
@@ -20968,7 +21010,7 @@ async function exportWebsiteReturnsCsv(){
     _dlCsv(headers,vals,'website_orders_filtered');
   }catch(e){alert('Website orders export failed: '+(e?.message||e));}
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.renderWebsiteOrdersTable=renderWebsiteOrdersTable;window.websiteOrdersPage=websiteOrdersPage;window.websiteOrdersPageSizeChanged=websiteOrdersPageSizeChanged;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.renderWebsiteOrdersTable=renderWebsiteOrdersTable;window.websiteOrdersPage=websiteOrdersPage;window.websiteOrdersPageSizeChanged=websiteOrdersPageSizeChanged;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.websiteReturnsOrderDateChanged=websiteReturnsOrderDateChanged;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
    Live Shopify availability + backend Inv Stock.  This tab intentionally does
@@ -25255,12 +25297,21 @@ def _website_returns_overview_payload(force=False):
     def _arg(name, default=""):
         return str(request.args.get(name, default) or default).strip()
 
-    order_from = _arg("order_from")
-    order_to = _arg("order_to")
-    pickup_from = _arg("pickup_from")
-    pickup_to = _arg("pickup_to")
-    status_from = _arg("status_from")
-    status_to = _arg("status_to")
+    def _date_arg(name):
+        raw = _arg(name)
+        if not raw:
+            return ""
+        # Browser date inputs normally send YYYY-MM-DD, but normalize again on
+        # the server so localized MM/DD/YYYY or legacy values cannot bypass the
+        # filter. _wr_iso_date returns a zero-padded ISO date for string compare.
+        return _wr_iso_date(raw) or raw
+
+    order_from = _date_arg("order_from")
+    order_to = _date_arg("order_to")
+    pickup_from = _date_arg("pickup_from")
+    pickup_to = _date_arg("pickup_to")
+    status_from = _date_arg("status_from")
+    status_to = _date_arg("status_to")
     payment = _arg("payment", "All") or "All"
     pay_min_raw = _arg("payment_min")
     pay_max_raw = _arg("payment_max")
@@ -25318,7 +25369,8 @@ def _website_returns_overview_payload(force=False):
         return out
 
     def _date_ok(value, start_value, end_value):
-        d = str(value or "").strip()
+        raw = str(value or "").strip()
+        d = _wr_iso_date(raw) or raw
         if start_value and (not d or d < start_value):
             return False
         if end_value and (not d or d > end_value):
@@ -25397,7 +25449,8 @@ def _website_returns_overview_payload(force=False):
     base_orders = []
     for rec in orders:
         rec_key = _daily_reporting_order_key(rec.get("display_order_code", ""))
-        od = str(rec.get("order_date", "") or "")
+        od_raw = str(rec.get("order_date", "") or "").strip()
+        od = _wr_iso_date(od_raw) or od_raw
         if order_from and (not od or od < order_from):
             continue
         if order_to and (not od or od > order_to):
@@ -25511,6 +25564,8 @@ def _website_returns_overview_payload(force=False):
         "details_total": len(detail_source) if details_active else 0,
         "details_limited": bool(details_active and len(detail_source) > 500),
         "active_filter_count": active_filter_count,
+        "applied_order_from": order_from,
+        "applied_order_to": order_to,
         "return_filter_active": bool(return_filter_active),
         "return_filter_orders": len(base_keys.intersection(return_match_keys)) if return_filter_active else 0,
         "source_rows": int(_WEBSITE_ORDER_AUDIT_CACHE.get("source_rows") or 0),
@@ -25944,9 +25999,16 @@ def api_website_oos_export_xlsx():
 def api_website_returns_overview():
     force = request.args.get("force", "0").lower() in ("1", "true", "yes")
     try:
-        return jsonify(_website_returns_overview_payload(force=force))
+        resp = jsonify(_website_returns_overview_payload(force=force))
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
     except Exception as e:
-        return jsonify({"error": "Website order/return overview failed: " + str(e)[:400]}), 502
+        resp = jsonify({"error": "Website order/return overview failed: " + str(e)[:400]})
+        resp.status_code = 502
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return resp
 
 
 @app.route("/api/website-returns")
@@ -25956,6 +26018,19 @@ def api_website_returns():
         rows = _load_website_returns(force=force)
         payment_lookup = CACHE.get("website_return_payment_mode_lookup") or {}
         order_sku_lookup = CACHE.get("website_return_order_skus") or {}
+
+        # Authoritative Website Order_Date lookup for the shipment-level return
+        # cards. This keeps Order From/To identical between return KPIs and the
+        # order-level Returned/Delivered/In-Transit pie. _load_website_returns()
+        # is already cached above, so building/reusing the audit cannot recurse.
+        audit_by_key = {}
+        try:
+            for _audit in _load_website_order_audit(force=False):
+                _key = _daily_reporting_order_key(_audit.get("display_order_code", ""))
+                if _key:
+                    audit_by_key[_key] = _audit
+        except Exception:
+            audit_by_key = {}
 
         enriched_rows = []
         for r in rows:
@@ -25978,6 +26053,27 @@ def api_website_returns():
                     matched_key = matched_key or _daily_reporting_order_key(raw_order)
                 if payment_mode and matched_skus:
                     break
+            # Prefer the exact Website order audit for Order Date, payment and
+            # SKU identity whenever the courier row maps to a Display Order Code.
+            audit_rec = None
+            audit_key = ""
+            for raw_order in (rec.get("display_order_code", ""), rec.get("order_id", "")):
+                k = _daily_reporting_order_key(raw_order)
+                if k and k in audit_by_key:
+                    audit_key = k
+                    audit_rec = audit_by_key[k]
+                    break
+            if audit_rec is not None:
+                website_order_date = str(audit_rec.get("order_date", "") or "").strip()
+                if website_order_date:
+                    rec["order_date"] = _wr_iso_date(website_order_date) or website_order_date
+                if audit_rec.get("payment_mode") in ("COD", "Prepaid"):
+                    payment_mode = audit_rec.get("payment_mode")
+                audit_skus = [str(x).strip().upper() for x in (audit_rec.get("skus") or []) if str(x).strip()]
+                if audit_skus:
+                    matched_skus = audit_skus
+                matched_key = matched_key or audit_key
+
             rec["payment_mode"] = payment_mode
             rec["skus"] = sorted({str(x).strip().upper() for x in matched_skus if str(x).strip()})
             rec["sku_text"] = ", ".join(rec["skus"])
