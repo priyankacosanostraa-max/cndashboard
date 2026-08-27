@@ -1,4 +1,11 @@
 # ============================================================
+# Cosa Nostraa — V24.7 (WEBSITE ALL ORDERS + STATUS PIE)
+# V24.7:
+#   • Website Returns main table now shows all filtered Website orders, not only returns.
+#   • Server-side pagination keeps the tab fast while every matching order remains accessible.
+#   • Order status donut now splits Website orders into Returned, Delivered and In Transit.
+#   • COMPLETE is treated as Delivered; active non-returned orders are In Transit; returns override both.
+#   • CSV export now exports all filtered Website orders and includes CN Name(s).
 # Cosa Nostraa — V24.6 (OVERVIEW MONTH TAXON COLUMN)
 # V24.6:
 #   • Overview Month-Year SKU summary now shows Taxon immediately after SKU.
@@ -7989,12 +7996,12 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vWebsiteReturns" class="ops-page" style="display:none">
     <div class="ops-hero" style="align-items:flex-end">
       <div>
-        <div class="ops-kicker">WEBSITE · BLUEDART RETURN TRACKER</div>
-        <div class="ops-title">Website Returns</div>
-        <div class="ops-sub">Analysis-ready Website return dashboard using BlueDart return operations, Website SKU mapping and COD / Prepaid classification.</div>
+        <div class="ops-kicker">WEBSITE · ORDER + RETURN TRACKER</div>
+        <div class="ops-title">Website Orders & Returns</div>
+        <div class="ops-sub">All Website orders with return/RTO matching, delivery-stage split, Website SKU mapping and COD / Prepaid classification.</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteReturnsCsv()">Export CSV</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportWebsiteReturnsCsv()">Export All Orders CSV</button>
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="loadWebsiteReturns(true)">Refresh Live Sheet</button>
       </div>
     </div>
@@ -8024,7 +8031,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Total Website Orders vs Returns</div><div class="small-note">Order-level view from the Website sheet, with Website Return fields + BlueDart matched by Display Order Code. Every active filter above—including Order, Pickup and Status dates—updates this donut and all summary KPIs.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Unique Website orders are split into Returned, Delivered and In Transit. Order Date, Payment Mode, SKU and order/customer search update the full status mix; return-only filters continue to refine the return analysis and all-orders table without corrupting the order denominator.</div></div></div>
     <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
         <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
@@ -8054,16 +8061,24 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status-Date Trend</label><div id="wrTrendAnalysis"></div></div>
     </div>
 
-    <div class="ops-section-head">
-      <div><div class="ops-section-title">Website Returns</div><div class="small-note" id="wrTableNote"></div></div>
+    <div class="ops-section-head" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+      <div><div class="ops-section-title">All Website Orders</div><div class="small-note" id="wrTableNote"></div></div>
+      <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <label class="small-note" for="wrTablePageSize">Rows/page</label>
+        <select class="fs" id="wrTablePageSize" style="width:auto;min-width:88px" onchange="websiteOrdersPageSizeChanged()"><option value="100">100</option><option value="250" selected>250</option><option value="500">500</option></select>
+        <button class="go-btn" id="wrTablePrev" style="width:auto;padding:8px 11px;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="websiteOrdersPage(-1)">Previous</button>
+        <span class="small-note" id="wrTablePageLabel">Page 1</span>
+        <button class="go-btn" id="wrTableNext" style="width:auto;padding:8px 11px;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="websiteOrdersPage(1)">Next</button>
+      </div>
     </div>
     <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:690px">
-      <table class="ops-table" id="websiteReturnsTable" style="min-width:1720px">
+      <table class="ops-table" id="websiteReturnsTable" style="min-width:2580px">
         <thead><tr>
-          <th>Order ID</th><th>Display Order Code</th><th>SKU(s)</th><th>Customer</th><th>Customer Contact</th><th>Payment</th>
-          <th>Order Date</th><th>Pickup Date</th><th>Status Description</th><th>Status Date</th><th>Origin</th><th>Destination</th><th>RTO Reason</th>
+          <th>Order ID</th><th>SKU(s)</th><th>CN Name(s)</th><th>Customer</th><th>Customer Contact</th><th>Payment Mode</th>
+          <th>Order Date</th><th>Order Stage</th><th>Website Order Status</th><th>Order Qty</th><th>Return Type</th><th>RTO Qty</th>
+          <th>Return Date</th><th>Return Reason</th><th>BlueDart Pickup</th><th>BlueDart Status</th><th>Status Date</th><th>Destination</th><th>WayBill</th>
         </tr></thead>
-        <tbody id="websiteReturnsBody"><tr><td colspan="13" class="ops-empty">Open this tab to load Website return data.</td></tr></tbody>
+        <tbody id="websiteReturnsBody"><tr><td colspan="19" class="ops-empty">Open this tab to load all Website orders.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -20456,6 +20471,10 @@ let _websiteReturnsOverview = null;
 let _websiteReturnsOverviewLoading = false;
 let _websiteReturnsOverviewSeq = 0;
 let _websiteReturnsOverviewLastKey = '';
+let _websiteReturnsTablePage = 1;
+let _websiteReturnsTablePageSize = 250;
+let _websiteReturnsTableRows = [];
+let _websiteReturnsTableTotal = 0;
 
 function _wrOverviewParams(force=false){
   const p=new URLSearchParams();
@@ -20480,6 +20499,8 @@ function _wrOverviewParams(force=false){
   put('reason',_wrEl('wrReason')?.value||'All');
   put('sku',_wrEl('wrSku')?.value||'');
   put('search',_wrEl('wrSearch')?.value||'');
+  p.set('table_page',String(Math.max(1,Number(_websiteReturnsTablePage||1))));
+  p.set('table_page_size',String(Math.max(50,Math.min(500,Number(_websiteReturnsTablePageSize||250)))));
   if(force)p.set('force','1');
   return p;
 }
@@ -20495,37 +20516,46 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   const s=data.summary||{};
   const total=Math.max(0,Number(s.total_orders||0));
   const ret=Math.max(0,Number(s.returned_orders||0));
-  const clean=Math.max(0,Number(s.not_returned_orders||0));
-  const pct=total?Math.min(100,Math.max(0,ret*100/total)):0;
+  const stageRet=Math.max(0,Number(s.stage_returned_orders??ret));
+  const delivered=Math.max(0,Number(s.delivered_orders||0));
+  const inTransit=Math.max(0,Number(s.in_transit_orders||0));
+  const pct=total?Math.min(100,Math.max(0,stageRet*100/total)):0;
+  const delPct=total?Math.min(100,Math.max(0,delivered*100/total)):0;
+  const transitPct=total?Math.min(100,Math.max(0,inTransit*100/total)):0;
   if(donut){
-    const ring=total?`conic-gradient(var(--cn-gold) 0 ${pct.toFixed(2)}%, #e6e1d8 ${pct.toFixed(2)}% 100%)`:'conic-gradient(#e6e1d8 0 100%)';
+    const stop1=pct,stop2=Math.min(100,pct+delPct);
+    const ring=total?`conic-gradient(var(--cn-gold) 0 ${stop1.toFixed(2)}%, #3f8f62 ${stop1.toFixed(2)}% ${stop2.toFixed(2)}%, #6f8fac ${stop2.toFixed(2)}% 100%)`:'conic-gradient(#e6e1d8 0 100%)';
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
-          <div style="font-size:30px;font-weight:950;line-height:1">${ret.toLocaleString('en-IN')}</div>
-          <div class="small-note" style="margin-top:5px">Returns</div>
-          <div style="font-size:11px;font-weight:850;margin-top:4px">of ${total.toLocaleString('en-IN')} orders</div>
+          <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">Website Orders</div>
+          <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
         </div>
       </div>
-      <div style="min-width:160px">
-        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--cn-gold);margin-right:7px"></span>Returned: ${ret.toLocaleString('en-IN')}</div>
-        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e6e1d8;margin-right:7px"></span>Not Returned: ${clean.toLocaleString('en-IN')}</div>
-        <div style="font-size:20px;font-weight:950;margin-top:14px">${pct.toFixed(1)}%</div>
-        <div class="small-note">Return rate</div>
+      <div style="min-width:190px">
+        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--cn-gold);margin-right:7px"></span>Returned: ${stageRet.toLocaleString('en-IN')} <span class="small-note">(${pct.toFixed(1)}%)</span></div>
+        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3f8f62;margin-right:7px"></span>Delivered: ${delivered.toLocaleString('en-IN')} <span class="small-note">(${delPct.toFixed(1)}%)</span></div>
+        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#6f8fac;margin-right:7px"></span>In Transit: ${inTransit.toLocaleString('en-IN')} <span class="small-note">(${transitPct.toFixed(1)}%)</span></div>
       </div>
     </div>`;
   }
   if(kpis)kpis.innerHTML=
-    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique Website Display Order Code after active order filters')+
-    _wrKpi('Returned Orders',ret.toLocaleString('en-IN'),`${pct.toFixed(1)}% of matching Website orders`)+
+    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique non-cancelled Website Display Order Code after active order filters')+
+    _wrKpi('Returned Orders',stageRet.toLocaleString('en-IN'),`${pct.toFixed(1)}% of matching Website orders`)+
+    _wrKpi('Delivered Orders',delivered.toLocaleString('en-IN'),`${delPct.toFixed(1)}% · COMPLETE and not returned`)+
+    _wrKpi('In Transit Orders',inTransit.toLocaleString('en-IN'),`${transitPct.toFixed(1)}% · active non-returned orders not COMPLETE`)+
     _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
     _wrKpi('BlueDart Returns',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Matched to Website Display Order Code')+
     _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Deduplicated in Returned Orders');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Return numerator is the union of <b>Website Return fields + BlueDart</b>, deduplicated by Website Display Order Code.${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    const filteredReturnNote=Number(s.returned_orders||0)!==stageRet?` · Return-only filters currently match <b>${Number(s.returned_orders||0).toLocaleString('en-IN')}</b> returned orders; the 3-way pie keeps the full order denominator intact.`:'';
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Stage rule: <b>Returned</b> overrides status, <b>COMPLETE = Delivered</b>, remaining active orders = <b>In Transit</b>.${filteredReturnNote}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
+
+  renderWebsiteOrdersTable(data);
 
   const detailRows=Array.isArray(data.orders)?data.orders:[];
   if(!data.details_active){
@@ -20563,6 +20593,73 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     <td style="min-width:170px">${escHtml(r.packages||'—')}</td>
   </tr>`).join('');
 }
+function _wrOrderStageBadge(stage){
+  const s=_wrText(stage)||'In Transit';
+  if(s==='Returned')return '<span style="font-weight:900;color:#8b3f23">Returned</span>';
+  if(s==='Delivered')return '<span style="font-weight:900;color:#237a4b">Delivered</span>';
+  return '<span style="font-weight:900;color:#4f6f91">In Transit</span>';
+}
+function _wrCnNamesForOrder(r){
+  const raw=Array.isArray(r?.skus)?r.skus:[];
+  const names=Array.from(new Set(raw.map(s=>exportCnName(s,'')).map(_wrText).filter(Boolean)));
+  return names.length?names.join(', '):'—';
+}
+function renderWebsiteOrdersTable(data=_websiteReturnsOverview){
+  const body=_wrEl('websiteReturnsBody'),note=_wrEl('wrTableNote'),pageLabel=_wrEl('wrTablePageLabel');
+  const prev=_wrEl('wrTablePrev'),next=_wrEl('wrTableNext'),sizeEl=_wrEl('wrTablePageSize');
+  if(!data){if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading all Website orders…</td></tr>';return;}
+  const rows=Array.isArray(data.table_orders)?data.table_orders:[];
+  _websiteReturnsTableRows=rows;
+  _websiteReturnsTableTotal=Math.max(0,Number(data.table_total||0));
+  _websiteReturnsTablePage=Math.max(1,Number(data.table_page||1));
+  _websiteReturnsTablePageSize=Math.max(50,Number(data.table_page_size||250));
+  const pages=Math.max(1,Number(data.table_pages||1));
+  if(sizeEl)sizeEl.value=String(_websiteReturnsTablePageSize);
+  if(pageLabel)pageLabel.textContent=`Page ${_websiteReturnsTablePage.toLocaleString('en-IN')} of ${pages.toLocaleString('en-IN')}`;
+  if(prev)prev.disabled=_websiteReturnsTablePage<=1;
+  if(next)next.disabled=_websiteReturnsTablePage>=pages;
+  if(note)note.textContent=`${_websiteReturnsTableTotal.toLocaleString('en-IN')} Website order${_websiteReturnsTableTotal===1?'':'s'} match the active filters · showing ${rows.length.toLocaleString('en-IN')} on this page · Export CSV includes all filtered orders.`;
+  if(!body)return;
+  if(!rows.length){body.innerHTML='<tr><td colspan="19" class="ops-empty">No Website orders match the selected filters.</td></tr>';return;}
+  body.innerHTML=rows.map(r=>`<tr>
+    <td style="font-weight:900;white-space:nowrap">${escHtml(r.display_order_code||'—')}</td>
+    <td style="font-weight:800;min-width:170px">${escHtml(r.sku_text||'—')}</td>
+    <td style="min-width:220px">${escHtml(_wrCnNamesForOrder(r))}</td>
+    <td style="font-weight:800;min-width:170px">${escHtml(r.customer||r.bluedart_customer||'—')}</td>
+    <td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'Not available')}</td>
+    <td style="font-weight:850">${escHtml(r.payment_mode||'Unclassified')}</td>
+    <td>${_wrFmtDate(r.order_date)}</td>
+    <td>${_wrOrderStageBadge(r.order_stage)}</td>
+    <td style="min-width:180px">${escHtml(r.website_order_status||'—')}</td>
+    <td class="ops-num">${Number(r.qty||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+    <td>${escHtml(r.website_return_type||'—')}</td>
+    <td class="ops-num" style="font-weight:850">${Number(r.rto_qty||0).toLocaleString('en-IN',{maximumFractionDigits:2})}</td>
+    <td>${_wrFmtDate(r.website_return_date)}</td>
+    <td style="min-width:240px;font-weight:800;color:#8b3f23">${escHtml(r.website_return_reason||r.bluedart_rto_reason||'—')}</td>
+    <td>${_wrFmtDate(r.bluedart_pickup_date)}</td>
+    <td style="min-width:220px">${escHtml(r.bluedart_status||'—')}</td>
+    <td>${_wrFmtDate(r.bluedart_status_date)}</td>
+    <td style="min-width:150px">${escHtml(r.bluedart_destination||r.city||'—')}</td>
+    <td style="white-space:nowrap">${escHtml(r.bluedart_waybill||'—')}</td>
+  </tr>`).join('');
+}
+function websiteOrdersPage(delta){
+  const pages=Math.max(1,Number(_websiteReturnsOverview?.table_pages||1));
+  const next=Math.max(1,Math.min(pages,Number(_websiteReturnsTablePage||1)+Number(delta||0)));
+  if(next===_websiteReturnsTablePage)return;
+  _websiteReturnsTablePage=next;
+  _websiteReturnsOverviewLastKey='';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading Website orders…</td></tr>';
+  loadWebsiteReturnsOverview(false);
+}
+function websiteOrdersPageSizeChanged(){
+  const n=Number(_wrEl('wrTablePageSize')?.value||250);
+  _websiteReturnsTablePageSize=Math.max(50,Math.min(500,Number.isFinite(n)?n:250));
+  _websiteReturnsTablePage=1;
+  _websiteReturnsOverviewLastKey='';
+  loadWebsiteReturnsOverview(false);
+}
+
 async function loadWebsiteReturnsOverview(force=false){
   const key=_wrOverviewKey();
   if(!force&&_websiteReturnsOverview&&key===_websiteReturnsOverviewLastKey){renderWebsiteReturnsOverview();return;}
@@ -20583,7 +20680,7 @@ async function loadWebsiteReturnsOverview(force=false){
     if(seq!==_websiteReturnsOverviewSeq)return;
     const msg=escHtml(e?.message||e);
     if(donut)donut.innerHTML=`<div class="small-note">Could not load Website order denominator: ${msg}</div>`;
-    const n=_wrEl('wrOrderSummaryNote');if(n)n.textContent='Website order-level summary failed to load. BlueDart return table below is still available.';
+    const n=_wrEl('wrOrderSummaryNote');if(n)n.textContent='Website order-level summary failed to load. Return analysis may still be available; retry Refresh Live Sheet.';
   }finally{
     if(seq===_websiteReturnsOverviewSeq)_websiteReturnsOverviewLoading=false;
   }
@@ -20762,7 +20859,7 @@ function renderWebsiteReturnsAnalytics(rows){
 function renderWebsiteReturns(){
   const body=_wrEl('websiteReturnsBody');
   if(!_websiteReturnsData){
-    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="13" class="ops-empty">Website return data has not loaded yet.</td></tr>';
+    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="19" class="ops-empty">Website order/return data has not loaded yet.</td></tr>';
     return;
   }
   const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.status_date||b.pickup_date||b.order_date||'').localeCompare(String(a.status_date||a.pickup_date||a.order_date||''))||String(b.order_date||'').localeCompare(String(a.order_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
@@ -20783,12 +20880,9 @@ function renderWebsiteReturns(){
     _wrKpi('RTO Reason Captured',reasonCaptured.toLocaleString('en-IN'),`${rows.length?(reasonCaptured*100/rows.length).toFixed(1):'0.0'}% of filtered returns`);
 
   renderWebsiteReturnsAnalytics(rows);
-  const show=rows.slice(0,500),note=_wrEl('wrTableNote');
-  if(note)note.textContent=`${rows.length.toLocaleString('en-IN')} filtered returns · showing ${show.length.toLocaleString('en-IN')}${rows.length>show.length?' (export includes all filtered rows)':''}`;
-  if(body){
-    if(!show.length)body.innerHTML='<tr><td colspan="13" class="ops-empty">No Website returns match the selected filters.</td></tr>';
-    else body.innerHTML=show.map(r=>`<tr><td style="font-weight:850">${escHtml(r.order_id||'—')}</td><td>${escHtml(r.display_order_code||'—')}</td><td style="font-weight:800;min-width:150px">${escHtml(_wrSkuText(r))}</td><td style="font-weight:800;min-width:150px">${escHtml(r.customer||'—')}</td><td style="font-weight:800;white-space:nowrap">${escHtml(r.customer_contact||'Not available')}</td><td class="ops-num" style="font-weight:800">${escHtml(_wrFmtPayment(r.payment))}</td><td>${_wrFmtDate(r.order_date)}</td><td>${_wrFmtDate(r.pickup_date)}</td><td style="min-width:260px">${escHtml(r.status_description||'—')}</td><td>${_wrFmtDate(r.status_date)}</td><td>${escHtml(r.origin||'—')}</td><td>${escHtml(r.destination||'—')}</td><td style="font-weight:800;color:#8b3f23;min-width:260px">${escHtml(r.rto_reason||'Not captured in source')}</td></tr>`).join('');
-  }
+  // The main table is order-level and comes from /api/website-returns-overview.
+  // Keep shipment-level BlueDart rows only for return KPIs/analysis above.
+  if(body&&!_websiteReturnsOverview)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading all Website orders…</td></tr>';
   const src=_wrEl('wrSourceNote');
   if(src){
     const unknown=Math.max(0,rows.length-classified);
@@ -20814,7 +20908,7 @@ async function loadWebsiteReturns(force=false){
   if(_websiteReturnsLoading)return;
   if(_websiteReturnsData&&!force){renderWebsiteReturns();renderSdWebsiteReturns();loadWebsiteReturnsOverview(false);return;}
   _websiteReturnsLoading=true;
-  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="13" class="ops-empty">Loading live Website return sheet…</td></tr>';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading Website orders and return data…</td></tr>';
   try{
     const r=await fetch('/api/website-returns'+(force?'?force=1':''),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
     const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
@@ -20830,16 +20924,19 @@ async function loadWebsiteReturns(force=false){
     await loadWebsiteReturnsOverview(force);
   }catch(e){
     _websiteReturnsData=null;
-    if(body)body.innerHTML=`<tr><td colspan="13" class="ops-empty">Could not load Website Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="19" class="ops-empty">Could not load Website Orders & Returns: ${escHtml(e?.message||e)}</td></tr>`;
     ['wrReasonAnalysis','wrStatusAnalysis','wrDestinationAnalysis','wrTrendAnalysis'].forEach(id=>{const el=_wrEl(id);if(el)el.innerHTML='<div class="small-note">Live data load failed.</div>';});
     const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
     const sdNote=_wrEl('sdWebsiteReturnsNote');if(sdNote&&_sdWebsiteReturnsFilterActive())sdNote.textContent='Website return sheet could not be loaded. Use Website Returns > Refresh Live Sheet and try again.';
   }finally{_websiteReturnsLoading=false;}
 }
-function applyWebsiteReturnsFilters(){
-  // One entry-point for every Website Returns filter. It synchronously updates
-  // shipment KPIs, all analysis cards and the table, then renderWebsiteReturns()
-  // queues the order-level donut/summary request with the same filter state.
+function applyWebsiteReturnsFilters(resetPage=true){
+  // One entry-point for every Website filter. Return cards update locally while
+  // the all-orders table + status pie are refreshed server-side on the same state.
+  if(resetPage){
+    _websiteReturnsTablePage=1;
+    _websiteReturnsOverviewLastKey='';
+  }
   if(!_websiteReturnsData){
     if(!_websiteReturnsLoading)loadWebsiteReturns(false);
     return;
@@ -20853,13 +20950,25 @@ function resetWebsiteReturnsFilters(){
   applyWebsiteReturnsFilters();
 }
 const websiteReturnsApply_d=_debounce(()=>applyWebsiteReturnsFilters(),160);
-function exportWebsiteReturnsCsv(){
-  const rows=_websiteReturnsFilteredRows||[];if(!rows.length){alert('No Website return rows to export.');return;}
-  const headers=['Order ID','Display Order Code','SKU(s)','Customer','Customer Contact','Payment','Payment Mode','Order Date','Pickup Date','Status Description','Status Group','Status Date','Origin','Destination','RTO Reason','WayBill No','Reference No'];
-  const vals=rows.map(r=>[r.order_id||'',r.display_order_code||'',_wrSkuText(r)==='—'?'':_wrSkuText(r),r.customer||'',r.customer_contact||'',r.payment||'',_wrPaymentMode(r),r.order_date||'',r.pickup_date||'',r.status_description||'',r.status_group||'',r.status_date||'',r.origin||'',r.destination||'',r.rto_reason||'',r.waybill_no||'',r.reference_no||'']);
-  _dlCsv(headers,vals,'website_returns_filtered');
+async function exportWebsiteReturnsCsv(){
+  try{
+    const params=_wrOverviewParams(false);
+    params.set('table_all','1');
+    params.delete('table_page');
+    params.delete('table_page_size');
+    const r=await fetch('/api/website-returns-overview?'+params.toString(),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
+    const d=await r.json();
+    if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
+    const rows=Array.isArray(d.table_orders)?d.table_orders:[];
+    if(!rows.length){alert('No Website orders match the active filters.');return;}
+    const headers=['Order ID','SKU(s)','CN Name(s)','Customer','Customer Contact','Payment Mode','Order Date','Order Stage','Website Order Status','Order Qty','Return Type','RTO Qty','Return Date','Return Reason','BlueDart Pickup','BlueDart Status','BlueDart Status Date','Destination','WayBill'];
+    const vals=rows.map(r=>[
+      r.display_order_code||'',r.sku_text||'',_wrCnNamesForOrder(r)==='—'?'':_wrCnNamesForOrder(r),r.customer||r.bluedart_customer||'',r.customer_contact||'',r.payment_mode||'',r.order_date||'',r.order_stage||'',r.website_order_status||'',Number(r.qty||0),r.website_return_type||'',Number(r.rto_qty||0),r.website_return_date||'',r.website_return_reason||r.bluedart_rto_reason||'',r.bluedart_pickup_date||'',r.bluedart_status||'',r.bluedart_status_date||'',r.bluedart_destination||r.city||'',r.bluedart_waybill||''
+    ]);
+    _dlCsv(headers,vals,'website_orders_filtered');
+  }catch(e){alert('Website orders export failed: '+(e?.message||e));}
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.renderWebsiteOrdersTable=renderWebsiteOrdersTable;window.websiteOrdersPage=websiteOrdersPage;window.websiteOrdersPageSizeChanged=websiteOrdersPageSizeChanged;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
    Live Shopify availability + backend Inv Stock.  This tab intentionally does
@@ -25109,18 +25218,37 @@ def _website_returns_combo_child_map():
     return mapping
 
 
+def _wr_order_stage(rec):
+    """Classify one non-cancelled Website order for the 3-way status pie."""
+    if bool((rec or {}).get("returned")):
+        return "Returned"
+    status = str((rec or {}).get("website_order_status") or "").strip().casefold()
+    if "complete" in status or "deliver" in status:
+        return "Delivered"
+    return "In Transit"
+
+
+def _wr_public_order(rec):
+    """Return browser-safe order fields and attach the normalized order stage."""
+    out = {
+        k: v for k, v in (rec or {}).items()
+        if not str(k).startswith("_")
+        and k not in ("selling_price_total", "total_price")
+    }
+    out["order_stage"] = _wr_order_stage(rec or {})
+    return out
+
+
 def _website_returns_overview_payload(force=False):
     """Return the order-level Website denominator under the active UI filters.
 
-    The Website Returns screen has two grains:
-      * shipment-level BlueDart/Website-return rows for the top KPIs, charts and table;
-      * unique Website Display Order Code for the donut and order-summary KPIs.
+    The Website Orders & Returns screen has two grains:
+      * shipment-level BlueDart/Website-return rows for return KPIs and analysis;
+      * unique Website Display Order Code for the 3-way status pie and all-orders table.
 
-    All filters must update both grains. Return-specific filters (pickup/status
-    dates, payment amount, origin, destination, status and reason) are first
-    applied to the live return rows, then their matching Website order keys are
-    used to constrain the order-level denominator. Order Date, COD/Prepaid, SKU
-    and search are applied to the Website order audit itself.
+    Order-level filters apply to the full Website order denominator. Return-only
+    filters select matching returned orders for the all-orders table while keeping
+    the full order denominator intact for the Returned / Delivered / In Transit pie.
     """
     orders = _load_website_order_audit(force=force)
 
@@ -25145,6 +25273,16 @@ def _website_returns_overview_payload(force=False):
     reason = _arg("reason", "All") or "All"
     sku_q = _arg("sku").upper()
     search_q = _arg("search").casefold()
+    table_all = _arg("table_all").casefold() in ("1", "true", "yes")
+    try:
+        table_page = max(1, int(float(_arg("table_page", "1") or 1)))
+    except Exception:
+        table_page = 1
+    try:
+        table_page_size = int(float(_arg("table_page_size", "250") or 250))
+    except Exception:
+        table_page_size = 250
+    table_page_size = max(50, min(500, table_page_size))
 
     origin_cf = origin.casefold()
     status_description_cf = status_description.casefold()
@@ -25310,17 +25448,32 @@ def _website_returns_overview_payload(force=False):
     cod_orders = sum(1 for r in base_orders if r.get("payment_mode") == "COD")
     prepaid_orders = sum(1 for r in base_orders if r.get("payment_mode") == "Prepaid")
 
+    # The pie is a true partition of every non-cancelled matching Website order.
+    # Returned always wins. COMPLETE/delivered status is Delivered. All remaining
+    # active orders are In Transit. This guarantees the three slices sum to total.
+    stage_returned_orders = sum(1 for r in base_orders if _wr_order_stage(r) == "Returned")
+    delivered_orders = sum(1 for r in base_orders if _wr_order_stage(r) == "Delivered")
+    in_transit_orders = max(0, total_orders - stage_returned_orders - delivered_orders)
+
     details_active = bool(search_q or sku_q)
     detail_source = returned if return_filter_active else base_orders
     detail_rows = []
     if details_active:
-        for rec in detail_source[:500]:
-            # Do not expose server-only search/filter helpers or hidden prices.
-            detail_rows.append({
-                k: v for k, v in rec.items()
-                if not str(k).startswith("_")
-                and k not in ("selling_price_total", "total_price")
-            })
+        detail_rows = [_wr_public_order(rec) for rec in detail_source[:500]]
+
+    # Main table: by default every order; when a return-only filter is active,
+    # show the returned orders that match that filter. Keep it server-paginated so
+    # 20k+ Website orders do not freeze the browser. table_all is export-only.
+    table_source = returned if return_filter_active else base_orders
+    table_total = len(table_source)
+    table_pages = max(1, (table_total + table_page_size - 1) // table_page_size)
+    table_page = min(table_page, table_pages)
+    if table_all:
+        table_slice = table_source
+    else:
+        start = (table_page - 1) * table_page_size
+        table_slice = table_source[start:start + table_page_size]
+    table_orders = [_wr_public_order(rec) for rec in table_slice]
 
     active_filter_count = sum(bool(v) for v in (
         order_from, order_to, pickup_from, pickup_to, status_from, status_to,
@@ -25336,8 +25489,11 @@ def _website_returns_overview_payload(force=False):
         "summary": {
             "total_orders": total_orders,
             "returned_orders": len(returned),
-            "not_returned_orders": max(0, total_orders - len(returned)),
-            "return_rate": round((len(returned) * 100.0 / total_orders), 2) if total_orders else 0.0,
+            "stage_returned_orders": stage_returned_orders,
+            "delivered_orders": delivered_orders,
+            "in_transit_orders": in_transit_orders,
+            "not_returned_orders": max(0, total_orders - stage_returned_orders),
+            "return_rate": round((stage_returned_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
             "website_sheet_returned": website_returns,
             "bluedart_returned": bluedart_returns,
             "both_sources": both_returns,
@@ -25345,6 +25501,12 @@ def _website_returns_overview_payload(force=False):
             "prepaid_orders": prepaid_orders,
         },
         "orders": detail_rows,
+        "table_orders": table_orders,
+        "table_total": table_total,
+        "table_page": table_page,
+        "table_page_size": table_page_size,
+        "table_pages": table_pages,
+        "table_all": bool(table_all),
         "details_active": details_active,
         "details_total": len(detail_source) if details_active else 0,
         "details_limited": bool(details_active and len(detail_source) > 500),
