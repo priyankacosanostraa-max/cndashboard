@@ -1,5 +1,8 @@
 # ============================================================
-# Cosa Nostraa — V24.5 (OVERVIEW MONTH SKU + COMBO ROLLUP)
+# Cosa Nostraa — V24.6 (OVERVIEW MONTH TAXON COLUMN)
+# V24.6:
+#   • Overview Month-Year SKU summary now shows Taxon immediately after SKU.
+#   • Taxon is preserved in CSV, Excel and PDF exports for the same filtered rows.
 # V24.5:
 #   • Overview Month-Year view is one row per non-CMB SKU with one sold-qty
 #     column per selected month, selected-month total, rolling 3M and rolling 1Y.
@@ -12522,7 +12525,7 @@ function applyF(){
 
           const iv=invBy[sk]||{s:0,w:0,b:0,img:'',cn:''};
           summaryRows.push({
-            month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',cn_name:item.cn_name||iv.cn||'',
+            month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',taxon:item.taxon||'',cn_name:item.cn_name||iv.cn||'',
             month_qty:monthQty,selected_months_qty:selectedMonthsQty,last_3m_qty:last3Qty,last_1y_qty:last1yQty,
             rev:selectedRevenue,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
             image_url:iv.img||'',cmbs:cmbNames,best_cmb:bestCmb,best_cmb_name:bestCmbName,best_cmb_sold_qty:bestCmbQty,best_cmb_image_url:bestCmbImage
@@ -12551,6 +12554,7 @@ function applyF(){
               : '<span class="muted">—</span>';
             return `<tr>
               <td><div class="sku-cell">${roThumb(t.image_url,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
+              <td>${safeText(t.taxon||'—')}</td>
               ${monthCells}
               <td class="gold"><b>${Math.round(Number(t.selected_months_qty)||0)}</b></td>
               <td class="gold" title="${safeText(last3Label)}"><b>${Math.round(Number(t.last_3m_qty)||0)}</b></td>
@@ -12575,7 +12579,7 @@ function applyF(){
               <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
             </div>
             <table class="ro"><thead><tr>
-              <th>SKU</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>CN Name</th>${LOGIN_ROLE==='employee'?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
+              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>CN Name</th>${LOGIN_ROLE==='employee'?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
             </tr></thead><tbody>${rowsHtml}</tbody></table>
             <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + sales from every CMB containing that child SKU. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
             ${displayTxns.length>MATRIX_RENDER_CAP?`<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} SKUs. Export includes all rows.</div>`:''}
@@ -12587,7 +12591,7 @@ function applyF(){
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
-        master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
+        master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || '', taxon: it.taxon || ''}; });
 
         const pivotMap = new Map();
         rawTxns.forEach(t => {
@@ -12741,7 +12745,7 @@ function _matrixBuildPayload(kind){
       const iv = invBy[String(t.sku||'').trim().toUpperCase()] || {s:0, w:0, b:0, img:'', cn:''};
       if(t.month_mode){
         return {
-          month_mode:true,sku:t.sku,cn_name:t.cn_name||iv.cn||'',month_qty:{...(t.month_qty||{})},
+          month_mode:true,sku:t.sku,taxon:t.taxon||iv.taxon||'',cn_name:t.cn_name||iv.cn||'',month_qty:{...(t.month_qty||{})},
           selected_months_qty:Number(t.selected_months_qty)||0,last_3m_qty:Number(t.last_3m_qty)||0,last_1y_qty:Number(t.last_1y_qty)||0,
           revenue:showRev?Math.round(Number(t.rev)||0):null,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
           image_url:iv.img||t.image_url||'',cmbs:Array.isArray(t.cmbs)?t.cmbs:[],best_cmb:t.best_cmb||'',best_cmb_sold_qty:Number(t.best_cmb_sold_qty)||0,
@@ -12783,9 +12787,9 @@ function exportMatrixCSV(kind){
     if(monthExport){
       const monthKeys=meta.months.length?meta.months:Object.keys(rows[0].month_qty||{}).sort();
       const monthHeaders=monthKeys.map(k=>`${matrixMonthLabel(k)} Total Sold Qty`);
-      headers=['SKU'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link']);
+      headers=['SKU','Taxon'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link']);
       csvRows=rows.map(r=>{
-        const line=[r.sku]; monthKeys.forEach(k=>line.push(Number(r.month_qty?.[k])||0));
+        const line=[r.sku,r.taxon||'']; monthKeys.forEach(k=>line.push(Number(r.month_qty?.[k])||0));
         line.push(r.selected_months_qty||0,r.last_3m_qty||0,r.last_1y_qty||0,r.cn_name||'');
         if(showRev)line.push(r.revenue);
         line.push(r.inv_stock,r.inv_wip,r.blocked_qty,r.image_url||'',(r.cmbs||[]).join(', '),(r.best_cmb||'')+(r.best_cmb_name?' · '+r.best_cmb_name:''),r.best_cmb_image_url||'');
@@ -30470,7 +30474,7 @@ def api_overall_export_xlsx():
                       + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
             if month_mode:
-                headers = ["SKU"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "CN Name"] \
+                headers = ["SKU", "Taxon"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Used in CMBs", "Best Sold in This CMB", "Best CMB Image Link"]
             else:
                 headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
@@ -30493,7 +30497,7 @@ def api_overall_export_xlsx():
             else:
                 if month_mode:
                     mq = r.get("month_qty") or {}
-                    line = [r.get("sku", "")] + [mq.get(k, 0) for k in month_keys] \
+                    line = [r.get("sku", ""), r.get("taxon", "")] + [mq.get(k, 0) for k in month_keys] \
                            + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("cn_name", "")]
                     if show_rev:
                         line.append(r.get("revenue", 0))
@@ -30632,7 +30636,7 @@ def api_overall_export_pdf():
                       + (["Total Sold", "Last 1Y Sold"] if month_mode else []) + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP"]
         else:
             if month_mode:
-                headers = ["Photo", "SKU"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "CN Name"] \
+                headers = ["Photo", "SKU", "Taxon"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Blocked", "Used in CMBs", "Best CMB", "Best CMB Image"]
             else:
                 headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
@@ -30651,7 +30655,7 @@ def api_overall_export_pdf():
             else:
                 if month_mode:
                     mq = r.get("month_qty") or {}
-                    line = [img_cell, r.get("sku", "")] + [mq.get(k, 0) for k in month_keys] \
+                    line = [img_cell, r.get("sku", ""), r.get("taxon", "")] + [mq.get(k, 0) for k in month_keys] \
                            + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("cn_name", "")]
                     if show_rev:
                         line.append(r.get("revenue", 0))
