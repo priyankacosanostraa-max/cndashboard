@@ -1,3 +1,4 @@
+# Cosa Nostraa — Overview Last 1 Year anchor fix: oldest selected month (e.g. Jun/Jul/Aug 2026 => 01-May-2025 to 31-May-2026)
 # Cosa Nostraa — V24.7 (WEBSITE ORDER DATE KPI/PIE FILTER SYNC)
 # Order Date changes now refresh return KPIs, status pie, order summary KPIs and all-orders table immediately.
 # ============================================================
@@ -12254,12 +12255,29 @@ function matrixMonthBounds(key){
   const y=Number(m[1]),mo=Number(m[2]);
   return {start:`${m[1]}-${m[2]}-01`,end:new Date(Date.UTC(y,mo,0)).toISOString().slice(0,10)};
 }
-function matrixRollingYearBounds(latestKey){
-  const m=String(latestKey||'').match(/^(\d{4})-(\d{2})$/); if(!m)return {start:'',end:''};
-  const d=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,1));
-  const a=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()-11,1));
-  const b=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0));
-  return {start:a.toISOString().slice(0,10),end:b.toISOString().slice(0,10)};
+function matrixRollingYearBounds(oldestSelectedKey){
+  // Last 1 Year is intentionally anchored BEFORE the oldest selected month.
+  // Example requested by Operations: Jun/Jul/Aug 2026 selected ->
+  // 01-May-2025 through 31-May-2026.
+  const m=String(oldestSelectedKey||'').match(/^(\d{4})-(\d{2})$/); if(!m)return {start:'',end:''};
+  const selectedStart=new Date(Date.UTC(Number(m[1]),Number(m[2])-1,1));
+  const previousMonthStart=new Date(Date.UTC(selectedStart.getUTCFullYear(),selectedStart.getUTCMonth()-1,1));
+  const previousMonthEnd=new Date(Date.UTC(selectedStart.getUTCFullYear(),selectedStart.getUTCMonth(),0));
+  const start=new Date(Date.UTC(previousMonthStart.getUTCFullYear()-1,previousMonthStart.getUTCMonth(),1));
+  return {start:start.toISOString().slice(0,10),end:previousMonthEnd.toISOString().slice(0,10)};
+}
+function matrixMonthKeysBetween(startIso,endIso){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(startIso||'')) || !/^\d{4}-\d{2}-\d{2}$/.test(String(endIso||'')))return [];
+  const a=new Date(String(startIso)+'T00:00:00Z'), b=new Date(String(endIso)+'T00:00:00Z');
+  if(!Number.isFinite(a.getTime()) || !Number.isFinite(b.getTime()) || a>b)return [];
+  const out=[];
+  let y=a.getUTCFullYear(), mo=a.getUTCMonth();
+  const ey=b.getUTCFullYear(), em=b.getUTCMonth();
+  while(y<ey || (y===ey && mo<=em)){
+    out.push(`${y}-${String(mo+1).padStart(2,'0')}`);
+    mo+=1; if(mo>11){mo=0;y+=1;}
+  }
+  return out;
 }
 function matrixRollingMonthKeys(latestKey,count){
   const m=String(latestKey||'').match(/^(\d{4})-(\d{2})$/); if(!m)return [];
@@ -12277,8 +12295,8 @@ function getSelectedMatrixMonths(){
 function updateMatrixMonthInfo(){
   const info=document.getElementById('fMonthYearInfo'); if(!info)return;
   const sel=getSelectedMatrixMonths(); if(!sel.length){info.textContent='All months';return;}
-  const latest=sel[sel.length-1],yr=matrixRollingYearBounds(latest);
-  info.textContent=`${sel.length} selected · Latest ${matrixMonthLabel(latest)} · 1Y: ${matrixMonthLabel(yr.start.slice(0,7))} – ${matrixMonthLabel(latest)}`;
+  const oldest=sel[0],latest=sel[sel.length-1],yr=matrixRollingYearBounds(oldest);
+  info.textContent=`${sel.length} selected · ${matrixMonthLabel(oldest)} – ${matrixMonthLabel(latest)} · 1Y: ${matrixMonthLabel(yr.start.slice(0,7))} – ${matrixMonthLabel(yr.end.slice(0,7))}`;
 }
 function renderMatrixMonthChecks(){
   const box=document.getElementById('fMonthYearChecks'); if(!box)return;
@@ -12314,7 +12332,9 @@ function applyF(){
   const d1 = document.getElementById('fD1')?.value || '';
   const d2 = document.getElementById('fD2')?.value || '';
   const monthSel=getSelectedMatrixMonths(), monthSet=new Set(monthSel), monthMode=monthSel.length>0;
-  const latestMonthKey=monthMode?monthSel[monthSel.length-1]:'', rollingYear=monthMode?matrixRollingYearBounds(latestMonthKey):{start:'',end:''};
+  const oldestMonthKey=monthMode?monthSel[0]:'';
+  const latestMonthKey=monthMode?monthSel[monthSel.length-1]:'';
+  const rollingYear=monthMode?matrixRollingYearBounds(oldestMonthKey):{start:'',end:''};
   _matrixMonthMode=monthMode; _matrixLatestMonthKey=latestMonthKey; _matrixOneYearStart=rollingYear.start; _matrixOneYearEnd=rollingYear.end;
   const hasSelectedSkus = selectedSkuSet.size > 0;
   const hasPastedSkus = matrixPastedSkuSet instanceof Set;
@@ -12494,7 +12514,9 @@ function applyF(){
         const monthOwnQty=(sk,mk)=>Number(monthSalesBySku.get(sk)?.qtyByMonth?.[mk])||0;
         const monthOwnRev=(sk,mk)=>Number(monthSalesBySku.get(sk)?.revByMonth?.[mk])||0;
         const last3Keys=matrixRollingMonthKeys(latestMonthKey,3);
-        const last12Keys=matrixRollingMonthKeys(latestMonthKey,12);
+        // Last 1 Year follows the oldest selected month, not the latest one.
+        // Exact requested example: Jun/Jul/Aug 2026 -> May 2025 through May 2026.
+        const last1yKeys=matrixMonthKeysBetween(rollingYear.start,rollingYear.end);
         const summaryRows=[];
 
         matrixEligibleItems.forEach((item,sk) => {
@@ -12523,7 +12545,7 @@ function applyF(){
           if(!(selectedMonthsQty>0))return;
 
           const last3Qty=last3Keys.reduce((sum,mk)=>sum+totalForMonth(mk),0);
-          const last1yQty=last12Keys.reduce((sum,mk)=>sum+totalForMonth(mk),0);
+          const last1yQty=last1yKeys.reduce((sum,mk)=>sum+totalForMonth(mk),0);
           const selectedRevenue=monthSel.reduce((sum,mk)=>sum+monthOwnRev(sk,mk),0);
           const cmbNames=cmbParents.map(p=>String(p && p.sku || '').trim()).filter(Boolean);
 
@@ -12559,7 +12581,7 @@ function applyF(){
           const visibleTxns=displayTxns.slice(0,MATRIX_RENDER_CAP);
           const monthHeaders=monthSel.map(k=>`<th>${safeText(matrixMonthLabel(k))} Total Sold Qty</th>`).join('');
           const last3Label=`${matrixMonthLabel(last3Keys[0]||latestMonthKey)} to ${matrixMonthLabel(latestMonthKey)}`;
-          const last1yLabel=`${matrixMonthLabel(last12Keys[0]||latestMonthKey)} to ${matrixMonthLabel(latestMonthKey)}`;
+          const last1yLabel=`${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}`;
           const rowsHtml=visibleTxns.map(t=>{
             const skuEsc=String(t.sku||'').replace(/'/g,"\\'");
             const monthCells=monthSel.map(k=>`<td class="gold"><b>${Math.round(Number(t.month_qty?.[k])||0)}</b></td>`).join('');
@@ -12662,7 +12684,7 @@ function applyF(){
             <td class="gold">${Math.round(Number(t.qty)||0)}</td>
             <td class="gold">${Math.round(Number(t.combo_qty)||0)}</td>
             <td class="gold"><b>${Math.round(Number(t.total_qty)||0)}</b></td>
-            <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(latestMonthKey))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
+            <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(rollingYear.end.slice(0,7)))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
             ${LOGIN_ROLE==='employee'?'':`<td class="green">${fmt(Number(t.rev)||0)}</td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
           return `<tr>
@@ -12701,7 +12723,7 @@ function applyF(){
           <table class="ro"><thead><tr>
             ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
-          ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = rolling 12 months ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(latestMonthKey)}, using the same active business filters.</div>` : ''}
+          ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
         <div class="ro-table-wrap" style="grid-column:1/-1;margin-top:20px">
           <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 12px 0;flex-wrap:wrap;gap:8px">
