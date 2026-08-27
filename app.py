@@ -9785,6 +9785,77 @@ function exportSkuName(sku, name){
 }
 window.exportSkuName = exportSkuName;
 
+// CN Name for EVERY SKU-based export. All Product inventory `cn_name` is the
+// authoritative source. Exact SKU wins; a punctuation-insensitive fallback
+// handles harmless variants such as spaces/underscores/case without changing
+// what is displayed in the SKU column.
+let _exportCnNormMap = null;
+function _exportSkuNorm(sku){
+  return String(sku||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+function _ensureExportCnNormMap(){
+  if(_exportCnNormMap) return _exportCnNormMap;
+  const m = new Map();
+  (master||[]).forEach(it=>{
+    const sku=String(it?.sku||'').trim();
+    const cn=String(it?.cn_name||'').trim();
+    if(!sku || !cn) return;
+    const nk=_exportSkuNorm(sku);
+    if(nk && !m.has(nk)) m.set(nk,cn);
+  });
+  _exportCnNormMap=m;
+  return m;
+}
+function exportCnName(sku, provided){
+  const p=String(provided||'').trim();
+  if(p) return p;
+  const raw=String(sku||'').trim();
+  if(!raw) return '';
+  const exact=(_masterSkuMap[String(raw).toUpperCase()]||{}).cn_name;
+  if(exact) return String(exact).trim();
+  return _ensureExportCnNormMap().get(_exportSkuNorm(raw))||'';
+}
+function _exportSkuHeaderInfo(headers){
+  const hs=headers||[];
+  let i=hs.findIndex(h=>/^(sku|sku code|sku no\.?|sku number|child sku|parent sku)$/i.test(String(h||'').trim()));
+  if(i>=0) return {index:i,multi:false};
+  i=hs.findIndex(h=>/^(sku\(s\)|skus|cmb skus|child skus|parent skus)$/i.test(String(h||'').trim()));
+  return i>=0 ? {index:i,multi:true} : {index:-1,multi:false};
+}
+function _exportHasCnHeader(headers){
+  return (headers||[]).some(h=>/^cn\s*name(?:\(s\))?$/i.test(String(h||'').trim()));
+}
+function _exportCnNamesForValue(value,multi){
+  if(!multi) return exportCnName(value,'');
+  const text=String(value||'');
+  const tokens=text.match(/[A-Za-z]{1,8}[-_ ]?\d{2,7}(?:[_()A-Za-z0-9-]*)?/g)||[];
+  const names=[];
+  tokens.forEach(tok=>{const n=exportCnName(tok,'');if(n&&!names.includes(n))names.push(n);});
+  return names.join(' | ');
+}
+function augmentExportWithCnName(headers, rows){
+  const hs=(headers||[]).slice();
+  if(_exportHasCnHeader(hs)) return {headers:hs, rows:rows||[]};
+  const info=_exportSkuHeaderInfo(hs),si=info.index;
+  if(si<0) return {headers:hs, rows:rows||[]};
+  hs.splice(si+1,0,info.multi?'CN Name(s)':'CN Name');
+  const out=(rows||[]).map(r=>{
+    if(Array.isArray(r)){
+      const a=r.slice();
+      a.splice(si+1,0,_exportCnNamesForValue(a[si],info.multi));
+      return a;
+    }
+    const o=Object.assign({},r||{});
+    const skuKey=headers[si];
+    const sku=o[skuKey] ?? o.SKU ?? o.sku ?? o['SKU Code'] ?? o['SKU No.'] ?? '';
+    o[info.multi?'CN Name(s)':'CN Name']=info.multi?_exportCnNamesForValue(sku,true):exportCnName(sku,o['CN Name']||o.cn_name||'');
+    return o;
+  });
+  return {headers:hs, rows:out};
+}
+window.exportCnName=exportCnName;
+window.augmentExportWithCnName=augmentExportWithCnName;
+
 function isMarketplaceTypeValue(value){
   const raw=String(value??'').trim();
   if(!raw)return false;
@@ -11793,6 +11864,7 @@ function augmentWithDailySTR(headers, data){
 
 function downloadTable(headers, data, baseName, fmtType){
   ({headers, data} = augmentWithDailySTR(headers, data));
+  { const aug=augmentExportWithCnName(headers,data); headers=aug.headers; data=aug.rows; }
   function downloadBlob(content, mime, filename){
     const blob = new Blob([content], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -18829,7 +18901,7 @@ function renderSmartAlerts(){
   const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${r.entityType==='SKU'?_opsPhoto(r.image):'<div class="ops-photo-ph">🎯</div>'}</td><td>${r.entityType==='SKU'?`<button class="sku-link" onclick="openSkuDetails('${String(r.entity).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.entity,r.name))}</button>`:`<b>${escHtml(r.entity)}</b><div style="font-size:9px;color:#64748b">${escHtml(r.name)}</div>`}</td><td>${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity==='critical'?'Critical':r.severity==='high'?'High':'Watch')}</td><td style="font-weight:900">${escHtml(r.metric)}</td><td class="ops-list">${escHtml(r.detail)}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.stock)).toLocaleString('en-IN'):'—'}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.wip)).toLocaleString('en-IN'):'—'}</td><td>${escHtml(r.taxon)}</td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU / Channel</th><th>Alert</th><th>Priority</th><th>Current Value</th><th>What to Check</th><th>Stock</th><th>WIP</th><th>Category</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No stock alerts match the selected filters.</td></tr>'}</tbody></table>`;
 }
-function exportSmartAlerts(){const rows=_smartAlertsFiltered();if(!rows.length){alert('No alert rows to export');return;}_dlCsv(['Item Type','SKU / Channel','Name / Owner','Alert','Priority','Current Value','What to Check','Stock','WIP','Category','Image Link'],rows.map(r=>[r.entityType,r.entity,exportSkuName(r.entity,r.name),r.typeLabel,r.severity,r.metric,r.detail,r.entityType==='SKU'?Math.round(_opsNum(r.stock)):'',r.entityType==='SKU'?Math.round(_opsNum(r.wip)):'',r.taxon,r.image||'']),'stock_alerts');}
+function exportSmartAlerts(){const rows=_smartAlertsFiltered();if(!rows.length){alert('No alert rows to export');return;}_dlCsv(['Item Type','SKU / Channel','CN Name','Name / Owner','Alert','Priority','Current Value','What to Check','Stock','WIP','Category','Image Link'],rows.map(r=>[r.entityType,r.entity,r.entityType==='SKU'?exportCnName(r.entity,r.cn_name||''):'',exportSkuName(r.entity,r.name),r.typeLabel,r.severity,r.metric,r.detail,r.entityType==='SKU'?Math.round(_opsNum(r.stock)):'',r.entityType==='SKU'?Math.round(_opsNum(r.wip)):'',r.taxon,r.image||'']),'stock_alerts');}
 
 function _ageBucket(days){if(days===null)return'Unknown';if(days<=30)return'0-30';if(days<=60)return'31-60';if(days<=90)return'61-90';return'90+';}
 function _iaLatestSaleDate(it){
@@ -20669,6 +20741,7 @@ window.loadWebsiteOos=loadWebsiteOos;window.renderWebsiteOos=renderWebsiteOos;wi
 
 /* shared tiny CSV downloader */
 function _dlCsv(headers, rows, name){
+  { const aug=augmentExportWithCnName(headers,rows); headers=aug.headers; rows=aug.rows; }
   const labelCols=new Set((headers||[]).map((h,i)=>/(^|\s)(channel|channels|type|types|marketplace|platform|where sold|source)(\s|$)/i.test(String(h||''))?i:-1).filter(i=>i>=0));
   const prepared=[headers].concat((rows||[]).map(r=>(r||[]).map((c,i)=>labelCols.has(i)?marketplaceDisplayText(c):c)));
   const csv = prepared.map(r => r.map(c => {
@@ -21200,6 +21273,7 @@ async function bulkExportPDF(){
     return {
       sku: String(item.sku || r.sku || '').trim(),
       product_name: String(item.sku_name || '').trim(),
+      cn_name: String(item.cn_name || '').trim(),
       qty: qty,
       mrp: basePrice,
       image_url: String(item.image_url || '').trim()
@@ -32067,9 +32141,11 @@ def api_bulk_combo_export_pdf():
             mrp = max(0.0, to_num(raw.get("mrp")))
             image_url = clean(raw.get("image_url"))
             product_name = clean(raw.get("product_name"))
+            cn_name = clean(raw.get("cn_name"))
             rows.append({
                 "sku": sku,
                 "product_name": product_name,
+                "cn_name": cn_name,
                 "qty": qty,
                 "mrp": mrp,
                 "image_url": image_url,
@@ -32333,9 +32409,13 @@ def api_bulk_combo_export_pdf():
         table_data = [headers]
         for item in rows:
             name = item.get("product_name") or ""
+            cn_name = item.get("cn_name") or ""
             safe_sku = xml_escape(str(item["sku"]))
+            safe_cn = xml_escape(str(cn_name))
             safe_name = xml_escape(str(name))
             product_parts = [f"<b>{safe_sku}</b>"]
+            if cn_name:
+                product_parts.append(f"<font color='#8C6A18'>CN Name: {safe_cn}</font>")
             if name and name.strip().upper() != item["sku"].strip().upper():
                 product_parts.append(f"<font color='#64748B'>{safe_name}</font>")
             product_text = "<br/>".join(product_parts)
