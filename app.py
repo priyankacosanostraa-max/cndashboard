@@ -1,5 +1,6 @@
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
+# V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
 # Cosa Nostraa — Overview Last 1 Year anchor fix: oldest selected month (e.g. Jun/Jul/Aug 2026 => 01-May-2025 to 31-May-2026)
 # Cosa Nostraa — V24.7 (WEBSITE ORDER DATE KPI/PIE FILTER SYNC)
 # Order Date changes now refresh return KPIs, status pie, order summary KPIs and all-orders table immediately.
@@ -981,7 +982,15 @@ def _compact_channel_text(*values):
     return re.sub(r"[^a-z0-9]", "", " ".join(str(v or "") for v in values).casefold())
 
 def _is_amazon_fba_value(*values):
-    return "amazonfba" in _compact_channel_text(*values)
+    compact = _compact_channel_text(*values)
+    if not compact:
+        return False
+    return (
+        "amazonfba" in compact
+        or "fbaamazon" in compact
+        or "amazonfulfilled" in compact
+        or "fulfilledbyamazon" in compact
+    )
 
 def _merge_amazon_identity(customer, typ):
     """Expose all legacy FBA-source identities as the single Amazon channel."""
@@ -14875,6 +14884,26 @@ function exportTarget(){
 window.loadTarget = loadTarget; window.exportTarget = exportTarget;
 
 /* ── DAILY REVENUE GLIMPSE (Target tab, 2nd table) ── */
+function _targetMergeAmazonRows(rows){
+  const out = []; const amazon = null;
+  let amazonRow = null;
+  const isAmazon = (v) => {
+    const k = String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+    return k === 'amazon' || k.includes('amazonfba') || k.includes('fbaamazon') || k.includes('fulfilledbyamazon');
+  };
+  (Array.isArray(rows) ? rows : []).forEach(r => {
+    if (!isAmazon(r && r.channel)){ out.push(r); return; }
+    if (!amazonRow){ amazonRow = Object.assign({}, r, {channel:'Amazon'}); out.push(amazonRow); return; }
+    ['ytd','last_month','mtd','day_before','yesterday','mtd_target'].forEach(k => {
+      amazonRow[k] = Number(amazonRow[k]||0) + Number(r[k]||0);
+    });
+  });
+  if (amazonRow){
+    amazonRow.mtd_achievement = Number(amazonRow.mtd_target||0)
+      ? Math.round((Number(amazonRow.mtd||0) / Number(amazonRow.mtd_target||0) * 100) * 10) / 10 : 0;
+  }
+  return out;
+}
 let _drgData = null;
 function loadDRG(force=false){
   const host = document.getElementById('drgContent');
@@ -14885,6 +14914,7 @@ function loadDRG(force=false){
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      d.rows = _targetMergeAmazonRows(d.rows);
       _drgData = d;
       renderDRGTable();
     })
@@ -14986,6 +15016,7 @@ function loadDRGMarketplace(force=false){
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      d.rows = _targetMergeAmazonRows(d.rows);
       _drgMarketplaceData = d;
       renderDRGMarketplaceTable();
     })
@@ -15031,7 +15062,7 @@ function renderDRGMarketplaceTable(){
       &nbsp;|&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
     <p style="color:var(--cn-mid);font-size:.74rem;margin:0 0 10px">
-      Price source: Website S (Total Price), Amazon = combined-sheet R plus additional Amazon cossa_orderdate H, Flipkart R, Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
+      Price source: Website S (Total Price), Amazon = merged cossa_orderdate H (standard Amazon + former FBA), Flipkart R, Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
     </p>
     ${warnings}
     <table class="ro" style="width:100%;min-width:920px">
@@ -27890,8 +27921,8 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # taaki same month/channel ke KPIs aapas me mismatch na karein. Dispatch-Date
     # rows sirf source-outage fallback hain.
     # Target ka "Channel Type" (Marketplace, Website, Purchase…) = COSA ka "Type".
-    # Standard Amazon keeps the original source logic. Amazon FBA is now a
-    # separate COSA/cossa_orderdate marketplace and is never merged into Amazon.
+    # Target tab canonical rule: Amazon and all legacy Amazon-FBA spellings are
+    # one Amazon family and also contribute to Marketplace/SOR actuals.
     act = {}
     for it in comp:
         _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
@@ -27900,10 +27931,21 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
             if not d or d == "N/A":
                 continue
             mk = d[:7]
-            typ = (e.get("type") or "").strip().lower()
+            typ = _marketplace_display_text(e.get("type") or "").strip().lower()
             sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
+            cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
             entry_keys = {typ}
-            if sub in {"amazon", "flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
+            amazon_family = (
+                sub == "amazon" or cust == "amazon"
+                or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))
+            )
+            if amazon_family:
+                # Target tab treats Amazon + legacy Amazon FBA as one Amazon bucket.
+                # Amazon also belongs to Mahesh's Marketplace/SOR actual, even if a
+                # source row happens to arrive with Ecom/other type text.
+                entry_keys.add("amazon")
+                entry_keys.add("marketplace")
+            if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
                 entry_keys.add("tata" if sub == "tata cliq" else sub)
             for entry_key in entry_keys:
                 if not entry_key:
@@ -28596,10 +28638,10 @@ _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 def _fetch_drg_source_rows(force=False):
     """Daily Revenue Glimpse ke normalized Net Revenue rows.
 
-    Most channels come from cossa_orderdate. Standard Amazon is deliberately
-    replaced by the original combined Amazon/Flipkart source (J=platform,
-    W=Payout to Seller); Amazon FBA remains separate from cossa_orderdate
-    column I. Date/word values may be text, numbers or date-times and are
+    Most channels come from cossa_orderdate. In the Target tab, Amazon is read
+    as one consolidated family from cossa_orderdate (standard Amazon + former
+    Amazon FBA) so no Amazon component can be lost after label normalization.
+    Date/word values may be text, numbers or date-times and are
     normalized through parse_date_any()/norm_type()/norm_cust()."""
     if (not force and _DRG_SRC_CACHE["rows"] is not None
             and time.time() - _DRG_SRC_CACHE["ts"] < 600):
@@ -28627,9 +28669,12 @@ def _fetch_drg_source_rows(force=False):
             continue
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
         selling_price = to_num(r.get(C_SP, 0)) if C_SP else 0.0
-        cust = norm_cust(r.get(C_CUST, "Unknown")) if C_CUST else "Unknown"
-        raw_typ = norm_type(r.get(C_TYPE, "Regular")) if C_TYPE else "Regular"
-        legacy_amazon_source = _is_amazon_fba_value(cust, raw_typ)
+        raw_cust_value = r.get(C_CUST, "Unknown") if C_CUST else "Unknown"
+        raw_type_value = r.get(C_TYPE, "Regular") if C_TYPE else "Regular"
+        raw_amazon_fba = _is_amazon_fba_value(raw_cust_value, raw_type_value)
+        cust = norm_cust(raw_cust_value)
+        raw_typ = norm_type(raw_type_value)
+        legacy_amazon_source = bool(raw_amazon_fba or _is_amazon_fba_value(cust, raw_typ))
         cust, typ = _merge_amazon_identity(cust, raw_typ)
         # Blinkit is sourced separately from the main COSA Net Revenue column I
         # below, so skip its cossa_orderdate copy here to prevent double count.
@@ -28637,11 +28682,11 @@ def _fetch_drg_source_rows(force=False):
             continue
         channel = calc_channel(cust, typ)
         sub_channel = calc_sub_channel(cust, channel, typ)
-        # Standard Amazon must come only from the original Amazon/Flipkart
-        # sheet in the Target-tab revenue tables. Keep Amazon FBA because it is
-        # a distinct new COSA/cossa_orderdate channel.
-        if str(sub_channel or "").strip().casefold() == "amazon" and not legacy_amazon_source:
-            continue
+        # Target-tab rule: cossa_orderdate is already the consolidated Amazon
+        # family source. Do not drop rows merely because the source no longer
+        # preserves a separate "Amazon FBA" label; every Amazon row belongs to
+        # the single Amazon bucket here.
+        target_amazon_merged = (str(sub_channel or "").strip().casefold() == "amazon")
         out.append({
             "date": dt.strftime("%Y-%m-%d"),
             "rev": rev,
@@ -28653,64 +28698,13 @@ def _fetch_drg_source_rows(force=False):
             # Amazon FBA and exclude Blinkit from its cossa_orderdate fallback.
             "customer": cust,
             "legacy_amazon_source": bool(legacy_amazon_source),
+            "target_amazon_merged": bool(target_amazon_merged),
         })
-    # Standard Amazon for the NET-REVENUE table: original combined
-    # Amazon/Flipkart source only. J identifies AMAZON/FLIPKART, S (Created On)
-    # is Order Date and W is Payout to Seller. Returned lines whose payout is
-    # zero naturally contribute zero; non-zero negative adjustments are kept.
-    try:
-        amazon_df = _fetch_csv_fresh(
-            AMAZON_FLIPKART_SALES_URL,
-            select_groups=[
-                ("Created On", "Order_Date", "Order Date", "OrderDate", "Packed On"),
-                ("Payout to Seller", "Net Revenue", "NetRevenue", "Settlement Amount"),
-                ("Status", "Type", "Channel", "Marketplace"),
-            ],
-            # J=platform, S=Created On and W=Payout to Seller.
-            select_positions=[9, 18, 22],
-        )
-        amazon_df.columns = [str(c).strip() for c in amazon_df.columns]
-        amazon_date = (find_col(
-            amazon_df.columns, "Created On", "Order_Date", "Order Date",
-            "OrderDate", "Packed On"
-        ) or _drg_source_position_col(amazon_df, 18))
-        amazon_platform = _drg_source_position_col(amazon_df, 9)
-        if not amazon_platform or amazon_platform not in amazon_df.columns:
-            amazon_platform = find_col(amazon_df.columns, "Channel", "Marketplace", "Status", "Type")
-        amazon_payout = _drg_source_position_col(amazon_df, 22)
-        if not amazon_payout or amazon_payout not in amazon_df.columns:
-            amazon_payout = find_col(
-                amazon_df.columns, "Payout to Seller", "Net Revenue",
-                "NetRevenue", "Settlement Amount"
-            )
-        if not amazon_date:
-            raise ValueError("Amazon/Flipkart order date column not found")
-        if not amazon_platform:
-            raise ValueError("Amazon/Flipkart platform column J not found")
-        if not amazon_payout:
-            raise ValueError("Amazon/Flipkart payout column W not found")
 
-        for row in _df_chunks(amazon_df):
-            platform = clean(row.get(amazon_platform, ""))
-            platform_key = re.sub(r"[^a-z0-9]", "", platform.casefold())
-            if "amazon" not in platform_key or "flipkart" in platform_key:
-                continue
-            dt = parse_date_any(row.get(amazon_date, ""))
-            if dt is None:
-                continue
-            payout = to_num(row.get(amazon_payout, 0))
-            if payout == 0:
-                continue
-            out.append({
-                "date": dt.strftime("%Y-%m-%d"), "rev": float(payout), "sp": 0.0,
-                "channel": "Ecom", "sub_channel": "Amazon", "type": "Marketplace",
-                "customer": "Amazon",
-            })
-    except Exception as exc:
-        # Keep every other channel available even if this one source is
-        # temporarily unreachable. Standard Amazon is intentionally not
-        # replaced by cossa_orderdate because the approved source is fixed.
-        print("Daily Revenue Glimpse Amazon source failed:", str(exc)[:180])
+    # Amazon is intentionally NOT appended again from the combined
+    # Amazon/Flipkart tracker in the Target tab. cossa_orderdate already holds
+    # the consolidated Amazon family (standard Amazon + former Amazon FBA), so
+    # adding the tracker here would double-count standard Amazon.
 
     # Blinkit for the NET-REVENUE table: COSA A=Dispatch Date,
     # I=Net Revenue, J=Customer Name. Customer matching is case-insensitive.
@@ -28778,9 +28772,9 @@ def _drg_bucket(channel, sub_channel, typ):
 
 # Source-sheet version of Daily Revenue Glimpse. Named DTC/Ecom channels use
 # the exact user-approved price columns from their approved source tabs.
-# Standard Amazon + Flipkart use the combined Amazon/Flipkart source:
-# J identifies the marketplace and R is Selling value. Amazon FBA is separate
-# and uses cossa_orderdate A=Order Date + H=Selling Price. Blinkit uses COSA H.
+# Flipkart keeps the combined Amazon/Flipkart source. Amazon is intentionally
+# read once from consolidated cossa_orderdate A=Order Date + H=Selling Price
+# (standard Amazon + former Amazon FBA). Blinkit uses COSA H.
 # Only the remaining buckets keep the existing cossa_orderdate Net Revenue feed.
 _DRG_MARKETPLACE_SOURCE_CACHE = {"rows": None, "meta": None, "ts": 0}
 _DRG_MARKETPLACE_SOURCE_TTL = 300
@@ -28807,9 +28801,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
             "qty_names": ("Qty", "Quantity"), "cancel_qty_groups": (), "cancel_date_names": (),
         },
         {
-            "key": "Amazon / Flipkart", "sheet": "Amazon/Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
+            "key": "Flipkart", "sheet": "Amazon/Flipkart", "url": AMAZON_FLIPKART_SALES_URL,
             "price_pos": 17, "price_letter": "R", "price_label": "Selling value",
-            "fixed_bucket": "", "allowed_buckets": ("Amazon", "Flipkart"),
+            "fixed_bucket": "", "allowed_buckets": ("Flipkart",),
             "platform_pos": 9, "platform_names": ("Channel", "Marketplace", "Status", "Type"),
             "date_names": ("Order_Date", "Order Date", "OrderDate", "Created On", "Packed On"),
             "status_names": (), "qty_names": ("Qty.", "Qty", "Quantity"),
@@ -28945,9 +28939,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
         except Exception as e:
             source_meta["error"] = str(e)[:240]
 
-    # Standard Amazon and Flipkart were loaded above from the original combined
-    # source sheet.  Only the NEW Amazon FBA channel is read from cossa_orderdate
-    # here, using A=Order Date and H=Selling Price.  It remains a separate row.
+    # Amazon for this Target-tab table comes ONLY from consolidated
+    # cossa_orderdate, using A=Order Date and H=Selling Price. This is already
+    # the merged Amazon family, so old Amazon-FBA labels are not required.
     orderdate_rows = []
     orderdate_error = ""
     try:
@@ -28961,9 +28955,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
         "rows_used": 0, "date_column": "A / Order Date",
         "customer_column": "J / Customer Name", "error": orderdate_error,
     }
-    meta["Amazon (cossa_orderdate)"] = amazon_extra_meta
+    meta["Amazon (merged cossa_orderdate)"] = amazon_extra_meta
     for entry in orderdate_rows:
-        if not bool(entry.get("legacy_amazon_source")):
+        if _drg_bucket(entry.get("channel"), entry.get("sub_channel"), entry.get("type")) != "Amazon":
             continue
         dt_iso = str(entry.get("date") or "")
         selling_price = float(to_num(entry.get("sp", 0)))
@@ -29079,6 +29073,8 @@ def _build_daily_revenue_glimpse_marketplace(force=False):
     for e in src_rows:
         d = e.get("date")
         b = e.get("bucket")
+        if _is_amazon_fba_value(b):
+            b = "Amazon"
         if not d or b not in buckets:
             continue
         rev = float(e.get("rev") or 0)
@@ -29149,9 +29145,9 @@ def api_daily_revenue_glimpse_marketplace():
 
 def _build_daily_revenue_glimpse(force=False):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
-    Before / Yesterday / This Month Target / Achievement %. Standard Amazon
-    uses the original Amazon/Flipkart sheet W (Payout to Seller); Amazon FBA
-    uses cossa_orderdate I (Net Revenue); remaining channels keep their approved
+    Before / Yesterday / This Month Target / Achievement %. In the Target tab,
+    Amazon is one consolidated cossa_orderdate bucket (standard Amazon + former
+    Amazon FBA); remaining channels keep their approved
     sources. Rows are sorted by YTD revenue descending."""
     src_rows = _fetch_drg_source_rows(force=force)
     targets = _fetch_target_rows()
@@ -29183,7 +29179,9 @@ def _build_daily_revenue_glimpse(force=False):
         if not d or d == "N/A":
             continue
         rev = float(e.get("rev") or 0)
-        b = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
+        b = e.get("bucket") or _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
+        if _is_amazon_fba_value(b):
+            b = "Amazon"
         slot = buckets[b]
         if fy_start_iso <= d <= today_iso:
             slot["ytd"] += rev
