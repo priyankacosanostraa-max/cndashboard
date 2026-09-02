@@ -10,10 +10,6 @@
 # Existing BlueDart Status Group logic, 350-row default, filters, status pie and all-orders table remain unchanged.
 # Cosa Nostraa — V24.11 (BLUEDART UNCLASSIFIED = ORDER ID + CONTACT + BLANK STATUS ONLY)
 # Website Returns pie: Unclassified only when a matched BlueDart row has Order ID and Customer Contact while Status Group N is blank.
-# Cosa Nostraa — V24.13 (REMOVE NO VALID BLUEDART STATUS FROM PIE)
-# Website Returns status pie now shows only BlueDart-classifiable orders: DL, IT, UD, RT/RD, plus the narrowly-qualified blank-status Unclassified bucket.
-# Unmatched Website orders and unknown/invalid nonblank BlueDart Status Group values are not shown as a pie slice, legend item, KPI, or summary field.
-# Total Website Orders KPI still remains the unique Website sheet column-A Display Order Code count.
 # Cosa Nostraa — V24.12 (WEBSITE A UNIQUE ORDER -> BLUEDART ORDER ID MATCH)
 # Website Returns status mix denominator is the unique Website sheet column-A Display Order Code set.
 # Each Website order is counted once, then matched STRICTLY to BlueDart `Order id` (not BlueDart Display Order Code).
@@ -20620,17 +20616,18 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   const rto=Math.max(0,Number(s.return_to_origin_orders??s.stage_returned_orders??0));
   const unclassified=Math.max(0,Number(s.unclassified_orders||0));
   const statusMixTotal=Math.max(0,Number(s.status_mix_orders??(delivered+inTransit+undelivered+rto+unclassified)));
-  // Pie contains ONLY orders that have a usable BlueDart status bucket. Website
-  // orders with no BlueDart match or an unknown/invalid nonblank Status Group are
-  // intentionally omitted from the pie instead of being shown as a remainder.
-  const pieTotal=statusMixTotal;
+  const notCounted=Math.max(0,Number(s.status_not_counted_orders||0));
+  // Pie denominator is the deduplicated Website column-A order count. Named
+  // BlueDart slices plus the remainder therefore always add up to Total Orders.
+  const pieTotal=total;
   const pct=n=>pieTotal?Math.min(100,Math.max(0,Number(n||0)*100/pieTotal)):0;
   const slices=[
     {label:'Delivered (DL)',count:delivered,color:'#3f8f62'},
     {label:'In Transit (IT)',count:inTransit,color:'#6f8fac'},
     {label:'Undelivered (UD)',count:undelivered,color:'#c18f36'},
     {label:'Return to Origin (RT/RD)',count:rto,color:'var(--cn-gold)'},
-    {label:'Unclassified',count:unclassified,color:'#a8a29a'}
+    {label:'Unclassified',count:unclassified,color:'#a8a29a'},
+    {label:'No valid BlueDart status',count:notCounted,color:'#d9d4ca'}
   ];
   if(donut){
     let cursor=0;
@@ -20639,12 +20636,12 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
       return `${x.color} ${a.toFixed(2)}% ${b.toFixed(2)}%`;
     });
     const ring=pieTotal&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
-    const legend=slices.filter(x=>x.count>0).map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
+    const legend=slices.filter(x=>x.count>0||x.label!=='Unclassified').map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
-          <div style="font-size:30px;font-weight:950;line-height:1">${statusMixTotal.toLocaleString('en-IN')}</div>
-          <div class="small-note" style="margin-top:5px">BlueDart Status Orders</div>
+          <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">Website Orders</div>
           <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
         </div>
       </div>
@@ -20663,7 +20660,7 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Total Website Orders: <b>unique Website column A</b> (one Display Order Code = one order) · Pie match: <b>BlueDart Order id only</b> · Status source: <b>latest BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = latest matched BlueDart row has Order ID + Customer Contact but blank Status Group.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Order denominator: <b>unique Website column A</b> (one Display Order Code = one order) · Courier match: <b>BlueDart Order id only</b> · Status source: <b>latest BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = latest matched BlueDart row has Order ID + Customer Contact but blank Status Group.`:''}${notCounted?` · ${notCounted.toLocaleString('en-IN')} Website orders have no valid/qualified current BlueDart status and are shown separately in the pie remainder.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   renderWebsiteOrdersTable(data);
@@ -25765,6 +25762,7 @@ def _website_returns_overview_payload(force=False):
     return_to_origin_orders = stage_counts["Return to Origin"]
     unclassified_orders = stage_counts["Unclassified"]
     status_mix_orders = sum(stage_counts.values())
+    status_not_counted_orders = max(0, total_orders - status_mix_orders)
     # Legacy key retained for any older frontend/cache consumer; it now means the
     # BlueDart RT/RD bucket, not generic Website-return detection.
     stage_returned_orders = return_to_origin_orders
@@ -25809,6 +25807,7 @@ def _website_returns_overview_payload(force=False):
             "undelivered_orders": undelivered_orders,
             "unclassified_orders": unclassified_orders,
             "status_mix_orders": status_mix_orders,
+            "status_not_counted_orders": status_not_counted_orders,
             "not_returned_orders": max(0, total_orders - return_to_origin_orders),
             "return_rate": round((return_to_origin_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
             "website_sheet_returned": website_returns,
