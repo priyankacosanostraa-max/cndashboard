@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.9 (WEBSITE RETURNS · BLUEDART STATUS GROUP N)
+# Website Returns order-status mix now follows BlueDart Status Group column N exactly:
+# DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
+# All active Website Returns filters refresh Total Orders and the status pie/table together.
+# ============================================================
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
 # V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
@@ -8056,13 +8061,13 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Unique Website orders are split into Returned, Delivered and In Transit. Order Date, Payment Mode, SKU and order/customer search update the full status mix; return-only filters continue to refine the return analysis and all-orders table without corrupting the order denominator.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Unique Website orders are classified strictly from BlueDart Status Group (column N): DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. Every active filter, including Order Date, refreshes the total and the status mix.</div></div></div>
     <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
         <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
       </div>
       <div class="filter-box" style="margin:0">
-        <label class="fl" style="display:block;margin-bottom:10px">Order-Level Return Summary</label>
+        <label class="fl" style="display:block;margin-bottom:10px">Order-Level Status Summary</label>
         <div id="wrOrderSummaryKpis" class="ops-kpis" style="margin:0"></div>
         <div id="wrOrderSummaryNote" class="small-note" style="margin-top:10px;white-space:normal"></div>
       </div>
@@ -8078,7 +8083,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </table>
     </div></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Return analysis follows the active filters below. BlueDart is used when available; the live Website return/RTO fields are the automatic fallback. The order-level donut above uses the Website order denominator.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Return analysis follows the active filters below. BlueDart is used when available; the live Website return/RTO fields are the automatic fallback. The order-level status donut above refreshes on the same active filters.</div></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top RTO Reasons</label><div id="wrReasonAnalysis"></div></div>
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status Description</label><div id="wrStatusAnalysis"></div></div>
@@ -20600,44 +20605,53 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   }
   const s=data.summary||{};
   const total=Math.max(0,Number(s.total_orders||0));
-  const ret=Math.max(0,Number(s.returned_orders||0));
-  const stageRet=Math.max(0,Number(s.stage_returned_orders??ret));
+  const actualReturned=Math.max(0,Number(s.returned_orders||0));
   const delivered=Math.max(0,Number(s.delivered_orders||0));
   const inTransit=Math.max(0,Number(s.in_transit_orders||0));
-  const pct=total?Math.min(100,Math.max(0,stageRet*100/total)):0;
-  const delPct=total?Math.min(100,Math.max(0,delivered*100/total)):0;
-  const transitPct=total?Math.min(100,Math.max(0,inTransit*100/total)):0;
+  const undelivered=Math.max(0,Number(s.undelivered_orders||0));
+  const rto=Math.max(0,Number(s.return_to_origin_orders??s.stage_returned_orders??0));
+  const unclassified=Math.max(0,Number(s.unclassified_orders||0));
+  const pct=n=>total?Math.min(100,Math.max(0,Number(n||0)*100/total)):0;
+  const slices=[
+    {label:'Delivered (DL)',count:delivered,color:'#3f8f62'},
+    {label:'In Transit (IT)',count:inTransit,color:'#6f8fac'},
+    {label:'Undelivered (UD)',count:undelivered,color:'#c18f36'},
+    {label:'Return to Origin (RT/RD)',count:rto,color:'var(--cn-gold)'},
+    {label:'Unclassified',count:unclassified,color:'#a8a29a'}
+  ];
   if(donut){
-    const stop1=pct,stop2=Math.min(100,pct+delPct);
-    const ring=total?`conic-gradient(var(--cn-gold) 0 ${stop1.toFixed(2)}%, #3f8f62 ${stop1.toFixed(2)}% ${stop2.toFixed(2)}%, #6f8fac ${stop2.toFixed(2)}% 100%)`:'conic-gradient(#e6e1d8 0 100%)';
+    let cursor=0;
+    const parts=slices.filter(x=>x.count>0).map(x=>{
+      const a=total?(cursor*100/total):0; cursor+=x.count; const b=total?(cursor*100/total):0;
+      return `${x.color} ${a.toFixed(2)}% ${b.toFixed(2)}%`;
+    });
+    const ring=total&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
+    const legend=slices.filter(x=>x.count>0||x.label!=='Unclassified').map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
           <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
           <div class="small-note" style="margin-top:5px">Website Orders</div>
-          <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
+          <div style="font-size:11px;font-weight:850;margin-top:4px">BlueDart status mix</div>
         </div>
       </div>
-      <div style="min-width:190px">
-        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--cn-gold);margin-right:7px"></span>Returned: ${stageRet.toLocaleString('en-IN')} <span class="small-note">(${pct.toFixed(1)}%)</span></div>
-        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#3f8f62;margin-right:7px"></span>Delivered: ${delivered.toLocaleString('en-IN')} <span class="small-note">(${delPct.toFixed(1)}%)</span></div>
-        <div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#6f8fac;margin-right:7px"></span>In Transit: ${inTransit.toLocaleString('en-IN')} <span class="small-note">(${transitPct.toFixed(1)}%)</span></div>
-      </div>
+      <div style="min-width:220px">${legend}</div>
     </div>`;
   }
   if(kpis)kpis.innerHTML=
-    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique non-cancelled Website Display Order Code after active order filters')+
-    _wrKpi('Returned Orders',stageRet.toLocaleString('en-IN'),`${pct.toFixed(1)}% of matching Website orders`)+
-    _wrKpi('Delivered Orders',delivered.toLocaleString('en-IN'),`${delPct.toFixed(1)}% · COMPLETE and not returned`)+
-    _wrKpi('In Transit Orders',inTransit.toLocaleString('en-IN'),`${transitPct.toFixed(1)}% · active non-returned orders not COMPLETE`)+
+    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique non-cancelled Website Display Order Code after every active filter')+
+    _wrKpi('Delivered Orders (DL)',delivered.toLocaleString('en-IN'),`${pct(delivered).toFixed(1)}% · BlueDart Status Group DL`)+
+    _wrKpi('In Transit Orders (IT)',inTransit.toLocaleString('en-IN'),`${pct(inTransit).toFixed(1)}% · BlueDart Status Group IT`)+
+    _wrKpi('Undelivered Orders (UD)',undelivered.toLocaleString('en-IN'),`${pct(undelivered).toFixed(1)}% · BlueDart Status Group UD`)+
+    _wrKpi('Return to Origin (RT/RD)',rto.toLocaleString('en-IN'),`${pct(rto).toFixed(1)}% · RT and RD combined`)+
+    (unclassified?_wrKpi('Unclassified Status',unclassified.toLocaleString('en-IN'),`${pct(unclassified).toFixed(1)}% · blank/other Status Group or no matched BlueDart row`):'')+
     _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
-    _wrKpi('BlueDart Returns',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Matched to Website Display Order Code')+
-    _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Deduplicated in Returned Orders');
+    _wrKpi('BlueDart RTO Orders',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Only Status Group RT or RD')+
+    _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Website return fields and BlueDart RT/RD both matched');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    const filteredReturnNote=Number(s.returned_orders||0)!==stageRet?` · Return-only filters currently match <b>${Number(s.returned_orders||0).toLocaleString('en-IN')}</b> returned orders; the 3-way pie keeps the full order denominator intact.`:'';
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Stage rule: <b>Returned</b> overrides status, <b>COMPLETE = Delivered</b>, remaining active orders = <b>In Transit</b>.${filteredReturnNote}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Status source: <b>BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · ${unclassified.toLocaleString('en-IN')} orders are unclassified because Status Group is blank/other or no BlueDart row matched.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   renderWebsiteOrdersTable(data);
@@ -20679,10 +20693,12 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   </tr>`).join('');
 }
 function _wrOrderStageBadge(stage){
-  const s=_wrText(stage)||'In Transit';
-  if(s==='Returned')return '<span style="font-weight:900;color:#8b3f23">Returned</span>';
+  const s=_wrText(stage)||'Unclassified';
+  if(s==='Return to Origin')return '<span style="font-weight:900;color:#8b3f23">Return to Origin</span>';
+  if(s==='Undelivered')return '<span style="font-weight:900;color:#a86f16">Undelivered</span>';
   if(s==='Delivered')return '<span style="font-weight:900;color:#237a4b">Delivered</span>';
-  return '<span style="font-weight:900;color:#4f6f91">In Transit</span>';
+  if(s==='In Transit')return '<span style="font-weight:900;color:#4f6f91">In Transit</span>';
+  return '<span style="font-weight:900;color:#777">Unclassified</span>';
 }
 function _wrCnNamesForOrder(r){
   const raw=Array.isArray(r?.skus)?r.skus:[];
@@ -20972,11 +20988,11 @@ function renderWebsiteReturns(){
   const wrSourceKind=_wrText(_websiteReturnsData?.source_kind)||'bluedart';
   const wrFallback=wrSourceKind!=='bluedart';
   if(k)k.innerHTML=
-    _wrKpi('Total Returns',rows.length.toLocaleString('en-IN'),wrFallback?'Unique Website returned orders after active filters':'Unique BlueDart return shipments after active filters')+
-    _wrKpi('COD Returns',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
-    _wrKpi('Prepaid Returns',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered returns`)+
+    _wrKpi('Filtered BlueDart Rows',rows.length.toLocaleString('en-IN'),wrFallback?'Filtered Website return/RTO fallback rows':'Unique BlueDart shipment/status rows after active filters')+
+    _wrKpi('COD Rows',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered rows`)+
+    _wrKpi('Prepaid Rows',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered rows`)+
     _wrKpi('Unique Customers',customerKeys.size.toLocaleString('en-IN'),'Contact number used first, customer name as fallback')+
-    _wrKpi('RTO Reason Captured',reasonCaptured.toLocaleString('en-IN'),`${rows.length?(reasonCaptured*100/rows.length).toFixed(1):'0.0'}% of filtered returns`);
+    _wrKpi('RTO Reason Captured',reasonCaptured.toLocaleString('en-IN'),`${rows.length?(reasonCaptured*100/rows.length).toFixed(1):'0.0'}% of filtered rows`);
 
   renderWebsiteReturnsAnalytics(rows);
   // The main table is order-level and comes from /api/website-returns-overview.
@@ -20998,7 +21014,7 @@ function renderWebsiteReturns(){
       src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} Website return/RTO source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique returned orders`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} Website sheet rows including header`:''} · Contact number is mapped by <b>Display Order Code → New_Uniware Notification Mobile</b>${tc?` (${tc.toLocaleString('en-IN')} orders available)`:''}. Return reason uses <b>RETURN & RTO → Return Reason</b> and falls back to <b>New_Uniware → Reverse Pickup Reason</b>${tr?` (${tr.toLocaleString('en-IN')} orders with a captured reason)`:''}. COD/Prepaid comes from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} orders linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
     }else{
       const tc=Number(_websiteReturnsData.tracker_contact_orders||0),tr=Number(_websiteReturnsData.tracker_reason_orders||0);
-      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique return shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b>. Missing contact is backfilled from <b>New_Uniware Notification Mobile</b>${tc?` (${tc.toLocaleString('en-IN')} orders available)`:''}; missing RTO reason is backfilled from <b>RETURN & RTO Return Reason</b> / <b>Reverse Pickup Reason</b>${tr?` (${tr.toLocaleString('en-IN')} orders with captured reason)`:''}. COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
+      src.innerHTML=`Live source: <b>${escHtml(sourceName)}</b> · <b>${validWebsite.toLocaleString('en-IN')} valid Website source rows</b>${uniqueShipments?` · ${uniqueShipments.toLocaleString('en-IN')} unique BlueDart shipments`:''}${sheetRows?` · ${sheetRows.toLocaleString('en-IN')} sheet rows including header`:''}${ignoredNonWebsite?` · ${ignoredNonWebsite.toLocaleString('en-IN')} non-Website/blank/error rows ignored`:''} · <b>P/U_Date = Pickup Date</b>. Missing contact is backfilled from <b>New_Uniware Notification Mobile</b>${tc?` (${tc.toLocaleString('en-IN')} orders available)`:''}; missing RTO reason is backfilled from <b>RETURN & RTO Return Reason</b> / <b>Reverse Pickup Reason</b>${tr?` (${tr.toLocaleString('en-IN')} orders with captured reason)`:''}. COD/Prepaid from <b>${escHtml(modeSource)}</b> · SKU joined from <b>Website Display Order Code + New SKU</b>${skuLinked?` (${skuLinked.toLocaleString('en-IN')} shipments linked)`:''}${unknown?` · ${unknown.toLocaleString('en-IN')} filtered rows not classified COD/Prepaid`:''}${_websiteReturnsData.loaded_at?` · refreshed ${escHtml(_websiteReturnsData.loaded_at)}`:''}.`;
     }
   }
   queueWebsiteReturnsOverview();
@@ -25127,7 +25143,8 @@ def _load_website_order_audit(force=False):
                     "_return_types": [], "_return_dates": [], "_return_reasons": [],
                     "_types": [],
                     "_bd_contacts": [], "_bd_customers": [], "_bd_pickups": [],
-                    "_bd_statuses": [], "_bd_status_dates": [], "_bd_reasons": [],
+                    "_bd_statuses": [], "_bd_status_groups": [], "_bd_status_dates": [], "_bd_reasons": [],
+                    "_bd_latest_status_group": "",
                     "_bd_destinations": [], "_bd_waybills": [], "_bd_refs": [],
                 }
                 orders[order_key] = rec
@@ -25189,9 +25206,10 @@ def _load_website_order_audit(force=False):
             rec["tracker_customer_email"] = t.get("customer_email", "")
             rec["tracker_reason_source"] = ("RETURN & RTO Return Reason" if t.get("return_reason") else ("New_Uniware Reverse Pickup Reason" if t.get("reverse_pickup_reason") else ""))
 
-        # Join genuine BlueDart return shipments to Website column-A Display
-        # Order Code. If the operational endpoint is currently using the Website
-        # fallback, do not re-label those Website rows as BlueDart events.
+        # Join genuine BlueDart Website shipment/status rows to Website column-A
+        # Display Order Code. Status Group (physical column N) is the authority for
+        # DL / IT / UD / RT / RD classification. If the operational endpoint is
+        # using the Website fallback, do not invent BlueDart status-group values.
         bd_rows = _load_website_returns(force=force)
         if _WEBSITE_RETURNS_CACHE.get("source_kind") != "bluedart":
             bd_rows = []
@@ -25206,11 +25224,21 @@ def _load_website_order_audit(force=False):
             if matched is None:
                 unmatched_bluedart += 1
                 continue
-            matched["bluedart_returned"] = True
+            bd_status_group = _wr_clean_value(bd.get("status_group", ""))
+            # A BlueDart row is an RTO only when Status Group N explicitly says
+            # RT or RD. DL/IT/UD rows are shipment statuses, not returns.
+            if _wr_bluedart_status_stage(bd_status_group) == "Return to Origin":
+                matched["bluedart_returned"] = True
             matched["_bd_contacts"].append(bd.get("customer_contact", ""))
             matched["_bd_customers"].append(bd.get("customer", ""))
             matched["_bd_pickups"].append(bd.get("pickup_date", ""))
-            matched["_bd_statuses"].append(bd.get("status_description", "") or bd.get("status_group", ""))
+            matched["_bd_statuses"].append(bd.get("status_description", "") or bd_status_group)
+            if bd_status_group:
+                matched["_bd_status_groups"].append(bd_status_group)
+                # _load_website_returns() is sorted newest status first, so the
+                # first nonblank group seen for an order is its latest group.
+                if not matched.get("_bd_latest_status_group"):
+                    matched["_bd_latest_status_group"] = bd_status_group
             matched["_bd_status_dates"].append(bd.get("status_date", ""))
             matched["_bd_reasons"].append(bd.get("rto_reason", ""))
             matched["_bd_destinations"].append(bd.get("destination", ""))
@@ -25231,6 +25259,8 @@ def _load_website_order_audit(force=False):
             bd_customers = rec.pop("_bd_customers", [])
             bd_pickups = sorted({x for x in rec.pop("_bd_pickups", []) if x})
             bd_statuses = rec.pop("_bd_statuses", [])
+            bd_status_groups = rec.pop("_bd_status_groups", [])
+            bd_latest_status_group = rec.pop("_bd_latest_status_group", "")
             bd_status_dates = sorted({x for x in rec.pop("_bd_status_dates", []) if x})
             bd_reasons = rec.pop("_bd_reasons", [])
             bd_destinations = rec.pop("_bd_destinations", [])
@@ -25251,6 +25281,8 @@ def _load_website_order_audit(force=False):
                 "bluedart_customer": _wr_unique_join(bd_customers),
                 "bluedart_pickup_date": bd_pickups[-1] if bd_pickups else "",
                 "bluedart_status": _wr_unique_join(bd_statuses),
+                "bluedart_status_group": _wr_unique_join(bd_status_groups),
+                "bluedart_latest_status_group": bd_latest_status_group,
                 "bluedart_status_date": bd_status_dates[-1] if bd_status_dates else "",
                 "bluedart_rto_reason": _wr_unique_join(bd_reasons),
                 "bluedart_destination": _wr_unique_join(bd_destinations),
@@ -25266,7 +25298,8 @@ def _load_website_order_audit(force=False):
                 str(rec.get("pincode", "")), str(rec.get("sku_text", "")), str(rec.get("packages", "")),
                 str(rec.get("invoices", "")), str(rec.get("website_order_status", "")),
                 str(rec.get("website_return_type", "")), str(rec.get("website_return_reason", "")),
-                str(rec.get("bluedart_status", "")), str(rec.get("bluedart_rto_reason", "")),
+                str(rec.get("bluedart_status", "")), str(rec.get("bluedart_status_group", "")),
+                str(rec.get("bluedart_latest_status_group", "")), str(rec.get("bluedart_rto_reason", "")),
                 str(rec.get("bluedart_destination", "")), str(rec.get("bluedart_waybill", "")),
             ]).casefold()
             final_orders.append(rec)
@@ -25324,14 +25357,39 @@ def _website_returns_combo_child_map():
     return mapping
 
 
-def _wr_order_stage(rec):
-    """Classify one non-cancelled Website order for the 3-way status pie."""
-    if bool((rec or {}).get("returned")):
-        return "Returned"
-    status = str((rec or {}).get("website_order_status") or "").strip().casefold()
-    if "complete" in status or "deliver" in status:
+def _wr_bluedart_status_stage(value):
+    """Map BlueDart Status Group (physical column N) to the dashboard stage.
+
+    User-confirmed codes:
+      DL = Delivered
+      IT = In Transit
+      UD = Undelivered
+      RT/RD = Return to Origin
+
+    Blank/other values stay Unclassified. We never infer a courier stage from
+    Website order status because the Website Returns status mix must follow N.
+    """
+    raw = str(value or "").strip().upper()
+    codes = re.findall(r"(?<![A-Z0-9])(IT|UD|DL|RT|RD)(?![A-Z0-9])", raw)
+    if not codes:
+        return "Unclassified"
+    code_set = set(codes)
+    if "RT" in code_set or "RD" in code_set:
+        return "Return to Origin"
+    if "UD" in code_set:
+        return "Undelivered"
+    if "DL" in code_set:
         return "Delivered"
-    return "In Transit"
+    if "IT" in code_set:
+        return "In Transit"
+    return "Unclassified"
+
+
+def _wr_order_stage(rec):
+    """Classify one Website order strictly from BlueDart Status Group column N."""
+    rec = rec or {}
+    raw_group = rec.get("bluedart_latest_status_group") or rec.get("bluedart_status_group") or ""
+    return _wr_bluedart_status_stage(raw_group)
 
 
 def _wr_public_order(rec):
@@ -25350,11 +25408,11 @@ def _website_returns_overview_payload(force=False):
 
     The Website Orders & Returns screen has two grains:
       * shipment-level BlueDart/Website-return rows for return KPIs and analysis;
-      * unique Website Display Order Code for the 3-way status pie and all-orders table.
+      * unique Website Display Order Code for the BlueDart Status Group pie and all-orders table.
 
-    Order-level filters apply to the full Website order denominator. Return-only
-    filters select matching returned orders for the all-orders table while keeping
-    the full order denominator intact for the Returned / Delivered / In Transit pie.
+    Every active Website Returns filter is applied to the order-level status mix.
+    The courier stage itself is taken strictly from BlueDart Status Group column N:
+    DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
     """
     orders = _load_website_order_audit(force=force)
 
@@ -25507,9 +25565,8 @@ def _website_returns_overview_payload(force=False):
                 if search_q in row_search_hay:
                     return_search_keys.update(row_keys)
 
-    # Base denominator: all Website orders under order-level filters. Return-only
-    # filters must change the return numerator, not collapse the denominator to
-    # returned orders (which would incorrectly force the donut to 100%).
+    # First apply Website order-level filters. Shipment-level filters are then
+    # intersected below so the status pie and all-orders table use the same state.
     base_orders = []
     for rec in orders:
         rec_key = _daily_reporting_order_key(rec.get("display_order_code", ""))
@@ -25551,37 +25608,51 @@ def _website_returns_overview_payload(force=False):
         if _daily_reporting_order_key(r.get("display_order_code", ""))
     }
     if return_filter_active:
-        returned = [
+        status_orders = [
             r for r in base_orders
             if _daily_reporting_order_key(r.get("display_order_code", "")) in return_match_keys
         ]
     else:
-        returned = [r for r in base_orders if r.get("returned")]
+        status_orders = base_orders
 
-    total_orders = len(base_orders)
+    # Actual return-source metrics stay available, but the operational status pie
+    # follows the filtered order set above and BlueDart Status Group N only.
+    returned = [r for r in status_orders if r.get("returned")]
+    total_orders = len(status_orders)
     website_returns = sum(1 for r in returned if r.get("website_returned"))
     bluedart_returns = sum(1 for r in returned if r.get("bluedart_returned"))
     both_returns = sum(1 for r in returned if r.get("website_returned") and r.get("bluedart_returned"))
-    cod_orders = sum(1 for r in base_orders if r.get("payment_mode") == "COD")
-    prepaid_orders = sum(1 for r in base_orders if r.get("payment_mode") == "Prepaid")
+    cod_orders = sum(1 for r in status_orders if r.get("payment_mode") == "COD")
+    prepaid_orders = sum(1 for r in status_orders if r.get("payment_mode") == "Prepaid")
 
-    # The pie is a true partition of every non-cancelled matching Website order.
-    # Returned always wins. COMPLETE/delivered status is Delivered. All remaining
-    # active orders are In Transit. This guarantees the three slices sum to total.
-    stage_returned_orders = sum(1 for r in base_orders if _wr_order_stage(r) == "Returned")
-    delivered_orders = sum(1 for r in base_orders if _wr_order_stage(r) == "Delivered")
-    in_transit_orders = max(0, total_orders - stage_returned_orders - delivered_orders)
+    stage_counts = {
+        "Delivered": 0,
+        "In Transit": 0,
+        "Undelivered": 0,
+        "Return to Origin": 0,
+        "Unclassified": 0,
+    }
+    for rec in status_orders:
+        stage = _wr_order_stage(rec)
+        stage_counts[stage if stage in stage_counts else "Unclassified"] += 1
+    delivered_orders = stage_counts["Delivered"]
+    in_transit_orders = stage_counts["In Transit"]
+    undelivered_orders = stage_counts["Undelivered"]
+    return_to_origin_orders = stage_counts["Return to Origin"]
+    unclassified_orders = stage_counts["Unclassified"]
+    # Legacy key retained for any older frontend/cache consumer; it now means the
+    # BlueDart RT/RD bucket, not generic Website-return detection.
+    stage_returned_orders = return_to_origin_orders
 
     details_active = bool(search_q or sku_q)
-    detail_source = returned if return_filter_active else base_orders
+    detail_source = status_orders
     detail_rows = []
     if details_active:
         detail_rows = [_wr_public_order(rec) for rec in detail_source[:500]]
 
-    # Main table: by default every order; when a return-only filter is active,
-    # show the returned orders that match that filter. Keep it server-paginated so
-    # 20k+ Website orders do not freeze the browser. table_all is export-only.
-    table_source = returned if return_filter_active else base_orders
+    # Main table uses the exact same filtered order set as the status mix. Keep
+    # it server-paginated so 20k+ Website orders do not freeze the browser.
+    table_source = status_orders
     table_total = len(table_source)
     table_pages = max(1, (table_total + table_page_size - 1) // table_page_size)
     table_page = min(table_page, table_pages)
@@ -25607,10 +25678,13 @@ def _website_returns_overview_payload(force=False):
             "total_orders": total_orders,
             "returned_orders": len(returned),
             "stage_returned_orders": stage_returned_orders,
+            "return_to_origin_orders": return_to_origin_orders,
             "delivered_orders": delivered_orders,
             "in_transit_orders": in_transit_orders,
-            "not_returned_orders": max(0, total_orders - stage_returned_orders),
-            "return_rate": round((stage_returned_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
+            "undelivered_orders": undelivered_orders,
+            "unclassified_orders": unclassified_orders,
+            "not_returned_orders": max(0, total_orders - return_to_origin_orders),
+            "return_rate": round((return_to_origin_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
             "website_sheet_returned": website_returns,
             "bluedart_returned": bluedart_returns,
             "both_sources": both_returns,
