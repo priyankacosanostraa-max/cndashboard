@@ -5,6 +5,9 @@
 # ============================================================
 # Cosa Nostraa — V24.9 (WEBSITE RETURNS TABLE FILTER + 350 ROWS)
 # Website Returns: lower All Website Orders table gets a Status Group filter, default page size is 350, and the In Both Sources KPI is removed.
+# Cosa Nostraa — V24.10 (WEBSITE RETURNS CLEANUP)
+# Website Returns: keep only Unique Customers in the shipment KPI strip; remove Order / Customer Investigation section.
+# Existing BlueDart Status Group logic, 350-row default, filters, status pie and all-orders table remain unchanged.
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
 # V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
@@ -8074,16 +8077,6 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div id="wrOrderSummaryNote" class="small-note" style="margin-top:10px;white-space:normal"></div>
       </div>
     </div>
-
-    <div class="ops-section-head"><div><div class="ops-section-title">Order / Customer Investigation</div><div class="small-note" id="wrInvestigationNote">Search an order, customer, contact or SKU above to see the Website order and its full return/RTO trail.</div></div></div>
-    <div class="ro-wrap" style="margin-bottom:16px"><div class="ro-table-wrap" style="max-height:520px">
-      <table class="ops-table" id="websiteReturnInvestigationTable" style="min-width:2500px">
-        <thead><tr>
-          <th>Order ID</th><th>Order Date</th><th>Customer</th><th>Payment</th><th>SKU(s)</th><th>Website Order Status</th><th>Order Qty</th><th>Website Return?</th><th>Return Type</th><th>RTO Qty</th><th>Website Return Date</th><th>Website Return Reason</th><th>Customer Contact</th><th>BlueDart Pickup</th><th>BlueDart Status</th><th>BlueDart Status Date</th><th>BlueDart RTO Reason</th><th>Destination</th><th>WayBill</th><th>Invoice(s)</th><th>Package(s)</th>
-        </tr></thead>
-        <tbody id="wrInvestigationBody"><tr><td colspan="21" class="ops-empty">Use Customer / Contact / Order Search or SKU Search to inspect exact orders.</td></tr></tbody>
-      </table>
-    </div></div>
 
     <div class="ops-section-head"><div><div class="ops-section-title">Return Analysis</div><div class="small-note">Return analysis follows the active filters below. BlueDart is used when available; the live Website return/RTO fields are the automatic fallback. The order-level status donut above refreshes on the same active filters.</div></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-bottom:16px">
@@ -21003,11 +20996,7 @@ function renderWebsiteReturns(){
   const wrSourceKind=_wrText(_websiteReturnsData?.source_kind)||'bluedart';
   const wrFallback=wrSourceKind!=='bluedart';
   if(k)k.innerHTML=
-    _wrKpi('Filtered BlueDart Rows',rows.length.toLocaleString('en-IN'),wrFallback?'Filtered Website return/RTO fallback rows':'Unique BlueDart shipment/status rows after active filters')+
-    _wrKpi('COD Rows',cod.toLocaleString('en-IN'),`${rows.length?(cod*100/rows.length).toFixed(1):'0.0'}% of filtered rows`)+
-    _wrKpi('Prepaid Rows',prepaid.toLocaleString('en-IN'),`${rows.length?(prepaid*100/rows.length).toFixed(1):'0.0'}% of filtered rows`)+
-    _wrKpi('Unique Customers',customerKeys.size.toLocaleString('en-IN'),'Contact number used first, customer name as fallback')+
-    _wrKpi('RTO Reason Captured',reasonCaptured.toLocaleString('en-IN'),`${rows.length?(reasonCaptured*100/rows.length).toFixed(1):'0.0'}% of filtered rows`);
+    _wrKpi('Unique Customers',customerKeys.size.toLocaleString('en-IN'),'Contact number used first, customer name as fallback');
 
   renderWebsiteReturnsAnalytics(rows);
   // The main table is order-level and comes from /api/website-returns-overview.
