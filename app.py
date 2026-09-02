@@ -10,6 +10,11 @@
 # Existing BlueDart Status Group logic, 350-row default, filters, status pie and all-orders table remain unchanged.
 # Cosa Nostraa — V24.11 (BLUEDART UNCLASSIFIED = ORDER ID + CONTACT + BLANK STATUS ONLY)
 # Website Returns pie: Unclassified only when a matched BlueDart row has Order ID and Customer Contact while Status Group N is blank.
+# Cosa Nostraa — V24.12 (WEBSITE A UNIQUE ORDER -> BLUEDART ORDER ID MATCH)
+# Website Returns status mix denominator is the unique Website sheet column-A Display Order Code set.
+# Each Website order is counted once, then matched STRICTLY to BlueDart `Order id` (not BlueDart Display Order Code).
+# If BlueDart has multiple rows for one order, only the latest BlueDart row supplies Status Group N.
+# Pie now keeps Total Website Orders as the denominator; unmatched/invalid BlueDart status stays a separate remainder, never Unclassified.
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
 # V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
@@ -8068,7 +8073,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Unique Website orders are classified strictly from BlueDart Status Group (column N): DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. Every active filter, including Order Date, refreshes the total and the status mix.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Total Orders = unique Website sheet column-A Display Order Code (repeated rows count once). Each order is then matched only to BlueDart Order id; the latest matched Status Group (column N) gives DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. Every active filter, including Order Date, refreshes the same unique-order set.</div></div></div>
     <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
         <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
@@ -20612,27 +20617,31 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   const unclassified=Math.max(0,Number(s.unclassified_orders||0));
   const statusMixTotal=Math.max(0,Number(s.status_mix_orders??(delivered+inTransit+undelivered+rto+unclassified)));
   const notCounted=Math.max(0,Number(s.status_not_counted_orders||0));
-  const pct=n=>statusMixTotal?Math.min(100,Math.max(0,Number(n||0)*100/statusMixTotal)):0;
+  // Pie denominator is the deduplicated Website column-A order count. Named
+  // BlueDart slices plus the remainder therefore always add up to Total Orders.
+  const pieTotal=total;
+  const pct=n=>pieTotal?Math.min(100,Math.max(0,Number(n||0)*100/pieTotal)):0;
   const slices=[
     {label:'Delivered (DL)',count:delivered,color:'#3f8f62'},
     {label:'In Transit (IT)',count:inTransit,color:'#6f8fac'},
     {label:'Undelivered (UD)',count:undelivered,color:'#c18f36'},
     {label:'Return to Origin (RT/RD)',count:rto,color:'var(--cn-gold)'},
-    {label:'Unclassified',count:unclassified,color:'#a8a29a'}
+    {label:'Unclassified',count:unclassified,color:'#a8a29a'},
+    {label:'No valid BlueDart status',count:notCounted,color:'#d9d4ca'}
   ];
   if(donut){
     let cursor=0;
     const parts=slices.filter(x=>x.count>0).map(x=>{
-      const a=statusMixTotal?(cursor*100/statusMixTotal):0; cursor+=x.count; const b=statusMixTotal?(cursor*100/statusMixTotal):0;
+      const a=pieTotal?(cursor*100/pieTotal):0; cursor+=x.count; const b=pieTotal?(cursor*100/pieTotal):0;
       return `${x.color} ${a.toFixed(2)}% ${b.toFixed(2)}%`;
     });
-    const ring=statusMixTotal&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
+    const ring=pieTotal&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
     const legend=slices.filter(x=>x.count>0||x.label!=='Unclassified').map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
-          <div style="font-size:30px;font-weight:950;line-height:1">${statusMixTotal.toLocaleString('en-IN')}</div>
-          <div class="small-note" style="margin-top:5px">BlueDart Status Orders</div>
+          <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">Website Orders</div>
           <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
         </div>
       </div>
@@ -20640,7 +20649,7 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     </div>`;
   }
   if(kpis)kpis.innerHTML=
-    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique non-cancelled Website Display Order Code after every active filter')+
+    _wrKpi('Total Website Orders',total.toLocaleString('en-IN'),'Unique Website sheet column-A Display Order Code; repeated order lines count once')+
     _wrKpi('Delivered Orders (DL)',delivered.toLocaleString('en-IN'),`${pct(delivered).toFixed(1)}% · BlueDart Status Group DL`)+
     _wrKpi('In Transit Orders (IT)',inTransit.toLocaleString('en-IN'),`${pct(inTransit).toFixed(1)}% · BlueDart Status Group IT`)+
     _wrKpi('Undelivered Orders (UD)',undelivered.toLocaleString('en-IN'),`${pct(undelivered).toFixed(1)}% · BlueDart Status Group UD`)+
@@ -20651,7 +20660,7 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Status source: <b>BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = BlueDart Order ID + Customer Contact present but Status Group blank.`:''}${notCounted?` · ${notCounted.toLocaleString('en-IN')} Website orders without a valid BlueDart status/qualified blank row are not included in the pie.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Order denominator: <b>unique Website column A</b> (one Display Order Code = one order) · Courier match: <b>BlueDart Order id only</b> · Status source: <b>latest BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = latest matched BlueDart row has Order ID + Customer Contact but blank Status Group.`:''}${notCounted?` · ${notCounted.toLocaleString('en-IN')} Website orders have no valid/qualified current BlueDart status and are shown separately in the pie remainder.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   renderWebsiteOrdersTable(data);
@@ -24220,7 +24229,7 @@ def api_warmup_status():
 #  WEBSITE RETURNS — bluedart report / Bluedart return tracker
 #  Separate operational source from the Mayuresh Website sales sheet.
 # ════════════════════════════════════════════════════════════════
-_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None, "source": "bluedart report · Bluedart return (gid 1316634902)", "source_kind": "bluedart", "source_warning": ""}
+_WEBSITE_RETURNS_CACHE = {"rows": None, "ts": 0.0, "source_rows": 0, "sheet_data_rows": 0, "ignored_non_website_rows": 0, "error": None, "source": "bluedart report · Bluedart return (gid 1316634902)", "source_kind": "bluedart", "source_warning": "", "order_status_by_order_id": {}}
 _WEBSITE_RETURNS_TTL = 300
 
 # Order-level Website denominator for the Website Returns dashboard. This keeps
@@ -24909,7 +24918,13 @@ def _load_website_returns(force=False):
         source_rows = 0
         ignored_non_website_rows = 0
         shipments = {}
-        for _, raw in df.iterrows():
+        # Strict status authority used by the order-level pie. This index is keyed
+        # ONLY by BlueDart `Order id` (column E). It deliberately does not use
+        # BlueDart Display Order Code, WayBill, customer name, or any fuzzy match.
+        # One BlueDart order can appear on several shipment/status rows; the latest
+        # dated raw row wins, including a latest row whose Status Group is blank.
+        order_status_by_order_id = {}
+        for _bd_source_seq, (_, raw) in enumerate(df.iterrows(), start=1):
             channel = _wr_clean_value(raw.get(c_channel, "")) if c_channel is not None else ""
             if channel.strip().casefold() != "website":
                 ignored_non_website_rows += 1
@@ -24926,26 +24941,66 @@ def _load_website_returns(force=False):
             source_customer = _wr_clean_value(raw.get(c_customer, "")) if c_customer is not None else ""
             customer_contact = _wr_contact_value(raw.get(c_contact, "")) if c_contact is not None else ""
             consignee_name = _wr_clean_value(raw.get(c_consignee, "")) if c_consignee is not None else ""
+
+            # Raw status fields are captured BEFORE tracker enrichment/waybill merge
+            # so Unclassified cannot be manufactured from another source and an
+            # older nonblank status cannot overwrite a newer blank Status Group.
+            raw_status_group = _wr_clean_value(raw.get(c_status_group, "")) if c_status_group is not None else ""
+            raw_status_date = _wr_iso_date(raw.get(c_status_date, "")) if c_status_date is not None else ""
+            raw_pickup_date = _wr_iso_date(raw.get(c_pickup, "")) if c_pickup is not None else ""
+            raw_order_date = _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else ""
+            raw_status_desc = _wr_clean_value(raw.get(c_status_desc, "")) if c_status_desc is not None else ""
+            raw_reason = _wr_clean_value(raw.get(c_reason, "")) if c_reason is not None else ""
+            raw_destination = _wr_clean_value(raw.get(c_dest, "")) if c_dest is not None else ""
+            raw_display_order = _wr_clean_value(raw.get(c_display_order, "")) if c_display_order is not None else ""
+            strict_bd_key = _daily_reporting_order_key(order_id) if order_id else ""
+            if strict_bd_key:
+                # Source is currently sorted newest-first; status date is primary
+                # and an earlier source row wins a same-date tie.
+                status_rank = (raw_status_date or raw_pickup_date or raw_order_date or "", -int(_bd_source_seq))
+                prior = order_status_by_order_id.get(strict_bd_key)
+                row_count = int((prior or {}).get("row_count") or 0) + 1
+                candidate = {
+                    "order_key": strict_bd_key,
+                    "order_id": order_id,
+                    "customer_contact": customer_contact,
+                    "status_group": raw_status_group,
+                    "status_date": raw_status_date,
+                    "pickup_date": raw_pickup_date,
+                    "order_date": raw_order_date,
+                    "status_description": raw_status_desc,
+                    "rto_reason": raw_reason,
+                    "destination": raw_destination,
+                    "waybill_no": waybill,
+                    "display_order_code": raw_display_order,
+                    "row_count": row_count,
+                    "_rank": status_rank,
+                }
+                if prior is None or status_rank > prior.get("_rank", ("", 0)):
+                    order_status_by_order_id[strict_bd_key] = candidate
+                else:
+                    prior["row_count"] = row_count
+
             rec = {
                 "channel": channel or "Website",
-                "order_date": _wr_iso_date(raw.get(c_order_date, "")) if c_order_date is not None else "",
+                "order_date": raw_order_date,
                 # Current tracker keeps the customer name in Consignee Name and
                 # the phone/mobile separately in Customer Contact.
                 "customer": source_customer or consignee_name,
                 "customer_contact": customer_contact,
-                "display_order_code": _wr_clean_value(raw.get(c_display_order, "")) if c_display_order is not None else "",
+                "display_order_code": raw_display_order,
                 "order_id": order_id,
                 "payment": _wr_clean_value(raw.get(c_payment, "")) if c_payment is not None else "",
                 "waybill_no": waybill,
                 "reference_no": _wr_clean_value(raw.get(c_ref, "")) if c_ref is not None else "",
-                "pickup_date": _wr_iso_date(raw.get(c_pickup, "")) if c_pickup is not None else "",
+                "pickup_date": raw_pickup_date,
                 "origin": _wr_clean_value(raw.get(c_origin, "")) if c_origin is not None else "",
-                "destination": _wr_clean_value(raw.get(c_dest, "")) if c_dest is not None else "",
+                "destination": raw_destination,
                 "consignee": consignee_name,
-                "status_description": _wr_clean_value(raw.get(c_status_desc, "")) if c_status_desc is not None else "",
-                "status_group": _wr_clean_value(raw.get(c_status_group, "")) if c_status_group is not None else "",
-                "status_date": _wr_iso_date(raw.get(c_status_date, "")) if c_status_date is not None else "",
-                "rto_reason": _wr_clean_value(raw.get(c_reason, "")) if c_reason is not None else "",
+                "status_description": raw_status_desc,
+                "status_group": raw_status_group,
+                "status_date": raw_status_date,
+                "rto_reason": raw_reason,
                 "weight": _wr_clean_value(raw.get(c_weight, "")) if c_weight is not None else "",
                 "pcs": _wr_clean_value(raw.get(c_pcs, "")) if c_pcs is not None else "",
                 "expected_delivery_date": _wr_iso_date(raw.get(c_exp, "")) if c_exp is not None else "",
@@ -24992,6 +25047,7 @@ def _load_website_returns(force=False):
             "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
             "tracker_reason_orders": int(tracker_meta.get("reason_orders") or 0),
             "tracker_return_orders": int(tracker_meta.get("return_orders") or 0),
+            "order_status_by_order_id": order_status_by_order_id,
         })
         return rows
     except Exception as e:
@@ -25015,6 +25071,7 @@ def _load_website_returns(force=False):
                 "tracker_contact_orders": int(meta.get("tracker_contact_orders") or 0),
                 "tracker_reason_orders": int(meta.get("tracker_reason_orders") or 0),
                 "tracker_return_orders": int(meta.get("tracker_return_orders") or 0),
+                "order_status_by_order_id": {},
             })
             return fallback_rows
         except Exception as fallback_error:
@@ -25221,53 +25278,68 @@ def _load_website_order_audit(force=False):
             rec["tracker_customer_email"] = t.get("customer_email", "")
             rec["tracker_reason_source"] = ("RETURN & RTO Return Reason" if t.get("return_reason") else ("New_Uniware Reverse Pickup Reason" if t.get("reverse_pickup_reason") else ""))
 
-        # Join genuine BlueDart Website shipment/status rows to Website column-A
-        # Display Order Code. Status Group (physical column N) is the authority for
-        # DL / IT / UD / RT / RD classification. If the operational endpoint is
-        # using the Website fallback, do not invent BlueDart status-group values.
+        # Join BlueDart details STRICTLY by Website sheet column-A Display Order
+        # Code -> BlueDart `Order id`. The BlueDart Display Order Code column is
+        # intentionally ignored for the status mix so one Website order can never
+        # be matched to the wrong courier record through a secondary identity.
         bd_rows = _load_website_returns(force=force)
+        bd_status_by_order = dict(_WEBSITE_RETURNS_CACHE.get("order_status_by_order_id") or {})
         if _WEBSITE_RETURNS_CACHE.get("source_kind") != "bluedart":
             bd_rows = []
-        unmatched_bluedart = 0
+            bd_status_by_order = {}
+
+        unmatched_bluedart = sum(1 for key in bd_status_by_order if key not in orders)
+
+        # Shipment/display enrichment may still have more than one WayBill row,
+        # but all of them roll into the already-deduped Website order record.
         for bd in bd_rows:
-            matched = None
-            for raw_order in (bd.get("display_order_code", ""), bd.get("order_id", "")):
-                key = _daily_reporting_order_key(raw_order)
-                if key and key in orders:
-                    matched = orders[key]
-                    break
+            strict_key = _daily_reporting_order_key(bd.get("order_id", ""))
+            matched = orders.get(strict_key) if strict_key else None
             if matched is None:
-                unmatched_bluedart += 1
                 continue
-            bd_status_group = _wr_clean_value(bd.get("status_group", ""))
-            bd_order_id = _wr_clean_value(bd.get("order_id", ""))
-            bd_contact = _wr_contact_value(bd.get("customer_contact", ""))
-            matched["_bd_matched_rows"] = int(matched.get("_bd_matched_rows") or 0) + 1
-            # User rule: Unclassified means a genuine BlueDart row exists and
-            # BOTH Order ID + Customer Contact are present, but Status Group N is blank.
-            # No BlueDart match, missing identity/contact, or an unknown NONBLANK
-            # status value must never be counted as Unclassified.
-            if (not bd_status_group) and bd_order_id and bd_contact:
-                matched["_bd_blank_status_qualified"] = True
-            # A BlueDart row is an RTO only when Status Group N explicitly says
-            # RT or RD. DL/IT/UD rows are shipment statuses, not returns.
-            if _wr_bluedart_status_stage(bd_status_group) == "Return to Origin":
-                matched["bluedart_returned"] = True
-            matched["_bd_contacts"].append(bd_contact)
+            matched["_bd_contacts"].append(bd.get("customer_contact", ""))
             matched["_bd_customers"].append(bd.get("customer", ""))
             matched["_bd_pickups"].append(bd.get("pickup_date", ""))
-            matched["_bd_statuses"].append(bd.get("status_description", "") or bd_status_group)
-            if bd_status_group:
-                matched["_bd_status_groups"].append(bd_status_group)
-                # _load_website_returns() is sorted newest status first, so the
-                # first nonblank group seen for an order is its latest group.
-                if not matched.get("_bd_latest_status_group"):
-                    matched["_bd_latest_status_group"] = bd_status_group
+            matched["_bd_statuses"].append(bd.get("status_description", "") or bd.get("status_group", ""))
+            if bd.get("status_group"):
+                matched["_bd_status_groups"].append(bd.get("status_group", ""))
             matched["_bd_status_dates"].append(bd.get("status_date", ""))
             matched["_bd_reasons"].append(bd.get("rto_reason", ""))
             matched["_bd_destinations"].append(bd.get("destination", ""))
             matched["_bd_waybills"].append(bd.get("waybill_no", ""))
             matched["_bd_refs"].append(bd.get("reference_no", ""))
+
+        # Status classification is one-row-per-Website-order. We apply ONLY the
+        # latest raw BlueDart row selected above. This makes DL/IT/UD/RT/RD and
+        # qualified blank/Unclassified mutually exclusive and prevents duplicate
+        # BlueDart rows or multiple WayBills from increasing the order count.
+        for website_order_key, matched in orders.items():
+            latest_bd = bd_status_by_order.get(website_order_key)
+            if not latest_bd:
+                continue
+            bd_status_group = _wr_clean_value(latest_bd.get("status_group", ""))
+            bd_order_id = _wr_clean_value(latest_bd.get("order_id", ""))
+            bd_contact = _wr_contact_value(latest_bd.get("customer_contact", ""))
+            matched["_bd_matched_rows"] = int(latest_bd.get("row_count") or 1)
+            matched["_bd_latest_status_group"] = bd_status_group
+            matched["_bd_blank_status_qualified"] = bool((not bd_status_group) and bd_order_id and bd_contact)
+            matched["bluedart_returned"] = (_wr_bluedart_status_stage(bd_status_group) == "Return to Origin")
+            # Guarantee the selected latest raw row is visible in the order table,
+            # even if the shipment-display merge did not carry a field through.
+            if bd_contact:
+                matched["_bd_contacts"].append(bd_contact)
+            if latest_bd.get("pickup_date"):
+                matched["_bd_pickups"].append(latest_bd.get("pickup_date"))
+            if latest_bd.get("status_description"):
+                matched["_bd_statuses"].append(latest_bd.get("status_description"))
+            if latest_bd.get("status_date"):
+                matched["_bd_status_dates"].append(latest_bd.get("status_date"))
+            if latest_bd.get("rto_reason"):
+                matched["_bd_reasons"].append(latest_bd.get("rto_reason"))
+            if latest_bd.get("destination"):
+                matched["_bd_destinations"].append(latest_bd.get("destination"))
+            if latest_bd.get("waybill_no"):
+                matched["_bd_waybills"].append(latest_bd.get("waybill_no"))
 
         final_orders = []
         for rec in orders.values():
@@ -25307,7 +25379,8 @@ def _load_website_order_audit(force=False):
                 "bluedart_customer": _wr_unique_join(bd_customers),
                 "bluedart_pickup_date": bd_pickups[-1] if bd_pickups else "",
                 "bluedart_status": _wr_unique_join(bd_statuses),
-                "bluedart_status_group": _wr_unique_join(bd_status_groups),
+                # Current order-level status is the latest raw BlueDart Order-id row.
+                "bluedart_status_group": bd_latest_status_group,
                 "bluedart_latest_status_group": bd_latest_status_group,
                 "bluedart_blank_status_qualified": bd_blank_status_qualified,
                 "bluedart_matched_rows": bd_matched_rows,
@@ -25338,6 +25411,8 @@ def _load_website_order_audit(force=False):
             "ts": now,
             "error": None,
             "source_rows": source_rows,
+            "unique_website_orders": len(final_orders),
+            "strict_bluedart_order_ids": len(bd_status_by_order),
             "unmatched_bluedart": unmatched_bluedart,
             "tracker_contact_orders": int(tracker_meta.get("contact_orders") or 0),
             "tracker_reason_orders": int(tracker_meta.get("reason_orders") or 0),
@@ -25416,10 +25491,13 @@ def _wr_bluedart_status_stage(value):
 def _wr_order_stage(rec):
     """Classify one Website order strictly from BlueDart Status Group column N.
 
-    Unclassified is deliberately narrow: a matched BlueDart row must contain
-    Order ID + Customer Contact and have a blank Status Group. Orders with no
-    BlueDart match, missing identity/contact, or an unknown nonblank group are
-    left outside the status mix instead of being mislabeled Unclassified.
+    Website order identity comes only from Website column A and is already
+    unique before this function runs. BlueDart status comes only from the latest
+    row whose BlueDart Order id equals that Website column-A value. Unclassified
+    is deliberately narrow: that latest raw BlueDart row must contain Order ID +
+    Customer Contact and have a blank Status Group. Orders with no BlueDart match,
+    missing identity/contact, or an unknown nonblank group stay outside the named
+    status buckets instead of being mislabeled Unclassified.
     """
     rec = rec or {}
     raw_group = str(rec.get("bluedart_latest_status_group") or rec.get("bluedart_status_group") or "").strip()
@@ -25450,7 +25528,9 @@ def _website_returns_overview_payload(force=False):
       * unique Website Display Order Code for the BlueDart Status Group pie and all-orders table.
 
     Every active Website Returns filter is applied to the order-level status mix.
-    The courier stage itself is taken strictly from BlueDart Status Group column N:
+    Order identity is unique Website column-A Display Order Code. Courier matching
+    is strict equality to BlueDart `Order id`, and the courier stage itself is
+    taken from the latest matching BlueDart Status Group column N:
     DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
     """
     orders = _load_website_order_audit(force=force)
@@ -25510,24 +25590,24 @@ def _website_returns_overview_payload(force=False):
             orders_by_key[key] = rec
     valid_order_keys = set(orders_by_key)
 
-    return_filter_active = any((
+    shipment_filter_active = any((
         pickup_from, pickup_to, status_from, status_to,
         pay_min_raw, pay_max_raw, destination_q,
         origin not in ("", "All"),
         status_description not in ("", "All"),
-        status_group not in ("", "All"),
         reason not in ("", "All"),
     ))
+    status_group_filter_active = status_group not in ("", "All")
+    return_filter_active = bool(shipment_filter_active or status_group_filter_active)
     return_match_keys = set()
     return_search_keys = set()
 
     def _row_order_keys(row):
-        out = []
-        for raw_order in (row.get("display_order_code", ""), row.get("order_id", "")):
-            key = _daily_reporting_order_key(raw_order)
-            if key and key in valid_order_keys and key not in out:
-                out.append(key)
-        return out
+        # Shipment-level filters follow the same strict identity as the status pie:
+        # Website column A must equal BlueDart `Order id`. Never fall back to the
+        # BlueDart Display Order Code column.
+        key = _daily_reporting_order_key((row or {}).get("order_id", ""))
+        return [key] if key and key in valid_order_keys else []
 
     def _date_ok(value, start_value, end_value):
         raw = str(value or "").strip()
@@ -25546,7 +25626,7 @@ def _website_returns_overview_payload(force=False):
 
     # _load_website_order_audit(force=True) already refreshes the return source,
     # so use its cache here and avoid downloading the same live sheet twice.
-    if return_filter_active or search_q:
+    if shipment_filter_active or search_q:
         for row in _load_website_returns(force=False):
             row_keys = _row_order_keys(row)
             if not row_keys:
@@ -25572,9 +25652,6 @@ def _website_returns_overview_payload(force=False):
                     row_ok = False
             if row_ok and status_description not in ("", "All"):
                 if str(row.get("status_description", "") or "").strip().casefold() != status_description_cf:
-                    row_ok = False
-            if row_ok and status_group not in ("", "All"):
-                if str(row.get("status_group", "") or "").strip().casefold() != status_group_cf:
                     row_ok = False
             if row_ok and reason not in ("", "All"):
                 if str(row.get("rto_reason", "") or "").strip().casefold() != reason_cf:
@@ -25617,6 +25694,10 @@ def _website_returns_overview_payload(force=False):
             continue
         if payment in ("COD", "Prepaid") and rec.get("payment_mode") != payment:
             continue
+        if status_group_filter_active:
+            current_group = str(rec.get("bluedart_latest_status_group") or "").strip().casefold()
+            if current_group != status_group_cf:
+                continue
         if sku_q:
             ok = False
             for sku in rec.get("skus") or []:
@@ -25646,7 +25727,7 @@ def _website_returns_overview_payload(force=False):
         for r in base_orders
         if _daily_reporting_order_key(r.get("display_order_code", ""))
     }
-    if return_filter_active:
+    if shipment_filter_active:
         status_orders = [
             r for r in base_orders
             if _daily_reporting_order_key(r.get("display_order_code", "")) in return_match_keys
@@ -25749,8 +25830,10 @@ def _website_returns_overview_payload(force=False):
         "applied_order_from": order_from,
         "applied_order_to": order_to,
         "return_filter_active": bool(return_filter_active),
-        "return_filter_orders": len(base_keys.intersection(return_match_keys)) if return_filter_active else 0,
+        "return_filter_orders": (len(status_orders) if status_group_filter_active and not shipment_filter_active else (len(base_keys.intersection(return_match_keys)) if shipment_filter_active else 0)),
         "source_rows": int(_WEBSITE_ORDER_AUDIT_CACHE.get("source_rows") or 0),
+        "unique_website_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("unique_website_orders") or 0),
+        "strict_bluedart_order_ids": int(_WEBSITE_ORDER_AUDIT_CACHE.get("strict_bluedart_order_ids") or 0),
         "unmatched_bluedart": int(_WEBSITE_ORDER_AUDIT_CACHE.get("unmatched_bluedart") or 0),
         "tracker_contact_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("tracker_contact_orders") or 0),
         "tracker_reason_orders": int(_WEBSITE_ORDER_AUDIT_CACHE.get("tracker_reason_orders") or 0),
