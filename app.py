@@ -8,6 +8,8 @@
 # Cosa Nostraa — V24.10 (WEBSITE RETURNS CLEANUP)
 # Website Returns: keep only Unique Customers in the shipment KPI strip; remove Order / Customer Investigation section.
 # Existing BlueDart Status Group logic, 350-row default, filters, status pie and all-orders table remain unchanged.
+# Cosa Nostraa — V24.11 (BLUEDART UNCLASSIFIED = ORDER ID + CONTACT + BLANK STATUS ONLY)
+# Website Returns pie: Unclassified only when a matched BlueDart row has Order ID and Customer Contact while Status Group N is blank.
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
 # V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
@@ -20608,7 +20610,9 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   const undelivered=Math.max(0,Number(s.undelivered_orders||0));
   const rto=Math.max(0,Number(s.return_to_origin_orders??s.stage_returned_orders??0));
   const unclassified=Math.max(0,Number(s.unclassified_orders||0));
-  const pct=n=>total?Math.min(100,Math.max(0,Number(n||0)*100/total)):0;
+  const statusMixTotal=Math.max(0,Number(s.status_mix_orders??(delivered+inTransit+undelivered+rto+unclassified)));
+  const notCounted=Math.max(0,Number(s.status_not_counted_orders||0));
+  const pct=n=>statusMixTotal?Math.min(100,Math.max(0,Number(n||0)*100/statusMixTotal)):0;
   const slices=[
     {label:'Delivered (DL)',count:delivered,color:'#3f8f62'},
     {label:'In Transit (IT)',count:inTransit,color:'#6f8fac'},
@@ -20619,17 +20623,17 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   if(donut){
     let cursor=0;
     const parts=slices.filter(x=>x.count>0).map(x=>{
-      const a=total?(cursor*100/total):0; cursor+=x.count; const b=total?(cursor*100/total):0;
+      const a=statusMixTotal?(cursor*100/statusMixTotal):0; cursor+=x.count; const b=statusMixTotal?(cursor*100/statusMixTotal):0;
       return `${x.color} ${a.toFixed(2)}% ${b.toFixed(2)}%`;
     });
-    const ring=total&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
+    const ring=statusMixTotal&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
     const legend=slices.filter(x=>x.count>0||x.label!=='Unclassified').map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
-          <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
-          <div class="small-note" style="margin-top:5px">Website Orders</div>
-          <div style="font-size:11px;font-weight:850;margin-top:4px">BlueDart status mix</div>
+          <div style="font-size:30px;font-weight:950;line-height:1">${statusMixTotal.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">BlueDart Status Orders</div>
+          <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
         </div>
       </div>
       <div style="min-width:220px">${legend}</div>
@@ -20641,13 +20645,13 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     _wrKpi('In Transit Orders (IT)',inTransit.toLocaleString('en-IN'),`${pct(inTransit).toFixed(1)}% · BlueDart Status Group IT`)+
     _wrKpi('Undelivered Orders (UD)',undelivered.toLocaleString('en-IN'),`${pct(undelivered).toFixed(1)}% · BlueDart Status Group UD`)+
     _wrKpi('Return to Origin (RT/RD)',rto.toLocaleString('en-IN'),`${pct(rto).toFixed(1)}% · RT and RD combined`)+
-    (unclassified?_wrKpi('Unclassified Status',unclassified.toLocaleString('en-IN'),`${pct(unclassified).toFixed(1)}% · blank/other Status Group or no matched BlueDart row`):'')+
+    (unclassified?_wrKpi('Unclassified Status',unclassified.toLocaleString('en-IN'),`${pct(unclassified).toFixed(1)}% · BlueDart Order ID + Contact present, Status Group blank`):'')+
     _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
     _wrKpi('BlueDart RTO Orders',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Only Status Group RT or RD');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Status source: <b>BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · ${unclassified.toLocaleString('en-IN')} orders are unclassified because Status Group is blank/other or no BlueDart row matched.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Status source: <b>BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = BlueDart Order ID + Customer Contact present but Status Group blank.`:''}${notCounted?` · ${notCounted.toLocaleString('en-IN')} Website orders without a valid BlueDart status/qualified blank row are not included in the pie.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   renderWebsiteOrdersTable(data);
@@ -20689,12 +20693,13 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   </tr>`).join('');
 }
 function _wrOrderStageBadge(stage){
-  const s=_wrText(stage)||'Unclassified';
+  const s=_wrText(stage);
   if(s==='Return to Origin')return '<span style="font-weight:900;color:#8b3f23">Return to Origin</span>';
   if(s==='Undelivered')return '<span style="font-weight:900;color:#a86f16">Undelivered</span>';
   if(s==='Delivered')return '<span style="font-weight:900;color:#237a4b">Delivered</span>';
   if(s==='In Transit')return '<span style="font-weight:900;color:#4f6f91">In Transit</span>';
-  return '<span style="font-weight:900;color:#777">Unclassified</span>';
+  if(s==='Unclassified')return '<span style="font-weight:900;color:#777">Unclassified</span>';
+  return '<span style="color:var(--cn-mid)">—</span>';
 }
 function _wrCnNamesForOrder(r){
   const raw=Array.isArray(r?.skus)?r.skus:[];
@@ -25152,6 +25157,9 @@ def _load_website_order_audit(force=False):
                     "_bd_contacts": [], "_bd_customers": [], "_bd_pickups": [],
                     "_bd_statuses": [], "_bd_status_groups": [], "_bd_status_dates": [], "_bd_reasons": [],
                     "_bd_latest_status_group": "",
+                    # Unclassified is allowed ONLY when a real BlueDart row has
+                    # both Order ID and Customer Contact, while Status Group N is blank.
+                    "_bd_blank_status_qualified": False, "_bd_matched_rows": 0,
                     "_bd_destinations": [], "_bd_waybills": [], "_bd_refs": [],
                 }
                 orders[order_key] = rec
@@ -25232,11 +25240,20 @@ def _load_website_order_audit(force=False):
                 unmatched_bluedart += 1
                 continue
             bd_status_group = _wr_clean_value(bd.get("status_group", ""))
+            bd_order_id = _wr_clean_value(bd.get("order_id", ""))
+            bd_contact = _wr_contact_value(bd.get("customer_contact", ""))
+            matched["_bd_matched_rows"] = int(matched.get("_bd_matched_rows") or 0) + 1
+            # User rule: Unclassified means a genuine BlueDart row exists and
+            # BOTH Order ID + Customer Contact are present, but Status Group N is blank.
+            # No BlueDart match, missing identity/contact, or an unknown NONBLANK
+            # status value must never be counted as Unclassified.
+            if (not bd_status_group) and bd_order_id and bd_contact:
+                matched["_bd_blank_status_qualified"] = True
             # A BlueDart row is an RTO only when Status Group N explicitly says
             # RT or RD. DL/IT/UD rows are shipment statuses, not returns.
             if _wr_bluedart_status_stage(bd_status_group) == "Return to Origin":
                 matched["bluedart_returned"] = True
-            matched["_bd_contacts"].append(bd.get("customer_contact", ""))
+            matched["_bd_contacts"].append(bd_contact)
             matched["_bd_customers"].append(bd.get("customer", ""))
             matched["_bd_pickups"].append(bd.get("pickup_date", ""))
             matched["_bd_statuses"].append(bd.get("status_description", "") or bd_status_group)
@@ -25268,6 +25285,8 @@ def _load_website_order_audit(force=False):
             bd_statuses = rec.pop("_bd_statuses", [])
             bd_status_groups = rec.pop("_bd_status_groups", [])
             bd_latest_status_group = rec.pop("_bd_latest_status_group", "")
+            bd_blank_status_qualified = bool(rec.pop("_bd_blank_status_qualified", False))
+            bd_matched_rows = int(rec.pop("_bd_matched_rows", 0) or 0)
             bd_status_dates = sorted({x for x in rec.pop("_bd_status_dates", []) if x})
             bd_reasons = rec.pop("_bd_reasons", [])
             bd_destinations = rec.pop("_bd_destinations", [])
@@ -25290,6 +25309,8 @@ def _load_website_order_audit(force=False):
                 "bluedart_status": _wr_unique_join(bd_statuses),
                 "bluedart_status_group": _wr_unique_join(bd_status_groups),
                 "bluedart_latest_status_group": bd_latest_status_group,
+                "bluedart_blank_status_qualified": bd_blank_status_qualified,
+                "bluedart_matched_rows": bd_matched_rows,
                 "bluedart_status_date": bd_status_dates[-1] if bd_status_dates else "",
                 "bluedart_rto_reason": _wr_unique_join(bd_reasons),
                 "bluedart_destination": _wr_unique_join(bd_destinations),
@@ -25393,10 +25414,21 @@ def _wr_bluedart_status_stage(value):
 
 
 def _wr_order_stage(rec):
-    """Classify one Website order strictly from BlueDart Status Group column N."""
+    """Classify one Website order strictly from BlueDart Status Group column N.
+
+    Unclassified is deliberately narrow: a matched BlueDart row must contain
+    Order ID + Customer Contact and have a blank Status Group. Orders with no
+    BlueDart match, missing identity/contact, or an unknown nonblank group are
+    left outside the status mix instead of being mislabeled Unclassified.
+    """
     rec = rec or {}
-    raw_group = rec.get("bluedart_latest_status_group") or rec.get("bluedart_status_group") or ""
-    return _wr_bluedart_status_stage(raw_group)
+    raw_group = str(rec.get("bluedart_latest_status_group") or rec.get("bluedart_status_group") or "").strip()
+    stage = _wr_bluedart_status_stage(raw_group)
+    if stage != "Unclassified":
+        return stage
+    if (not raw_group) and bool(rec.get("bluedart_blank_status_qualified")):
+        return "Unclassified"
+    return ""
 
 
 def _wr_public_order(rec):
@@ -25641,12 +25673,15 @@ def _website_returns_overview_payload(force=False):
     }
     for rec in status_orders:
         stage = _wr_order_stage(rec)
-        stage_counts[stage if stage in stage_counts else "Unclassified"] += 1
+        if stage in stage_counts:
+            stage_counts[stage] += 1
     delivered_orders = stage_counts["Delivered"]
     in_transit_orders = stage_counts["In Transit"]
     undelivered_orders = stage_counts["Undelivered"]
     return_to_origin_orders = stage_counts["Return to Origin"]
     unclassified_orders = stage_counts["Unclassified"]
+    status_mix_orders = sum(stage_counts.values())
+    status_not_counted_orders = max(0, total_orders - status_mix_orders)
     # Legacy key retained for any older frontend/cache consumer; it now means the
     # BlueDart RT/RD bucket, not generic Website-return detection.
     stage_returned_orders = return_to_origin_orders
@@ -25690,6 +25725,8 @@ def _website_returns_overview_payload(force=False):
             "in_transit_orders": in_transit_orders,
             "undelivered_orders": undelivered_orders,
             "unclassified_orders": unclassified_orders,
+            "status_mix_orders": status_mix_orders,
+            "status_not_counted_orders": status_not_counted_orders,
             "not_returned_orders": max(0, total_orders - return_to_origin_orders),
             "return_rate": round((return_to_origin_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
             "website_sheet_returned": website_returns,
