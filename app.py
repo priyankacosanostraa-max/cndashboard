@@ -3,6 +3,8 @@
 # DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
 # All active Website Returns filters refresh Total Orders and the status pie/table together.
 # ============================================================
+# Cosa Nostraa — V24.9 (WEBSITE RETURNS TABLE FILTER + 350 ROWS)
+# Website Returns: lower All Website Orders table gets a Status Group filter, default page size is 350, and the In Both Sources KPI is removed.
 # Cosa Nostraa — V24.8 (AMAZON MERGED EVERYWHERE)
 # All legacy Amazon-FBA source rows are recognized internally but exposed and aggregated as Amazon in every tab, filter, chart, KPI and Target table.
 # V24.2 TARGET FIX: Target tab uses consolidated cossa_orderdate Amazon rows once, preventing lost FBA or double-counted standard Amazon.
@@ -8050,7 +8052,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="applyWebsiteReturnsFilters()"><option value="All">All Origins</option></select></div>
         <div class="fc"><label class="fl">Destination Search</label><input class="fi" id="wrDestination" type="search" list="wrDestinationList" autocomplete="off" placeholder="Type city / destination…" oninput="websiteReturnsApply_d()"><datalist id="wrDestinationList"></datalist></div>
         <div class="fc"><label class="fl">Status Description</label><select class="fs" id="wrStatusDescription" onchange="applyWebsiteReturnsFilters()"><option value="All">All Statuses</option></select></div>
-        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="applyWebsiteReturnsFilters()"><option value="All">All Groups</option></select></div>
+        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="websiteReturnsStatusGroupChanged()"><option value="All">All Groups</option></select></div>
         <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="applyWebsiteReturnsFilters()"><option value="All">All Reasons</option></select></div>
         <div class="fc"><label class="fl">SKU Search</label><input class="fi" id="wrSku" type="search" list="wrSkuList" autocomplete="off" placeholder="SKU or child SKU inside CMB…" oninput="websiteReturnsApply_d()"><datalist id="wrSkuList"></datalist></div>
         <div class="fc"><label class="fl">Customer / Contact / Order Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Name, contact, order ID, display code…" oninput="websiteReturnsApply_d()"></div>
@@ -8094,8 +8096,10 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-section-head" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
       <div><div class="ops-section-title">All Website Orders</div><div class="small-note" id="wrTableNote"></div></div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <label class="small-note" for="wrTableStatusGroup">Status Group</label>
+        <select class="fs" id="wrTableStatusGroup" style="width:auto;min-width:118px" onchange="websiteOrdersTableStatusGroupChanged()"><option value="All">All Groups</option></select>
         <label class="small-note" for="wrTablePageSize">Rows/page</label>
-        <select class="fs" id="wrTablePageSize" style="width:auto;min-width:88px" onchange="websiteOrdersPageSizeChanged()"><option value="100">100</option><option value="250" selected>250</option><option value="500">500</option></select>
+        <select class="fs" id="wrTablePageSize" style="width:auto;min-width:88px" onchange="websiteOrdersPageSizeChanged()"><option value="100">100</option><option value="250">250</option><option value="350" selected>350</option><option value="500">500</option></select>
         <button class="go-btn" id="wrTablePrev" style="width:auto;padding:8px 11px;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="websiteOrdersPage(-1)">Previous</button>
         <span class="small-note" id="wrTablePageLabel">Page 1</span>
         <button class="go-btn" id="wrTableNext" style="width:auto;padding:8px 11px;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="websiteOrdersPage(1)">Next</button>
@@ -20545,7 +20549,7 @@ let _websiteReturnsOverviewLastKey = '';
 let _websiteReturnsOverviewLoadingKey = '';
 let _websiteReturnsOverviewRequestNonce = 0;
 let _websiteReturnsTablePage = 1;
-let _websiteReturnsTablePageSize = 250;
+let _websiteReturnsTablePageSize = 350;
 let _websiteReturnsTableRows = [];
 let _websiteReturnsTableTotal = 0;
 
@@ -20590,7 +20594,7 @@ function _wrOverviewParams(force=false){
   put('sku',_wrEl('wrSku')?.value||'');
   put('search',_wrEl('wrSearch')?.value||'');
   p.set('table_page',String(Math.max(1,Number(_websiteReturnsTablePage||1))));
-  p.set('table_page_size',String(Math.max(50,Math.min(500,Number(_websiteReturnsTablePageSize||250)))));
+  p.set('table_page_size',String(Math.max(50,Math.min(500,Number(_websiteReturnsTablePageSize||350)))));
   if(force)p.set('force','1');
   return p;
 }
@@ -20646,8 +20650,7 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     _wrKpi('Return to Origin (RT/RD)',rto.toLocaleString('en-IN'),`${pct(rto).toFixed(1)}% · RT and RD combined`)+
     (unclassified?_wrKpi('Unclassified Status',unclassified.toLocaleString('en-IN'),`${pct(unclassified).toFixed(1)}% · blank/other Status Group or no matched BlueDart row`):'')+
     _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
-    _wrKpi('BlueDart RTO Orders',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Only Status Group RT or RD')+
-    _wrKpi('In Both Sources',Number(s.both_sources||0).toLocaleString('en-IN'),'Website return fields and BlueDart RT/RD both matched');
+    _wrKpi('BlueDart RTO Orders',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Only Status Group RT or RD');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
@@ -20713,7 +20716,7 @@ function renderWebsiteOrdersTable(data=_websiteReturnsOverview){
   _websiteReturnsTableRows=rows;
   _websiteReturnsTableTotal=Math.max(0,Number(data.table_total||0));
   _websiteReturnsTablePage=Math.max(1,Number(data.table_page||1));
-  _websiteReturnsTablePageSize=Math.max(50,Number(data.table_page_size||250));
+  _websiteReturnsTablePageSize=Math.max(50,Number(data.table_page_size||350));
   const pages=Math.max(1,Number(data.table_pages||1));
   if(sizeEl)sizeEl.value=String(_websiteReturnsTablePageSize);
   if(pageLabel)pageLabel.textContent=`Page ${_websiteReturnsTablePage.toLocaleString('en-IN')} of ${pages.toLocaleString('en-IN')}`;
@@ -20753,9 +20756,21 @@ function websiteOrdersPage(delta){
   const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading Website orders…</td></tr>';
   loadWebsiteReturnsOverview(false);
 }
+function websiteReturnsStatusGroupChanged(){
+  const main=_wrEl('wrStatusGroup'),table=_wrEl('wrTableStatusGroup');
+  if(main&&table) table.value=main.value||'All';
+  applyWebsiteReturnsFilters(true);
+}
+function websiteOrdersTableStatusGroupChanged(){
+  const table=_wrEl('wrTableStatusGroup'),main=_wrEl('wrStatusGroup');
+  if(table&&main) main.value=table.value||'All';
+  _websiteReturnsTablePage=1;
+  _websiteReturnsOverviewLastKey='';
+  applyWebsiteReturnsFilters(true);
+}
 function websiteOrdersPageSizeChanged(){
-  const n=Number(_wrEl('wrTablePageSize')?.value||250);
-  _websiteReturnsTablePageSize=Math.max(50,Math.min(500,Number.isFinite(n)?n:250));
+  const n=Number(_wrEl('wrTablePageSize')?.value||350);
+  _websiteReturnsTablePageSize=Math.max(50,Math.min(500,Number.isFinite(n)?n:350));
   _websiteReturnsTablePage=1;
   _websiteReturnsOverviewLastKey='';
   loadWebsiteReturnsOverview(false);
@@ -21033,6 +21048,9 @@ async function loadWebsiteReturns(force=false){
     _wrSetDatalist('wrSkuList',d.filters?.skus||[]);
     _wrSetOptions('wrStatusDescription',d.filters?.status_descriptions||[],'All Statuses');
     _wrSetOptions('wrStatusGroup',d.filters?.status_groups||[],'All Groups');
+    _wrSetOptions('wrTableStatusGroup',d.filters?.status_groups||[],'All Groups');
+    const _wrMainStatusGroup=_wrEl('wrStatusGroup'),_wrTableStatusGroup=_wrEl('wrTableStatusGroup');
+    if(_wrMainStatusGroup&&_wrTableStatusGroup)_wrTableStatusGroup.value=_wrMainStatusGroup.value||'All';
     _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
     renderWebsiteReturns();
     renderSdWebsiteReturns();
@@ -21067,7 +21085,7 @@ function websiteReturnsOrderDateChanged(){
 }
 function resetWebsiteReturnsFilters(){
   ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
-  ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrTableStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
   _websiteReturnsOverviewLastKey='';
   applyWebsiteReturnsFilters();
 }
@@ -25452,9 +25470,9 @@ def _website_returns_overview_payload(force=False):
     except Exception:
         table_page = 1
     try:
-        table_page_size = int(float(_arg("table_page_size", "250") or 250))
+        table_page_size = int(float(_arg("table_page_size", "350") or 350))
     except Exception:
-        table_page_size = 250
+        table_page_size = 350
     table_page_size = max(50, min(500, table_page_size))
 
     origin_cf = origin.casefold()
