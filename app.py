@@ -1,3 +1,17 @@
+# Cosa Nostraa — V24.17 (WEBSITE RETURNS · MULTI STATUS + OTHER PARTNER FALLBACK)
+# Website Returns updates:
+# - Status Group supports selecting multiple groups together.
+# - Top RTO Reasons excludes delivered shipments from the 'No RTO reason captured' denominator.
+# - Status-Date Trend card is removed.
+# - If a Website order has no BlueDart Order-id match, Website status/return fields supply
+#   Other Partner Delivered / In Transit / Undelivered / Return instead of a fake BlueDart bucket.
+# ============================================================
+# Cosa Nostraa — V24.16 (OVERVIEW: NET REVENUE REMOVED)
+# Overall Details no longer displays, exports, badges, or ranks by Net Revenue.
+# CSV / Excel / PDF Overall exports contain only quantity, inventory and descriptive fields.
+# ============================================================
+# Cosa Nostraa — V24.14 history: Overview export revenue accuracy fix (superseded by V24.16 removal).
+# ============================================================
 # Cosa Nostraa — V24.9 (WEBSITE RETURNS · BLUEDART STATUS GROUP N)
 # Website Returns order-status mix now follows BlueDart Status Group column N exactly:
 # DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
@@ -10,6 +24,10 @@
 # Existing BlueDart Status Group logic, 350-row default, filters, status pie and all-orders table remain unchanged.
 # Cosa Nostraa — V24.11 (BLUEDART UNCLASSIFIED = ORDER ID + CONTACT + BLANK STATUS ONLY)
 # Website Returns pie: Unclassified only when a matched BlueDart row has Order ID and Customer Contact while Status Group N is blank.
+# Cosa Nostraa — V24.13 (REMOVE NO VALID BLUEDART STATUS FROM PIE)
+# Website Returns status pie now shows only BlueDart-classifiable orders: DL, IT, UD, RT/RD, plus the narrowly-qualified blank-status Unclassified bucket.
+# Unmatched Website orders and unknown/invalid nonblank BlueDart Status Group values are not shown as a pie slice, legend item, KPI, or summary field.
+# Total Website Orders KPI still remains the unique Website sheet column-A Display Order Code count.
 # Cosa Nostraa — V24.12 (WEBSITE A UNIQUE ORDER -> BLUEDART ORDER ID MATCH)
 # Website Returns status mix denominator is the unique Website sheet column-A Display Order Code set.
 # Each Website order is counted once, then matched STRICTLY to BlueDart `Order id` (not BlueDart Display Order Code).
@@ -8062,7 +8080,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Origin</label><select class="fs" id="wrOrigin" onchange="applyWebsiteReturnsFilters()"><option value="All">All Origins</option></select></div>
         <div class="fc"><label class="fl">Destination Search</label><input class="fi" id="wrDestination" type="search" list="wrDestinationList" autocomplete="off" placeholder="Type city / destination…" oninput="websiteReturnsApply_d()"><datalist id="wrDestinationList"></datalist></div>
         <div class="fc"><label class="fl">Status Description</label><select class="fs" id="wrStatusDescription" onchange="applyWebsiteReturnsFilters()"><option value="All">All Statuses</option></select></div>
-        <div class="fc"><label class="fl">Status Group</label><select class="fs" id="wrStatusGroup" onchange="websiteReturnsStatusGroupChanged()"><option value="All">All Groups</option></select></div>
+        <div class="fc"><label class="fl">Status Group · Multi-select</label><select class="fs" id="wrStatusGroup" multiple size="4" style="height:94px" onmousedown="_wrMultiSelectMouseDown(event)" onchange="websiteReturnsStatusGroupChanged()"><option value="All" selected>All Groups</option></select><div class="small-note" style="margin-top:4px">Click groups to select more than one.</div></div>
         <div class="fc"><label class="fl">RTO Reason</label><select class="fs" id="wrReason" onchange="applyWebsiteReturnsFilters()"><option value="All">All Reasons</option></select></div>
         <div class="fc"><label class="fl">SKU Search</label><input class="fi" id="wrSku" type="search" list="wrSkuList" autocomplete="off" placeholder="SKU or child SKU inside CMB…" oninput="websiteReturnsApply_d()"><datalist id="wrSkuList"></datalist></div>
         <div class="fc"><label class="fl">Customer / Contact / Order Search</label><input class="fi" id="wrSearch" type="search" autocomplete="off" placeholder="Name, contact, order ID, display code…" oninput="websiteReturnsApply_d()"></div>
@@ -8073,7 +8091,7 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div id="wrKpis" class="ops-kpis" style="margin:0 0 14px"></div>
 
-    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Total Orders = unique Website sheet column-A Display Order Code (repeated rows count once). Each order is then matched only to BlueDart Order id; the latest matched Status Group (column N) gives DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. Every active filter, including Order Date, refreshes the same unique-order set.</div></div></div>
+    <div class="ops-section-head"><div><div class="ops-section-title">Website Order Status Mix</div><div class="small-note">Total Orders = unique Website sheet column-A Display Order Code (repeated rows count once). BlueDart Order id is matched first; its latest Status Group (column N) gives DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. If no BlueDart Order-id match exists, Website status/return fields are shown separately as Other Partner Delivered / In Transit / Undelivered / Return. Every active filter refreshes the same unique-order set.</div></div></div>
     <div style="display:grid;grid-template-columns:minmax(310px,.8fr) minmax(420px,1.6fr);gap:12px;margin-bottom:16px">
       <div class="filter-box" style="margin:0;min-height:310px;display:flex;flex-direction:column;justify-content:center">
         <div id="wrOrderReturnDonut"><div class="small-note">Loading Website order denominator…</div></div>
@@ -8090,14 +8108,13 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top RTO Reasons</label><div id="wrReasonAnalysis"></div></div>
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status Description</label><div id="wrStatusAnalysis"></div></div>
       <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Top Destinations</label><div id="wrDestinationAnalysis"></div></div>
-      <div class="filter-box" style="margin:0"><label class="fl" style="display:block;margin-bottom:10px">Status-Date Trend</label><div id="wrTrendAnalysis"></div></div>
     </div>
 
     <div class="ops-section-head" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
       <div><div class="ops-section-title">All Website Orders</div><div class="small-note" id="wrTableNote"></div></div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
-        <label class="small-note" for="wrTableStatusGroup">Status Group</label>
-        <select class="fs" id="wrTableStatusGroup" style="width:auto;min-width:118px" onchange="websiteOrdersTableStatusGroupChanged()"><option value="All">All Groups</option></select>
+        <label class="small-note" for="wrTableStatusGroup">Status Group · Multi</label>
+        <select class="fs" id="wrTableStatusGroup" multiple size="3" style="width:auto;min-width:168px;height:76px" onmousedown="_wrMultiSelectMouseDown(event)" onchange="websiteOrdersTableStatusGroupChanged()"><option value="All" selected>All Groups</option></select>
         <label class="small-note" for="wrTablePageSize">Rows/page</label>
         <select class="fs" id="wrTablePageSize" style="width:auto;min-width:88px" onchange="websiteOrdersPageSizeChanged()"><option value="100">100</option><option value="250">250</option><option value="350" selected>350</option><option value="500">500</option></select>
         <button class="go-btn" id="wrTablePrev" style="width:auto;padding:8px 11px;letter-spacing:1px;background:#f3f6fb;color:#111" onclick="websiteOrdersPage(-1)">Previous</button>
@@ -9788,6 +9805,8 @@ function skuRevenueContributionMeta(itemOrSku){
   return {rev, total, pct: total > 0 ? (rev / total) * 100 : 0};
 }
 function skuRevenueContributionText(itemOrSku){
+  // Overview intentionally contains no Net Revenue information.
+  if (currentTab === 'matrix') return '';
   const m = skuRevenueContributionMeta(itemOrSku);
   return m ? `〔REV SHARE ${m.pct.toFixed(2)}%〕` : '';
 }
@@ -10631,7 +10650,7 @@ window.sdSearchInput=sdSearchInput;window.sdSearchGo=sdSearchGo;window.sdPickSea
 
 const MENU_TAB_META = {
   m1:  {name:"Home",             desc:"Sales, stock, targets and current priorities."},
-  m2:  {name:"Overview",         desc:"All SKU sales, revenue, stock and filters."},
+  m2:  {name:"Overview",         desc:"All SKU sales, stock and filters."},
   m3:  {name:"Repeat Orders",    desc:"Demand, stock, WIP and repeat-order needs."},
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
@@ -12174,7 +12193,7 @@ function loadData(force){
     });
 }
 
-function mkCard(item, rev, conf, slow){
+function mkCard(item, rev, conf, slow, hideRevenue=false){
   const img = (item.image_url && String(item.image_url).trim() && String(item.image_url).toLowerCase() !== 'nan')
     ? `<img src="${item.image_url}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=&quot;img-ph&quot;>💎</div>'">`
     : '<div class="img-ph">💎</div>';
@@ -12186,7 +12205,7 @@ function mkCard(item, rev, conf, slow){
   const wn = parseFloat(item.inv_wip) || 0;
   const r = rev !== undefined ? rev : (item.total_net_revenue || 0);
 
-  const revRows = (LOGIN_ROLE === 'employee') ? '' : `
+  const revRows = (LOGIN_ROLE === 'employee' || hideRevenue) ? '' : `
     <div class="row rev-only"><span>Net Revenue</span><span>${fmt(r)}</span></div>
     <div class="row rev-only"><span>Yesterday</span><span>${fmt(item.rev_yesterday || 0)}</span></div>
     <div class="row rev-only"><span>This Month</span><span>${fmt(item.rev_month || 0)}</span></div>
@@ -12496,7 +12515,7 @@ function applyF(){
         qty_1y: anyEntryFilter ? Math.round(q1y) : item.qty_1y,
         rev_yesterday: yRev, rev_month: mRev, rev_fy: fRev, rev_prev_fy: pfRev
       };
-      cards.push({ mrp: parseFloat(item.mrp) || 0, render: () => mkCard(cardItem, itemFilteredRevenue, null, false) });
+      cards.push({ mrp: parseFloat(item.mrp) || 0, render: () => mkCard(cardItem, itemFilteredRevenue, null, false, true) });
     }
   });
 
@@ -12525,7 +12544,7 @@ function applyF(){
         (master || []).forEach(srcItem => {
           const sk=String(srcItem && srcItem.sku || '').trim().toUpperCase();
           if(!sk)return;
-          const qtyByMonth=Object.create(null), revByMonth=Object.create(null);
+          const qtyByMonth=Object.create(null);
           (srcItem.sales_entries || []).forEach(e => {
             if (custQ && !String(e && e.cust || '').toLowerCase().includes(custQ)) return;
             if (!typeOk(e && e.type) || !chanOk(e) || !subChanOk(e && e.sub_channel)) return;
@@ -12536,12 +12555,33 @@ function applyF(){
             if(d2 && ed>d2)return;
             const mk=ed.slice(0,7);
             qtyByMonth[mk]=(qtyByMonth[mk]||0)+(Number(e && e.qty)||0);
-            revByMonth[mk]=(revByMonth[mk]||0)+(Number(e && e.rev)||0);
           });
-          monthSalesBySku.set(sk,{qtyByMonth,revByMonth});
+          monthSalesBySku.set(sk,{qtyByMonth});
         });
         const monthOwnQty=(sk,mk)=>Number(monthSalesBySku.get(sk)?.qtyByMonth?.[mk])||0;
-        const monthOwnRev=(sk,mk)=>Number(monthSalesBySku.get(sk)?.revByMonth?.[mk])||0;
+
+        // Overview month view shows CHILD SKUs instead of CMB parents. Keep the
+        // child's own sales completely authoritative: its individual Net Revenue
+        // is the exact sum of e.rev after the active Customer / Type / Channel /
+        // Sub-Channel / FY / Date / Month filters above. Example: if RKH-0070 has
+        // Website filtered Net Revenue 700, use 700; if Myntra filtered NR is 500,
+        // use 500. CMB revenue is added separately as an allocation, never by
+        // replacing or estimating the child's own filtered revenue.
+        const comboChildQtyPerParent=(parent,childSku)=>{
+          try{
+            if(typeof _rkhComboChildQtyPerCmb==='function')
+              return Math.max(1,Number(_rkhComboChildQtyPerCmb(parent,childSku))||1);
+          }catch(_e){}
+          const target=String(childSku||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+          let q=0;
+          (Array.isArray(parent&&parent.combo_details)?parent.combo_details:[]).forEach(ch=>{
+            const ck=String(ch&&ch.sku||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+            if(ck&&ck===target)q+=Math.max(1,Math.round(Number(ch&&ch.component_qty)||1));
+          });
+          return Math.max(1,q||1);
+        };
+
+        // Net Revenue is intentionally not calculated in Overview.
         const last3Keys=matrixRollingMonthKeys(latestMonthKey,3);
         // Last 1 Year follows the oldest selected month, not the latest one.
         // Exact requested example: Jun/Jul/Aug 2026 -> May 2025 through May 2026.
@@ -12558,7 +12598,13 @@ function applyF(){
           const parentKeys=cmbParents.map(p=>String(p && p.sku || '').trim().toUpperCase()).filter(Boolean);
           const totalForMonth=mk=>{
             let q=monthOwnQty(sk,mk);
-            parentKeys.forEach(pk=>{q+=monthOwnQty(pk,mk);});
+            cmbParents.forEach(parent=>{
+              const pk=String(parent&&parent.sku||'').trim().toUpperCase();
+              if(!pk)return;
+              // One parent CMB sale consumes the child once, twice, etc. according
+              // to the actual component quantity in that CMB.
+              q+=monthOwnQty(pk,mk)*comboChildQtyPerParent(parent,sk);
+            });
             return q;
           };
 
@@ -12575,7 +12621,6 @@ function applyF(){
 
           const last3Qty=last3Keys.reduce((sum,mk)=>sum+totalForMonth(mk),0);
           const last1yQty=last1yKeys.reduce((sum,mk)=>sum+totalForMonth(mk),0);
-          const selectedRevenue=monthSel.reduce((sum,mk)=>sum+monthOwnRev(sk,mk),0);
           const cmbNames=cmbParents.map(p=>String(p && p.sku || '').trim()).filter(Boolean);
 
           let bestCmb='',bestCmbName='',bestCmbQty=0,bestCmbImage='';
@@ -12595,7 +12640,7 @@ function applyF(){
           summaryRows.push({
             month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',taxon:item.taxon||'',cn_name:item.cn_name||iv.cn||'',
             month_qty:monthQty,selected_months_qty:selectedMonthsQty,last_3m_qty:last3Qty,last_1y_qty:last1yQty,
-            rev:selectedRevenue,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
+            inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
             image_url:iv.img||'',cmbs:cmbNames,best_cmb:bestCmb,best_cmb_name:bestCmbName,best_cmb_sold_qty:bestCmbQty,best_cmb_image_url:bestCmbImage
           });
         });
@@ -12628,7 +12673,6 @@ function applyF(){
               <td class="gold" title="${safeText(last3Label)}"><b>${Math.round(Number(t.last_3m_qty)||0)}</b></td>
               <td class="gold" title="${safeText(last1yLabel)}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
               <td>${safeText(t.cn_name||'')}</td>
-              ${LOGIN_ROLE==='employee'?'':`<td class="green">${fmt(Number(t.rev)||0)}</td>`}
               <td class="${t.inv_stock>10?'red':t.inv_stock>0?'orange':'muted'}">${t.inv_stock}</td>
               <td class="${t.inv_wip>10?'orange':t.inv_wip>0?'gold':'muted'}">${t.inv_wip}</td>
               <td class="${t.blocked_qty>0?'red':'muted'}">${t.blocked_qty}</td>
@@ -12647,9 +12691,9 @@ function applyF(){
               <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
             </div>
             <table class="ro"><thead><tr>
-              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>CN Name</th>${LOGIN_ROLE==='employee'?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
+              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>CN Name</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
             </tr></thead><tbody>${rowsHtml}</tbody></table>
-            <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + sales from every CMB containing that child SKU. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
+            <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + each filtered CMB's sold qty × that child's required pieces in the CMB. Customer, Type, Channel, Sub-Channel, FY, Date and Month filters are applied before quantity calculations. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
             ${displayTxns.length>MATRIX_RENDER_CAP?`<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} SKUs. Export includes all rows.</div>`:''}
           </div>`;
         }
@@ -12698,7 +12742,7 @@ function applyF(){
         }
 
         _matrixTxns=displayTxns;
-        _matrixPivot=Array.from(pivotMap.values()).map(x=>({sku:x.sku,sku_name:x.sku_name,qty:x.qty,rev:x.rev,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,customer_count:x.customers.size,customer_names:Array.from(x.customers).sort()})).sort((a,b)=>monthMode?(b.total_qty-a.total_qty||b.rev-a.rev):(b.rev-a.rev));
+        _matrixPivot=Array.from(pivotMap.values()).map(x=>({sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,customer_count:x.customers.size,customer_names:Array.from(x.customers).sort()})).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
 
         const MATRIX_RENDER_CAP = 150;
         const visibleTxns=displayTxns.slice(0,MATRIX_RENDER_CAP), visiblePivot=_matrixPivot.slice(0,MATRIX_RENDER_CAP);
@@ -12714,13 +12758,11 @@ function applyF(){
             <td class="gold">${Math.round(Number(t.combo_qty)||0)}</td>
             <td class="gold"><b>${Math.round(Number(t.total_qty)||0)}</b></td>
             <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(rollingYear.end.slice(0,7)))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
-            ${LOGIN_ROLE==='employee'?'':`<td class="green">${fmt(Number(t.rev)||0)}</td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
             <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td>
-            ${LOGIN_ROLE==='employee'?'':`<td class="green">${fmt(Number(t.rev)||0)}</td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
         }).join('');
 
@@ -12736,7 +12778,7 @@ function applyF(){
             <td class="gold" title="${escHtml((x.customer_names||[]).join(', '))}">${Number(x.customer_count||0).toLocaleString('en-IN')}</td>
             <td class="gold">${Math.round(Number(x.qty)||0)}</td><td class="gold">${Math.round(combo)}</td>
             ${monthMode?`<td class="gold"><b>${Math.round(total)}</b></td><td class="gold"><b>${Math.round(Number(x.last_1y_qty)||0)}</b></td>`:''}
-            ${LOGIN_ROLE==='employee'?'':`<td class="green">${fmt(x.rev)}</td>`}<td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td></tr>`;
+            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td></tr>`;
         }).join('');
 
         const exportBtns = kind => `
@@ -12750,7 +12792,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
-            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th>${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
+            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
           ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
@@ -12760,7 +12802,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}${LOGIN_ROLE==='employee' ? '' : '<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Inv Stock</th><th>Inv (WIP)</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
           ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
@@ -12805,8 +12847,16 @@ function _matrixInvLookup(){
   master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
   return invBy;
 }
+function _matrixRevenueExportValue(v){
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0;
+  // COSA Net Revenue is currency. Preserve paise and only remove floating-point
+  // noise; never round each export row to a whole rupee.
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
 function _matrixBuildPayload(kind){
-  const showRev = LOGIN_ROLE !== 'employee';
+  // Net Revenue is intentionally excluded from Overview dashboard exports.
+  const showRev = false;
   const invBy = _matrixInvLookup();
   if (kind === 'transactions'){
     return _matrixTxns.map(t => {
@@ -12815,14 +12865,14 @@ function _matrixBuildPayload(kind){
         return {
           month_mode:true,sku:t.sku,taxon:t.taxon||iv.taxon||'',cn_name:t.cn_name||iv.cn||'',month_qty:{...(t.month_qty||{})},
           selected_months_qty:Number(t.selected_months_qty)||0,last_3m_qty:Number(t.last_3m_qty)||0,last_1y_qty:Number(t.last_1y_qty)||0,
-          revenue:showRev?Math.round(Number(t.rev)||0):null,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
+          revenue:showRev?_matrixRevenueExportValue(t.rev):null,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
           image_url:iv.img||t.image_url||'',cmbs:Array.isArray(t.cmbs)?t.cmbs:[],best_cmb:t.best_cmb||'',best_cmb_sold_qty:Number(t.best_cmb_sold_qty)||0,
           best_cmb_name:t.best_cmb_name||'',best_cmb_image_url:t.best_cmb_image_url||'',one_year_start:_matrixOneYearStart,one_year_end:_matrixOneYearEnd
         };
       }
       return {
         date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
-        qty: parseFloat(t.qty) || 0, combo_qty: 0, revenue: showRev ? Math.round(parseFloat(t.rev) || 0) : null,
+        qty: parseFloat(t.qty) || 0, combo_qty: 0, revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
         image_url: iv.img || ''
       };
@@ -12838,7 +12888,7 @@ function _matrixBuildPayload(kind){
     const comboQty=_matrixMonthMode?(Number(p.combo_qty)||0):cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
     return {
       month_mode:_matrixMonthMode, sku: p.sku, cn_name: item.cn_name || iv.cn || '', customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty,
-      total_qty:_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0), last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, revenue: showRev ? Math.round(p.rev) : null,
+      total_qty:_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0), last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, revenue: showRev ? _matrixRevenueExportValue(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
       image_url: iv.img || '', one_year_start:_matrixOneYearStart, one_year_end:_matrixOneYearEnd
     };
@@ -12848,7 +12898,7 @@ function exportMatrixCSV(kind){
   const rows = _matrixBuildPayload(kind);
   if (!rows.length){ alert('No filtered data to export.'); return; }
   const meta = _matrixExportMeta();
-  const showRev = LOGIN_ROLE !== 'employee';
+  const showRev = false;
   let headers, csvRows;
   const monthExport=!!(rows[0]&&rows[0].month_mode);
   if (kind === 'transactions'){
@@ -20589,7 +20639,7 @@ function _wrOverviewParams(force=false){
   put('origin',_wrEl('wrOrigin')?.value||'All');
   put('destination',_wrEl('wrDestination')?.value||'');
   put('status_description',_wrEl('wrStatusDescription')?.value||'All');
-  put('status_group',_wrEl('wrStatusGroup')?.value||'All');
+  put('status_group',_wrMultiSelectedCsv('wrStatusGroup'));
   put('reason',_wrEl('wrReason')?.value||'All');
   put('sku',_wrEl('wrSku')?.value||'');
   put('search',_wrEl('wrSearch')?.value||'');
@@ -20614,20 +20664,27 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
   const inTransit=Math.max(0,Number(s.in_transit_orders||0));
   const undelivered=Math.max(0,Number(s.undelivered_orders||0));
   const rto=Math.max(0,Number(s.return_to_origin_orders??s.stage_returned_orders??0));
+  const opDelivered=Math.max(0,Number(s.other_partner_delivered_orders||0));
+  const opInTransit=Math.max(0,Number(s.other_partner_in_transit_orders||0));
+  const opUndelivered=Math.max(0,Number(s.other_partner_undelivered_orders||0));
+  const opReturn=Math.max(0,Number(s.other_partner_return_orders||0));
   const unclassified=Math.max(0,Number(s.unclassified_orders||0));
-  const statusMixTotal=Math.max(0,Number(s.status_mix_orders??(delivered+inTransit+undelivered+rto+unclassified)));
-  const notCounted=Math.max(0,Number(s.status_not_counted_orders||0));
-  // Pie denominator is the deduplicated Website column-A order count. Named
-  // BlueDart slices plus the remainder therefore always add up to Total Orders.
-  const pieTotal=total;
+  const statusMixTotal=Math.max(0,Number(s.status_mix_orders??(delivered+inTransit+undelivered+rto+opDelivered+opInTransit+opUndelivered+opReturn+unclassified)));
+  // BlueDart stays authoritative when a strict Order-id match exists. Orders with
+  // no BlueDart match may use Website status/return fields, clearly prefixed as
+  // Other Partner so courier and non-BlueDart outcomes never get mixed together.
+  const pieTotal=statusMixTotal;
   const pct=n=>pieTotal?Math.min(100,Math.max(0,Number(n||0)*100/pieTotal)):0;
   const slices=[
     {label:'Delivered (DL)',count:delivered,color:'#3f8f62'},
     {label:'In Transit (IT)',count:inTransit,color:'#6f8fac'},
     {label:'Undelivered (UD)',count:undelivered,color:'#c18f36'},
     {label:'Return to Origin (RT/RD)',count:rto,color:'var(--cn-gold)'},
-    {label:'Unclassified',count:unclassified,color:'#a8a29a'},
-    {label:'No valid BlueDart status',count:notCounted,color:'#d9d4ca'}
+    {label:'Other Partner Delivered',count:opDelivered,color:'#78ad88'},
+    {label:'Other Partner In Transit',count:opInTransit,color:'#9eb3c7'},
+    {label:'Other Partner Undelivered',count:opUndelivered,color:'#d3a65b'},
+    {label:'Other Partner Return',count:opReturn,color:'#b8785c'},
+    {label:'Unclassified',count:unclassified,color:'#a8a29a'}
   ];
   if(donut){
     let cursor=0;
@@ -20636,12 +20693,12 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
       return `${x.color} ${a.toFixed(2)}% ${b.toFixed(2)}%`;
     });
     const ring=pieTotal&&parts.length?`conic-gradient(${parts.join(',')})`:'conic-gradient(#e6e1d8 0 100%)';
-    const legend=slices.filter(x=>x.count>0||x.label!=='Unclassified').map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
+    const legend=slices.filter(x=>x.count>0).map(x=>`<div style="font-size:11px;font-weight:900;margin-bottom:8px"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:7px"></span>${escHtml(x.label)}: ${x.count.toLocaleString('en-IN')} <span class="small-note">(${pct(x.count).toFixed(1)}%)</span></div>`).join('');
     donut.innerHTML=`<div style="display:flex;gap:24px;align-items:center;justify-content:center;flex-wrap:wrap">
       <div style="position:relative;width:190px;height:190px;border-radius:50%;background:${ring};box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)">
         <div style="position:absolute;inset:24px;border-radius:50%;background:var(--cn-paper);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;box-shadow:0 0 0 1px var(--cn-line)">
-          <div style="font-size:30px;font-weight:950;line-height:1">${total.toLocaleString('en-IN')}</div>
-          <div class="small-note" style="margin-top:5px">Website Orders</div>
+          <div style="font-size:30px;font-weight:950;line-height:1">${statusMixTotal.toLocaleString('en-IN')}</div>
+          <div class="small-note" style="margin-top:5px">Status Orders</div>
           <div style="font-size:11px;font-weight:850;margin-top:4px">status mix</div>
         </div>
       </div>
@@ -20654,13 +20711,17 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     _wrKpi('In Transit Orders (IT)',inTransit.toLocaleString('en-IN'),`${pct(inTransit).toFixed(1)}% · BlueDart Status Group IT`)+
     _wrKpi('Undelivered Orders (UD)',undelivered.toLocaleString('en-IN'),`${pct(undelivered).toFixed(1)}% · BlueDart Status Group UD`)+
     _wrKpi('Return to Origin (RT/RD)',rto.toLocaleString('en-IN'),`${pct(rto).toFixed(1)}% · RT and RD combined`)+
+    (opDelivered?_wrKpi('Other Partner Delivered',opDelivered.toLocaleString('en-IN'),`${pct(opDelivered).toFixed(1)}% · No BlueDart Order-id match; Website status indicates delivered/complete`):'')+
+    (opInTransit?_wrKpi('Other Partner In Transit',opInTransit.toLocaleString('en-IN'),`${pct(opInTransit).toFixed(1)}% · No BlueDart Order-id match; Website status indicates active shipment`):'')+
+    (opUndelivered?_wrKpi('Other Partner Undelivered',opUndelivered.toLocaleString('en-IN'),`${pct(opUndelivered).toFixed(1)}% · No BlueDart Order-id match; Website status indicates undelivered`):'')+
+    (opReturn?_wrKpi('Other Partner Return',opReturn.toLocaleString('en-IN'),`${pct(opReturn).toFixed(1)}% · No BlueDart Order-id match; Website return/RTO fields indicate return`):'')+
     (unclassified?_wrKpi('Unclassified Status',unclassified.toLocaleString('en-IN'),`${pct(unclassified).toFixed(1)}% · BlueDart Order ID + Contact present, Status Group blank`):'')+
     _wrKpi('Website Sheet Returns',Number(s.website_sheet_returned||0).toLocaleString('en-IN'),'Return Type / RTO Qty / Return Date / Return Reason')+
     _wrKpi('BlueDart RTO Orders',Number(s.bluedart_returned||0).toLocaleString('en-IN'),'Only Status Group RT or RD');
   if(note){
     const pm=_wrEl('wrPaymentMode')?.value||'All';
     const activeFilters=Number(data.active_filter_count||0);
-    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Order denominator: <b>unique Website column A</b> (one Display Order Code = one order) · Courier match: <b>BlueDart Order id only</b> · Status source: <b>latest BlueDart Status Group, column N</b> — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = latest matched BlueDart row has Order ID + Customer Contact but blank Status Group.`:''}${notCounted?` · ${notCounted.toLocaleString('en-IN')} Website orders have no valid/qualified current BlueDart status and are shown separately in the pie remainder.`:''}${actualReturned!==rto?` · Website-return fields identify ${actualReturned.toLocaleString('en-IN')} returned order${actualReturned===1?'':'s'} separately; they do not override the BlueDart status pie.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
+    note.innerHTML=`Active filters: <b>${activeFilters.toLocaleString('en-IN')}</b> · Payment filter: <b>${escHtml(pm)}</b> · COD orders ${Number(s.cod_orders||0).toLocaleString('en-IN')} · Prepaid orders ${Number(s.prepaid_orders||0).toLocaleString('en-IN')} · Total Website Orders: <b>unique Website column A</b> (one Display Order Code = one order) · BlueDart strict match: <b>Website column A = BlueDart Order id</b>. Matched orders use latest BlueDart Status Group N — DL = Delivered, IT = In Transit, UD = Undelivered, RT/RD = Return to Origin. Orders with <b>no BlueDart Order-id match</b> use Website status/return fields only and are clearly labeled <b>Other Partner …</b>.${unclassified?` · Unclassified ${unclassified.toLocaleString('en-IN')} = matched BlueDart row has Order ID + Customer Contact but blank Status Group.`:''}${data.loaded_at?` · refreshed ${escHtml(data.loaded_at)}`:''}`;
   }
 
   renderWebsiteOrdersTable(data);
@@ -20707,6 +20768,10 @@ function _wrOrderStageBadge(stage){
   if(s==='Undelivered')return '<span style="font-weight:900;color:#a86f16">Undelivered</span>';
   if(s==='Delivered')return '<span style="font-weight:900;color:#237a4b">Delivered</span>';
   if(s==='In Transit')return '<span style="font-weight:900;color:#4f6f91">In Transit</span>';
+  if(s==='Other Partner Delivered')return '<span style="font-weight:900;color:#4f8d62">Other Partner Delivered</span>';
+  if(s==='Other Partner In Transit')return '<span style="font-weight:900;color:#657f99">Other Partner In Transit</span>';
+  if(s==='Other Partner Undelivered')return '<span style="font-weight:900;color:#a86f16">Other Partner Undelivered</span>';
+  if(s==='Other Partner Return')return '<span style="font-weight:900;color:#8b3f23">Other Partner Return</span>';
   if(s==='Unclassified')return '<span style="font-weight:900;color:#777">Unclassified</span>';
   return '<span style="color:var(--cn-mid)">—</span>';
 }
@@ -20764,13 +20829,11 @@ function websiteOrdersPage(delta){
   loadWebsiteReturnsOverview(false);
 }
 function websiteReturnsStatusGroupChanged(){
-  const main=_wrEl('wrStatusGroup'),table=_wrEl('wrTableStatusGroup');
-  if(main&&table) table.value=main.value||'All';
+  _wrSetMultiSelectedValues('wrTableStatusGroup',_wrMultiSelectedValues('wrStatusGroup'));
   applyWebsiteReturnsFilters(true);
 }
 function websiteOrdersTableStatusGroupChanged(){
-  const table=_wrEl('wrTableStatusGroup'),main=_wrEl('wrStatusGroup');
-  if(table&&main) main.value=table.value||'All';
+  _wrSetMultiSelectedValues('wrStatusGroup',_wrMultiSelectedValues('wrTableStatusGroup'));
   _websiteReturnsTablePage=1;
   _websiteReturnsOverviewLastKey='';
   applyWebsiteReturnsFilters(true);
@@ -20848,6 +20911,51 @@ function _wrSetOptions(id, values, allLabel){
   const vals=Array.from(new Set((values||[]).map(_wrText).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
   el.innerHTML=`<option value="All">${escHtml(allLabel||'All')}</option>`+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
   el.value=vals.includes(old)?old:'All';
+}
+function _wrMultiSelectedValues(id){
+  const el=_wrEl(id); if(!el)return [];
+  const vals=Array.from(el.options||[]).filter(o=>o.selected&&o.value!=='All').map(o=>_wrText(o.value)).filter(Boolean);
+  return Array.from(new Set(vals));
+}
+function _wrMultiSelectedCsv(id){
+  const vals=_wrMultiSelectedValues(id);
+  return vals.length?vals.join(','):'All';
+}
+function _wrSetMultiSelectedValues(id, values){
+  const el=_wrEl(id); if(!el)return;
+  const wanted=new Set((values||[]).map(_wrText).filter(v=>v&&v!=='All'));
+  let any=false;
+  Array.from(el.options||[]).forEach(o=>{
+    if(o.value==='All'){o.selected=false;return;}
+    o.selected=wanted.has(o.value);
+    if(o.selected)any=true;
+  });
+  const allOpt=Array.from(el.options||[]).find(o=>o.value==='All');
+  if(allOpt)allOpt.selected=!any;
+}
+function _wrSetMultiOptions(id, values, allLabel){
+  const el=_wrEl(id); if(!el)return;
+  const old=_wrMultiSelectedValues(id);
+  const vals=Array.from(new Set((values||[]).map(_wrText).filter(Boolean))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}));
+  el.innerHTML=`<option value="All">${escHtml(allLabel||'All')}</option>`+vals.map(v=>`<option value="${escHtml(v)}">${escHtml(v)}</option>`).join('');
+  _wrSetMultiSelectedValues(id,old.filter(v=>vals.includes(v)));
+}
+function _wrMultiSelectMouseDown(ev){
+  const opt=ev&&ev.target;
+  if(!opt||String(opt.tagName||'').toUpperCase()!=='OPTION')return;
+  const el=opt.parentElement;
+  if(!el||!el.multiple)return;
+  ev.preventDefault();
+  if(opt.value==='All'){
+    Array.from(el.options||[]).forEach(o=>{o.selected=(o.value==='All');});
+  }else{
+    opt.selected=!opt.selected;
+    const allOpt=Array.from(el.options||[]).find(o=>o.value==='All');
+    if(allOpt)allOpt.selected=false;
+    const any=Array.from(el.options||[]).some(o=>o.value!=='All'&&o.selected);
+    if(!any&&allOpt)allOpt.selected=true;
+  }
+  el.dispatchEvent(new Event('change',{bubbles:true}));
 }
 function _wrSetDatalist(id, values){
   const el=_wrEl(id); if(!el)return;
@@ -20937,7 +21045,7 @@ function _websiteReturnsFilterRows(){
   const sd1=_wrInputDateIso('wrStatusD1'),sd2=_wrInputDateIso('wrStatusD2');
   const mode=_wrEl('wrPaymentMode')?.value||'All';
   const origin=_wrEl('wrOrigin')?.value||'All',destQ=_wrNorm(_wrEl('wrDestination')?.value||'');
-  const statusDesc=_wrEl('wrStatusDescription')?.value||'All',statusGroup=_wrEl('wrStatusGroup')?.value||'All';
+  const statusDesc=_wrEl('wrStatusDescription')?.value||'All',statusGroups=_wrMultiSelectedValues('wrStatusGroup');
   const reason=_wrEl('wrReason')?.value||'All';
   const payMin=_wrNum(_wrEl('wrPayMin')?.value),payMax=_wrNum(_wrEl('wrPayMax')?.value);
   const skuQ=_wrText(_wrEl('wrSku')?.value||'');
@@ -20951,7 +21059,7 @@ function _websiteReturnsFilterRows(){
     if(origin!=='All'&&_wrText(r.origin)!==origin)return false;
     if(destQ&&!_wrNorm(r.destination).includes(destQ))return false;
     if(statusDesc!=='All'&&_wrText(r.status_description)!==statusDesc)return false;
-    if(statusGroup!=='All'&&_wrText(r.status_group)!==statusGroup)return false;
+    if(statusGroups.length&&!statusGroups.includes(_wrText(r.status_group)))return false;
     if(reason!=='All'&&_wrText(r.rto_reason)!==reason)return false;
     if(skuQ&&!_wrRowMatchesSkuQuery(r,skuQ))return false;
     const p=_wrNum(r.payment);
@@ -20985,13 +21093,17 @@ function _wrMonthLabel(key){
 }
 function renderWebsiteReturnsAnalytics(rows){
   const total=(rows||[]).length;
-  _wrRenderRanked('wrReasonAnalysis',_wrTopCounts(rows,r=>r.rto_reason||'No RTO reason captured',8),total,'No RTO reasons for active filters.');
+  // "No RTO reason captured" must never be inflated by successfully delivered
+  // shipments. Exclude DL / delivered descriptions from the RTO-reason card.
+  const reasonRows=(rows||[]).filter(r=>{
+    const g=_wrText(r.status_group).toUpperCase();
+    const d=_wrNorm(r.status_description);
+    const deliveredByDescription=d.includes('delivered')&&!d.includes('undeliver');
+    return g!=='DL'&&!deliveredByDescription;
+  });
+  _wrRenderRanked('wrReasonAnalysis',_wrTopCounts(reasonRows,r=>r.rto_reason||'No RTO reason captured',8),reasonRows.length,'No non-delivered RTO reasons for active filters.');
   _wrRenderRanked('wrStatusAnalysis',_wrTopCounts(rows,r=>r.status_description||r.status_group||'No status captured',8),total,'No status data for active filters.');
   _wrRenderRanked('wrDestinationAnalysis',_wrTopCounts(rows,r=>r.destination||'Unknown destination',8),total,'No destination data for active filters.');
-  const months=new Map();
-  (rows||[]).forEach(r=>{const d=_wrText(r.status_date)||_wrText(r.pickup_date)||_wrText(r.order_date);if(/^\d{4}-\d{2}/.test(d)){const k=d.slice(0,7);months.set(k,(months.get(k)||0)+1);}});
-  const trend=Array.from(months.entries()).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12).map(([k,count])=>({label:_wrMonthLabel(k),count}));
-  _wrRenderRanked('wrTrendAnalysis',trend,Math.max(1,trend.reduce((a,x)=>a+x.count,0)),'No dated return rows for active filters.');
 }
 function renderWebsiteReturns(){
   const body=_wrEl('websiteReturnsBody');
@@ -21050,10 +21162,10 @@ async function loadWebsiteReturns(force=false){
     _wrSetDatalist('wrDestinationList',d.filters?.destinations||[]);
     _wrSetDatalist('wrSkuList',d.filters?.skus||[]);
     _wrSetOptions('wrStatusDescription',d.filters?.status_descriptions||[],'All Statuses');
-    _wrSetOptions('wrStatusGroup',d.filters?.status_groups||[],'All Groups');
-    _wrSetOptions('wrTableStatusGroup',d.filters?.status_groups||[],'All Groups');
-    const _wrMainStatusGroup=_wrEl('wrStatusGroup'),_wrTableStatusGroup=_wrEl('wrTableStatusGroup');
-    if(_wrMainStatusGroup&&_wrTableStatusGroup)_wrTableStatusGroup.value=_wrMainStatusGroup.value||'All';
+    const _wrStatusGroupChoices=[...(d.filters?.status_groups||[]),'Other Partner Delivered','Other Partner In Transit','Other Partner Undelivered','Other Partner Return','Unclassified'];
+    _wrSetMultiOptions('wrStatusGroup',_wrStatusGroupChoices,'All Groups');
+    _wrSetMultiOptions('wrTableStatusGroup',_wrStatusGroupChoices,'All Groups');
+    _wrSetMultiSelectedValues('wrTableStatusGroup',_wrMultiSelectedValues('wrStatusGroup'));
     _wrSetOptions('wrReason',d.filters?.rto_reasons||[],'All RTO Reasons');
     renderWebsiteReturns();
     renderSdWebsiteReturns();
@@ -21061,7 +21173,7 @@ async function loadWebsiteReturns(force=false){
   }catch(e){
     _websiteReturnsData=null;
     if(body)body.innerHTML=`<tr><td colspan="19" class="ops-empty">Could not load Website Orders & Returns: ${escHtml(e?.message||e)}</td></tr>`;
-    ['wrReasonAnalysis','wrStatusAnalysis','wrDestinationAnalysis','wrTrendAnalysis'].forEach(id=>{const el=_wrEl(id);if(el)el.innerHTML='<div class="small-note">Live data load failed.</div>';});
+    ['wrReasonAnalysis','wrStatusAnalysis','wrDestinationAnalysis'].forEach(id=>{const el=_wrEl(id);if(el)el.innerHTML='<div class="small-note">Live data load failed.</div>';});
     const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
     const sdNote=_wrEl('sdWebsiteReturnsNote');if(sdNote&&_sdWebsiteReturnsFilterActive())sdNote.textContent='Website return sheet could not be loaded. Use Website Returns > Refresh Live Sheet and try again.';
   }finally{_websiteReturnsLoading=false;}
@@ -21088,7 +21200,9 @@ function websiteReturnsOrderDateChanged(){
 }
 function resetWebsiteReturnsFilters(){
   ['wrOrderD1','wrOrderD2','wrD1','wrD2','wrStatusD1','wrStatusD2','wrPayMin','wrPayMax','wrDestination','wrSku','wrSearch'].forEach(id=>{const e=_wrEl(id);if(e)e.value='';});
-  ['wrPaymentMode','wrOrigin','wrStatusDescription','wrStatusGroup','wrTableStatusGroup','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  ['wrPaymentMode','wrOrigin','wrStatusDescription','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
+  _wrSetMultiSelectedValues('wrStatusGroup',[]);
+  _wrSetMultiSelectedValues('wrTableStatusGroup',[]);
   _websiteReturnsOverviewLastKey='';
   applyWebsiteReturnsFilters();
 }
@@ -25488,16 +25602,44 @@ def _wr_bluedart_status_stage(value):
     return "Unclassified"
 
 
-def _wr_order_stage(rec):
-    """Classify one Website order strictly from BlueDart Status Group column N.
+def _wr_other_partner_stage(rec):
+    """Website-only fallback when the order has no BlueDart Order-id match.
 
-    Website order identity comes only from Website column A and is already
-    unique before this function runs. BlueDart status comes only from the latest
-    row whose BlueDart Order id equals that Website column-A value. Unclassified
-    is deliberately narrow: that latest raw BlueDart row must contain Order ID +
-    Customer Contact and have a blank Status Group. Orders with no BlueDart match,
-    missing identity/contact, or an unknown nonblank group stay outside the named
-    status buckets instead of being mislabeled Unclassified.
+    BlueDart is never overwritten.  The prefix makes it explicit that this
+    status came from Website / another fulfilment partner rather than BlueDart.
+    """
+    rec = rec or {}
+    if int(rec.get("bluedart_matched_rows") or 0) > 0:
+        return ""
+
+    website_status = str(rec.get("website_order_status") or "").strip()
+    return_type = str(rec.get("website_return_type") or "").strip()
+    return_reason = str(rec.get("website_return_reason") or "").strip()
+    combined = " ".join((website_status, return_type, return_reason)).casefold()
+
+    # Specific operational outcomes first so a generic COMPLETE value cannot
+    # hide a return / undelivered signal carried in Website return fields.
+    if re.search(r"undeliver|not\s+deliver|delivery\s+fail|failed\s+deliver", combined):
+        return "Other Partner Undelivered"
+    if re.search(r"(?:^|\W)(?:rto|return|returned|refund|reverse)(?:$|\W)", combined) or bool(rec.get("website_returned")):
+        return "Other Partner Return"
+
+    status_l = website_status.casefold()
+    if re.search(r"complete|delivered|delivery\s+complete", status_l):
+        return "Other Partner Delivered"
+    if re.search(r"in\s*transit|transit|dispatch|shipped|shipping|ready\s*to\s*ship|packed|processing", status_l):
+        return "Other Partner In Transit"
+    return ""
+
+
+def _wr_order_stage(rec):
+    """Order stage with BlueDart first and clearly-labelled Website fallback.
+
+    A strict Website column-A = BlueDart Order-id match always wins. Valid
+    BlueDart Status Group N maps to DL/IT/UD/RT/RD. A matched blank group is
+    Unclassified only under the previously requested Order ID + Contact rule.
+    Only when there is no BlueDart Order-id match may Website fields create an
+    Other Partner Delivered / In Transit / Undelivered / Return stage.
     """
     rec = rec or {}
     raw_group = str(rec.get("bluedart_latest_status_group") or rec.get("bluedart_status_group") or "").strip()
@@ -25506,6 +25648,8 @@ def _wr_order_stage(rec):
         return stage
     if (not raw_group) and bool(rec.get("bluedart_blank_status_qualified")):
         return "Unclassified"
+    if int(rec.get("bluedart_matched_rows") or 0) <= 0:
+        return _wr_other_partner_stage(rec)
     return ""
 
 
@@ -25532,6 +25676,8 @@ def _website_returns_overview_payload(force=False):
     is strict equality to BlueDart `Order id`, and the courier stage itself is
     taken from the latest matching BlueDart Status Group column N:
     DL=Delivered, IT=In Transit, UD=Undelivered, RT/RD=Return to Origin.
+    If there is no BlueDart Order-id match, Website status/return fields may add
+    an explicitly prefixed Other Partner stage.
     """
     orders = _load_website_order_audit(force=force)
 
@@ -25562,6 +25708,7 @@ def _website_returns_overview_payload(force=False):
     destination_q = _arg("destination").casefold()
     status_description = _arg("status_description", "All") or "All"
     status_group = _arg("status_group", "All") or "All"
+    status_group_values = [x.strip() for x in status_group.split(",") if x.strip() and x.strip().casefold() != "all"]
     reason = _arg("reason", "All") or "All"
     sku_q = _arg("sku").upper()
     search_q = _arg("search").casefold()
@@ -25578,7 +25725,7 @@ def _website_returns_overview_payload(force=False):
 
     origin_cf = origin.casefold()
     status_description_cf = status_description.casefold()
-    status_group_cf = status_group.casefold()
+    status_group_cf_set = {x.casefold() for x in status_group_values}
     reason_cf = reason.casefold()
     sku_compact = re.sub(r"[^A-Z0-9]", "", sku_q)
     combo_child_map = _website_returns_combo_child_map() if sku_q else {}
@@ -25597,7 +25744,7 @@ def _website_returns_overview_payload(force=False):
         status_description not in ("", "All"),
         reason not in ("", "All"),
     ))
-    status_group_filter_active = status_group not in ("", "All")
+    status_group_filter_active = bool(status_group_values)
     return_filter_active = bool(shipment_filter_active or status_group_filter_active)
     return_match_keys = set()
     return_search_keys = set()
@@ -25696,7 +25843,8 @@ def _website_returns_overview_payload(force=False):
             continue
         if status_group_filter_active:
             current_group = str(rec.get("bluedart_latest_status_group") or "").strip().casefold()
-            if current_group != status_group_cf:
+            current_stage = _wr_order_stage(rec).casefold()
+            if current_group not in status_group_cf_set and current_stage not in status_group_cf_set:
                 continue
         if sku_q:
             ok = False
@@ -25750,6 +25898,10 @@ def _website_returns_overview_payload(force=False):
         "In Transit": 0,
         "Undelivered": 0,
         "Return to Origin": 0,
+        "Other Partner Delivered": 0,
+        "Other Partner In Transit": 0,
+        "Other Partner Undelivered": 0,
+        "Other Partner Return": 0,
         "Unclassified": 0,
     }
     for rec in status_orders:
@@ -25760,9 +25912,12 @@ def _website_returns_overview_payload(force=False):
     in_transit_orders = stage_counts["In Transit"]
     undelivered_orders = stage_counts["Undelivered"]
     return_to_origin_orders = stage_counts["Return to Origin"]
+    other_partner_delivered_orders = stage_counts["Other Partner Delivered"]
+    other_partner_in_transit_orders = stage_counts["Other Partner In Transit"]
+    other_partner_undelivered_orders = stage_counts["Other Partner Undelivered"]
+    other_partner_return_orders = stage_counts["Other Partner Return"]
     unclassified_orders = stage_counts["Unclassified"]
     status_mix_orders = sum(stage_counts.values())
-    status_not_counted_orders = max(0, total_orders - status_mix_orders)
     # Legacy key retained for any older frontend/cache consumer; it now means the
     # BlueDart RT/RD bucket, not generic Website-return detection.
     stage_returned_orders = return_to_origin_orders
@@ -25792,7 +25947,7 @@ def _website_returns_overview_payload(force=False):
         "" if payment == "All" else payment,
         "" if origin == "All" else origin,
         "" if status_description == "All" else status_description,
-        "" if status_group == "All" else status_group,
+        ",".join(status_group_values),
         "" if reason == "All" else reason,
     ))
 
@@ -25805,11 +25960,14 @@ def _website_returns_overview_payload(force=False):
             "delivered_orders": delivered_orders,
             "in_transit_orders": in_transit_orders,
             "undelivered_orders": undelivered_orders,
+            "other_partner_delivered_orders": other_partner_delivered_orders,
+            "other_partner_in_transit_orders": other_partner_in_transit_orders,
+            "other_partner_undelivered_orders": other_partner_undelivered_orders,
+            "other_partner_return_orders": other_partner_return_orders,
             "unclassified_orders": unclassified_orders,
             "status_mix_orders": status_mix_orders,
-            "status_not_counted_orders": status_not_counted_orders,
-            "not_returned_orders": max(0, total_orders - return_to_origin_orders),
-            "return_rate": round((return_to_origin_orders * 100.0 / total_orders), 2) if total_orders else 0.0,
+            "not_returned_orders": max(0, total_orders - return_to_origin_orders - other_partner_return_orders),
+            "return_rate": round(((return_to_origin_orders + other_partner_return_orders) * 100.0 / total_orders), 2) if total_orders else 0.0,
             "website_sheet_returned": website_returns,
             "bluedart_returned": bluedart_returns,
             "both_sources": both_returns,
@@ -30962,6 +31120,7 @@ def api_daily_revenue_glimpse_export_xlsx():
 #  (Excel) ya photo ke roop me (PDF) shamil hota hai.
 # ════════════════════════════════════════════════════════════════
 _OVERALL_NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
+_OVERALL_MONEY_FMT = "[>=10000000]##\\,##\\,##\\,##0.00;[>=100000]##\\,##\\,##0.00;##,##0.00"
 
 @app.route("/api/overall_export/xlsx", methods=["POST"])
 def api_overall_export_xlsx():
@@ -30975,7 +31134,7 @@ def api_overall_export_xlsx():
         kind  = payload.get("kind", "transactions")
         rows  = payload.get("rows") or []
         title = (payload.get("title") or "overall_details").strip() or "overall_details"
-        show_rev = bool(rows) and rows[0].get("revenue") is not None
+        show_rev = False  # Overview Net Revenue intentionally removed from all exports
         month_mode = bool(rows) and bool(rows[0].get("month_mode"))
         month_keys = sorted({str(k) for r in rows for k in ((r.get("month_qty") or {}).keys()) if re.match(r"^\d{4}-\d{2}$", str(k))}) if month_mode else []
         month_headers = [datetime.strptime(k, "%Y-%m").strftime("%B %Y") + " Total Sold Qty" for k in month_keys]
@@ -31027,7 +31186,10 @@ def api_overall_export_xlsx():
             ws.append(line)
 
         for col_idx, h in enumerate(headers, start=1):
-            if h in num_cols:
+            if h == "Net Revenue":
+                for row_i in range(2, ws.max_row + 1):
+                    ws.cell(row=row_i, column=col_idx).number_format = _OVERALL_MONEY_FMT
+            elif h in num_cols:
                 for row_i in range(2, ws.max_row + 1):
                     ws.cell(row=row_i, column=col_idx).number_format = _OVERALL_NUM_FMT
             if h in {"Image Link", "Best CMB Image Link"}:
@@ -31075,7 +31237,7 @@ def api_overall_export_pdf():
         kind  = payload.get("kind", "transactions")
         rows  = payload.get("rows") or []
         title = payload.get("title") or "Overall Details"
-        show_rev = bool(rows) and rows[0].get("revenue") is not None
+        show_rev = False  # Overview Net Revenue intentionally removed from all exports
         month_mode = bool(rows) and bool(rows[0].get("month_mode"))
         month_keys = sorted({str(k) for r in rows for k in ((r.get("month_qty") or {}).keys()) if re.match(r"^\d{4}-\d{2}$", str(k))}) if month_mode else []
         month_headers = [datetime.strptime(k, "%Y-%m").strftime("%B %Y") + " Sold" for k in month_keys]
