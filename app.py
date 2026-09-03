@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.20 (REPEAT CUSTOMERS · SAME-DAY ORDERS NOT REPEAT)
+# Repeat-customer logic now treats all orders by the same customer on the same calendar date
+# as one purchase occasion for repeat calculations. A repeat requires purchase on a later date.
+# Total Orders and AOV still use unique Website Display Order Codes, so order value metrics stay accurate.
+# ============================================================
 # Cosa Nostraa — V24.19 (REPEAT CUSTOMERS · SIMPLE HUMAN VIEW)
 # Consumer Repeat tab simplified for non-technical users: plain-language comeback periods and no
 # customer IDs shown. Adds repeat-customer table with customer name, repeat count,
@@ -7928,7 +7933,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
 
-    <div class="crr-plain-help"><b>How to read this:</b> If 1,000 customers purchased in January and 80 of those customers made their next purchase in February, the <b>After 1 Month</b> column shows <b>80 (8%)</b>. If their next purchase was in March, they appear under <b>After 2 Months</b>. The table uses only plain-language time periods.</div>
+    <div class="crr-plain-help"><b>How to read this:</b> If 1,000 customers purchased in January and 80 of those customers purchased again in February, the <b>After 1 Month</b> column shows <b>80 (8%)</b>. If they purchased again in March, they appear under <b>After 2 Months</b>. <b>Important:</b> if the same customer places multiple orders on the same date, those orders are treated as one purchase occasion and are <b>not</b> counted as a repeat.</div>
 
     <div class="filter-box" style="margin-bottom:12px">
       <div class="fg">
@@ -7959,7 +7964,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
 
     <div class="crr-panel">
-      <div class="crr-panel-head"><div><div class="crr-panel-title">Repeat Customer Details</div><div class="crr-panel-note">Only repeat customers are shown. AOV = total Website order value without GST divided by unique Website orders in the selected period. No customer ID or full address is displayed.</div></div><div class="small-note" id="crrDetailCount"></div></div>
+      <div class="crr-panel-head"><div><div class="crr-panel-title">Repeat Customer Details</div><div class="crr-panel-note">Only customers who purchased on at least 2 different dates are shown. Multiple orders on the same date do not count as repeat. AOV = total Website order value without GST divided by unique Website orders. No customer ID or full address is displayed.</div></div><div class="small-note" id="crrDetailCount"></div></div>
       <div class="crr-table-wrap" id="crrDetail"></div>
     </div>
   </div>
@@ -22904,23 +22909,42 @@ function renderConsumerRepeat(){
   const details=[];const repeatDays=[];const lagBuckets=new Map();
   byCustomer.forEach((arr,c)=>{
     arr.sort((a,b)=>a.d.localeCompare(b.d)||a.o.localeCompare(b.o));
-    const first=arr[0],second=arr[1]||null,last=arr[arr.length-1];
-    const days=second?_crrDayDiff(first.d,second.d):null,months=second?_crrMonthDiff(first.d,second.d):null;
+
+    // Repeat is based on DISTINCT PURCHASE DATES, not order count. If one customer
+    // places 2+ Website orders on the same calendar date, that is one purchase occasion.
+    const byDay=new Map();
+    arr.forEach(e=>{
+      let d=byDay.get(e.d);
+      if(!d){d={d:e.d,orders:[],spend:0};byDay.set(e.d,d);}
+      d.orders.push(e.o);
+      d.spend+=Math.max(0,Number(e.r)||0);
+    });
+    const purchaseDays=Array.from(byDay.values()).sort((a,b)=>a.d.localeCompare(b.d));
+    const firstDay=purchaseDays[0],secondDay=purchaseDays[1]||null,lastDay=purchaseDays[purchaseDays.length-1];
+    const first=arr[0];
+    const days=secondDay?_crrDayDiff(firstDay.d,secondDay.d):null;
+    const months=secondDay?_crrMonthDiff(firstDay.d,secondDay.d):null;
     if(Number.isFinite(days))repeatDays.push(days);
     if(Number.isFinite(months))lagBuckets.set(months,(lagBuckets.get(months)||0)+1);
-    const gaps=[];for(let i=1;i<arr.length;i++){const g=_crrDayDiff(arr[i-1].d,arr[i].d);if(Number.isFinite(g))gaps.push(g);}
+
+    const gaps=[];
+    for(let i=1;i<purchaseDays.length;i++){
+      const g=_crrDayDiff(purchaseDays[i-1].d,purchaseDays[i].d);
+      if(Number.isFinite(g))gaps.push(g);
+    }
     const avgGap=gaps.length?gaps.reduce((s,v)=>s+v,0)/gaps.length:null;
     const totalSpend=arr.reduce((s,x)=>s+Math.max(0,Number(x.r)||0),0);
+    // AOV remains true order AOV: total spend / unique Website Display Order Codes.
     const aov=arr.length?totalSpend/arr.length:0;
     details.push({
-      customer:c,name:String(first.n||'Customer').trim()||'Customer',first:first.d,second:second?.d||'',days,months,
-      orders:arr.length,repeats:Math.max(0,arr.length-1),last:last.d,
-      purchaseDates:arr.map(x=>x.d),repeatDates:arr.slice(1).map(x=>x.d),
+      customer:c,name:String(first.n||'Customer').trim()||'Customer',first:firstDay.d,second:secondDay?.d||'',days,months,
+      orders:arr.length,purchaseDayCount:purchaseDays.length,repeats:Math.max(0,purchaseDays.length-1),last:lastDay.d,
+      purchaseDates:purchaseDays.map(x=>x.d),repeatDates:purchaseDays.slice(1).map(x=>x.d),
       avgGap,totalSpend,aov
     });
   });
   details.sort((a,b)=>b.repeats-a.repeats||b.totalSpend-a.totalSpend||(a.days??999999)-(b.days??999999)||a.first.localeCompare(b.first));
-  const repeat=details.filter(x=>x.orders>=2),consumerCount=details.length,orderCount=events.length;
+  const repeat=details.filter(x=>x.purchaseDayCount>=2),consumerCount=details.length,orderCount=events.length;
   const within30=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=30).length,within60=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=60).length,within90=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=90).length;
   const avgDays=repeatDays.length?repeatDays.reduce((s,v)=>s+v,0)/repeatDays.length:0,medianDays=_crrMedian(repeatDays);
   const avgOrdersRepeat=repeat.length?repeat.reduce((s,x)=>s+x.orders,0)/repeat.length:0;
@@ -22941,7 +22965,7 @@ function renderConsumerRepeat(){
     const bucket={same:0,after1:0,after2:0,after3:0,after4to6:0,after7to12:0,returned:0};
     buyers.forEach(c=>{
       const anchorOrders=cmap.get(c)||[];
-      if(new Set(anchorOrders.map(x=>x.o)).size>=2){bucket.same++;bucket.returned++;return;}
+      if(new Set(anchorOrders.map(x=>x.d)).size>=2){bucket.same++;bucket.returned++;return;}
       let firstK=null;
       for(let k=1;k<=12;k++){
         const targetMonth=_crrAddMonths(mk,k);if(targetMonth>endMonth)break;
@@ -22969,7 +22993,7 @@ function renderConsumerRepeat(){
   if(kpis)kpis.innerHTML=[
     ['Customers Who Purchased',consumerCount.toLocaleString('en-IN'),'Website customers in selected period'],
     ['Repeat Customers',repeat.length.toLocaleString('en-IN'),`${_crrFmtPct(_crrPct(repeat.length,consumerCount))} bought again`],
-    ['Repeat Rate',_crrFmtPct(_crrPct(repeat.length,consumerCount)),'Customers with 2+ unique orders'],
+    ['Repeat Rate',_crrFmtPct(_crrPct(repeat.length,consumerCount)),'Customers who purchased on 2+ different dates'],
     ['Website Orders',orderCount.toLocaleString('en-IN'),'Unique Display Order Codes'],
     ['Typical Time to Come Back',`${Math.round(medianDays)} days`,'Median first repeat time'],
     ['Avg Orders / Repeat Customer',avgOrdersRepeat.toFixed(1),`${_crrFmtPct(_crrPct(within90,consumerCount))} of all customers repeat within 90 days`],
@@ -22977,7 +23001,7 @@ function renderConsumerRepeat(){
 
   if(note){
     const partial=[];if(base.min&&from<base.min)partial.push(`source starts ${base.min}`);if(base.max&&to>base.max)partial.push(`source ends ${base.max}`);
-    note.innerHTML=`Website sheet only · Selected ${escHtml(from)} to ${escHtml(to)} · 1 Display Order Code = 1 order · customer matched using Billing Address Name + Final Billing Address · <b>no customer ID is shown</b>${partial.length?` · ${partial.map(escHtml).join(' · ')}`:''}.`;
+    note.innerHTML=`Website sheet only · Selected ${escHtml(from)} to ${escHtml(to)} · 1 Display Order Code = 1 order for order/AOV metrics · <b>same-customer orders on the same date count as one purchase occasion for repeat analysis</b> · customer matched using Billing Address Name + Final Billing Address · <b>no customer ID is shown</b>${partial.length?` · ${partial.map(escHtml).join(' · ')}`:''}.`;
   }
 
   if(matrixHost){
@@ -23025,16 +23049,16 @@ function renderConsumerRepeatDetail(){
   if(count)count.textContent=`${rows.length.toLocaleString('en-IN')} repeat customers · showing ${Math.min(rows.length,500).toLocaleString('en-IN')}`;
   const shown=rows.slice(0,500);
   if(!shown.length){host.innerHTML='<div class="crr-empty">No repeat customers match this search.</div>';return;}
-  host.innerHTML=`<table class="crr-table"><thead><tr><th>Customer Name</th><th>Total Orders</th><th>Repeat Purchases</th><th>First Purchase</th><th>Repeat Purchase Dates</th><th>Latest Purchase</th><th>Avg Days Between Orders</th><th>Total Spend</th><th>AOV</th></tr></thead><tbody>${shown.map(r=>`<tr><td class="crr-name">${escHtml(r.name||'Customer')}</td><td><b>${r.orders}</b></td><td><b>${r.repeats}</b></td><td>${escHtml(_crrPrettyDate(r.first))}</td><td class="crr-wrap">${r.repeatDates.map(_crrPrettyDate).map(escHtml).join(', ')||'—'}</td><td>${escHtml(_crrPrettyDate(r.last))}</td><td>${Number.isFinite(r.avgGap)?`${Math.round(r.avgGap)} days`:'—'}</td><td><b>${escHtml(_crrMoney(r.totalSpend))}</b></td><td><b>${escHtml(_crrMoney(r.aov))}</b></td></tr>`).join('')}</tbody></table>`;
+  host.innerHTML=`<table class="crr-table"><thead><tr><th>Customer Name</th><th>Total Orders</th><th>Purchase Dates</th><th>Repeat Times</th><th>First Purchase</th><th>Repeat Purchase Dates</th><th>Latest Purchase</th><th>Avg Days Between Purchase Dates</th><th>Total Spend</th><th>AOV</th></tr></thead><tbody>${shown.map(r=>`<tr><td class="crr-name">${escHtml(r.name||'Customer')}</td><td><b>${r.orders}</b></td><td><b>${r.purchaseDayCount}</b></td><td><b>${r.repeats}</b></td><td>${escHtml(_crrPrettyDate(r.first))}</td><td class="crr-wrap">${r.repeatDates.map(_crrPrettyDate).map(escHtml).join(', ')||'—'}</td><td>${escHtml(_crrPrettyDate(r.last))}</td><td>${Number.isFinite(r.avgGap)?`${Math.round(r.avgGap)} days`:'—'}</td><td><b>${escHtml(_crrMoney(r.totalSpend))}</b></td><td><b>${escHtml(_crrMoney(r.aov))}</b></td></tr>`).join('')}</tbody></table>`;
 }
 
 function exportConsumerRepeatCsv(){
   if(!_crrState)renderConsumerRepeat();if(!_crrState)return;
   const q=String(document.getElementById('crrSearch')?.value||'').trim().toLowerCase();
   const rows=_crrState.repeat.filter(r=>!q||String(r.name||'').toLowerCase().includes(q));
-  const lines=[['Customer Name','Total Orders','Repeat Purchases','First Purchase','First Repeat','Repeat Purchase Dates','Latest Purchase','Days to First Repeat','Average Days Between Orders','Total Spend','AOV'].join(',')];
+  const lines=[['Customer Name','Total Orders','Distinct Purchase Dates','Repeat Times','First Purchase','First Repeat','Repeat Purchase Dates','Latest Purchase','Days to First Repeat','Average Days Between Purchase Dates','Total Spend','AOV'].join(',')];
   rows.forEach(r=>lines.push([
-    r.name,r.orders,r.repeats,r.first,r.second||'',r.repeatDates.join(' | '),r.last,
+    r.name,r.orders,r.purchaseDayCount,r.repeats,r.first,r.second||'',r.repeatDates.join(' | '),r.last,
     Number.isFinite(r.days)?r.days:'',Number.isFinite(r.avgGap)?r.avgGap.toFixed(1):'',
     Number(r.totalSpend||0).toFixed(2),Number(r.aov||0).toFixed(2)
   ].map(_crrEscCsv).join(',')));
