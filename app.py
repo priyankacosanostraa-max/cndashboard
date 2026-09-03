@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.19 (REPEAT CUSTOMERS · SIMPLE HUMAN VIEW)
+# Consumer Repeat tab simplified for non-technical users: plain-language comeback periods and no
+# customer IDs shown. Adds repeat-customer table with customer name, repeat count,
+# purchase/repeat dates, total spend and AOV from Website Total Price W/O GST.
+# ============================================================
 # Cosa Nostraa — V24.18 (CONSUMER ROLLING REPEAT · WEBSITE LAST 1 YEAR)
 # New Consumer Repeat tab uses Website customer-order events already built from the
 # Website sheet: one Display Order Code = one order; consumer identity = normalized
@@ -2397,7 +2402,8 @@ def _refresh_data():
     # Billing Address Name + Final Billing Address together identify one
     # Website customer, while Display Order Code (column A) alone identifies each Website order.
     # Duplicate lines of one invoice collapse; two invoices by the same customer
-    # on the same day stay distinct. Only short SHA-1 tokens reach the browser.
+    # on the same day stay distinct. A short internal token keeps identity stable;
+    # the Repeat Customers tab also receives customer display name and order value.
     website_customer_events = {}
     website_city_events = {}
     website_payment_events = {}
@@ -2676,28 +2682,28 @@ def _refresh_data():
                 if not is_sold_web_line:
                     continue
 
-                # PIN is the State source of truth. City is validated against
-                # it, and State is kept in the compact event so same-named
-                # cities in different States never get merged.
+                # Use the Website line value for customer AOV/spend. Source priority is
+                # Total Price W/O GST / Net Revenue, then Selling Price x sold qty.
+                consumer_line_rev_web = to_num(r.get(W_REV, 0)) if W_REV else 0.0
+                if consumer_line_rev_web <= 0 and W_SP:
+                    unit_sp_web = to_num(r.get(W_SP, 0))
+                    if unit_sp_web > 0:
+                        consumer_line_rev_web = float(unit_sp_web) * float(qty_web)
+                elif consumer_line_rev_web > 0 and gross_qty_web > 0 and qty_web < gross_qty_web:
+                    consumer_line_rev_web *= qty_web / gross_qty_web
+                consumer_line_rev_web = max(0.0, float(consumer_line_rev_web or 0.0))
+
+                # PIN is the State source of truth. City is validated against it.
                 city_web, pin_web = _extract_city_pin_from_address(raw_addr)
                 state_web = _pincode_to_state(pin_web) if pin_web else ""
                 if state_web:
                     city_web = _normalize_city_for_state(city_web, state_web, pin_web)
                 if city_web:
-                    rev_web = to_num(r.get(W_REV, 0)) if W_REV else 0.0
-                    if rev_web <= 0 and W_SP:
-                        unit_sp_web = to_num(r.get(W_SP, 0))
-                        if unit_sp_web > 0:
-                            rev_web = float(unit_sp_web) * float(qty_web)
-                    elif rev_web > 0 and gross_qty_web > 0 and qty_web < gross_qty_web:
-                        # Source line revenue is gross; retain only the sold
-                        # portion when part/all of a multi-qty line is returned.
-                        rev_web *= qty_web / gross_qty_web
                     city_key = (date_iso, state_web, city_web)
                     sku_city_map = _web_city_sums.setdefault(mapped_web_sku, {})
                     city_bucket = sku_city_map.setdefault(city_key, {"q": 0.0, "r": 0.0})
                     city_bucket["q"] += float(qty_web)
-                    city_bucket["r"] += float(rev_web)
+                    city_bucket["r"] += float(consumer_line_rev_web)
 
                 name_norm = re.sub(r"[^a-z0-9]+", " ", raw_name.casefold()).strip()
                 addr_norm = re.sub(r"[^a-z0-9]+", " ", raw_addr.casefold()).strip()
@@ -2705,13 +2711,26 @@ def _refresh_data():
                     continue
                 identity = name_norm + "|" + addr_norm
                 customer_token = hashlib.sha1(identity.encode("utf-8", errors="ignore")).hexdigest()[:16]
-                # Repeat-customer events are order-level too. Same customer can
-                # place multiple invoices on one date; those must remain distinct.
+                display_customer_name = re.sub(r"\s+", " ", raw_name).strip() or "Customer"
+
+                # Keep one event per customer + exact Website order + SKU. If the same SKU
+                # appears on multiple genuine lines, accumulate its sold value; the browser
+                # later joins all SKU pieces back to one Display Order Code before AOV.
                 event_key = (customer_token, order_token)
-                _web_event_sets.setdefault(mapped_web_sku, {})[event_key] = {
-                    "c": _si(customer_token), "d": _si(order_day),
-                    "s": _si(order_token),
-                }
+                sku_event_map = _web_event_sets.setdefault(mapped_web_sku, {})
+                repeat_event = sku_event_map.get(event_key)
+                if repeat_event is None:
+                    repeat_event = {
+                        "c": _si(customer_token), "d": _si(order_day),
+                        "s": _si(order_token), "n": _si(display_customer_name),
+                        "r": 0.0,
+                    }
+                    sku_event_map[event_key] = repeat_event
+                elif not repeat_event.get("n") and display_customer_name:
+                    repeat_event["n"] = _si(display_customer_name)
+                repeat_event["r"] = round(
+                    float(repeat_event.get("r", 0.0) or 0.0) + consumer_line_rev_web, 2
+                )
 
         website_customer_events = {
             sku: sorted(events.values(), key=lambda x: (x["d"], x["c"]))
@@ -7513,7 +7532,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m1" onclick="showTab('home')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5M9.5 20v-6h5v6"/></svg></span><span>Home</span></button>
   <button class="menu-item" id="m2" onclick="showTab('matrix')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V11h4v9M10 20V4h4v16M16 20v-7h4v7M3 20h18"/></svg></span><span>Overall Details</span></button>
   <button class="menu-item" id="m3" onclick="showTab('repeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m17 3 4 4-4 4M21 7H7a4 4 0 0 0-4 4v1M7 21l-4-4 4-4M3 17h14a4 4 0 0 0 4-4v-1"/></svg></span><span>Repeat Orders</span></button>
-  <button class="menu-item" id="m37" onclick="showTab('consumerrepeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3.5 19c.5-3.5 2.5-5.5 5.5-5.5S14 15.5 14.5 19M12.5 19c.4-2.8 2.1-4.6 4.6-4.6 2.2 0 3.7 1.4 4.4 4.1"/><path d="m16 3 2 2-2 2M18 5h-4"/></svg></span><span>Consumer Repeat</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#8a611b;color:#fff;font-size:7px;font-weight:900">1Y</span></button>
+  <button class="menu-item" id="m37" onclick="showTab('consumerrepeat')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="16" cy="8" r="3"/><path d="M3.5 19c.5-3.5 2.5-5.5 5.5-5.5S14 15.5 14.5 19M12.5 19c.4-2.8 2.1-4.6 4.6-4.6 2.2 0 3.7 1.4 4.4 4.1"/><path d="m16 3 2 2-2 2M18 5h-4"/></svg></span><span>Repeat Customers</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#8a611b;color:#fff;font-size:7px;font-weight:900">1Y</span></button>
   <button class="menu-item" id="m4" onclick="showTab('finder')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M8 8h5M8 11h3"/></svg></span><span>SKU Finder</span></button>
   <button class="menu-item" id="m5" onclick="showTab('skudetails')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span>SKU Details</span></button>
   <button class="menu-item" id="m34" onclick="showTab('returns')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M9 7 5 11l4 4"/><path d="M5 11h9a5 5 0 0 1 5 5v2"/><path d="M15 5h4v4"/></svg></span><span>Returns</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
@@ -7890,6 +7909,9 @@ select.lg-in option{background:#fff;color:#1a1610}
       .crr-bar-track{height:9px;border-radius:999px;background:#eee7d8;overflow:hidden}.crr-bar-fill{height:100%;background:linear-gradient(90deg,#d6af4a,#a87a14);border-radius:999px}
       .crr-bar-val{text-align:right;font-weight:900;color:#4f3b17}
       .crr-detail-note{margin:5px 0 0;color:#7b6e5e;font-size:8px}
+      .crr-plain-help{background:#fff8e9;border:1px solid rgba(185,138,25,.22);border-radius:12px;padding:10px 12px;margin:0 0 12px;font-size:9px;line-height:1.65;color:#5f513e}
+      .crr-table td.crr-wrap{white-space:normal;min-width:220px;max-width:330px;text-align:left;line-height:1.45}
+      .crr-table td.crr-name{font-weight:850;min-width:170px;text-align:left}
       .crr-empty{padding:24px;text-align:center;color:#847767;font-size:10px}
       @media(max-width:1100px){.crr-kpis{grid-template-columns:repeat(3,minmax(140px,1fr))}.crr-two{grid-template-columns:1fr}}
       @media(max-width:650px){.crr-kpis{grid-template-columns:repeat(2,minmax(130px,1fr))}}
@@ -7897,21 +7919,22 @@ select.lg-in option{background:#fff;color:#1a1610}
 
     <div class="crr-hero">
       <div>
-        <div class="crr-title">Consumer Rolling Repeat</div>
-        <div class="crr-sub">Website consumers only. One <b>Display Order Code</b> is one order. Consumer identity follows the existing dashboard repeat logic: normalized <b>Billing Address Name + Final Billing Address</b>. Default range is the latest 1 year available in the Website source.</div>
+        <div class="crr-title">Website Repeat Customers</div>
+        <div class="crr-sub">Simple last-1-year view of who bought again, how quickly they came back, how many repeat purchases they made, and their Website AOV.</div>
       </div>
       <div class="crr-actions">
         <button class="go-btn" style="width:auto;padding:9px 13px;letter-spacing:1px" onclick="crrSetLastYear()">LAST 1 YEAR</button>
-        <button class="go-btn" style="width:auto;padding:9px 13px;letter-spacing:1px;background:#f0eee8;color:#2d281f" onclick="exportConsumerRepeatCsv()">EXPORT CSV</button>
+        <button class="go-btn" style="width:auto;padding:9px 13px;letter-spacing:1px;background:#f0eee8;color:#2d281f" onclick="exportConsumerRepeatCsv()">EXPORT REPEAT CUSTOMERS</button>
       </div>
     </div>
+
+    <div class="crr-plain-help"><b>How to read this:</b> If 1,000 customers purchased in January and 80 of those customers made their next purchase in February, the <b>After 1 Month</b> column shows <b>80 (8%)</b>. If their next purchase was in March, they appear under <b>After 2 Months</b>. The table uses only plain-language time periods.</div>
 
     <div class="filter-box" style="margin-bottom:12px">
       <div class="fg">
         <div class="fc"><label class="fl">Purchase Date From</label><input class="fi" type="date" id="crrFrom" onchange="renderConsumerRepeat()"></div>
         <div class="fc"><label class="fl">Purchase Date To</label><input class="fi" type="date" id="crrTo" onchange="renderConsumerRepeat()"></div>
-        <div class="fc"><label class="fl">Consumer Detail View</label><select class="fs" id="crrView" onchange="renderConsumerRepeatDetail()"><option value="repeat">Repeat consumers only</option><option value="all">All consumers</option></select></div>
-        <div class="fc"><label class="fl">Customer ID Search</label><input class="fi" id="crrSearch" placeholder="hashed customer ID…" oninput="renderConsumerRepeatDetail()"></div>
+        <div class="fc"><label class="fl">Search Customer Name</label><input class="fi" id="crrSearch" placeholder="e.g. Priya, Rahul..." oninput="renderConsumerRepeatDetail()"></div>
       </div>
       <div class="small-note" id="crrSourceNote" style="margin-top:8px"></div>
     </div>
@@ -7919,24 +7942,24 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="crr-kpis" id="crrKpis"></div>
 
     <div class="crr-panel">
-      <div class="crr-panel-head"><div><div class="crr-panel-title">Rolling Repeat Matrix</div><div class="crr-panel-note">Each purchase month is an anchor. M+1 means the same consumers bought again one calendar month later. Same Month means 2+ unique orders in the anchor month. Blank future cells are not yet observable.</div></div></div>
+      <div class="crr-panel-head"><div><div class="crr-panel-title">When Did Customers Come Back?</div><div class="crr-panel-note">Start with the purchase month on the left. Each customer is placed in the first period in which they purchased again, so the columns are easy to read and do not double-count the same customer's first comeback.</div></div></div>
       <div class="crr-table-wrap" id="crrMatrix"></div>
     </div>
 
     <div class="crr-two">
       <div class="crr-panel">
-        <div class="crr-panel-head"><div><div class="crr-panel-title">First Return Lag</div><div class="crr-panel-note">Starts from each consumer's first observed order inside the selected date range and shows when the second unique order happened.</div></div></div>
+        <div class="crr-panel-head"><div><div class="crr-panel-title">First Comeback Timing</div><div class="crr-panel-note">Among customers who repeated, this shows when their first repeat purchase happened.</div></div></div>
         <div class="crr-bars" id="crrLagBars"></div>
         <div class="crr-detail-note" id="crrLagNote"></div>
       </div>
       <div class="crr-panel">
-        <div class="crr-panel-head"><div><div class="crr-panel-title">What this means</div><div class="crr-panel-note">Use the month matrix for rolling retention, and First Return Lag to understand the consumer's first comeback speed.</div></div></div>
+        <div class="crr-panel-head"><div><div class="crr-panel-title">Simple Summary</div><div class="crr-panel-note">Plain-English takeaway from the selected period.</div></div></div>
         <div id="crrInsight" style="font-size:9px;line-height:1.75;color:#4c4336"></div>
       </div>
     </div>
 
     <div class="crr-panel">
-      <div class="crr-panel-head"><div><div class="crr-panel-title">Consumer Detail</div><div class="crr-panel-note">Customer IDs are privacy-safe hashes. The table renders up to 500 rows for speed; CSV export includes every row in the selected detail view.</div></div><div class="small-note" id="crrDetailCount"></div></div>
+      <div class="crr-panel-head"><div><div class="crr-panel-title">Repeat Customer Details</div><div class="crr-panel-note">Only repeat customers are shown. AOV = total Website order value without GST divided by unique Website orders in the selected period. No customer ID or full address is displayed.</div></div><div class="small-note" id="crrDetailCount"></div></div>
       <div class="crr-table-wrap" id="crrDetail"></div>
     </div>
   </div>
@@ -10740,7 +10763,7 @@ const MENU_TAB_META = {
   m1:  {name:"Home",             desc:"Sales, stock, targets and current priorities."},
   m2:  {name:"Overview",         desc:"All SKU sales, stock and filters."},
   m3:  {name:"Repeat Orders",    desc:"Demand, stock, WIP and repeat-order needs."},
-  m37: {name:"Consumer Repeat",  desc:"Website consumer rolling repeat, comeback timing and monthly retention."},
+  m37: {name:"Repeat Customers", desc:"Website repeat customers, comeback timing, repeat dates and AOV."},
   m4:  {name:"SKU Finder",       desc:"Find a SKU using a product image."},
   m5:  {name:"SKU Details",      desc:"One SKU's complete sales and stock history."},
   m34: {name:"Returns",          desc:"Top return SKUs with date, SKU/CN Name and channel filters."},
@@ -22765,7 +22788,7 @@ function renderProUI(){
 }
 
 
-/* ===== WEBSITE CONSUMER ROLLING REPEAT — LAST 1 YEAR ===== */
+/* ===== WEBSITE REPEAT CUSTOMERS — SIMPLE LAST 1 YEAR VIEW ===== */
 let _crrBase = null;
 let _crrState = null;
 
@@ -22781,6 +22804,9 @@ function _crrMonthKey(iso){return String(iso||'').slice(0,7);}
 function _crrMonthLabel(key){
   const d=new Date(String(key||'')+'-01T00:00:00');
   return Number.isNaN(d.getTime())?String(key||''):d.toLocaleDateString('en-GB',{month:'short',year:'numeric'});
+}
+function _crrPrettyDate(iso){
+  const d=_crrDate(iso);return d?d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
 }
 function _crrAddMonths(key,n){
   const d=new Date(String(key||'')+'-01T00:00:00');
@@ -22802,8 +22828,21 @@ function _crrMedian(values){
 }
 function _crrPct(n,d){return d>0?(n/d*100):0;}
 function _crrFmtPct(n){return `${Number(n||0).toFixed(1)}%`;}
+function _crrMoney(n){
+  const v=Number(n||0);return `₹${v.toLocaleString('en-IN',{maximumFractionDigits:0})}`;
+}
 function _crrEscCsv(v){
   const s=String(v==null?'':v);return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
+}
+function _crrTimingLabel(months){
+  if(!Number.isFinite(months))return 'No repeat';
+  if(months<=0)return 'Same month';
+  if(months===1)return 'After 1 month';
+  if(months===2)return 'After 2 months';
+  if(months===3)return 'After 3 months';
+  if(months<=6)return 'After 4–6 months';
+  if(months<=12)return 'After 7–12 months';
+  return 'After 12+ months';
 }
 
 function _crrCollectBase(){
@@ -22812,9 +22851,20 @@ function _crrCollectBase(){
   (master||[]).forEach(item=>{
     (Array.isArray(item?.website_customer_events)?item.website_customer_events:[]).forEach(ev=>{
       const order=String(ev?.s||'').trim(),customer=String(ev?.c||'').trim(),day=_crrIsoDate(ev?.d);
+      const name=String(ev?.n||'').trim(),rev=Math.max(0,Number(ev?.r)||0);
       if(!order||!customer||!day)return;
       const prev=byOrder.get(order);
-      if(!prev||day<prev.d)byOrder.set(order,{o:order,c:customer,d:day});
+      if(!prev){
+        byOrder.set(order,{o:order,c:customer,d:day,n:name||'Customer',r:rev});
+        return;
+      }
+      // Same exact Website Display Order Code can appear under multiple SKU rows.
+      // Revenue is summed across those SKU pieces, but the order itself stays one order.
+      if(prev.c===customer){
+        prev.r=(Number(prev.r)||0)+rev;
+        if(day<prev.d)prev.d=day;
+        if((!prev.n||prev.n==='Customer')&&name)prev.n=name;
+      }
     });
   });
   const events=Array.from(byOrder.values()).sort((a,b)=>a.d.localeCompare(b.d)||a.o.localeCompare(b.o));
@@ -22842,7 +22892,7 @@ function renderConsumerRepeat(){
   const base=_crrCollectBase();
   const kpis=document.getElementById('crrKpis'),matrixHost=document.getElementById('crrMatrix'),bars=document.getElementById('crrLagBars'),note=document.getElementById('crrSourceNote');
   if(!base.events.length){
-    if(kpis)kpis.innerHTML='<div class="crr-empty" style="grid-column:1/-1">Website consumer-order events are not available yet. Refresh dashboard data and try again.</div>';
+    if(kpis)kpis.innerHTML='<div class="crr-empty" style="grid-column:1/-1">Website customer-order data is not available yet. Refresh dashboard data and try again.</div>';
     if(matrixHost)matrixHost.innerHTML='<div class="crr-empty">No data</div>';return;
   }
   let from=document.getElementById('crrFrom')?.value||base.min,to=document.getElementById('crrTo')?.value||base.max;
@@ -22850,6 +22900,7 @@ function renderConsumerRepeat(){
   const events=base.events.filter(e=>e.d>=from&&e.d<=to);
   const byCustomer=new Map();
   events.forEach(e=>{const a=byCustomer.get(e.c)||[];a.push(e);byCustomer.set(e.c,a);});
+
   const details=[];const repeatDays=[];const lagBuckets=new Map();
   byCustomer.forEach((arr,c)=>{
     arr.sort((a,b)=>a.d.localeCompare(b.d)||a.o.localeCompare(b.o));
@@ -22857,14 +22908,24 @@ function renderConsumerRepeat(){
     const days=second?_crrDayDiff(first.d,second.d):null,months=second?_crrMonthDiff(first.d,second.d):null;
     if(Number.isFinite(days))repeatDays.push(days);
     if(Number.isFinite(months))lagBuckets.set(months,(lagBuckets.get(months)||0)+1);
-    details.push({customer:c,first:first.d,second:second?.d||'',days,months,orders:arr.length,last:last.d,orderIds:arr.map(x=>x.o)});
+    const gaps=[];for(let i=1;i<arr.length;i++){const g=_crrDayDiff(arr[i-1].d,arr[i].d);if(Number.isFinite(g))gaps.push(g);}
+    const avgGap=gaps.length?gaps.reduce((s,v)=>s+v,0)/gaps.length:null;
+    const totalSpend=arr.reduce((s,x)=>s+Math.max(0,Number(x.r)||0),0);
+    const aov=arr.length?totalSpend/arr.length:0;
+    details.push({
+      customer:c,name:String(first.n||'Customer').trim()||'Customer',first:first.d,second:second?.d||'',days,months,
+      orders:arr.length,repeats:Math.max(0,arr.length-1),last:last.d,
+      purchaseDates:arr.map(x=>x.d),repeatDates:arr.slice(1).map(x=>x.d),
+      avgGap,totalSpend,aov
+    });
   });
-  details.sort((a,b)=>b.orders-a.orders||(a.days??999999)-(b.days??999999)||a.first.localeCompare(b.first));
+  details.sort((a,b)=>b.repeats-a.repeats||b.totalSpend-a.totalSpend||(a.days??999999)-(b.days??999999)||a.first.localeCompare(b.first));
   const repeat=details.filter(x=>x.orders>=2),consumerCount=details.length,orderCount=events.length;
   const within30=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=30).length,within60=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=60).length,within90=repeat.filter(x=>Number.isFinite(x.days)&&x.days<=90).length;
   const avgDays=repeatDays.length?repeatDays.reduce((s,v)=>s+v,0)/repeatDays.length:0,medianDays=_crrMedian(repeatDays);
+  const avgOrdersRepeat=repeat.length?repeat.reduce((s,x)=>s+x.orders,0)/repeat.length:0;
 
-  // month -> customer -> orders; each month is a rolling anchor
+  // Purchase month -> customer -> exact orders in that month.
   const monthMap=new Map();
   events.forEach(e=>{
     const mk=_crrMonthKey(e.d);if(!monthMap.has(mk))monthMap.set(mk,new Map());
@@ -22872,56 +22933,86 @@ function renderConsumerRepeat(){
   });
   const startMonth=_crrMonthKey(from),endMonth=_crrMonthKey(to),months=[];
   for(let mk=startMonth;mk&&mk<=endMonth;mk=_crrAddMonths(mk,1))months.push(mk);
+
+  // Exclusive first-comeback buckets per purchase month. A customer is shown only in
+  // the first future period where they buy again, which is easier than a retention matrix.
   const rolling=months.map(mk=>{
     const cmap=monthMap.get(mk)||new Map(),buyers=new Set(cmap.keys());
-    let same=0;cmap.forEach(a=>{if(new Set(a.map(x=>x.o)).size>=2)same++;});
-    const offsets=[];
-    for(let k=1;k<=11;k++){
-      const tm=_crrAddMonths(mk,k);if(tm>endMonth){offsets.push(null);continue;}
-      const target=new Set((monthMap.get(tm)||new Map()).keys());let n=0;buyers.forEach(c=>{if(target.has(c))n++;});offsets.push(n);
-    }
-    const future=new Set();months.forEach(tm=>{if(tm<=mk)return;const target=monthMap.get(tm)||new Map();buyers.forEach(c=>{if(target.has(c))future.add(c);});});
-    return {month:mk,buyers:buyers.size,same,offsets,anyFuture:future.size};
+    const bucket={same:0,after1:0,after2:0,after3:0,after4to6:0,after7to12:0,returned:0};
+    buyers.forEach(c=>{
+      const anchorOrders=cmap.get(c)||[];
+      if(new Set(anchorOrders.map(x=>x.o)).size>=2){bucket.same++;bucket.returned++;return;}
+      let firstK=null;
+      for(let k=1;k<=12;k++){
+        const targetMonth=_crrAddMonths(mk,k);if(targetMonth>endMonth)break;
+        if((monthMap.get(targetMonth)||new Map()).has(c)){firstK=k;break;}
+      }
+      if(firstK==null)return;
+      bucket.returned++;
+      if(firstK===1)bucket.after1++;
+      else if(firstK===2)bucket.after2++;
+      else if(firstK===3)bucket.after3++;
+      else if(firstK<=6)bucket.after4to6++;
+      else bucket.after7to12++;
+    });
+    return {month:mk,buyers:buyers.size,...bucket,
+      avail1:_crrAddMonths(mk,1)<=endMonth,
+      avail2:_crrAddMonths(mk,2)<=endMonth,
+      avail3:_crrAddMonths(mk,3)<=endMonth,
+      avail46:_crrAddMonths(mk,6)<=endMonth,
+      avail712:_crrAddMonths(mk,12)<=endMonth
+    };
   });
 
-  _crrState={from,to,events,details,repeat,rolling,lagBuckets,consumerCount,orderCount,within30,within60,within90,avgDays,medianDays,base};
+  _crrState={from,to,events,details,repeat,rolling,lagBuckets,consumerCount,orderCount,within30,within60,within90,avgDays,medianDays,avgOrdersRepeat,base};
 
   if(kpis)kpis.innerHTML=[
-    ['Unique Consumers',consumerCount.toLocaleString('en-IN'),'Identifiable Website consumers'],
-    ['Website Orders',orderCount.toLocaleString('en-IN'),'Unique Display Order Code'],
-    ['Repeat Consumers',repeat.length.toLocaleString('en-IN'),`${_crrFmtPct(_crrPct(repeat.length,consumerCount))} of consumers`],
-    ['Median First Repeat',`${Math.round(medianDays)} days`,`${_crrFmtPct(_crrPct(within30,consumerCount))} repeat within 30D`],
-    ['Average First Repeat',`${avgDays.toFixed(1)} days`,`${_crrFmtPct(_crrPct(within60,consumerCount))} within 60D`],
-    ['Repeat within 90D',_crrFmtPct(_crrPct(within90,consumerCount)),`${within90.toLocaleString('en-IN')} consumers`],
+    ['Customers Who Purchased',consumerCount.toLocaleString('en-IN'),'Website customers in selected period'],
+    ['Repeat Customers',repeat.length.toLocaleString('en-IN'),`${_crrFmtPct(_crrPct(repeat.length,consumerCount))} bought again`],
+    ['Repeat Rate',_crrFmtPct(_crrPct(repeat.length,consumerCount)),'Customers with 2+ unique orders'],
+    ['Website Orders',orderCount.toLocaleString('en-IN'),'Unique Display Order Codes'],
+    ['Typical Time to Come Back',`${Math.round(medianDays)} days`,'Median first repeat time'],
+    ['Avg Orders / Repeat Customer',avgOrdersRepeat.toFixed(1),`${_crrFmtPct(_crrPct(within90,consumerCount))} of all customers repeat within 90 days`],
   ].map(x=>`<div class="crr-kpi"><div class="crr-kpi-l">${escHtml(x[0])}</div><div class="crr-kpi-v">${escHtml(x[1])}</div><div class="crr-kpi-s">${escHtml(x[2])}</div></div>`).join('');
 
   if(note){
-    const partial=[];if(base.min&&from<base.min)partial.push(`source actually starts ${base.min}`);if(base.max&&to>base.max)partial.push(`source ends ${base.max}`);
-    note.innerHTML=`Selected ${escHtml(from)} to ${escHtml(to)} · ${events.length.toLocaleString('en-IN')} unique Website orders · ${consumerCount.toLocaleString('en-IN')} identifiable consumers${partial.length?` · <b>${partial.map(escHtml).join(' · ')}</b>`:''}. Consumer identity is hashed in the browser; raw address is never shown here.`;
+    const partial=[];if(base.min&&from<base.min)partial.push(`source starts ${base.min}`);if(base.max&&to>base.max)partial.push(`source ends ${base.max}`);
+    note.innerHTML=`Website sheet only · Selected ${escHtml(from)} to ${escHtml(to)} · 1 Display Order Code = 1 order · customer matched using Billing Address Name + Final Billing Address · <b>no customer ID is shown</b>${partial.length?` · ${partial.map(escHtml).join(' · ')}`:''}.`;
   }
 
   if(matrixHost){
     const cell=(n,baseN,available=true)=>{
-      if(!available||n==null)return '<td><span style="color:#b6aa99">—</span></td>';
+      if(!available)return '<td><span style="color:#b6aa99">Not enough time yet</span></td>';
       const pct=_crrPct(n,baseN),alpha=Math.min(.24,.04+pct/100*1.6);
       return `<td><span class="crr-cell" style="background:rgba(185,138,25,${alpha.toFixed(3)})"><b>${Number(n).toLocaleString('en-IN')}</b><span>${_crrFmtPct(pct)}</span></span></td>`;
     };
-    const head=`<thead><tr><th>Purchase Month</th><th>Unique Consumers</th><th>Same Month</th>${Array.from({length:11},(_,i)=>`<th>M+${i+1}</th>`).join('')}<th>Any Future</th></tr></thead>`;
-    const body=rolling.map(r=>`<tr><td><b>${escHtml(_crrMonthLabel(r.month))}</b></td><td><b>${r.buyers.toLocaleString('en-IN')}</b></td>${cell(r.same,r.buyers)}${r.offsets.map(v=>cell(v,r.buyers,v!=null)).join('')}${cell(r.anyFuture,r.buyers)}</tr>`).join('');
+    const head='<thead><tr><th>Purchase Month</th><th>Customers</th><th>Came Back Same Month</th><th>After 1 Month</th><th>After 2 Months</th><th>After 3 Months</th><th>After 4–6 Months</th><th>After 7–12 Months</th><th>Came Back Later</th></tr></thead>';
+    const body=rolling.map(r=>`<tr><td><b>${escHtml(_crrMonthLabel(r.month))}</b></td><td><b>${r.buyers.toLocaleString('en-IN')}</b></td>${cell(r.same,r.buyers,true)}${cell(r.after1,r.buyers,r.avail1)}${cell(r.after2,r.buyers,r.avail2)}${cell(r.after3,r.buyers,r.avail3)}${cell(r.after4to6,r.buyers,r.avail46)}${cell(r.after7to12,r.buyers,r.avail712)}${cell(r.returned,r.buyers,r.month<endMonth)}</tr>`).join('');
     matrixHost.innerHTML=rolling.length?`<table class="crr-table">${head}<tbody>${body}</tbody></table>`:'<div class="crr-empty">No orders in this date range.</div>';
   }
 
   if(bars){
-    const bucketRows=[];for(let k=0;k<=11;k++)bucketRows.push({label:k===0?'Same Month':`M+${k}`,count:lagBuckets.get(k)||0});
-    bucketRows.push({label:'M+12+',count:Array.from(lagBuckets.entries()).filter(([k])=>k>=12).reduce((s,[,v])=>s+v,0)});
+    const bucketRows=[
+      {label:'Same month',count:lagBuckets.get(0)||0},
+      {label:'After 1 month',count:lagBuckets.get(1)||0},
+      {label:'After 2 months',count:lagBuckets.get(2)||0},
+      {label:'After 3 months',count:lagBuckets.get(3)||0},
+      {label:'After 4–6 months',count:[4,5,6].reduce((s,k)=>s+(lagBuckets.get(k)||0),0)},
+      {label:'After 7–12 months',count:[7,8,9,10,11,12].reduce((s,k)=>s+(lagBuckets.get(k)||0),0)},
+      {label:'After 12+ months',count:Array.from(lagBuckets.entries()).filter(([k])=>k>=13).reduce((s,[,v])=>s+v,0)}
+    ];
     const max=Math.max(1,...bucketRows.map(x=>x.count));
     bars.innerHTML=bucketRows.map(x=>`<div class="crr-bar-row"><div>${escHtml(x.label)}</div><div class="crr-bar-track"><div class="crr-bar-fill" style="width:${(x.count/max*100).toFixed(1)}%"></div></div><div class="crr-bar-val">${x.count.toLocaleString('en-IN')} <span style="font-weight:500;color:#857665">(${_crrFmtPct(_crrPct(x.count,repeat.length))})</span></div></div>`).join('');
   }
-  const lagNote=document.getElementById('crrLagNote');if(lagNote)lagNote.textContent=`${(consumerCount-repeat.length).toLocaleString('en-IN')} consumers did not place a second order inside the selected window. Percentages above use repeat consumers as the denominator.`;
+  const lagNote=document.getElementById('crrLagNote');if(lagNote)lagNote.textContent=`${repeat.length.toLocaleString('en-IN')} repeat customers in the selected period. The bars show each repeat customer's first comeback only.`;
 
   const insight=document.getElementById('crrInsight');if(insight){
-    const same=lagBuckets.get(0)||0,one=lagBuckets.get(1)||0,three=within90;
-    insight.innerHTML=`<b>${_crrFmtPct(_crrPct(repeat.length,consumerCount))}</b> of identifiable consumers repeated within the selected window. Of repeat consumers, <b>${_crrFmtPct(_crrPct(same,repeat.length))}</b> came back in the same calendar month and <b>${_crrFmtPct(_crrPct(one,repeat.length))}</b> first came back one calendar month later. Exact timing is faster than the calendar-month view for many buyers: median first repeat is <b>${Math.round(medianDays)} days</b>. Use M+1 / M+2 in the rolling matrix to compare retention by purchase month.`;
+    const bucketSummary=[
+      ['same month',lagBuckets.get(0)||0],['after 1 month',lagBuckets.get(1)||0],['after 2 months',lagBuckets.get(2)||0],['after 3 months',lagBuckets.get(3)||0],
+      ['after 4–6 months',[4,5,6].reduce((s,k)=>s+(lagBuckets.get(k)||0),0)],['after 7–12 months',[7,8,9,10,11,12].reduce((s,k)=>s+(lagBuckets.get(k)||0),0)]
+    ].sort((a,b)=>b[1]-a[1]);
+    const top=bucketSummary[0]||['—',0];
+    insight.innerHTML=`Out of <b>${consumerCount.toLocaleString('en-IN')}</b> Website customers, <b>${repeat.length.toLocaleString('en-IN')}</b> bought again, giving a <b>${_crrFmtPct(_crrPct(repeat.length,consumerCount))}</b> repeat rate. A typical repeat customer came back in about <b>${Math.round(medianDays)} days</b>. The largest first-comeback group is <b>${escHtml(top[0])}</b> (${top[1].toLocaleString('en-IN')} customers). <b>${within90.toLocaleString('en-IN')}</b> customers made their first repeat within 90 days.`;
   }
   renderConsumerRepeatDetail();
 }
@@ -22929,21 +23020,25 @@ function renderConsumerRepeat(){
 function renderConsumerRepeatDetail(){
   const host=document.getElementById('crrDetail'),count=document.getElementById('crrDetailCount');if(!host)return;
   if(!_crrState){host.innerHTML='<div class="crr-empty">Open the tab to build repeat data.</div>';return;}
-  const view=document.getElementById('crrView')?.value||'repeat',q=String(document.getElementById('crrSearch')?.value||'').trim().toLowerCase();
-  let rows=(view==='all'?_crrState.details:_crrState.repeat).filter(r=>!q||String(r.customer).toLowerCase().includes(q));
-  if(count)count.textContent=`${rows.length.toLocaleString('en-IN')} consumers · showing ${Math.min(rows.length,500).toLocaleString('en-IN')}`;
+  const q=String(document.getElementById('crrSearch')?.value||'').trim().toLowerCase();
+  const rows=_crrState.repeat.filter(r=>!q||String(r.name||'').toLowerCase().includes(q));
+  if(count)count.textContent=`${rows.length.toLocaleString('en-IN')} repeat customers · showing ${Math.min(rows.length,500).toLocaleString('en-IN')}`;
   const shown=rows.slice(0,500);
-  if(!shown.length){host.innerHTML='<div class="crr-empty">No consumers match this view.</div>';return;}
-  host.innerHTML=`<table class="crr-table"><thead><tr><th>Customer ID</th><th>First Purchase</th><th>First Repeat</th><th>Calendar Month Gap</th><th>Exact Day Gap</th><th>Total Orders</th><th>Last Purchase</th></tr></thead><tbody>${shown.map(r=>`<tr><td><code>${escHtml(r.customer)}</code></td><td>${escHtml(r.first)}</td><td>${escHtml(r.second||'—')}</td><td>${Number.isFinite(r.months)?(r.months===0?'Same Month':`M+${r.months}`):'—'}</td><td>${Number.isFinite(r.days)?`${r.days} days`:'—'}</td><td><b>${r.orders}</b></td><td>${escHtml(r.last)}</td></tr>`).join('')}</tbody></table>`;
+  if(!shown.length){host.innerHTML='<div class="crr-empty">No repeat customers match this search.</div>';return;}
+  host.innerHTML=`<table class="crr-table"><thead><tr><th>Customer Name</th><th>Total Orders</th><th>Repeat Purchases</th><th>First Purchase</th><th>Repeat Purchase Dates</th><th>Latest Purchase</th><th>Avg Days Between Orders</th><th>Total Spend</th><th>AOV</th></tr></thead><tbody>${shown.map(r=>`<tr><td class="crr-name">${escHtml(r.name||'Customer')}</td><td><b>${r.orders}</b></td><td><b>${r.repeats}</b></td><td>${escHtml(_crrPrettyDate(r.first))}</td><td class="crr-wrap">${r.repeatDates.map(_crrPrettyDate).map(escHtml).join(', ')||'—'}</td><td>${escHtml(_crrPrettyDate(r.last))}</td><td>${Number.isFinite(r.avgGap)?`${Math.round(r.avgGap)} days`:'—'}</td><td><b>${escHtml(_crrMoney(r.totalSpend))}</b></td><td><b>${escHtml(_crrMoney(r.aov))}</b></td></tr>`).join('')}</tbody></table>`;
 }
 
 function exportConsumerRepeatCsv(){
   if(!_crrState)renderConsumerRepeat();if(!_crrState)return;
-  const view=document.getElementById('crrView')?.value||'repeat',q=String(document.getElementById('crrSearch')?.value||'').trim().toLowerCase();
-  const rows=(view==='all'?_crrState.details:_crrState.repeat).filter(r=>!q||String(r.customer).toLowerCase().includes(q));
-  const lines=[['Customer ID','First Purchase','First Repeat','Calendar Months to First Repeat','Days to First Repeat','Total Unique Orders','Last Purchase','Order IDs'].join(',')];
-  rows.forEach(r=>lines.push([r.customer,r.first,r.second||'',Number.isFinite(r.months)?r.months:'',Number.isFinite(r.days)?r.days:'',r.orders,r.last,r.orderIds.join(' | ')].map(_crrEscCsv).join(',')));
-  const blob=new Blob(['\ufeff',lines.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`website_consumer_repeat_${_crrState.from}_to_${_crrState.to}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1200);
+  const q=String(document.getElementById('crrSearch')?.value||'').trim().toLowerCase();
+  const rows=_crrState.repeat.filter(r=>!q||String(r.name||'').toLowerCase().includes(q));
+  const lines=[['Customer Name','Total Orders','Repeat Purchases','First Purchase','First Repeat','Repeat Purchase Dates','Latest Purchase','Days to First Repeat','Average Days Between Orders','Total Spend','AOV'].join(',')];
+  rows.forEach(r=>lines.push([
+    r.name,r.orders,r.repeats,r.first,r.second||'',r.repeatDates.join(' | '),r.last,
+    Number.isFinite(r.days)?r.days:'',Number.isFinite(r.avgGap)?r.avgGap.toFixed(1):'',
+    Number(r.totalSpend||0).toFixed(2),Number(r.aov||0).toFixed(2)
+  ].map(_crrEscCsv).join(',')));
+  const blob=new Blob(['\ufeff',lines.join('\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`website_repeat_customers_${_crrState.from}_to_${_crrState.to}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1200);
 }
 window.loadConsumerRepeat=loadConsumerRepeat;window.renderConsumerRepeat=renderConsumerRepeat;window.renderConsumerRepeatDetail=renderConsumerRepeatDetail;window.crrSetLastYear=crrSetLastYear;window.exportConsumerRepeatCsv=exportConsumerRepeatCsv;
 
@@ -23017,7 +23112,7 @@ showTab = function(t){
       home: 'HOME',
       matrix: 'OVERVIEW',
       repeat: 'REPEAT ORDERS',
-      consumerrepeat: 'CONSUMER REPEAT',
+      consumerrepeat: 'REPEAT CUSTOMERS',
       finder: 'SKU FINDER',
       skudetails: 'SKU DETAILS',
       returns: 'RETURNS',
