@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.26 (PAYMENTS · WEEK-WISE TRACKER FIX)
+# Week-wise Payments tracker now uses a true month opening/due schedule and all
+# current-month credits (including customers whose balance became zero). Weekly
+# balance rolls forward cumulatively: Opening + New Due Target - Payment = Closing.
+# Designer remains merged into Purchase. All other dashboard behaviour unchanged.
+# ============================================================
 # ============================================================
 # Cosa Nostraa — V24.25 (PAYMENTS · DESIGNER = PURCHASE)
 # Payments customer Tag/Type now treats Designer and Purchase as one canonical
@@ -8570,7 +8576,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div>
       <div class="insights-head" style="margin-bottom:6px">
-        <div class="insights-title" style="font-size:.85rem">Week-wise Overdue Tracker (Current Month)</div>
+        <div class="insights-title" style="font-size:.85rem">Week-wise Collection Tracker (Current Month)</div>
         <button class="go-btn" style="width:auto;padding:5px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayWeek()">Export CSV</button>
       </div>
       <div id="payWeekTable" style="font-size:.78rem"></div>
@@ -20103,96 +20109,103 @@ function renderPayments(){
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">Respects Tag/Search/Show filters. 0 Days = within term / not overdue.</p>`;
   }
-  // ---- WEEK-WISE summary — ab FILTER ke according (tag/customer/show) ----
+  // ---- WEEK-WISE COLLECTION TRACKER — true rolling math ----
   const wkHost = document.getElementById('payWeekTable');
   if (wkHost){
     const wm = d.week_meta || [];
-    // filtered customers ke week_due se "Overdue(month end)" week-wise recompute
-    // (isme carried-forward backlog + is month ke due-dates dono already shamil
-    // hain — backend hi Week 1 me carry-forward add kar deta hai)
-    const wkOverdue = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.week_due || []).forEach(([ds, amt]) => {
-        for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkOverdue[wi] += (parseFloat(amt)||0); break; }
-        }
-      });
+    const tag = (document.getElementById('payTag')?.value || '').toLowerCase();
+    const q = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
+    const view = document.getElementById('payView')?.value || 'all';
+
+    // Backend sends ALL customers that had ledger activity / target exposure this
+    // month, including customers now fully settled. That keeps Payment Received
+    // correct; the old rows[] list contained outstanding customers only.
+    const weekCustomers = (d.weekly_customers || []).filter(r => {
+      if (tag && String(r.tag||'').toLowerCase() !== tag) return false;
+      if (q && !String(r.customer||'').toLowerCase().includes(q)) return false;
+      if (view === 'overdue' && Number(r.overdue||0) <= 0) return false;
+      if (view === 'due' && Number(r.due||0) <= 0) return false;
+      return true;
     });
-    // Payment Received — jaisa tha waisa hi (FILTERED rows ke week_paid se)
-    const wkPayment = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.week_paid || []).forEach(([ds, amt]) => {
-        for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkPayment[wi] += (parseFloat(amt)||0); break; }
-        }
-      });
-    });
-    // "Overdue(month end) Target" — ab FILTER-AWARE: har customer ka target
-    // month ki pehli baar hi freeze ho chuka hai (backend me), yahan sirf
-    // FILTERED customers ka wahi frozen target sum hota hai. Isliye Tag/Type
-    // filter lagane par ye number badalta hai, par poore month ke liye fixed
-    // rehta hai (ledger baad me kitna bhi badle, frozen value nahi badlegi).
+
     const wkTarget = wm.map(()=>0);
-    rows.forEach(r => {
-      (r.target_week_due || []).forEach(([ds, amt]) => {
+    const wkPayment = wm.map(()=>0);
+    const addPairs = (pairs, dest) => {
+      (pairs || []).forEach(([ds, amt]) => {
         for (let wi=0; wi<wm.length; wi++){
-          if (ds >= wm[wi].start && ds <= wm[wi].end){ wkTarget[wi] += (parseFloat(amt)||0); break; }
+          if (ds >= wm[wi].start && ds <= wm[wi].end){
+            dest[wi] += (parseFloat(amt)||0);
+            break;
+          }
         }
       });
+    };
+    weekCustomers.forEach(r => {
+      addPairs(r.week_target, wkTarget);
+      addPairs(r.week_paid, wkPayment);
     });
-    let tgtTotal = 0, ovTotal = 0, payTotal = 0, balTotal = 0;
-    _payWeekRowsExport = [];
+
+    // Rolling balance: a payment received early can reduce a later week's target.
+    // Keep the internal net position allowed to go negative (advance collection),
+    // but never display a negative overdue balance.
+    let runningNet = 0;
+    let targetTotal = 0, paymentTotal = 0;
     let _weekRowsData = wm.map((w,wi) => {
-      const label = w.label;
-      const ov = Math.round(wkOverdue[wi]);
-      const pay = Math.round(wkPayment[wi]);
-      // Target is the backend's filter-aware MONTH-FROZEN customer target,
-      // not a value reconstructed from today's live overdue. This keeps the
-      // target stable while payments/live ledger amounts move during the month.
-      const tgt = Math.round(wkTarget[wi]);
-      tgtTotal += tgt; ovTotal += ov; payTotal += pay;
-      // Balance against the fixed target cannot be negative after over-collection.
-      const balAfter = Math.max(0, Math.round(tgt - pay));
-      balTotal += balAfter;
+      const opening = Math.max(0, Math.round(runningNet));
+      const target = Math.round(wkTarget[wi]);
+      const payment = Math.round(wkPayment[wi]);
+      targetTotal += target;
+      paymentTotal += payment;
+      runningNet = runningNet + target - payment;
+      const closing = Math.max(0, Math.round(runningNet));
       return {
-        label, wi,
+        label: w.label, wi,
         rangeShort: (w.start.slice(8)+'-'+w.start.slice(5,7))+' to '+(w.end.slice(8)+'-'+w.end.slice(5,7)),
-        overdue_target: tgt, overdue_month_end: ov, payment_received: pay, balance_remaining: balAfter
+        opening_balance: opening,
+        week_target: target,
+        payment_received: payment,
+        closing_balance: closing
       };
     });
-    _payWeekRowsExport = _weekRowsData.map(r => ({week: r.label, range: r.rangeShort, overdue_target: r.overdue_target, overdue_month_end: r.overdue_month_end, payment_received: r.payment_received, balance_remaining: r.balance_remaining}));
-    _payWeekRowsExport.push({week:'Total', range:'', overdue_target: tgtTotal, overdue_month_end: ovTotal, payment_received: payTotal, balance_remaining: balTotal});
+    const finalClosing = _weekRowsData.length ? _weekRowsData[_weekRowsData.length-1].closing_balance : 0;
+
+    _payWeekRowsExport = _weekRowsData.map(r => ({
+      week:r.label, range:r.rangeShort, opening_balance:r.opening_balance,
+      week_target:r.week_target, payment_received:r.payment_received,
+      closing_balance:r.closing_balance
+    }));
+    _payWeekRowsExport.push({
+      week:'Total / Month Closing', range:'', opening_balance:'',
+      week_target:targetTotal, payment_received:paymentTotal, closing_balance:finalClosing
+    });
+
     if (_payWeekSortKey){
       const k = _payWeekSortKey, dir = _payWeekSortDir;
-      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((a[k]||0) - (b[k]||0)));
+      _weekRowsData = _weekRowsData.slice().sort((a,b) => dir * ((Number(a[k])||0) - (Number(b[k])||0)));
     }
     const body = _weekRowsData.map(r => `<tr>
         <td style="padding:5px 8px">${escHtml(r.label)}<br><span style="color:var(--cn-mid);font-size:.85em">${escHtml(r.rangeShort)}</span></td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(r.overdue_target)}</td>
-        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#c0392b">${fmt(r.overdue_month_end)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px">${fmt(r.opening_balance)}</td>
+        <td style="text-align:right;font-weight:700;padding:5px 8px;color:#8a6d3b;background:#fdf6e3">${fmt(r.week_target)}</td>
         <td style="text-align:right;font-weight:700;padding:5px 8px;color:#1f7a3a">${fmt(r.payment_received)}</td>
-        <td style="text-align:right;font-weight:800;padding:5px 8px">${fmt(r.balance_remaining)}</td>
+        <td style="text-align:right;font-weight:800;padding:5px 8px;color:${r.closing_balance>0?'#c0392b':'#1f7a3a'}">${fmt(r.closing_balance)}</td>
       </tr>`).join('');
     wkHost.innerHTML = `<table class="ro" style="width:100%;font-size:.78rem"><thead><tr>
         <th style="padding:5px 8px">Week</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_target')" class="sort-arrow">Overdue-month end Target ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('overdue_month_end')" class="sort-arrow">Overdue (Month End, Live) ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('opening_balance')" class="sort-arrow">Opening Balance ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('week_target')" class="sort-arrow">Due / Overdue Target ⇅</th>
         <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('payment_received')" class="sort-arrow">Payment Received ⇅</th>
-        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('balance_remaining')" class="sort-arrow">Balance ⇅</th>
+        <th style="text-align:right;padding:5px 8px;cursor:pointer" onclick="sortPayWeek('closing_balance')" class="sort-arrow">Closing Balance ⇅</th>
       </tr></thead><tbody>${body || '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999">No data</td></tr>'}</tbody>
       <tfoot><tr style="font-weight:800;background:var(--cn-ivory)">
-        <td style="padding:5px 8px">Total</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(tgtTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(ovTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(payTotal)}</td>
-        <td style="text-align:right;padding:5px 8px">${fmt(balTotal)}</td>
+        <td style="padding:5px 8px">Month Total / Closing</td>
+        <td></td>
+        <td style="text-align:right;padding:5px 8px">${fmt(targetTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(paymentTotal)}</td>
+        <td style="text-align:right;padding:5px 8px">${fmt(finalClosing)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Overdue-month end Target</b> = the month-frozen target from each matching customer's target snapshot. Tag/Customer filters sum only those same frozen customer targets, so the target does not move with later ledger changes.<br>
-        <b>Overdue (Month End, Live)</b> = based on today's ledger, this is how much will still be overdue by month-end if <i>no further payment</i> is received from here on — this matches the "Overdue" total in the "Outstanding till month-end" table below.<br>
-        <b>Payment Received</b> = payment actually received so far this month (live, updates as payments come in).<br>
-        <b>Balance</b> = Overdue-month end Target minus this week's Payment Received.
-        Week 1 = 1st–7th of the month, and so on.
+        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> = opening overdue carried into Week 1 plus invoices becoming due in that week. <b>Payment Received</b> = every ledger credit received in that week, including customers who became fully settled. <b>Closing Balance</b> rolls forward week to week as Opening + Target − Payment. Week 1 = 1st–7th of the month. Tag, Customer and Show filters apply.
       </p>`;
   }
 
@@ -20316,9 +20329,9 @@ function exportPayAging(){
 }
 function exportPayWeek(){
   if (!_payWeekRowsExport.length){ alert('No data to export'); return; }
-  const headers = ['Week','Range','Overdue-month end Target','Overdue (Month End, Live)','Payment Received','Balance'];
-  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.overdue_target, w.overdue_month_end, w.payment_received, w.balance_remaining]);
-  _dlCsv(headers, data, 'week_wise_overdue_tracker');
+  const headers = ['Week','Range','Opening Balance','Due / Overdue Target','Payment Received','Closing Balance'];
+  const data = _payWeekRowsExport.map(w => [w.week, w.range, w.opening_balance, w.week_target, w.payment_received, w.closing_balance]);
+  _dlCsv(headers, data, 'week_wise_collection_tracker');
 }
 function exportPayTagSummary(){
   if (!_payTagRowsExport.length){ alert('No data to export'); return; }
@@ -32821,6 +32834,91 @@ def _build_payments():
     tags_set = set()
     all_due_pairs = []   # (due_date, remaining_amount) across ALL customers — for week-wise tracker
     carry_over_total = 0.0   # pichle mahine (ya usse pehle) se due/overdue balance, abhi tak unpaid
+    weekly_customers = []    # includes settled customers too, so weekly collections are never understated
+
+    def _month_week_plan(ents, term_days):
+        """Return gross due-target pairs and actual payment pairs for this month.
+
+        Target is reconstructed from the ledger as it stood immediately before
+        month start, then current-month debit invoices are added by their due date.
+        Current-month credits do NOT shrink the target; they are shown separately
+        as Payment Received. Any genuine advance credit already existing before
+        month start offsets later invoices before they enter the target.
+        """
+        open_before = []
+        advance_before = 0.0
+        current_debits = []
+        paid_pairs = []
+
+        for e in ents:
+            dt = e.get("date")
+            if not dt:
+                continue
+            debit = max(0.0, float(e.get("debit") or 0.0))
+            credit = max(0.0, float(e.get("credit") or 0.0))
+
+            if dt < month_start_g:
+                if debit > 0.009:
+                    amt = debit
+                    if advance_before > 0.009:
+                        used = min(advance_before, amt)
+                        amt -= used
+                        advance_before -= used
+                    if amt > 0.009:
+                        open_before.append({"date": dt, "amt": amt})
+                if credit > 0.009:
+                    cp0 = credit
+                    for inv0 in open_before:
+                        if cp0 <= 0.009:
+                            break
+                        if inv0["amt"] <= 0.009:
+                            continue
+                        used = min(cp0, inv0["amt"])
+                        inv0["amt"] -= used
+                        cp0 -= used
+                    if cp0 > 0.009:
+                        advance_before += cp0
+                continue
+
+            if month_start_g <= dt <= month_end:
+                if debit > 0.009:
+                    current_debits.append({"date": dt, "amt": debit})
+                if credit > 0.009:
+                    paid_pairs.append([dt.strftime("%Y-%m-%d"), round(credit, 2)])
+
+        target_pairs = []
+        # Opening invoices: only their month-start outstanding amount is targeted.
+        for inv0 in open_before:
+            amt = round(float(inv0.get("amt") or 0.0), 2)
+            if amt <= 0.009:
+                continue
+            idt = inv0.get("date")
+            due = (idt + timedelta(days=term_days)) if idt else None
+            if not due:
+                continue
+            if due < month_start_g:
+                target_day = month_start_g      # opening overdue -> Week 1
+            elif due <= month_end:
+                target_day = due                # becomes due this month
+            else:
+                continue
+            target_pairs.append([target_day.strftime("%Y-%m-%d"), amt])
+
+        # Current-month invoices: only pre-month advance credit may offset target.
+        for inv0 in current_debits:
+            amt = round(float(inv0.get("amt") or 0.0), 2)
+            if advance_before > 0.009 and amt > 0.009:
+                used = min(advance_before, amt)
+                amt -= used
+                advance_before -= used
+            if amt <= 0.009:
+                continue
+            idt = inv0.get("date")
+            due = (idt + timedelta(days=term_days)) if idt else None
+            if due and month_start_g <= due <= month_end:
+                target_pairs.append([due.strftime("%Y-%m-%d"), round(amt, 2)])
+
+        return target_pairs, paid_pairs
 
     for nm, entries in by_cust.items():
         term_days = term_map.get(nm, 0)
@@ -32881,9 +32979,23 @@ def _build_payments():
             else:
                 cust_due_me += rem
 
+        # Build the WEEK tracker from ledger history BEFORE dropping zero-balance
+        # customers. This is the critical fix: payments from customers who fully
+        # settled this month must still appear in the week in which cash arrived.
+        _gross_week_target, _all_week_paid = _month_week_plan(ents, term_days)
+        weekly_customers.append({
+            "customer": nm.title(),
+            "tag": tag,
+            "due": round(cust_due, 0),
+            "overdue": round(cust_over, 0),
+            "balance": round(cust_bal, 0),
+            "week_target": _gross_week_target,
+            "week_paid": _all_week_paid,
+        })
+
         if cust_bal <= 0.009:
             continue
-        # is customer ke is-month due-date pairs (week summary filter-aware ke liye)
+        # is customer ke is-month due-date pairs (legacy/live fields retained for compatibility)
         _cust_week_due = []
         for inv in open_inv:
             rem2 = round(inv["amt"], 2)
@@ -32904,10 +33016,7 @@ def _build_payments():
         # Received" ko FILTER-AWARE banane ke liye (pehle company-wide payment
         # frozen data use hota tha, filtered balance ke saath mix ho ke galat
         # "Balance Remaining" deta tha).
-        _cust_week_paid = []
-        for e in ents:
-            if e["credit"] > 0 and e["date"] and month_start_g <= e["date"] <= month_end:
-                _cust_week_paid.append([e["date"].strftime("%Y-%m-%d"), round(e["credit"], 2)])
+        _cust_week_paid = [list(x) for x in _all_week_paid]
         # is customer ne is month kitna pay kiya (collected this month)
 
         # FREEZE: is customer ka target (week_due jaisa tha) month ki pehli
@@ -33057,6 +33166,7 @@ def _build_payments():
         "aging_total": round(sum(aging.values()), 0),
         "week_overdue": week_overdue,
         "week_meta": week_meta,
+        "weekly_customers": weekly_customers,
         "overdue_target_total": frozen["total"],
         "carry_over_overdue_total": round(carry_over_total, 0),
         "tag_summary": tag_summary_list,
