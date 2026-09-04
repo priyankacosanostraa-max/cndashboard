@@ -1,3 +1,10 @@
+# ============================================================
+# Cosa Nostraa — V24.22 (SEPTEMBER 2026 TARGETS REVISED)
+# September 2026 targets are replaced with the approved plan only:
+# Website/Kiran 7,500,000; Amazon/Mahesh 1,000,000; Myntra/Mahesh 700,000;
+# Nykaa/Mahesh 300,000; Other Marketplaces/Mahesh 0. Other months and all
+# non-target dashboard behavior remain unchanged.
+# ============================================================
 # Cosa Nostraa — V24.21 (KRISHNA JANMASHTAMI GREETING · 04 SEP 2026)
 # On 04 Sep 2026 IST, every authenticated page load/refresh shows a premium
 # English Krishna Janmashtami greeting. Hidden automatically on all other dates.
@@ -27017,6 +27024,34 @@ _TARGET_CACHE = {"rows": None, "ts": 0}
 WEBSITE_SP_TARGET_OVERRIDE_MONTH = "2026-08"
 WEBSITE_SP_TARGET_OVERRIDE_VALUE = 30000000.0
 
+# Approved revised September 2026 targets supplied on 04-Sep-2026.
+# These five rows REPLACE every September target row from the live Target sheet.
+# DRR is retained as metadata from the approved plan; the existing Target UI
+# continues to display monthly Target/Achieved exactly as before.
+SEPTEMBER_TARGET_OVERRIDE_MONTH = "2026-09"
+SEPTEMBER_TARGET_OVERRIDE_ROWS = (
+    {"stakeholder": "Kiran",  "channel": "Website",            "sp_target": 7500000.0, "drr_target": 250000.0},
+    {"stakeholder": "Mahesh", "channel": "Amazon",             "sp_target": 1000000.0, "drr_target": 33333.0},
+    {"stakeholder": "Mahesh", "channel": "Myntra",             "sp_target": 700000.0,  "drr_target": 23333.0},
+    {"stakeholder": "Mahesh", "channel": "Nykaa",              "sp_target": 300000.0,  "drr_target": 10000.0},
+    {"stakeholder": "Mahesh", "channel": "Other Marketplaces", "sp_target": 0.0,       "drr_target": 0.0},
+)
+
+def _apply_september_target_override(rows):
+    # Replace September only; every other month remains exactly as sourced.
+    kept = [r for r in rows if r.get("month") != SEPTEMBER_TARGET_OVERRIDE_MONTH]
+    for spec in SEPTEMBER_TARGET_OVERRIDE_ROWS:
+        kept.append({
+            "month": SEPTEMBER_TARGET_OVERRIDE_MONTH,
+            "month_label": "Sep 2026",
+            "stakeholder": spec["stakeholder"],
+            "channel": spec["channel"],
+            "qty_target": 0.0,
+            "sp_target": float(spec["sp_target"]),
+            "drr_target": float(spec["drr_target"]),
+        })
+    return kept
+
 def _apply_website_sp_target_override(rows):
     matched = [
         r for r in rows
@@ -27079,6 +27114,7 @@ def _fetch_target_rows():
                     "stakeholder": sh or "—", "channel": ch or "—",
                     "qty_target": qt, "sp_target": st})
     out = _apply_website_sp_target_override(out)
+    out = _apply_september_target_override(out)
     merged = []
     amazon_positions = {}
     for row in out:
@@ -28767,6 +28803,14 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
                 entry_keys.add("marketplace")
             if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
                 entry_keys.add("tata" if sub == "tata cliq" else sub)
+            # Revised September plan has Amazon, Myntra and Nykaa as separate
+            # targets. Every remaining marketplace (Flipkart/Ajio/Tata/smaller
+            # partners) belongs to the single "Other Marketplaces" target row.
+            is_marketplace_entry = (typ in {"marketplace", "sor"}) or bool(sub in {
+                "amazon", "flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"
+            })
+            if is_marketplace_entry and not amazon_family and sub not in {"myntra", "nykaa"}:
+                entry_keys.add("other marketplaces")
             for entry_key in entry_keys:
                 if not entry_key:
                     continue
@@ -29320,7 +29364,7 @@ _DRG_TARGET_ALIASES = {
     "Tata":                             {"tata", "tata cliq"},
     "Blinkit":                          {"blinkit"},
     "Instamart":                        {"instamart", "swiggy instamart", "swiggy"},
-    "Other Marketplace Channels":       {"sor", "marketplace"},
+    "Other Marketplace Channels":       {"sor", "marketplace", "other marketplace", "other marketplaces", "other marketplace channels"},
     "Others (Purchase, Exhibition, Bulk)": {"purchase", "bulk", "exhibition"},
 }
 _DRG_OTHER_BUCKET = "Others (Purchase, Exhibition, Bulk)"
