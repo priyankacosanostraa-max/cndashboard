@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.27 (PAYMENTS · WEEK-WISE EXACT DUE DATE + FILTER FIX)
+# Week-wise Collection Tracker now buckets each invoice by Full_Ledger_Main's
+# actual Due Date. Any unpaid invoice already due before the current month is
+# carried into Week 1. Tag / Customer / Show filters now use the same customer
+# universe as the visible outstanding tables. Designer remains merged to Purchase.
+# All other dashboard behaviour is unchanged.
+# ============================================================
 # Cosa Nostraa — V24.26 (PAYMENTS · WEEK-WISE TRACKER FIX)
 # Week-wise Payments tracker now uses a true month opening/due schedule and all
 # current-month credits (including customers whose balance became zero). Weekly
@@ -20123,6 +20130,10 @@ function renderPayments(){
     const weekCustomers = (d.weekly_customers || []).filter(r => {
       if (tag && String(r.tag||'').toLowerCase() !== tag) return false;
       if (q && !String(r.customer||'').toLowerCase().includes(q)) return false;
+      // Keep the week table on exactly the same customer universe as the
+      // Outstanding tables above. The default "All Outstanding" must not
+      // silently include customers already settled to zero.
+      if (view === 'all' && Number(r.balance||0) <= 0) return false;
       if (view === 'overdue' && Number(r.overdue||0) <= 0) return false;
       if (view === 'due' && Number(r.due||0) <= 0) return false;
       return true;
@@ -20205,7 +20216,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(finalClosing)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> = opening overdue carried into Week 1 plus invoices becoming due in that week. <b>Payment Received</b> = every ledger credit received in that week, including customers who became fully settled. <b>Closing Balance</b> rolls forward week to week as Opening + Target − Payment. Week 1 = 1st–7th of the month. Tag, Customer and Show filters apply.
+        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = ledger credits received in that week for the currently filtered outstanding customers. <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
       </p>`;
   }
 
@@ -32676,7 +32687,7 @@ def _build_payments():
     try:
         terms_df = _fetch_payments_csv_slim(PAY_TERMS_URL, [
             ("Customer Name", "customer", "name"),
-            ("Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)"),
+            ("Payment Term", "payment terms", "terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)"),
             ("Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type"),
         ])
         tcols = list(terms_df.columns)
@@ -32714,6 +32725,8 @@ def _build_payments():
         ("Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr"),
         ("Particulars", "particular", "narration"),
         ("Vch Type", "voucher type", "vch_type"),
+        ("Terms", "Payment Term", "payment terms", "credit days", "credit period", "term", "days"),
+        ("Due Date", "due date", "duedate", "payment due date"),
         ("Tag", "tag", "Customer Tag", "customer tag", "Category", "category", "Type", "type"),
     ])
     lcols = list(led_df.columns)
@@ -32724,6 +32737,11 @@ def _build_payments():
     L_CRED = find_col(led_df.columns, "Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr")
     L_PART = find_col(led_df.columns, "Particulars", "particular", "narration")
     L_VTYPE = find_col(led_df.columns, "Vch Type", "voucher type", "vch_type")
+    # Full_Ledger_Main already carries the row-level Terms and exact Due Date.
+    # Use those first; Sheet2 customer Terms remain only a fallback for old/blank rows.
+    L_TERMS = find_col(led_df.columns, "Terms", "Payment Term", "payment terms",
+                       "credit days", "credit period", "term", "days")
+    L_DUE_DATE = find_col(led_df.columns, "Due Date", "due date", "duedate", "payment due date")
     # Full_Ledger_Main ka Tag authoritative hai. Terms-sheet tag sirf fallback.
     L_TAG  = find_col(led_df.columns, "Tag", "tag", "Customer Tag", "customer tag",
                       "Category", "category", "Type", "type")
@@ -32739,6 +32757,8 @@ def _build_payments():
     i_cred = col_idx.get(L_CRED) if L_CRED else None
     i_part = col_idx.get(L_PART) if L_PART else None
     i_vtype = col_idx.get(L_VTYPE) if L_VTYPE else None
+    i_terms = col_idx.get(L_TERMS) if L_TERMS else None
+    i_due_date = col_idx.get(L_DUE_DATE) if L_DUE_DATE else None
     i_tag = col_idx.get(L_TAG) if L_TAG else None
 
     by_cust = {}
@@ -32772,12 +32792,19 @@ def _build_payments():
         dt = _fast_date(raw_date)
         debit_amt = to_num(vals[i_deb]) if i_deb is not None else 0.0
         credit_amt = to_num(vals[i_cred]) if i_cred is not None else 0.0
+        row_terms = to_int(vals[i_terms]) if i_terms is not None else 0
+        row_due_date = _fast_date(vals[i_due_date]) if i_due_date is not None else None
         row_tag = _canon_pay_tag(vals[i_tag]) if i_tag is not None else ""
         if row_tag:
             ledger_tag_map[nm] = row_tag
 
-        # Only the fields needed for FIFO aging are kept per ledger row.
-        by_cust.setdefault(nm, []).append({"date": dt, "debit": debit_amt, "credit": credit_amt})
+        # Keep the exact source Due Date/Terms on each ledger row. This is what
+        # the week-wise tracker must follow; deriving all due dates from a single
+        # customer term was the reason most values collapsed into Week 1.
+        by_cust.setdefault(nm, []).append({
+            "date": dt, "debit": debit_amt, "credit": credit_amt,
+            "terms": row_terms, "due_date": row_due_date
+        })
 
         if credit_amt > 0.009:
             pay_log_total += 1
@@ -32836,14 +32863,29 @@ def _build_payments():
     carry_over_total = 0.0   # pichle mahine (ya usse pehle) se due/overdue balance, abhi tak unpaid
     weekly_customers = []    # includes settled customers too, so weekly collections are never understated
 
-    def _month_week_plan(ents, term_days):
-        """Return gross due-target pairs and actual payment pairs for this month.
+    def _entry_due_date(e, fallback_term_days=0):
+        """Exact ledger Due Date first; row Terms/customer Terms only as fallback."""
+        dd = e.get("due_date")
+        if dd:
+            return dd
+        idt = e.get("date")
+        if not idt:
+            return None
+        row_term = to_int(e.get("terms"))
+        days = row_term if row_term > 0 else max(0, to_int(fallback_term_days))
+        return idt + timedelta(days=days)
 
-        Target is reconstructed from the ledger as it stood immediately before
-        month start, then current-month debit invoices are added by their due date.
-        Current-month credits do NOT shrink the target; they are shown separately
-        as Payment Received. Any genuine advance credit already existing before
-        month start offsets later invoices before they enter the target.
+    def _month_week_plan(ents, term_days):
+        """Return due-target pairs and payment pairs for the current month.
+
+        Business rule:
+        * Each invoice goes to the week containing its ACTUAL Full_Ledger_Main
+          Due Date.
+        * An invoice that was already due before this month and was still unpaid
+          at month opening goes to Week 1.
+        * Current-month credits are shown separately as Payment Received and do
+          not move an invoice into another week.
+        * Pre-month advance credit is still respected before building the target.
         """
         open_before = []
         advance_before = 0.0
@@ -32856,6 +32898,7 @@ def _build_payments():
                 continue
             debit = max(0.0, float(e.get("debit") or 0.0))
             credit = max(0.0, float(e.get("credit") or 0.0))
+            exact_due = _entry_due_date(e, term_days)
 
             if dt < month_start_g:
                 if debit > 0.009:
@@ -32865,7 +32908,7 @@ def _build_payments():
                         amt -= used
                         advance_before -= used
                     if amt > 0.009:
-                        open_before.append({"date": dt, "amt": amt})
+                        open_before.append({"date": dt, "due_date": exact_due, "amt": amt})
                 if credit > 0.009:
                     cp0 = credit
                     for inv0 in open_before:
@@ -32882,29 +32925,31 @@ def _build_payments():
 
             if month_start_g <= dt <= month_end:
                 if debit > 0.009:
-                    current_debits.append({"date": dt, "amt": debit})
+                    current_debits.append({"date": dt, "due_date": exact_due, "amt": debit})
                 if credit > 0.009:
                     paid_pairs.append([dt.strftime("%Y-%m-%d"), round(credit, 2)])
 
         target_pairs = []
-        # Opening invoices: only their month-start outstanding amount is targeted.
+        # Opening invoices: use their exact source due date. Older unpaid due
+        # invoices are carried into Week 1; invoices due later this month stay
+        # in the correct week.
         for inv0 in open_before:
             amt = round(float(inv0.get("amt") or 0.0), 2)
             if amt <= 0.009:
                 continue
-            idt = inv0.get("date")
-            due = (idt + timedelta(days=term_days)) if idt else None
+            due = inv0.get("due_date")
             if not due:
                 continue
             if due < month_start_g:
-                target_day = month_start_g      # opening overdue -> Week 1
+                target_day = month_start_g
             elif due <= month_end:
-                target_day = due                # becomes due this month
+                target_day = due
             else:
                 continue
             target_pairs.append([target_day.strftime("%Y-%m-%d"), amt])
 
-        # Current-month invoices: only pre-month advance credit may offset target.
+        # Current-month invoices are included only when their actual due date is
+        # inside this month. Pre-month advance credit can reduce them.
         for inv0 in current_debits:
             amt = round(float(inv0.get("amt") or 0.0), 2)
             if advance_before > 0.009 and amt > 0.009:
@@ -32913,8 +32958,7 @@ def _build_payments():
                 advance_before -= used
             if amt <= 0.009:
                 continue
-            idt = inv0.get("date")
-            due = (idt + timedelta(days=term_days)) if idt else None
+            due = inv0.get("due_date")
             if due and month_start_g <= due <= month_end:
                 target_pairs.append([due.strftime("%Y-%m-%d"), round(amt, 2)])
 
@@ -32935,7 +32979,11 @@ def _build_payments():
         for e in ents:
             credit_pool += e["credit"]
             if e["debit"] > 0:
-                open_inv.append({"date": e["date"], "amt": e["debit"]})
+                open_inv.append({
+                    "date": e["date"],
+                    "due_date": _entry_due_date(e, term_days),
+                    "amt": e["debit"]
+                })
         # apply credit pool FIFO
         cp = credit_pool
         for inv in open_inv:
@@ -32954,7 +33002,7 @@ def _build_payments():
                 continue
             cust_bal += rem
             idt = inv["date"]
-            due_date = (idt + timedelta(days=term_days)) if idt else None
+            due_date = inv.get("due_date")
             all_due_pairs.append((due_date, rem))
             if due_date and due_date < month_start_g:
                 cust_carry_over += rem
@@ -33002,7 +33050,7 @@ def _build_payments():
             if rem2 <= 0.009:
                 continue
             idt2 = inv["date"]
-            dd2 = (idt2 + timedelta(days=term_days)) if idt2 else None
+            dd2 = inv.get("due_date")
             if dd2 and month_start_g <= dd2 <= month_end:
                 _cust_week_due.append([dd2.strftime("%Y-%m-%d"), rem2])
         # CARRY-OVER: jo balance pichle mahine (ya usse pehle) hi due/overdue ho chuka
