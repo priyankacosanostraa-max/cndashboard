@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.21 (KRISHNA JANMASHTAMI GREETING · 04 SEP 2026)
+# On 04 Sep 2026 IST, every authenticated page load/refresh shows a premium
+# English Krishna Janmashtami greeting. Hidden automatically on all other dates.
+# No other dashboard logic is changed.
+# ============================================================
 # Cosa Nostraa — V24.20 (REPEAT CUSTOMERS · SAME-DAY ORDERS NOT REPEAT)
 # Repeat-customer logic now treats all orders by the same customer on the same calendar date
 # as one purchase occasion for repeat calculations. A repeat requires purchase on a later date.
@@ -7507,6 +7512,45 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 </div>
 
+<!-- 04 Sep 2026 only: Krishna Janmashtami greeting. Hidden on every other IST date. -->
+<div id="krishnaJanmashtamiWish" class="cnx-janmashtami-wish" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="krishnaJanmashtamiWishTitle" style="display:none">
+  <style>
+    .cnx-janmashtami-wish{position:fixed;inset:0;z-index:10060;align-items:center;justify-content:center;padding:24px;background:rgba(10,18,40,.66);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);opacity:0;transition:opacity .22s ease}
+    .cnx-janmashtami-wish.is-open{opacity:1}
+    .cnx-janmashtami-card{position:relative;width:min(610px,94vw);overflow:hidden;border:1px solid rgba(218,173,66,.48);border-radius:28px;background:linear-gradient(145deg,#fffdf7 0%,#f8f1dd 54%,#eef3fb 100%);box-shadow:0 40px 110px rgba(4,13,35,.46);color:#17213d;text-align:center;transform:translateY(13px) scale(.985);transition:transform .24s cubic-bezier(.2,.8,.2,1)}
+    .cnx-janmashtami-wish.is-open .cnx-janmashtami-card{transform:none}
+    .cnx-janmashtami-card:before{content:"";position:absolute;inset:10px;border:1px solid rgba(179,132,37,.18);border-radius:20px;pointer-events:none}
+    .cnx-janmashtami-top{position:relative;padding:38px 36px 20px;background:radial-gradient(circle at 50% -10%,rgba(45,80,155,.18),transparent 58%),radial-gradient(circle at 86% 4%,rgba(214,163,55,.22),transparent 34%)}
+    .cnx-janmashtami-kicker{font-size:10px;font-weight:950;letter-spacing:2.5px;text-transform:uppercase;color:#9b6d16}
+    .cnx-janmashtami-icon{width:72px;height:72px;margin:18px auto 15px;display:grid;place-items:center;border:1px solid rgba(180,132,36,.34);border-radius:50%;background:linear-gradient(145deg,#fffaf0,#edf4ff);font-size:34px;box-shadow:0 14px 34px rgba(33,60,112,.13)}
+    .cnx-janmashtami-title{margin:0;color:#142650;font:800 clamp(31px,5vw,44px)/1.06 'Cormorant Garamond',Georgia,serif;letter-spacing:-.45px}
+    .cnx-janmashtami-sub{margin:12px 0 0;color:#a17119;font-size:11px;font-weight:950;letter-spacing:2px;text-transform:uppercase}
+    .cnx-janmashtami-copy{padding:0 50px 28px;color:#5b6070;font-size:13px;font-weight:650;line-height:1.82}
+    .cnx-janmashtami-copy strong{color:#25385f}
+    .cnx-janmashtami-sign{margin-top:15px;color:#8d6418;font-size:10px;font-weight:900;letter-spacing:1.25px;text-transform:uppercase}
+    .cnx-janmashtami-actions{padding:0 34px 35px}
+    .cnx-janmashtami-close{min-width:210px;min-height:47px;padding:0 24px;border:1px solid #9c7425;border-radius:12px;background:linear-gradient(145deg,#142650,#2d4b83);color:#fffaf0;font-size:10px;font-weight:950;letter-spacing:1.45px;text-transform:uppercase;cursor:pointer;box-shadow:0 15px 30px rgba(20,38,80,.24)}
+    .cnx-janmashtami-close:hover{transform:translateY(-1px)}
+    .cnx-janmashtami-x{position:absolute;z-index:2;right:16px;top:16px;width:34px;height:34px;border:1px solid rgba(72,91,131,.18);border-radius:10px;background:rgba(255,255,255,.62);color:#32456c;font-size:20px;line-height:30px;cursor:pointer}
+    @media(max-width:560px){.cnx-janmashtami-top{padding:31px 22px 17px}.cnx-janmashtami-copy{padding:0 27px 25px;font-size:12px}.cnx-janmashtami-actions{padding:0 22px 29px}}
+  </style>
+  <div class="cnx-janmashtami-card">
+    <button class="cnx-janmashtami-x" type="button" aria-label="Close greeting" onclick="closeKrishnaJanmashtamiWish()">×</button>
+    <div class="cnx-janmashtami-top">
+      <div class="cnx-janmashtami-kicker">Cosa Nostraa • Festive Greetings</div>
+      <div class="cnx-janmashtami-icon" aria-hidden="true">🦚</div>
+      <h2 class="cnx-janmashtami-title" id="krishnaJanmashtamiWishTitle">Happy Krishna Janmashtami</h2>
+      <div class="cnx-janmashtami-sub">A celebration of joy, wisdom &amp; devotion</div>
+    </div>
+    <div class="cnx-janmashtami-copy">
+      <strong>Warm wishes from the entire Cosa Nostraa family.</strong><br>
+      May Lord Krishna fill your home with happiness, your work with purpose, and your journey with prosperity, wisdom and peace.
+      <div class="cnx-janmashtami-sign">With warm wishes • Cosa Nostraa</div>
+    </div>
+    <div class="cnx-janmashtami-actions"><button class="cnx-janmashtami-close" type="button" onclick="closeKrishnaJanmashtamiWish()">Celebrate with Joy</button></div>
+  </div>
+</div>
+
 <div id="appRoot" style="display:none">
 
 <div class="app-bar" id="appBar">
@@ -14127,13 +14171,36 @@ function closeSawanLastSomwarWish(){
 window.closeSawanLastSomwarWish = closeSawanLastSomwarWish;
 window.maybeShowSawanLastSomwarWish = maybeShowSawanLastSomwarWish;
 
+const CNX_KRISHNA_JANMASHTAMI_DATE = '2026-09-04';
+
+function maybeShowKrishnaJanmashtamiWish(){
+  // Strict IST date gate: show again after every authenticated refresh on 04 Sep 2026 only.
+  if (cnxIstDateKey(new Date()) !== CNX_KRISHNA_JANMASHTAMI_DATE) return;
+  const modal = document.getElementById('krishnaJanmashtamiWish');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden','false');
+  requestAnimationFrame(() => modal.classList.add('is-open'));
+}
+
+function closeKrishnaJanmashtamiWish(){
+  const modal = document.getElementById('krishnaJanmashtamiWish');
+  if (!modal) return;
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden','true');
+  setTimeout(() => { modal.style.display = 'none'; }, 220);
+}
+window.closeKrishnaJanmashtamiWish = closeKrishnaJanmashtamiWish;
+window.maybeShowKrishnaJanmashtamiWish = maybeShowKrishnaJanmashtamiWish;
+
 function enterApp(role){
   LOGIN_ROLE = role;
   _loggedIn = true;
   setLoginGateVisible(false);
   const app = document.getElementById('appRoot');   if (app) app.style.display = 'block';
-  // Today's corporate greeting appears immediately after authenticated entry.
+  // Today's corporate greetings appear immediately after authenticated entry.
   setTimeout(maybeShowSawanLastSomwarWish, 180);
+  setTimeout(maybeShowKrishnaJanmashtamiWish, 180);
   // Login overlay ko pehle browser paint karne do. Home rendering and the
   // multi-megabyte data sync run on the next task, so successful sign-in feels
   // instant even on slower machines or a Railway cold start.
