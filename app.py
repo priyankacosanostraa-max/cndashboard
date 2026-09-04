@@ -1,4 +1,18 @@
 # ============================================================
+# Cosa Nostraa — V24.25 (PAYMENTS · DESIGNER = PURCHASE)
+# Payments customer Tag/Type now treats Designer and Purchase as one canonical
+# group: Purchase. The same alias is also applied to Payments Planning channel
+# rows, so duplicate Designer/Purchase rows merge into one Purchase row.
+# Everything else remains unchanged from V24.24.
+# ============================================================
+# ============================================================
+# Cosa Nostraa — V24.24 (PAYMENTS TAB CRASH FIX · MEMORY SAFE)
+# Payments main load is now memory-safe: published CSV is streamed to a temp
+# spool, only required columns are parsed, full customer ledger is lazy-loaded
+# only when opened, payment log payload/DOM is capped, and duplicate tab loads
+# are avoided. Targets and every other dashboard feature remain unchanged.
+# ============================================================
+# ============================================================
 # Cosa Nostraa — V24.23 (WEB CRASH FIX · SAFE SEPTEMBER TARGET OVERRIDE)
 # Based on the last stable V24.21 build. Only September 2026 Target-sheet rows
 # are overridden in-memory; no other dashboard/data logic has been changed.
@@ -19899,6 +19913,7 @@ window.sortTaxon = sortTaxon; window.resetTaxonFilters = resetTaxonFilters; wind
 
 /* ── PAYMENTS ── */
 let _payData = null; let _payTagsFilled = false;
+let _payLoadController = null;
 let _payAgingRows = [];
 let _payAgingTotalsExport = [];   // [{bucket, amount}] — current filtered aging table, for export
 let _payWeekRowsExport = [];      // current filtered week-wise rows, for export
@@ -19935,8 +19950,15 @@ function _applyPaySort(rows){
 }
 function loadPayments(force){
   const todayHost = document.getElementById('payTodayTable');
+  if (!force && _payData){ renderPayments(); return; }
+  if (_payLoadController){
+    if (!force) return;
+    try{ _payLoadController.abort(); }catch(_e){}
+  }
+  const ctl = new AbortController();
+  _payLoadController = ctl;
   if (todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Loading…</div>';
-  fetch('/api/payments' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+  fetch('/api/payments' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}, signal:ctl.signal})
     .then(r => r.json().then(j => ({ok:r.ok, j})))
     .then(({ok, j}) => {
       if (!ok || j.error){
@@ -19963,7 +19985,8 @@ function loadPayments(force){
       }
       renderPayments();
     })
-    .catch(err => { if(todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { if(err && err.name === 'AbortError') return; if(todayHost) todayHost.innerHTML = '<div class="home-empty" style="padding:24px">Failed: ' + escHtml(err.message||err) + '</div>'; })
+    .finally(()=>{ if(_payLoadController === ctl) _payLoadController = null; });
 }
 function _payFiltered(){
   const d = _payData; if (!d) return [];
@@ -20233,7 +20256,9 @@ function _payLogFiltered(){
 function renderPaymentsLog(){
   const host = document.getElementById('payLogTable');
   if (!host) return;
-  const rows = _payLogFiltered();
+  const filtered = _payLogFiltered();
+  const renderLimit = 300;
+  const rows = filtered.slice(0, renderLimit);
   const total = rows.reduce((s,r)=>s+(r.amount||0),0);
   const body = rows.map(r => `<tr>
       <td style="padding:5px 8px">${escHtml(r.date||'')}</td>
@@ -20243,13 +20268,19 @@ function renderPaymentsLog(){
       <td style="padding:5px 8px">${escHtml(r.vch_no||'')}</td>
       <td style="padding:5px 8px">${escHtml(r.particulars||'')}</td>
     </tr>`).join('');
-  host.innerHTML = `<table class="ro" style="width:100%;min-width:640px"><thead><tr>
+  const sourceCount = Number(_payData?.payments_log_total || filtered.length || 0);
+  const limited = !!_payData?.payments_log_limited;
+  const msg = filtered.length > rows.length
+    ? `Showing latest ${rows.length.toLocaleString('en-IN')} of ${filtered.length.toLocaleString('en-IN')} loaded payments`
+    : `Showing ${rows.length.toLocaleString('en-IN')} payments`;
+  const sourceMsg = limited ? ` · source has ${sourceCount.toLocaleString('en-IN')} payment entries; tab keeps only the latest ${Number(_payData?.payments_log_limit||filtered.length).toLocaleString('en-IN')} for stability` : '';
+  host.innerHTML = `<div class="small-note" style="padding:0 0 6px 2px">${msg}${sourceMsg}</div><table class="ro" style="width:100%;min-width:640px"><thead><tr>
       <th style="padding:5px 8px">Date</th><th style="padding:5px 8px">Customer Name</th>
       <th style="text-align:center;padding:5px 8px">Tag</th><th style="text-align:right;padding:5px 8px">Amount</th>
       <th style="padding:5px 8px">Vch No</th><th style="padding:5px 8px">Particulars</th>
     </tr></thead><tbody>${body || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">No payments found</td></tr>'}</tbody>
     <tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc">
-      <td colspan="3" style="padding:5px 8px">Total (${rows.length} payments)</td>
+      <td colspan="3" style="padding:5px 8px">Total of rows shown (${rows.length} payments)</td>
       <td style="text-align:right;padding:5px 8px">${fmt(total)}</td><td></td><td></td>
     </tr></tfoot></table>`;
 }
@@ -20445,6 +20476,7 @@ let _planData = null;
 function loadPaymentsPlanning(force){
   const host = document.getElementById('planContent');
   if (!host) return;
+  if (!force && _planData){ renderPaymentsPlanning(); return; }
   host.innerHTML = '<div class="home-empty" style="padding:20px">Loading…</div>';
   fetch('/api/payments/planning' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
@@ -32513,7 +32545,73 @@ _PAY_CACHE = {"data": None, "ts": 0}
 # the Payments + Planning API calls can share one build, while Refresh always
 # pulls the latest published-sheet data immediately.
 _PAY_CACHE_TTL = max(0, int(os.environ.get("PAY_CACHE_TTL_SECONDS", "30") or 30))
-_PAY_RAW_LEDGER = {"data": None}
+_PAY_RAW_LEDGER = {"data": {}, "ts": {}}
+_PAY_LOG_LIMIT = max(200, int(os.environ.get("PAY_LOG_MAX_ROWS", "750") or 750))
+_PAY_LEDGER_DETAIL_CACHE_TTL = max(0, int(os.environ.get("PAY_LEDGER_DETAIL_CACHE_TTL_SECONDS", "120") or 120))
+_PAY_LEDGER_DETAIL_CACHE_MAX = max(1, int(os.environ.get("PAY_LEDGER_DETAIL_CACHE_MAX", "8") or 8))
+
+def _fetch_payments_csv_slim(url, select_groups):
+    """Memory-safe CSV fetch used only by Payments.
+
+    The response is streamed into a SpooledTemporaryFile (rolling to disk after
+    2 MB) and pandas parses only the columns required by the Payments view.
+    This avoids holding the full published ledger bytes + a wide DataFrame +
+    duplicate Python row structures in RAM at the same time.
+    """
+    import tempfile
+    headers = {"Cache-Control": "no-cache, no-store, max-age=0",
+               "Pragma": "no-cache",
+               "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard)"}
+    last_err = None
+    for attempt in range(3):
+        try:
+            bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
+            with requests.get(url + bust, headers=headers, timeout=(8, 45),
+                              allow_redirects=True, stream=True) as r:
+                r.raise_for_status()
+                with tempfile.SpooledTemporaryFile(max_size=2 * 1024 * 1024, mode="w+b") as fh:
+                    prefix = b""
+                    for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        if len(prefix) < 512:
+                            prefix += chunk[:512-len(prefix)]
+                        fh.write(chunk)
+                    if "<html" in prefix.decode("utf-8", errors="replace").lower():
+                        raise ValueError("Received HTML instead of CSV — re-check Publish-to-web")
+                    fh.seek(0)
+                    try:
+                        header_df = pd.read_csv(fh, dtype=str, nrows=0, on_bad_lines="skip",
+                                                encoding="utf-8", encoding_errors="replace")
+                    except TypeError:
+                        fh.seek(0)
+                        header_df = pd.read_csv(fh, dtype=str, nrows=0, on_bad_lines="skip",
+                                                encoding="utf-8")
+                    raw_cols = list(header_df.columns)
+                    clean_cols = [str(c).strip() for c in raw_cols]
+                    selected = set()
+                    for group in (select_groups or []):
+                        resolved = find_col(clean_cols, *group) if group else None
+                        if resolved is not None:
+                            try:
+                                selected.add(clean_cols.index(resolved))
+                            except ValueError:
+                                pass
+                    fh.seek(0)
+                    kwargs = {"dtype": str, "on_bad_lines": "skip"}
+                    if selected:
+                        kwargs["usecols"] = sorted(selected)
+                    try:
+                        frame = pd.read_csv(fh, encoding="utf-8", encoding_errors="replace", **kwargs)
+                    except TypeError:
+                        fh.seek(0)
+                        frame = pd.read_csv(fh, encoding="utf-8", **kwargs)
+                    return frame
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(1)
+    raise last_err
 # Month-start pe overdue target freeze hota hai (poore month fixed). Key = "YYYY-MM".
 # Ek baar set hone ke baad month bhar wahi rehta hai (target reference).
 _PAY_OVERDUE_TARGET = {}   # {"2026-07": {"total": 1873072, "weeks": {"Week 1": ..., ...}}}
@@ -32528,6 +32626,22 @@ _PAY_TARGET_FREEZE = {}   # {"2026-07": {"customer_norm_name": [[date, amt], ...
 def _norm_name(s):
     return re.sub(r"\s+", " ", str(s or "").strip()).upper()
 
+def _payments_type_alias(value):
+    """Canonical Payments Tag/Type alias.
+
+    Business rule: Designer and Purchase mean the same customer/channel group in
+    Payments, so both are always exposed as Purchase. Only these exact/common
+    combined labels are merged; unrelated tags remain untouched.
+    """
+    raw = clean(value).strip()
+    if not raw:
+        return ""
+    key = re.sub(r"[^a-z0-9]+", " ", raw.lower()).strip()
+    tokens = [t for t in key.split() if t]
+    if tokens and set(tokens).issubset({"designer", "purchase"}):
+        return "Purchase"
+    return raw
+
 def _build_payments():
     if (_PAY_CACHE_TTL > 0 and _PAY_CACHE["data"] is not None
             and (time.time() - _PAY_CACHE["ts"] < _PAY_CACHE_TTL)):
@@ -32539,7 +32653,7 @@ def _build_payments():
     # for both Terms and Full_Ledger_Main so Designer/DESIGNER/designer merge.
     _tag_canon = {}
     def _canon_pay_tag(v):
-        raw = clean(v).strip()
+        raw = _payments_type_alias(v)
         if not raw:
             return ""
         key = raw.lower()
@@ -32547,7 +32661,11 @@ def _build_payments():
             _tag_canon[key] = raw
         return _tag_canon[key]
     try:
-        terms_df = _fetch_csv_fresh(PAY_TERMS_URL)
+        terms_df = _fetch_payments_csv_slim(PAY_TERMS_URL, [
+            ("Customer Name", "customer", "name"),
+            ("Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)"),
+            ("Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type"),
+        ])
         tcols = list(terms_df.columns)
         T_CUST = find_col(terms_df.columns, "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
         T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)")
@@ -32565,43 +32683,60 @@ def _build_payments():
     except Exception as e:
         print("payments terms fetch error:", str(e)[:200])
 
-    # ---- Ledger ----
-    led_df = _fetch_csv_fresh(PAY_LEDGER_URL)
+    # ---- Ledger (memory-safe / one pass) ----
+    # Compute the current-month boundaries before scanning the ledger so all
+    # payment summaries can be accumulated during the same pass.
+    today = now_ist().date()
+    if today.month == 12:
+        month_end = date(today.year, 12, 31)
+    else:
+        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
+    month_start_g = date(today.year, today.month, 1)
+
+    led_df = _fetch_payments_csv_slim(PAY_LEDGER_URL, [
+        ("Date", "date", "invoice date", "txn date"),
+        ("Customer Name", "customer", "name", "party"),
+        ("Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno"),
+        ("Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr"),
+        ("Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr"),
+        ("Particulars", "particular", "narration"),
+        ("Vch Type", "voucher type", "vch_type"),
+        ("Tag", "tag", "Customer Tag", "customer tag", "Category", "category", "Type", "type"),
+    ])
     lcols = list(led_df.columns)
     L_DATE = find_col(led_df.columns, "Date", "date", "invoice date", "txn date") or (lcols[0] if lcols else None)
     L_CUST = find_col(led_df.columns, "Customer Name", "customer", "name", "party")
     L_INV  = find_col(led_df.columns, "Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno")
     L_DEB  = find_col(led_df.columns, "Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
     L_CRED = find_col(led_df.columns, "Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr")
-    L_BAL  = find_col(led_df.columns, "Balance", "sum of outstanding", "bal", "running balance")
     L_PART = find_col(led_df.columns, "Particulars", "particular", "narration")
     L_VTYPE = find_col(led_df.columns, "Vch Type", "voucher type", "vch_type")
-    L_DUE  = find_col(led_df.columns, "Due Date", "due date", "duedate")
-    L_CMP  = find_col(led_df.columns, "Company Details", "company")
-    # Full_Ledger_Main ka Tag authoritative hai. Terms-sheet tag sirf fallback
-    # rahega, kyunki latest credits/payment rows isi ledger me update hote hain.
+    # Full_Ledger_Main ka Tag authoritative hai. Terms-sheet tag sirf fallback.
     L_TAG  = find_col(led_df.columns, "Tag", "tag", "Customer Tag", "customer tag",
                       "Category", "category", "Type", "type")
 
     if not L_CUST:
         raise ValueError(f"'Customer Name' column not found in Ledger. Columns: {lcols[:12]}")
 
+    col_idx = {c: i for i, c in enumerate(lcols)}
+    i_date = col_idx.get(L_DATE) if L_DATE else None
+    i_cust = col_idx.get(L_CUST)
+    i_inv = col_idx.get(L_INV) if L_INV else None
+    i_deb = col_idx.get(L_DEB) if L_DEB else None
+    i_cred = col_idx.get(L_CRED) if L_CRED else None
+    i_part = col_idx.get(L_PART) if L_PART else None
+    i_vtype = col_idx.get(L_VTYPE) if L_VTYPE else None
+    i_tag = col_idx.get(L_TAG) if L_TAG else None
+
     by_cust = {}
-    raw_by_cust = {}
-    # FAST: column lists nikaal ke zip karo (.iterrows bahut dheema hota hai)
-    custs = led_df[L_CUST].tolist() if L_CUST else []
-    n = len(custs)
-    dates = led_df[L_DATE].tolist() if L_DATE else [None]*n
-    debs  = led_df[L_DEB].tolist()  if L_DEB  else [0]*n
-    creds = led_df[L_CRED].tolist() if L_CRED else [0]*n
-    invs  = led_df[L_INV].tolist()  if L_INV  else [""]*n
-    bals  = led_df[L_BAL].tolist()  if L_BAL  else [None]*n
-    parts = led_df[L_PART].tolist() if L_PART else [""]*n
-    vtyps = led_df[L_VTYPE].tolist() if L_VTYPE else [""]*n
-    dues  = led_df[L_DUE].tolist()  if L_DUE  else [None]*n
-    cmps  = led_df[L_CMP].tolist()  if L_CMP  else [""]*n
-    ltags = led_df[L_TAG].tolist() if L_TAG else [""]*n
     ledger_tag_map = {}
+    collected_month_by_customer = {}
+    monthly_credit_by_date = {}
+    last_pay_date = None
+    pay_log_total = 0
+    pay_log_heap = []
+    import heapq
+
     _date_cache = {}
     def _fast_date(v):
         key = str(v)
@@ -32615,63 +32750,59 @@ def _build_payments():
             dd = dd.date()
         _date_cache[key] = dd
         return dd
-    for i in range(n):
-        nm = _norm_name(custs[i])
+
+    for row_no, vals in enumerate(led_df.itertuples(index=False, name=None)):
+        nm = _norm_name(vals[i_cust] if i_cust is not None else "")
         if not nm:
             continue
-        dt = _fast_date(dates[i])
-        row_tag = _canon_pay_tag(ltags[i])
+        raw_date = vals[i_date] if i_date is not None else None
+        dt = _fast_date(raw_date)
+        debit_amt = to_num(vals[i_deb]) if i_deb is not None else 0.0
+        credit_amt = to_num(vals[i_cred]) if i_cred is not None else 0.0
+        row_tag = _canon_pay_tag(vals[i_tag]) if i_tag is not None else ""
         if row_tag:
-            # Last non-empty ledger tag wins; Full_Ledger_Main is the live source.
             ledger_tag_map[nm] = row_tag
-        by_cust.setdefault(nm, []).append({
-            "date": dt,
-            "inv":  clean(invs[i]),
-            "debit":  to_num(debs[i]),
-            "credit": to_num(creds[i]),
-            "tag": row_tag,
-        })
-        due_v = _fast_date(dues[i]) if dues[i] not in (None, "") else None
-        raw_by_cust.setdefault(nm, []).append({
-            "company": clean(cmps[i]),
-            "date": dt.strftime("%d-%b-%y") if dt else clean(dates[i]),
-            "particulars": clean(parts[i]) or ("To Opening Balance" if i == 0 else ""),
-            "vch_type": clean(vtyps[i]),
-            "vch_no": clean(invs[i]),
-            "debit": to_num(debs[i]),
-            "credit": to_num(creds[i]),
-            "balance": to_num(bals[i]) if bals[i] is not None else None,
-            "due_date": due_v.strftime("%d-%b-%y") if due_v else None,
-            "_sort": dt or date(1900, 1, 1),
-        })
 
-    today = now_ist().date()
-    # month-end of current month
-    if today.month == 12:
-        month_end = date(today.year, 12, 31)
-    else:
-        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
-    month_start_g = date(today.year, today.month, 1)
+        # Only the fields needed for FIFO aging are kept per ledger row.
+        by_cust.setdefault(nm, []).append({"date": dt, "debit": debit_amt, "credit": credit_amt})
 
-    # IMPORTANT: Planning Actual must include every current-month Credit row.
-    # Earlier it was derived from outstanding-customer rows only, so customers
-    # whose balance became zero were skipped and Designer Actual was understated.
-    collected_month_by_customer = {}
+        if credit_amt > 0.009:
+            pay_log_total += 1
+            if dt and (last_pay_date is None or dt > last_pay_date):
+                last_pay_date = dt
+            if dt and month_start_g <= dt <= month_end:
+                collected_month_by_customer[nm] = collected_month_by_customer.get(nm, 0.0) + credit_amt
+                monthly_credit_by_date[dt] = monthly_credit_by_date.get(dt, 0.0) + credit_amt
+
+            entry = {
+                "_nm": nm,
+                "date": dt.strftime("%d-%b-%y") if dt else clean(raw_date),
+                "date_sort": dt.strftime("%Y-%m-%d") if dt else "",
+                "amount": round(credit_amt, 2),
+                "vch_type": clean(vals[i_vtype]) if i_vtype is not None else "",
+                "vch_no": clean(vals[i_inv]) if i_inv is not None else "",
+                "particulars": clean(vals[i_part]) if i_part is not None else "",
+            }
+            rank = (dt.toordinal() if dt else 0, row_no)
+            item = (rank[0], rank[1], entry)
+            if len(pay_log_heap) < _PAY_LOG_LIMIT:
+                heapq.heappush(pay_log_heap, item)
+            elif item[:2] > pay_log_heap[0][:2]:
+                heapq.heapreplace(pay_log_heap, item)
+
+    # Current-month collection by tag is resolved after the final live-ledger tag
+    # for each customer is known, so blank-tag credit rows still fall back safely.
     collected_month_by_tag = {}
-    for i in range(n):
-        credit_amt = to_num(creds[i])
-        if credit_amt <= 0.009:
-            continue
-        cd = _fast_date(dates[i])
-        if not cd or not (month_start_g <= cd <= month_end):
-            continue
-        nm = _norm_name(custs[i])
-        if not nm:
-            continue
-        row_tag = (_canon_pay_tag(ltags[i]) or ledger_tag_map.get(nm)
-                   or tag_map.get(nm) or "Unknown")
-        collected_month_by_customer[nm] = collected_month_by_customer.get(nm, 0.0) + credit_amt
-        collected_month_by_tag[row_tag] = collected_month_by_tag.get(row_tag, 0.0) + credit_amt
+    for nm, amt in collected_month_by_customer.items():
+        tg = ledger_tag_map.get(nm) or tag_map.get(nm, "") or "Unknown"
+        collected_month_by_tag[tg] = collected_month_by_tag.get(tg, 0.0) + amt
+
+    # Wide DataFrame can be released before the expensive FIFO/customer pass.
+    try:
+        del led_df
+        _gc.collect(); _malloc_trim()
+    except Exception:
+        pass
 
     AG_LABELS = ["0 Days", "0-30 Days", "31-60 Days", "61-90 Days", "91-180 Days", ">180 Days"]
     def _ag_bucket(days):
@@ -32810,43 +32941,19 @@ def _build_payments():
 
     rows.sort(key=lambda x: x["balance"], reverse=True)
 
-    # raw ledger lines sorted by date, per customer (for the printable customer ledger view)
-    for nm in raw_by_cust:
-        raw_by_cust[nm].sort(key=lambda e: e["_sort"])
-        for e in raw_by_cust[nm]:
-            e.pop("_sort", None)
-    _PAY_RAW_LEDGER["data"] = raw_by_cust
-
-    # ---- Ledger last updated (latest payment/credit entry date across the whole ledger) ----
-    last_pay_date = None
-    for i in range(n):
-        if to_num(creds[i]) > 0:
-            cd = _fast_date(dates[i])
-            if cd and (last_pay_date is None or cd > last_pay_date):
-                last_pay_date = cd
-
-    # ---- PAYMENTS RECEIVED LOG — every credit/payment entry, latest first ----
+    # ---- PAYMENTS RECEIVED LOG — latest entries only in the tab payload ----
+    # Full historical customer ledger is now lazy-loaded only when a customer is
+    # clicked. This keeps /api/payments small and prevents browser/server crashes.
     payments_log = []
-    for i in range(n):
-        credit_amt = to_num(creds[i])
-        if credit_amt <= 0.009:
-            continue
-        nm = _norm_name(custs[i])
-        if not nm:
-            continue
-        cd = _fast_date(dates[i])
-        payments_log.append({
-            "customer": nm.title(),
-            "tag": (_canon_pay_tag(ltags[i]) or ledger_tag_map.get(nm)
-                    or tag_map.get(nm, "") or "Unknown"),
-            "date": cd.strftime("%d-%b-%y") if cd else clean(dates[i]),
-            "date_sort": cd.strftime("%Y-%m-%d") if cd else "",
-            "amount": round(credit_amt, 2),
-            "vch_type": clean(vtyps[i]),
-            "vch_no": clean(invs[i]),
-            "particulars": clean(parts[i]),
-        })
-    payments_log.sort(key=lambda x: x["date_sort"], reverse=True)
+    for _ord, _row_no, e in sorted(pay_log_heap, key=lambda x: (x[0], x[1]), reverse=True):
+        nm = e.pop("_nm", "")
+        e["tag"] = ledger_tag_map.get(nm) or tag_map.get(nm, "") or "Unknown"
+        e["customer"] = nm.title()
+        payments_log.append(e)
+    try:
+        pay_log_heap.clear()
+    except Exception:
+        pass
 
     # ---- Week-wise overdue tracker for the CURRENT month (fixed buckets, whole month) ----
     month_start = date(today.year, today.month, 1)
@@ -32876,12 +32983,8 @@ def _build_payments():
         week_overdue_amt[0] += carry_over_total
 
     week_payment_amt = [0.0] * len(week_bounds)
-    for i in range(n):
-        credit_amt = to_num(creds[i])
-        if credit_amt <= 0:
-            continue
-        cd = _fast_date(dates[i])
-        if not cd or cd < month_start or cd > month_end:
+    for cd, credit_amt in monthly_credit_by_date.items():
+        if not cd or credit_amt <= 0:
             continue
         for wi, (ws_, we_) in enumerate(week_bounds):
             if ws_ <= cd <= we_:
@@ -32960,10 +33063,103 @@ def _build_payments():
         "collected_by_tag": {k: round(v, 0) for k, v in collected_month_by_tag.items()},
         "tags": sorted([t for t in tags_set if t]),
         "payments_log": payments_log,
+        "payments_log_total": int(pay_log_total),
+        "payments_log_limited": bool(pay_log_total > len(payments_log)),
+        "payments_log_limit": int(_PAY_LOG_LIMIT),
     }
     _PAY_CACHE["data"] = data
     _PAY_CACHE["ts"] = time.time()
     return data
+
+
+def _load_payment_customer_ledger(customer_name):
+    """Load one customer's printable ledger on demand, not during tab load."""
+    key = _norm_name(customer_name)
+    if not key:
+        return []
+    now_ts = time.time()
+    cache = _PAY_RAW_LEDGER.setdefault("data", {})
+    cache_ts = _PAY_RAW_LEDGER.setdefault("ts", {})
+    if key in cache and (_PAY_LEDGER_DETAIL_CACHE_TTL <= 0 or
+                         now_ts - cache_ts.get(key, 0) < _PAY_LEDGER_DETAIL_CACHE_TTL):
+        return cache[key]
+
+    df = _fetch_payments_csv_slim(PAY_LEDGER_URL, [
+        ("Date", "date", "invoice date", "txn date"),
+        ("Customer Name", "customer", "name", "party"),
+        ("Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno"),
+        ("Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr"),
+        ("Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr"),
+        ("Balance", "sum of outstanding", "bal", "running balance"),
+        ("Particulars", "particular", "narration"),
+        ("Vch Type", "voucher type", "vch_type"),
+        ("Due Date", "due date", "duedate"),
+        ("Company Details", "company"),
+    ])
+    cols = list(df.columns)
+    CUST = find_col(cols, "Customer Name", "customer", "name", "party")
+    DATEC = find_col(cols, "Date", "date", "invoice date", "txn date") or (cols[0] if cols else None)
+    INV = find_col(cols, "Invoice No", "invoice", "inv no", "bill no", "voucher", "vch no", "vchno")
+    DEB = find_col(cols, "Debit", "sum of debit", "invoice amount", "debit (invoice)", "debit_invoice", "dr")
+    CRED = find_col(cols, "Credit", "sum of credit", "payment", "credit (payment)", "credit_payment", "cr")
+    BAL = find_col(cols, "Balance", "sum of outstanding", "bal", "running balance")
+    PART = find_col(cols, "Particulars", "particular", "narration")
+    VTYPE = find_col(cols, "Vch Type", "voucher type", "vch_type")
+    DUE = find_col(cols, "Due Date", "due date", "duedate")
+    CMP = find_col(cols, "Company Details", "company")
+    if not CUST:
+        return []
+    pos = {c: i for i, c in enumerate(cols)}
+    def _v(vals, col, default=""):
+        return vals[pos[col]] if col and col in pos else default
+    entries = []
+    first = True
+    for vals in df.itertuples(index=False, name=None):
+        if _norm_name(_v(vals, CUST)) != key:
+            continue
+        raw_date = _v(vals, DATEC, None)
+        try:
+            dt = parse_date_any(raw_date)
+        except Exception:
+            dt = None
+        if isinstance(dt, datetime):
+            dt = dt.date()
+        raw_due = _v(vals, DUE, None)
+        try:
+            due_dt = parse_date_any(raw_due) if raw_due not in (None, "") else None
+        except Exception:
+            due_dt = None
+        if isinstance(due_dt, datetime):
+            due_dt = due_dt.date()
+        entries.append({
+            "company": clean(_v(vals, CMP)),
+            "date": dt.strftime("%d-%b-%y") if dt else clean(raw_date),
+            "particulars": clean(_v(vals, PART)) or ("To Opening Balance" if first else ""),
+            "vch_type": clean(_v(vals, VTYPE)),
+            "vch_no": clean(_v(vals, INV)),
+            "debit": to_num(_v(vals, DEB, 0)),
+            "credit": to_num(_v(vals, CRED, 0)),
+            "balance": to_num(_v(vals, BAL, 0)) if BAL else None,
+            "due_date": due_dt.strftime("%d-%b-%y") if due_dt else None,
+            "_sort": dt or date(1900, 1, 1),
+        })
+        first = False
+    try:
+        del df
+        _gc.collect(); _malloc_trim()
+    except Exception:
+        pass
+    entries.sort(key=lambda e: e["_sort"])
+    for e in entries:
+        e.pop("_sort", None)
+
+    cache[key] = entries
+    cache_ts[key] = now_ts
+    if len(cache) > _PAY_LEDGER_DETAIL_CACHE_MAX:
+        oldest = sorted(cache_ts, key=cache_ts.get)[:max(0, len(cache)-_PAY_LEDGER_DETAIL_CACHE_MAX)]
+        for old_key in oldest:
+            cache.pop(old_key, None); cache_ts.pop(old_key, None)
+    return entries
 
 # ════════════════════════════════════════════════════════════════
 #  📋 PAYMENTS PLANNING — published Planning sheet is the source of truth
@@ -33052,7 +33248,7 @@ def _build_payments_planning():
             raise ValueError("Planning table ke required columns complete nahi mile")
 
         for row in raw_rows[header_at + 1:]:
-            category = clean(_plan_cell(row, c_channel))
+            category = _payments_type_alias(_plan_cell(row, c_channel))
             if not category:
                 continue
             inward = round(to_num(_plan_cell(row, c_inward)), 0)
@@ -33080,6 +33276,41 @@ def _build_payments_planning():
             rows.append(parsed)
         if not rows:
             raise ValueError("Planning table me channel rows nahi mile")
+
+        # Designer and Purchase are one business group. If the source Planning
+        # sheet contains both rows, combine them into one Purchase row instead
+        # of showing/counting them separately. Other categories remain unchanged.
+        _merged_plan = {}
+        _merged_order = []
+        for _r in rows:
+            _cat = _payments_type_alias(_r.get("category", "")) or "Unknown"
+            _key = _cat.lower()
+            if _key not in _merged_plan:
+                _merged_plan[_key] = {
+                    "category": _cat, "inward_projection": 0.0, "actual": 0.0,
+                    "pending": 0.0, "pct_achievement": None,
+                    "actual_str": 0.0, "required_str": 0.0,
+                }
+                _merged_order.append(_key)
+            _m = _merged_plan[_key]
+            _m["inward_projection"] += float(_r.get("inward_projection") or 0)
+            _m["actual"] += float(_r.get("actual") or 0)
+            _m["pending"] += float(_r.get("pending") or 0)
+            _m["actual_str"] += float(_r.get("actual_str") or 0)
+            _m["required_str"] += float(_r.get("required_str") or 0)
+        rows = []
+        for _key in _merged_order:
+            _m = _merged_plan[_key]
+            _m["inward_projection"] = round(_m["inward_projection"], 0)
+            _m["actual"] = round(_m["actual"], 0)
+            _m["pending"] = round(_m["pending"], 0)
+            _m["actual_str"] = round(_m["actual_str"], 0)
+            _m["required_str"] = round(_m["required_str"], 0)
+            _m["pct_achievement"] = (
+                round(_m["actual"] / _m["inward_projection"] * 100, 1)
+                if _m["inward_projection"] else None
+            )
+            rows.append(_m)
     except Exception as e:
         plan_err = f"Planning sheet fetch/parse nahi ho payi: {str(e)[:200]}"
 
@@ -33141,9 +33372,7 @@ def api_payments_ledger():
     if not name:
         return jsonify({"error": "customer required"}), 400
     try:
-        _build_payments()  # ensure cache populated
-        raw = _PAY_RAW_LEDGER.get("data") or {}
-        entries = raw.get(_norm_name(name)) or []
+        entries = _load_payment_customer_ledger(name)
         tot_debit = round(sum(e.get("debit") or 0 for e in entries), 2)
         tot_credit = round(sum(e.get("credit") or 0 for e in entries), 2)
         closing_bal = entries[-1]["balance"] if entries and entries[-1].get("balance") is not None else round(tot_debit - tot_credit, 2)
