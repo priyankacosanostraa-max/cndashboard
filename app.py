@@ -1,3 +1,10 @@
+# ============================================================
+# Cosa Nostraa — V24.28 (PAYMENTS · WEEK RECEIVED BY ACTUAL RECEIPT DATE)
+# Week-wise Payment Received now counts only actual Receipt voucher credits,
+# buckets them by the ledger transaction Date (1-7, 8-14, 15-21, 22-28, 29-EOM),
+# and uses the exact same Tag / Customer / Show filtered customer set as the
+# visible Payments tables. Due/overdue target logic is unchanged from V24.27.
+# ============================================================
 # Cosa Nostraa — V24.27 (PAYMENTS · WEEK-WISE EXACT DUE DATE + FILTER FIX)
 # Week-wise Collection Tracker now buckets each invoice by Full_Ledger_Main's
 # actual Due Date. Any unpaid invoice already due before the current month is
@@ -20124,20 +20131,13 @@ function renderPayments(){
     const q = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
     const view = document.getElementById('payView')?.value || 'all';
 
-    // Backend sends ALL customers that had ledger activity / target exposure this
-    // month, including customers now fully settled. That keeps Payment Received
-    // correct; the old rows[] list contained outstanding customers only.
-    const weekCustomers = (d.weekly_customers || []).filter(r => {
-      if (tag && String(r.tag||'').toLowerCase() !== tag) return false;
-      if (q && !String(r.customer||'').toLowerCase().includes(q)) return false;
-      // Keep the week table on exactly the same customer universe as the
-      // Outstanding tables above. The default "All Outstanding" must not
-      // silently include customers already settled to zero.
-      if (view === 'all' && Number(r.balance||0) <= 0) return false;
-      if (view === 'overdue' && Number(r.overdue||0) <= 0) return false;
-      if (view === 'due' && Number(r.due||0) <= 0) return false;
-      return true;
-    });
+    // Use EXACTLY the same customer set that survived the Payments filters above.
+    // This guarantees Tag / Customer Search / Show changes update the week table
+    // identically instead of maintaining a second, slightly different filter path.
+    const _weekAllowed = new Set(rows.map(r => String(r.customer||'').trim().toLowerCase()));
+    const weekCustomers = (d.weekly_customers || []).filter(r =>
+      _weekAllowed.has(String(r.customer||'').trim().toLowerCase())
+    );
 
     const wkTarget = wm.map(()=>0);
     const wkPayment = wm.map(()=>0);
@@ -20216,7 +20216,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(finalClosing)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = ledger credits received in that week for the currently filtered outstanding customers. <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
+        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = actual Receipt-voucher credits whose ledger Date falls in that week, for the currently filtered customers. <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
       </p>`;
   }
 
@@ -32666,6 +32666,20 @@ def _payments_type_alias(value):
         return "Purchase"
     return raw
 
+def _is_received_payment_vtype(value):
+    """True only for actual incoming receipt voucher types.
+
+    Full_Ledger_Main contains many positive Credit rows (Purchase, Sales, Journal,
+    Credit Note, Contra, etc.). Those are ledger movements, not cash collected.
+    Week-wise "Payment Received" must therefore use Receipt vouchers only.
+    This accepts normal variants such as Receipt / Bank Receipt / Receipt Voucher.
+    """
+    raw = clean(value).strip().lower()
+    if not raw:
+        return False
+    tokens = re.findall(r"[a-z0-9]+", raw)
+    return "receipt" in tokens
+
 def _build_payments():
     if (_PAY_CACHE_TTL > 0 and _PAY_CACHE["data"] is not None
             and (time.time() - _PAY_CACHE["ts"] < _PAY_CACHE_TTL)):
@@ -32795,15 +32809,16 @@ def _build_payments():
         row_terms = to_int(vals[i_terms]) if i_terms is not None else 0
         row_due_date = _fast_date(vals[i_due_date]) if i_due_date is not None else None
         row_tag = _canon_pay_tag(vals[i_tag]) if i_tag is not None else ""
+        row_vtype = clean(vals[i_vtype]) if i_vtype is not None else ""
         if row_tag:
             ledger_tag_map[nm] = row_tag
 
-        # Keep the exact source Due Date/Terms on each ledger row. This is what
-        # the week-wise tracker must follow; deriving all due dates from a single
-        # customer term was the reason most values collapsed into Week 1.
+        # Keep the exact source Due Date/Terms/Voucher Type on each ledger row.
+        # Voucher Type is required so week-wise Payment Received can exclude
+        # non-cash credits such as Purchase/Sales/Journal/Credit Note/Contra.
         by_cust.setdefault(nm, []).append({
             "date": dt, "debit": debit_amt, "credit": credit_amt,
-            "terms": row_terms, "due_date": row_due_date
+            "terms": row_terms, "due_date": row_due_date, "vch_type": row_vtype
         })
 
         if credit_amt > 0.009:
@@ -32926,7 +32941,10 @@ def _build_payments():
             if month_start_g <= dt <= month_end:
                 if debit > 0.009:
                     current_debits.append({"date": dt, "due_date": exact_due, "amt": debit})
-                if credit > 0.009:
+                # IMPORTANT: positive Credit is not automatically a payment.
+                # Only Receipt voucher credits represent customer money received.
+                # Use the transaction Date itself to place it in the correct week.
+                if credit > 0.009 and _is_received_payment_vtype(e.get("vch_type")):
                     paid_pairs.append([dt.strftime("%Y-%m-%d"), round(credit, 2)])
 
         target_pairs = []
