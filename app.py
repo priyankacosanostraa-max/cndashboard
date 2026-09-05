@@ -27158,15 +27158,63 @@ SEPTEMBER_TARGET_OVERRIDE_ROWS = (
 )
 
 def _apply_september_target_override(rows):
-    # Replace September target rows only. Keep every other month unchanged.
-    kept = [r for r in rows if r.get("month") != SEPTEMBER_TARGET_OVERRIDE_MONTH]
-    for spec in SEPTEMBER_TARGET_OVERRIDE_ROWS:
+    """Replace only the five revised September channel targets.
+
+    Every other September stakeholder/channel from the Target sheet is kept.
+    For the revised channels, the owner and SP target come from the user's
+    September plan, so stale rows under an older owner cannot remain and double
+    count in the leaderboard.
+    """
+    def _norm(v):
+        return re.sub(r"[^a-z0-9]+", "", str(v or "").strip().casefold())
+
+    def _revised_bucket(channel):
+        key = _norm(channel)
+        if key in {"website", "online", "d2c", "websiteonline"}:
+            return "website"
+        if key in {"amazon", "amazonfba"}:
+            return "amazon"
+        if key == "myntra":
+            return "myntra"
+        if key == "nykaa":
+            return "nykaa"
+        if key in {
+            "othermarketplace", "othermarketplaces", "othermp",
+            "marketplaceother", "marketplacesother", "sorother"
+        }:
+            return "othermarketplaces"
+        return ""
+
+    revised_by_bucket = {
+        "website": SEPTEMBER_TARGET_OVERRIDE_ROWS[0],
+        "amazon": SEPTEMBER_TARGET_OVERRIDE_ROWS[1],
+        "myntra": SEPTEMBER_TARGET_OVERRIDE_ROWS[2],
+        "nykaa": SEPTEMBER_TARGET_OVERRIDE_ROWS[3],
+        "othermarketplaces": SEPTEMBER_TARGET_OVERRIDE_ROWS[4],
+    }
+
+    kept = []
+    existing_qty = {}
+    for row in rows:
+        if row.get("month") != SEPTEMBER_TARGET_OVERRIDE_MONTH:
+            kept.append(row)
+            continue
+        bucket = _revised_bucket(row.get("channel"))
+        if bucket:
+            # Preserve an existing Qty Target when available, but remove the
+            # old SP target/owner row because the revised plan replaces it.
+            existing_qty.setdefault(bucket, to_num(row.get("qty_target", 0)))
+            continue
+        kept.append(row)
+
+    for bucket in ("website", "amazon", "myntra", "nykaa", "othermarketplaces"):
+        spec = revised_by_bucket[bucket]
         kept.append({
             "month": SEPTEMBER_TARGET_OVERRIDE_MONTH,
             "month_label": "Sep 2026",
             "stakeholder": spec["stakeholder"],
             "channel": spec["channel"],
-            "qty_target": 0.0,
+            "qty_target": existing_qty.get(bucket, 0.0),
             "sp_target": float(spec["sp_target"]),
         })
     return kept
