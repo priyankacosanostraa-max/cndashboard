@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.34 (PAYMENTS ACTUAL RECONCILED TO CUSTOMER MASTER TAG)
+# - Payments Actual/Week-wise collections use Planning -> recvd vs paid amounts + dates.
+# - Customer master Sheet2 Tag overrides the raw bank Type (Designer = Purchase).
+# - Prevents Amazon(SOR) / Blink(QCom) receipts from inflating Purchase Actual.
+# - Planning Actual, Pending, % Ach, Required STR, week-wise received and collected-by-tag stay consistent.
+
 # Cosa Nostraa — V24.29 (PAYMENTS WEEK RECEIVED = ACTUAL BANK INWARD SOURCE)
 # - Week-wise Payment Received now uses Planning -> `recvd vs paid` actual received
 #   entries by transaction Date, so Purchase Week 1 reconciles to Planning Actual.
@@ -19584,21 +19590,50 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(finalClosing)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = actual bank inward from Planning → recvd vs paid, placed by its received Date (Designer + Purchase = Purchase). <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
+        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = actual bank inward from Planning → recvd vs paid, placed by its received Date and classified by the Payments customer-master Tag (Designer + Purchase = Purchase). <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
       </p>`;
   }
 
   // ---- TAG-WISE SUMMARY (due / overdue / collected this month / balance) ----
   const tagHost = document.getElementById('payTagSummary');
   if (tagHost){
-    // filtered rows se tag-wise banao (search/show filter bhi lagey)
+    // Due/overdue/balance come from the currently filtered outstanding rows.
+    // Collected Month comes from the SAME master-tag reconciled bank-inward
+    // source as Planning + Week-wise, so fully-settled customers are not lost.
     const tmap = {};
     rows.forEach(r => {
       const tg = r.tag || 'Unknown';
       const s = tmap[tg] || (tmap[tg] = {tag:tg, due:0, overdue:0, collected_month:0, balance:0, customers:0});
       s.due += r.due||0; s.overdue += r.overdue||0;
-      s.collected_month += r.collected_month||0; s.balance += r.balance||0; s.customers++;
+      s.balance += r.balance||0; s.customers++;
     });
+    const _tagFilterRaw = document.getElementById('payTag')?.value || '';
+    const _tagFilterKey = _payCollectionGroup(_tagFilterRaw);
+    const _tagQ = (document.getElementById('paySearch')?.value || '').trim().toLowerCase();
+    const _tagView = document.getElementById('payView')?.value || 'all';
+    const _tagAllowed = rows.map(r=>r.customer||'');
+    const _bankRows = Array.isArray(d.received_entries) ? d.received_entries : [];
+    if (_bankRows.length || d.received_source === 'recvd_vs_paid_master_tag'){
+      _bankRows.forEach(e => {
+        const eg = _payCollectionGroup(e.tag);
+        const rawKey = String(e.tag||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+        const wantedRaw = String(_tagFilterRaw||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+        if (_tagFilterRaw && !((_tagFilterKey && eg===_tagFilterKey) || (! _tagFilterKey && rawKey===wantedRaw))) return;
+        const ec = String(e.customer||'');
+        if (_tagQ && !ec.toLowerCase().includes(_tagQ)) return;
+        if (_tagView!=='all' && !_tagAllowed.some(n=>_payNameSame(n,ec))) return;
+        const tg = e.tag || 'Unknown';
+        const x = tmap[tg] || (tmap[tg] = {tag:tg, due:0, overdue:0, collected_month:0, balance:0, customers:0});
+        x.collected_month += (parseFloat(e.amount)||0);
+      });
+    }else{
+      // Ledger fallback only when the bank-inward source itself failed.
+      rows.forEach(r => {
+        const tg = r.tag || 'Unknown';
+        const x = tmap[tg] || (tmap[tg] = {tag:tg, due:0, overdue:0, collected_month:0, balance:0, customers:0});
+        x.collected_month += r.collected_month||0;
+      });
+    }
     const trows = Object.values(tmap).sort((a,b)=>b.balance-a.balance);
     let tDue=0,tOv=0,tCol=0,tBal=0,tCust=0;
     _payTagRowsExport = [];
@@ -30806,6 +30841,195 @@ def _payments_received_name(value):
     # Bank-inward sheet normally stores names as `CN- Customer Name`.
     return re.sub(r"^\s*CN\s*[-:]*\s*", "", raw, flags=re.I).strip()
 
+# Row-level bank inward is the source of truth for collection Actual.  The raw
+# `recvd vs paid` Type is not always the business customer type (for example an
+# Amazon receipt can be marked Purchase there even though the customer master is
+# SOR).  Resolve every party back to Sheet2/Vendor_SBC first, then use the master
+# Tag.  This cache is small and shared by Payments + Planning so both endpoints
+# show the same numbers without repeatedly loading the sheets.
+_PAY_INWARD_CACHE = {"data": None, "ts": 0, "month": ""}
+_PAY_INWARD_CACHE_TTL = max(0, int(os.environ.get("PAY_INWARD_CACHE_TTL_SECONDS", "30") or 30))
+_PAY_INWARD_LOCK = threading.Lock()
+
+def _payments_party_key(value):
+    raw = _payments_received_name(value).upper()
+    # Normalize the common company suffix variants seen between bank narration
+    # and the customer master.  DEBTOR/CUSTOMER suffixes are master-only labels.
+    raw = re.sub(r"\bPRIVATE\b", "PVT", raw)
+    raw = re.sub(r"\bLIMITED\b", "LTD", raw)
+    raw = re.sub(r"\b(DEBTOR|CUSTOMER)\b", " ", raw)
+    return re.sub(r"[^A-Z0-9]+", "", raw)
+
+def _load_payment_master_tags_for_inward():
+    master = {}
+    df = _fetch_payments_csv_slim(PAY_TERMS_URL, [
+        ("Vendor_SBC", "Vendor", "Customer Name", "customer", "name"),
+        ("Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type"),
+    ])
+    cols = list(df.columns)
+    c_cust = find_col(df.columns, "Vendor_SBC", "Vendor", "Customer Name", "customer", "name") or (cols[0] if cols else None)
+    c_tag = find_col(df.columns, "Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type")
+    if not c_cust:
+        raise ValueError("Payment master customer/Vendor_SBC column missing")
+    if c_tag is None:
+        raise ValueError("Payment master Tag column missing")
+    for vals in df.itertuples(index=False, name=None):
+        idx = {c:i for i,c in enumerate(cols)}
+        nm = _norm_name(vals[idx[c_cust]])
+        if not nm:
+            continue
+        tg = _payments_type_alias(vals[idx[c_tag]])
+        if tg:
+            master[nm] = tg
+    try:
+        del df
+        _gc.collect(); _malloc_trim()
+    except Exception:
+        pass
+    return master
+
+def _match_payment_master_customer(bank_customer, master_tag_map):
+    src_norm = _norm_name(_payments_received_name(bank_customer))
+    if not src_norm or not master_tag_map:
+        return None, ""
+    if src_norm in master_tag_map:
+        return src_norm, master_tag_map.get(src_norm, "")
+    src_key = _payments_party_key(src_norm)
+    if not src_key:
+        return None, ""
+
+    exact = None
+    prefix_best = None
+    prefix_score = -1
+    fuzzy_best = None
+    fuzzy_score = 0.0
+    for master_norm, tag in master_tag_map.items():
+        mk = _payments_party_key(master_norm)
+        if not mk:
+            continue
+        if mk == src_key:
+            exact = (master_norm, tag)
+            break
+        min_len = min(len(mk), len(src_key))
+        if min_len >= 7 and (mk.startswith(src_key) or src_key.startswith(mk)):
+            # Prefer the longest meaningful prefix match.  This safely handles
+            # `... - Debtor` and duplicated/extended bank narration strings.
+            score = min_len
+            if score > prefix_score:
+                prefix_score = score
+                prefix_best = (master_norm, tag)
+        elif min_len >= 10:
+            # Last-resort typo/corporate-suffix tolerance; strict threshold to
+            # avoid mapping a receipt to a different customer with a short name.
+            ratio = difflib.SequenceMatcher(None, src_key, mk).ratio()
+            if ratio >= 0.93 and ratio > fuzzy_score:
+                fuzzy_score = ratio
+                fuzzy_best = (master_norm, tag)
+    if exact:
+        return exact
+    if prefix_best:
+        return prefix_best
+    if fuzzy_best:
+        return fuzzy_best
+    return None, ""
+
+def _build_payments_bank_inward(master_tag_map=None, force=False):
+    today = now_ist().date()
+    month_key = f"{today.year}-{today.month:02d}"
+    now_ts = time.time()
+    with _PAY_INWARD_LOCK:
+        cached = _PAY_INWARD_CACHE.get("data")
+        if (not force and _PAY_INWARD_CACHE_TTL > 0 and cached is not None
+                and _PAY_INWARD_CACHE.get("month") == month_key
+                and now_ts - _PAY_INWARD_CACHE.get("ts", 0) < _PAY_INWARD_CACHE_TTL):
+            return cached
+
+        result = {
+            "ok": False, "entries": [], "by_tag": {}, "by_group": {},
+            "by_customer": {}, "error": "", "month": month_key,
+        }
+        try:
+            master = dict(master_tag_map or {})
+            if not master:
+                master = _load_payment_master_tags_for_inward()
+
+            recv_df = _fetch_payments_csv_slim(PAY_RECEIVED_URL, [
+                ("Date", "date", "received date", "txn date"),
+                ("Received From / Paid To", "Received From", "received from", "party", "customer"),
+                ("Recived", "Received", "received amount", "amount received", "inward"),
+                ("Type", "type", "Tag", "tag", "channel", "category"),
+            ])
+            cols = list(recv_df.columns)
+            c_date = find_col(recv_df.columns, "Date", "date", "received date", "txn date")
+            c_from = find_col(recv_df.columns, "Received From / Paid To", "Received From", "received from", "party", "customer")
+            c_amt = find_col(recv_df.columns, "Recived", "Received", "received amount", "amount received", "inward")
+            c_type = find_col(recv_df.columns, "Type", "type", "Tag", "tag", "channel", "category")
+            if not (c_date and c_amt and c_type):
+                raise ValueError(f"recvd vs paid required columns missing: {cols[:12]}")
+            idx = {c:i for i,c in enumerate(cols)}
+            i_date, i_amt, i_type = idx[c_date], idx[c_amt], idx[c_type]
+            i_from = idx.get(c_from) if c_from else None
+
+            for vals in recv_df.itertuples(index=False, name=None):
+                try:
+                    rdt = parse_date_any(vals[i_date])
+                except Exception:
+                    rdt = None
+                if isinstance(rdt, datetime):
+                    rdt = rdt.date()
+                if not rdt or rdt.year != today.year or rdt.month != today.month:
+                    continue
+                amt = to_num(vals[i_amt])
+                if amt <= 0.009:
+                    continue
+                raw_customer = vals[i_from] if i_from is not None else ""
+                matched_norm, master_tag = _match_payment_master_customer(raw_customer, master)
+                source_tag = _payments_type_alias(vals[i_type])
+                final_tag = master_tag or source_tag
+                group = _payments_collection_group(final_tag)
+
+                # Master-backed tags (including QCom) are valid.  If the party
+                # is not found in the master, preserve only the recognized
+                # Planning groups so contra/misc/bulk bank movements do not
+                # inflate collections.
+                if not master_tag and not group:
+                    continue
+                customer_norm = matched_norm or _norm_name(_payments_received_name(raw_customer))
+                customer_display = (matched_norm.title() if matched_norm
+                                    else _payments_received_name(raw_customer))
+                entry = {
+                    "date": rdt.strftime("%Y-%m-%d"),
+                    "amount": round(amt, 2),
+                    "tag": final_tag or "Unknown",
+                    "group": group,
+                    "customer": customer_display,
+                    "source_type": source_tag,
+                }
+                result["entries"].append(entry)
+                tg = final_tag or "Unknown"
+                result["by_tag"][tg] = result["by_tag"].get(tg, 0.0) + amt
+                if group:
+                    result["by_group"][group] = result["by_group"].get(group, 0.0) + amt
+                if customer_norm:
+                    result["by_customer"][customer_norm] = result["by_customer"].get(customer_norm, 0.0) + amt
+
+            for bucket in ("by_tag", "by_group", "by_customer"):
+                result[bucket] = {k: round(v, 2) for k,v in result[bucket].items()}
+            result["ok"] = True
+            try:
+                del recv_df
+                _gc.collect(); _malloc_trim()
+            except Exception:
+                pass
+        except Exception as e:
+            result["error"] = str(e)[:240]
+            print("payments bank-inward master reconciliation error:", result["error"])
+
+        _PAY_INWARD_CACHE["data"] = result
+        _PAY_INWARD_CACHE["ts"] = time.time()
+        _PAY_INWARD_CACHE["month"] = month_key
+        return result
+
 def _build_payments():
     if (_PAY_CACHE_TTL > 0 and _PAY_CACHE["data"] is not None
             and (time.time() - _PAY_CACHE["ts"] < _PAY_CACHE_TTL)):
@@ -30826,12 +31050,12 @@ def _build_payments():
         return _tag_canon[key]
     try:
         terms_df = _fetch_payments_csv_slim(PAY_TERMS_URL, [
-            ("Customer Name", "customer", "name"),
+            ("Vendor_SBC", "Vendor", "Customer Name", "customer", "name"),
             ("Payment Term", "payment terms", "terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)"),
             ("Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type"),
         ])
         tcols = list(terms_df.columns)
-        T_CUST = find_col(terms_df.columns, "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
+        T_CUST = find_col(terms_df.columns, "Vendor_SBC", "Vendor", "Customer Name", "customer", "name") or (tcols[0] if tcols else None)
         T_TERM = find_col(terms_df.columns, "Payment Term", "payment terms", "term", "credit days", "credit period", "days", "payment term (days)", "term (days)")
         T_TAG  = find_col(terms_df.columns, "Tag", "type", "tag", "tag / type", "b2b/b2c", "customer type")
         tc = terms_df[T_CUST].tolist() if T_CUST else []
@@ -30972,60 +31196,23 @@ def _build_payments():
                 heapq.heapreplace(pay_log_heap, item)
 
     # ---- ACTUAL BANK INWARD (Planning -> `recvd vs paid`) ------------------
-    # Planning Summary's weekly Actual is a SUMIFS over this sheet. Use the same
-    # row-level source here so Week-wise Payment Received reconciles exactly to
-    # Planning while still allowing Tag/Customer/Show filters in the browser.
-    received_entries = []
-    received_source = "ledger_receipt_fallback"
-    received_source_error = ""
-    received_month_by_tag = {}
-    try:
-        recv_df = _fetch_payments_csv_slim(PAY_RECEIVED_URL, [
-            ("Date", "date", "received date", "txn date"),
-            ("Received From / Paid To", "Received From", "received from", "party", "customer"),
-            ("Recived", "Received", "received amount", "amount received", "inward"),
-            ("Type", "type", "Tag", "tag", "channel", "category"),
-        ])
-        rcols = list(recv_df.columns)
-        R_DATE = find_col(recv_df.columns, "Date", "date", "received date", "txn date")
-        R_FROM = find_col(recv_df.columns, "Received From / Paid To", "Received From", "received from", "party", "customer")
-        R_AMT  = find_col(recv_df.columns, "Recived", "Received", "received amount", "amount received", "inward")
-        R_TYPE = find_col(recv_df.columns, "Type", "type", "Tag", "tag", "channel", "category")
-        if not (R_DATE and R_AMT and R_TYPE):
-            raise ValueError(f"recvd vs paid required columns missing: {rcols[:12]}")
-        ridx = {c:i for i,c in enumerate(rcols)}
-        i_rd, i_rf, i_ra, i_rt = ridx[R_DATE], ridx.get(R_FROM), ridx[R_AMT], ridx[R_TYPE]
-        for vals in recv_df.itertuples(index=False, name=None):
-            rdt = _fast_date(vals[i_rd])
-            if not rdt or not (month_start_g <= rdt <= month_end):
-                continue
-            amt = to_num(vals[i_ra])
-            if amt <= 0.009:
-                continue
-            grp = _payments_collection_group(vals[i_rt])
-            if not grp:
-                continue
-            cust_display = _payments_received_name(vals[i_rf] if i_rf is not None else "")
-            received_entries.append({
-                "date": rdt.strftime("%Y-%m-%d"),
-                "amount": round(amt, 2),
-                "tag": grp,
-                "customer": cust_display,
-            })
-            received_month_by_tag[grp] = received_month_by_tag.get(grp, 0.0) + amt
-        received_source = "recvd_vs_paid"
-        try:
-            del recv_df
-        except Exception:
-            pass
-    except Exception as e:
-        received_source_error = str(e)[:240]
-        print("payments received-source fetch error:", received_source_error)
+    # Amount + transaction date come from `recvd vs paid`, but the business
+    # classification comes from the customer master Sheet2 Tag.  This prevents
+    # marketplace/QCom receipts that happen to have raw Type=Purchase from
+    # inflating the Purchase actual.
+    _bank_inward = _build_payments_bank_inward(tag_map)
+    bank_inward_ok = bool(_bank_inward.get("ok"))
+    received_entries = list(_bank_inward.get("entries") or []) if bank_inward_ok else []
+    received_source = "recvd_vs_paid_master_tag" if bank_inward_ok else "ledger_receipt_fallback"
+    received_source_error = _bank_inward.get("error", "")
+    received_month_by_tag = dict(_bank_inward.get("by_tag") or {}) if bank_inward_ok else {}
+    received_month_by_customer = dict(_bank_inward.get("by_customer") or {}) if bank_inward_ok else {}
 
-    # Collected Month in tag summary should reconcile to the same actual bank
-    # inward source whenever it is available. Ledger credits remain fallback.
+    # Collected Month uses the exact same source/classification as Planning and
+    # Week-wise.  Ledger credits are used only when the bank-inward sheet cannot
+    # be loaded at all.
     collected_month_by_tag = {}
-    if received_entries:
+    if bank_inward_ok:
         collected_month_by_tag.update(received_month_by_tag)
     else:
         for nm, amt in collected_month_by_customer.items():
@@ -31173,7 +31360,8 @@ def _build_payments():
         credit_pool = 0.0
         # All month credits were calculated before outstanding filtering, so a
         # fully-paid customer is still counted in Planning Actual.
-        cust_collected_month = collected_month_by_customer.get(nm, 0.0)
+        cust_collected_month = (received_month_by_customer.get(nm, 0.0)
+                                if bank_inward_ok else collected_month_by_customer.get(nm, 0.0))
         for e in ents:
             credit_pool += e["credit"]
             if e["debit"] > 0:
@@ -31672,36 +31860,93 @@ def _build_payments_planning():
             )
             rows.append(_m)
 
-        # Parse the second Planning table (W1/W2/... Actual). This gives a
-        # guaranteed fallback from the already-published Summary sheet if the
-        # row-level `recvd vs paid` gid is temporarily unavailable.
-        for _hi, _hrow in enumerate(raw_rows):
-            _hn = [_plan_norm(v) for v in _hrow]
-            if "channel" not in _hn or "w1projection" not in _hn:
-                continue
-            _actual_idx = [ii for ii,v in enumerate(_hn) if v == "actual"]
-            if not _actual_idx:
-                continue
-            _ch_i = _hn.index("channel")
-            _tmp = {}
-            for _rr in raw_rows[_hi+1:]:
-                _cat_raw = _plan_cell(_rr, _ch_i)
-                _cat = _payments_type_alias(_cat_raw)
-                if not _cat:
-                    continue
-                _nk = _plan_norm(_cat)
-                if _nk in ("total", "grandtotal"):
-                    break
-                _grp = _payments_collection_group(_cat)
+        # Actual source of truth: row-level `recvd vs paid` amounts/dates, but
+        # classified by the Payments customer master Tag (Designer = Purchase).
+        # The published Summary's raw Type can misclassify Amazon/Blink as
+        # Purchase, so do not use its Actual when reconciliation is available.
+        _bank_plan = _build_payments_bank_inward()
+        _bank_plan_ok = bool(_bank_plan.get("ok"))
+        if _bank_plan_ok:
+            _group_actual = _bank_plan.get("by_group") or {}
+            if today.month == 12:
+                _plan_month_end = date(today.year, 12, 31)
+            else:
+                _plan_month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
+            _days_in_month = _plan_month_end.day
+            _days_remaining = max(1, (_plan_month_end - today).days + 1)
+            for _r in rows:
+                _grp = _payments_collection_group(_r.get("category", ""))
                 if not _grp:
                     continue
-                _vals = [round(to_num(_plan_cell(_rr, jj)), 0) for jj in _actual_idx]
-                if _grp not in _tmp:
-                    _tmp[_grp] = [0.0] * len(_vals)
-                for jj,vv in enumerate(_vals):
-                    _tmp[_grp][jj] += vv
-            weekly_actuals = {kk:[round(vv,0) for vv in vals] for kk,vals in _tmp.items()}
-            break
+                _inward = float(_r.get("inward_projection") or 0)
+                _actual = round(float(_group_actual.get(_grp, 0.0)), 0)
+                _pending = round(max(0.0, _inward - _actual), 0)
+                _r["actual"] = _actual
+                _r["pending"] = _pending
+                _r["pct_achievement"] = round(_actual / _inward * 100, 1) if _inward else None
+                _r["actual_str"] = round(_inward / _days_in_month, 0) if _days_in_month else 0
+                _r["required_str"] = round(_pending / _days_remaining, 0) if _days_remaining else 0
+
+            # Totals must be rebuilt from the corrected rows, not copied from the
+            # raw Planning Summary total.
+            source_totals = None
+
+            # Standard dashboard weeks: 1-7, 8-14, 15-21, 22-28, 29-EOM.
+            _week_bounds = []
+            _ws = date(today.year, today.month, 1)
+            while _ws <= _plan_month_end:
+                _we = min(_ws + timedelta(days=6), _plan_month_end)
+                _week_bounds.append((_ws, _we))
+                _ws = _we + timedelta(days=1)
+            _tmp = {}
+            for _e in (_bank_plan.get("entries") or []):
+                _grp = _e.get("group") or ""
+                if not _grp:
+                    continue
+                try:
+                    _dt = datetime.strptime(str(_e.get("date") or ""), "%Y-%m-%d").date()
+                except Exception:
+                    continue
+                _arr = _tmp.setdefault(_grp, [0.0] * len(_week_bounds))
+                for _wi, (_ws, _we) in enumerate(_week_bounds):
+                    if _ws <= _dt <= _we:
+                        _arr[_wi] += float(_e.get("amount") or 0)
+                        break
+            weekly_actuals = {k:[round(v,0) for v in arr] for k,arr in _tmp.items()}
+        else:
+            _bank_err = clean(_bank_plan.get("error", ""))
+            if _bank_err:
+                plan_err = (plan_err + " | " if plan_err else "") + "Bank inward master mapping fallback: " + _bank_err[:160]
+
+            # Fallback only: use the second published Planning table when the
+            # row-level bank-inward/master source is unavailable.
+            for _hi, _hrow in enumerate(raw_rows):
+                _hn = [_plan_norm(v) for v in _hrow]
+                if "channel" not in _hn or "w1projection" not in _hn:
+                    continue
+                _actual_idx = [ii for ii,v in enumerate(_hn) if v == "actual"]
+                if not _actual_idx:
+                    continue
+                _ch_i = _hn.index("channel")
+                _tmp = {}
+                for _rr in raw_rows[_hi+1:]:
+                    _cat_raw = _plan_cell(_rr, _ch_i)
+                    _cat = _payments_type_alias(_cat_raw)
+                    if not _cat:
+                        continue
+                    _nk = _plan_norm(_cat)
+                    if _nk in ("total", "grandtotal"):
+                        break
+                    _grp = _payments_collection_group(_cat)
+                    if not _grp:
+                        continue
+                    _vals = [round(to_num(_plan_cell(_rr, jj)), 0) for jj in _actual_idx]
+                    if _grp not in _tmp:
+                        _tmp[_grp] = [0.0] * len(_vals)
+                    for jj,vv in enumerate(_vals):
+                        _tmp[_grp][jj] += vv
+                weekly_actuals = {kk:[round(vv,0) for vv in vals] for kk,vals in _tmp.items()}
+                break
     except Exception as e:
         plan_err = f"Planning sheet fetch/parse nahi ho payi: {str(e)[:200]}"
 
@@ -31737,6 +31982,7 @@ def api_payments_planning():
         if request.args.get("force", "").lower() == "true":
             _PLAN_CACHE["data"] = None
             _PAY_CACHE["data"] = None
+            _PAY_INWARD_CACHE["data"] = None
         return jsonify(_build_payments_planning())
     except Exception as e:
         return jsonify({"error": f"planning build failed: {e}"}), 500
@@ -31749,6 +31995,7 @@ def api_payments():
         if request.args.get("force", "").lower() == "true":
             _PAY_CACHE["data"] = None
             _PLAN_CACHE["data"] = None
+            _PAY_INWARD_CACHE["data"] = None
         return jsonify(_build_payments())
     except Exception as e:
         import traceback
