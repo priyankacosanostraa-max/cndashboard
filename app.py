@@ -14806,7 +14806,12 @@ function renderHome(){
 
   const isEmp = (LOGIN_ROLE === 'employee');
   const today = new Date();
-  const iso = d => d.toISOString().slice(0,10);
+  // IMPORTANT: business dates on the dashboard are IST/local calendar dates.
+  // Using toISOString() on a local-midnight Date shifts it to the previous UTC
+  // date in India (e.g. 01-Aug IST becomes 31-Jul UTC), which made the
+  // Same-Month YoY block show July values under an August label.
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const monthKeyLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 
   // LAST WEEK = pichhla poora calendar hafta (Mon–Sun jo abhi khatam hua).
   const dow = (today.getDay() + 6) % 7;              // Mon=0 … Sun=6
@@ -14816,7 +14821,7 @@ function renderHome(){
   const wkStart = iso(lastMonday), wkEnd = iso(lastSunday);
 
   // THIS MONTH = abhi wala calendar mahina (e.g. June 2026): YYYY-MM se match.
-  const monKey = today.toISOString().slice(0,7);
+  const monKey = monthKeyLocal(today);
   // THIS YEAR = abhi wala calendar saal (e.g. 2026): YYYY se match.
   const yrKey = String(today.getFullYear());
 
@@ -14916,10 +14921,10 @@ function renderHome(){
   // ── SAME MONTH — Last Year vs This Year (ab homeType filter ke according recompute hota hai) ──
   const lmDate = new Date(today.getFullYear(), today.getMonth(), 1);
   lmDate.setMonth(lmDate.getMonth() - 1);              // last completed calendar month (this year)
-  const lmKey = lmDate.toISOString().slice(0,7);
+  const lmKey = monthKeyLocal(lmDate);
   const lmLabel = lmDate.toLocaleDateString('en-GB', {month:'short', year:'numeric'});
   const lyMonDate = new Date(lmDate); lyMonDate.setFullYear(lyMonDate.getFullYear() - 1);
-  const lyMonKey = lyMonDate.toISOString().slice(0,7);
+  const lyMonKey = monthKeyLocal(lyMonDate);
   const lyMonLabel = lyMonDate.toLocaleDateString('en-GB', {month:'short', year:'numeric'});
 
   const lmAgg = sumRevQty(d => d.slice(0,7) === lmKey);
