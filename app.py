@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.29 (PAYMENTS WEEK RECEIVED = ACTUAL BANK INWARD SOURCE)
+# - Week-wise Payment Received now uses Planning -> `recvd vs paid` actual received
+#   entries by transaction Date, so Purchase Week 1 reconciles to Planning Actual.
+# - Designer/Purchase remain one Purchase group. Tag, customer search and Show
+#   filters are applied to the week tracker; ledger Receipt rows are only fallback.
+# - Payments menu description corrected; no unrelated dashboard logic changed.
+# ============================================================
 # ============================================================
 # Cosa Nostraa — V24.28 (PAYMENTS · WEEK RECEIVED BY ACTUAL RECEIPT DATE)
 # Week-wise Payment Received now counts only actual Receipt voucher credits,
@@ -10877,7 +10884,7 @@ const MENU_TAB_META = {
   m28: {name:"Sales Risk",       desc:"Revenue dependence on top SKUs and customers."},
   m29: {name:"Demand",           desc:"Day, week and seasonal demand patterns."},
   m30: {name:"Lost Sales",       desc:"Estimated sales and revenue lost due to OOS."},
-  m17: {name:"Payments",         desc:"Website COD and prepaid order analysis."},
+  m17: {name:"Payments",         desc:"Receivables, due dates, collections and payment planning."},
   m11: {name:"Help",             desc:"Daily action guide for employees."}
 };
 
@@ -20151,10 +20158,64 @@ function renderPayments(){
         }
       });
     };
-    weekCustomers.forEach(r => {
-      addPairs(r.week_target, wkTarget);
-      addPairs(r.week_paid, wkPayment);
-    });
+    weekCustomers.forEach(r => addPairs(r.week_target, wkTarget));
+
+    // Payment Received source of truth = Planning workbook `recvd vs paid`.
+    // That is the source behind Planning -> Actual (e.g. Purchase W1), whereas
+    // Full_Ledger_Main may post only a subset as Receipt vouchers.
+    const _payCollectionGroup = (v) => {
+      const k=String(v||'').toLowerCase().replace(/[^a-z0-9]+/g,'');
+      if(['purchase','designer','designerpurchase','purchasedesigner'].includes(k)) return 'purchase';
+      if(['sor','invonsor','invoiceonsor'].includes(k)) return 'sor';
+      if(['online','website','onlinewebsite','websiteonline'].includes(k)) return 'onlinewebsite';
+      if(k==='exhibition') return 'exhibition';
+      return k;
+    };
+    const _payNameKey = (v) => String(v||'').toLowerCase()
+      .replace(/^\s*cn\s*[-:]*\s*/i,'').replace(/[^a-z0-9]+/g,'');
+    const _payNameSame = (a,b) => {
+      a=_payNameKey(a); b=_payNameKey(b);
+      if(!a||!b) return false;
+      if(a===b) return true;
+      const m=Math.min(a.length,b.length);
+      return m>=7 && (a.startsWith(b)||b.startsWith(a));
+    };
+    const selectedGroup = _payCollectionGroup(document.getElementById('payTag')?.value||'');
+    const allowedForShow = rows.map(r=>r.customer||'');
+    const recv = Array.isArray(d.received_entries) ? d.received_entries : [];
+    let usedBankInward = false;
+    if(recv.length){
+      recv.forEach(e => {
+        const eg=_payCollectionGroup(e.tag);
+        if(selectedGroup && eg!==selectedGroup) return;
+        const ec=String(e.customer||'');
+        if(q && !ec.toLowerCase().includes(q)) return;
+        // Has Overdue / Has Due filters are customer-state filters. Match bank
+        // inward customer labels back to the currently filtered ledger customers.
+        if(view!=='all' && !allowedForShow.some(n=>_payNameSame(n,ec))) return;
+        for(let wi=0;wi<wm.length;wi++){
+          const ds=String(e.date||'');
+          if(ds>=wm[wi].start && ds<=wm[wi].end){
+            wkPayment[wi]+=(parseFloat(e.amount)||0);
+            usedBankInward=true;
+            break;
+          }
+        }
+      });
+    }
+    // Safe fallback if the row-level bank-inward sheet is temporarily unavailable.
+    // With normal (All) view and no customer search, use Planning Summary's own
+    // W1/W2/... Actual so Purchase still reconciles to the Planning table.
+    if(!usedBankInward && !recv.length){
+      const planWeeks = (_planData && _planData.weekly_actuals) ? _planData.weekly_actuals : null;
+      if(planWeeks && !q && view==='all'){
+        const wanted = selectedGroup;
+        const arrays = Object.entries(planWeeks).filter(([k]) => !wanted || _payCollectionGroup(k)===wanted).map(([,v])=>v||[]);
+        arrays.forEach(arr => arr.forEach((amt,wi)=>{ if(wi<wkPayment.length) wkPayment[wi]+=(parseFloat(amt)||0); }));
+      }else{
+        weekCustomers.forEach(r => addPairs(r.week_paid, wkPayment));
+      }
+    }
 
     // Rolling balance: a payment received early can reduce a later week's target.
     // Keep the internal net position allowed to go negative (advance collection),
@@ -20216,7 +20277,7 @@ function renderPayments(){
         <td style="text-align:right;padding:5px 8px">${fmt(finalClosing)}</td>
       </tr></tfoot></table>
       <p style="color:var(--cn-mid);font-size:.7rem;margin-top:6px">
-        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = actual Receipt-voucher credits whose ledger Date falls in that week, for the currently filtered customers. <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
+        <b>Opening Balance</b> = previous week's unpaid target. <b>Due / Overdue Target</b> follows each invoice's exact Full_Ledger_Main Due Date; unpaid invoices already due before this month are carried into Week 1. <b>Payment Received</b> = actual bank inward from Planning → recvd vs paid, placed by its received Date (Designer + Purchase = Purchase). <b>Closing Balance</b> rolls forward as Opening + Target − Payment. Week 1 = 1st–7th. Tag, Customer and Show filters apply to this table.
       </p>`;
   }
 
@@ -20512,6 +20573,7 @@ function loadPaymentsPlanning(force){
       }
       _planData = d;
       renderPaymentsPlanning();
+      try{ if(_payData) renderPayments(); }catch(_e){}
     })
     .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
@@ -32564,6 +32626,11 @@ PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=745089354&single=true&output=csv")
 PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
+# Planning workbook -> `recvd vs paid` sheet. This is the same source used by
+# the Planning Summary formulas for weekly Actual inward. Keep it separate from
+# Full_Ledger_Main because bank inward and ledger receipt posting can differ.
+PAY_RECEIVED_URL = os.environ.get("PAY_RECEIVED_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmZIJi58MyrgdxhjR2fvtxBwDuCJgPBjSK6puZ-w2qk2fL-fhytUAfExU2v4C-QcwKnj8aA1H_PAx7/pub?gid=99560727&single=true&output=csv")
 _PAY_CACHE = {"data": None, "ts": 0}
 # Payments data changes throughout the day. Keep only a very short cache so
 # the Payments + Planning API calls can share one build, while Refresh always
@@ -32667,18 +32734,36 @@ def _payments_type_alias(value):
     return raw
 
 def _is_received_payment_vtype(value):
-    """True only for actual incoming receipt voucher types.
-
-    Full_Ledger_Main contains many positive Credit rows (Purchase, Sales, Journal,
-    Credit Note, Contra, etc.). Those are ledger movements, not cash collected.
-    Week-wise "Payment Received" must therefore use Receipt vouchers only.
-    This accepts normal variants such as Receipt / Bank Receipt / Receipt Voucher.
-    """
+    """Ledger fallback: true only for actual incoming receipt voucher types."""
     raw = clean(value).strip().lower()
     if not raw:
         return False
     tokens = re.findall(r"[a-z0-9]+", raw)
     return "receipt" in tokens
+
+def _payments_collection_group(value):
+    """Map bank-inward source Type to the Planning collection groups.
+
+    The Planning Summary intentionally measures Purchase, SOR, Online/Website and
+    Exhibition. Other bank movements (Others/Bulk/Misc/Contra) are outside that
+    target and must not inflate Week-wise Payment Received.
+    """
+    raw = _payments_type_alias(value)
+    key = re.sub(r"[^a-z0-9]+", "", str(raw or "").lower())
+    if key in ("purchase", "designer", "designerpurchase", "purchasedesigner"):
+        return "Purchase"
+    if key in ("sor", "invonsor", "invoiceonsor"):
+        return "SOR"
+    if key in ("online", "website", "onlinewebsite", "websiteonline"):
+        return "Online/Website"
+    if key == "exhibition":
+        return "Exhibition"
+    return ""
+
+def _payments_received_name(value):
+    raw = clean(value)
+    # Bank-inward sheet normally stores names as `CN- Customer Name`.
+    return re.sub(r"^\s*CN\s*[-:]*\s*", "", raw, flags=re.I).strip()
 
 def _build_payments():
     if (_PAY_CACHE_TTL > 0 and _PAY_CACHE["data"] is not None
@@ -32845,12 +32930,66 @@ def _build_payments():
             elif item[:2] > pay_log_heap[0][:2]:
                 heapq.heapreplace(pay_log_heap, item)
 
-    # Current-month collection by tag is resolved after the final live-ledger tag
-    # for each customer is known, so blank-tag credit rows still fall back safely.
+    # ---- ACTUAL BANK INWARD (Planning -> `recvd vs paid`) ------------------
+    # Planning Summary's weekly Actual is a SUMIFS over this sheet. Use the same
+    # row-level source here so Week-wise Payment Received reconciles exactly to
+    # Planning while still allowing Tag/Customer/Show filters in the browser.
+    received_entries = []
+    received_source = "ledger_receipt_fallback"
+    received_source_error = ""
+    received_month_by_tag = {}
+    try:
+        recv_df = _fetch_payments_csv_slim(PAY_RECEIVED_URL, [
+            ("Date", "date", "received date", "txn date"),
+            ("Received From / Paid To", "Received From", "received from", "party", "customer"),
+            ("Recived", "Received", "received amount", "amount received", "inward"),
+            ("Type", "type", "Tag", "tag", "channel", "category"),
+        ])
+        rcols = list(recv_df.columns)
+        R_DATE = find_col(recv_df.columns, "Date", "date", "received date", "txn date")
+        R_FROM = find_col(recv_df.columns, "Received From / Paid To", "Received From", "received from", "party", "customer")
+        R_AMT  = find_col(recv_df.columns, "Recived", "Received", "received amount", "amount received", "inward")
+        R_TYPE = find_col(recv_df.columns, "Type", "type", "Tag", "tag", "channel", "category")
+        if not (R_DATE and R_AMT and R_TYPE):
+            raise ValueError(f"recvd vs paid required columns missing: {rcols[:12]}")
+        ridx = {c:i for i,c in enumerate(rcols)}
+        i_rd, i_rf, i_ra, i_rt = ridx[R_DATE], ridx.get(R_FROM), ridx[R_AMT], ridx[R_TYPE]
+        for vals in recv_df.itertuples(index=False, name=None):
+            rdt = _fast_date(vals[i_rd])
+            if not rdt or not (month_start_g <= rdt <= month_end):
+                continue
+            amt = to_num(vals[i_ra])
+            if amt <= 0.009:
+                continue
+            grp = _payments_collection_group(vals[i_rt])
+            if not grp:
+                continue
+            cust_display = _payments_received_name(vals[i_rf] if i_rf is not None else "")
+            received_entries.append({
+                "date": rdt.strftime("%Y-%m-%d"),
+                "amount": round(amt, 2),
+                "tag": grp,
+                "customer": cust_display,
+            })
+            received_month_by_tag[grp] = received_month_by_tag.get(grp, 0.0) + amt
+        received_source = "recvd_vs_paid"
+        try:
+            del recv_df
+        except Exception:
+            pass
+    except Exception as e:
+        received_source_error = str(e)[:240]
+        print("payments received-source fetch error:", received_source_error)
+
+    # Collected Month in tag summary should reconcile to the same actual bank
+    # inward source whenever it is available. Ledger credits remain fallback.
     collected_month_by_tag = {}
-    for nm, amt in collected_month_by_customer.items():
-        tg = ledger_tag_map.get(nm) or tag_map.get(nm, "") or "Unknown"
-        collected_month_by_tag[tg] = collected_month_by_tag.get(tg, 0.0) + amt
+    if received_entries:
+        collected_month_by_tag.update(received_month_by_tag)
+    else:
+        for nm, amt in collected_month_by_customer.items():
+            tg = ledger_tag_map.get(nm) or tag_map.get(nm, "") or "Unknown"
+            collected_month_by_tag[tg] = collected_month_by_tag.get(tg, 0.0) + amt
 
     # Wide DataFrame can be released before the expensive FIFO/customer pass.
     try:
@@ -33233,6 +33372,9 @@ def _build_payments():
         "week_overdue": week_overdue,
         "week_meta": week_meta,
         "weekly_customers": weekly_customers,
+        "received_entries": received_entries,
+        "received_source": received_source,
+        "received_source_error": received_source_error,
         "overdue_target_total": frozen["total"],
         "carry_over_overdue_total": round(carry_over_total, 0),
         "tag_summary": tag_summary_list,
@@ -33385,6 +33527,7 @@ def _build_payments_planning():
     today = now_ist().date()
     rows = []
     source_totals = None
+    weekly_actuals = {}
     period_label = ""
     updated_till = ""
     plan_err = None
@@ -33487,6 +33630,37 @@ def _build_payments_planning():
                 if _m["inward_projection"] else None
             )
             rows.append(_m)
+
+        # Parse the second Planning table (W1/W2/... Actual). This gives a
+        # guaranteed fallback from the already-published Summary sheet if the
+        # row-level `recvd vs paid` gid is temporarily unavailable.
+        for _hi, _hrow in enumerate(raw_rows):
+            _hn = [_plan_norm(v) for v in _hrow]
+            if "channel" not in _hn or "w1projection" not in _hn:
+                continue
+            _actual_idx = [ii for ii,v in enumerate(_hn) if v == "actual"]
+            if not _actual_idx:
+                continue
+            _ch_i = _hn.index("channel")
+            _tmp = {}
+            for _rr in raw_rows[_hi+1:]:
+                _cat_raw = _plan_cell(_rr, _ch_i)
+                _cat = _payments_type_alias(_cat_raw)
+                if not _cat:
+                    continue
+                _nk = _plan_norm(_cat)
+                if _nk in ("total", "grandtotal"):
+                    break
+                _grp = _payments_collection_group(_cat)
+                if not _grp:
+                    continue
+                _vals = [round(to_num(_plan_cell(_rr, jj)), 0) for jj in _actual_idx]
+                if _grp not in _tmp:
+                    _tmp[_grp] = [0.0] * len(_vals)
+                for jj,vv in enumerate(_vals):
+                    _tmp[_grp][jj] += vv
+            weekly_actuals = {kk:[round(vv,0) for vv in vals] for kk,vals in _tmp.items()}
+            break
     except Exception as e:
         plan_err = f"Planning sheet fetch/parse nahi ho payi: {str(e)[:200]}"
 
@@ -33507,6 +33681,7 @@ def _build_payments_planning():
         "totals": source_totals,
         "month_label": period_label or today.strftime("%b-%y"),
         "today": updated_till or today.strftime("%d-%b-%y"),
+        "weekly_actuals": weekly_actuals,
         "error": plan_err,
     }
     _PLAN_CACHE["data"] = data
