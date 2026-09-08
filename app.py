@@ -3084,7 +3084,10 @@ def _refresh_data():
             _wstage("processing", "Matching sales records…", _ri, _n_rows)
         qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
-        sp  = to_num(r.get(C_SP, 0))  if C_SP  else 0.0   # per-unit Selling Price (COSA col H)
+        _sp_raw = r.get(C_SP, None) if C_SP else None
+        _sp_text = clean(_sp_raw)
+        sp  = to_num(_sp_raw) if _sp_text else 0.0   # per-unit Selling Price (COSA col H)
+        sp_valid = bool(_sp_text and re.search(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?", _sp_text.replace(",", ""), re.I))
         ret = to_num(r.get(C_RET, 0)) if C_RET else 0.0   # Return Qty (COSA col F)
 
         # SANITY: ek order ki qty itni badi nahi ho sakti. Agar koi cell me galti
@@ -3177,7 +3180,7 @@ def _refresh_data():
         if fy != "N/A": fyears.add(fy)
 
         # Return amount = return qty × us transaction ki selling price (COSA F × H)
-        entry = {"qty":qty,"rev":rev,"sp":sp,"ret":ret,"ret_amt":float(ret*sp),
+        entry = {"qty":qty,"rev":rev,"sp":sp,"sp_valid":sp_valid,"ret":ret,"ret_amt":float(ret*sp),
                  "date":_si(date_iso),"order_date":_si(order_date_iso),"cust":_si(cust),"type":_si(typ),
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         
@@ -3275,7 +3278,10 @@ def _refresh_data():
 
             qty = to_num(r.get(OD_QTY, 0)) if OD_QTY else 0.0
             ret = to_num(r.get(OD_RET, 0)) if OD_RET else 0.0
-            sp  = to_num(r.get(OD_SP, 0)) if OD_SP else 0.0
+            _od_sp_raw = r.get(OD_SP, None) if OD_SP else None
+            _od_sp_text = clean(_od_sp_raw)
+            sp  = to_num(_od_sp_raw) if _od_sp_text else 0.0
+            sp_valid = bool(_od_sp_text and re.search(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[-+]?\d+)?", _od_sp_text.replace(",", ""), re.I))
             rev = to_num(r.get(OD_REV, 0)) if OD_REV else 0.0
             if not (-100000 <= qty <= 100000): qty = 0.0
             if not (-100000 <= ret <= 100000): ret = 0.0
@@ -3375,7 +3381,7 @@ def _refresh_data():
                 cust = "Website"
 
             entry = {
-                "qty": qty, "rev": rev, "sp": sp, "ret": ret,
+                "qty": qty, "rev": rev, "sp": sp, "sp_valid": sp_valid, "ret": ret,
                 "ret_amt": float(ret * sp),
                 "date": _si(order_date_iso),
                 "order_date": _si(order_date_iso),
@@ -3967,20 +3973,23 @@ def _refresh_data():
             _ck = str((_child or {}).get("sku") or "").strip().upper()
             if not _ck or _ck == _ku:
                 continue
-            _combo_parent_map.setdefault(_ck, {})[_ku] = _it
+            _pieces = max(1, int(round(to_num((_child or {}).get("component_qty", 1)) or 1)))
+            _combo_parent_map.setdefault(_ck, {})[_ku] = {"parent": _it, "pieces": _pieces}
 
     for _it in compiled:
         _ku = str(_it.get("sku") or "").strip().upper()
         if not _ku:
             continue
-        _parents = list((_combo_parent_map.get(_ku) or {}).keys())
-        _combo_fc30 = sum(_direct_fc30.get(_pk, 0.0) for _pk in _parents)
-        _combo_fc60 = sum(_direct_fc60.get(_pk, 0.0) for _pk in _parents)
-        _combo_q7 = sum(_direct_q7.get(_pk, 0.0) for _pk in _parents)
-        _combo_q15 = sum(_direct_q15.get(_pk, 0.0) for _pk in _parents)
-        _combo_q30 = sum(_direct_q30.get(_pk, 0.0) for _pk in _parents)
-        _combo_q90 = sum(_direct_q90.get(_pk, 0.0) for _pk in _parents)
-        _combo_all = sum(_direct_all.get(_pk, 0.0) for _pk in _parents)
+        _parent_links = (_combo_parent_map.get(_ku) or {})
+        _parents = list(_parent_links.keys())
+        _pieces_for = lambda _pk: max(1, int((_parent_links.get(_pk) or {}).get("pieces", 1)))
+        _combo_fc30 = sum(_direct_fc30.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_fc60 = sum(_direct_fc60.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_q7 = sum(_direct_q7.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_q15 = sum(_direct_q15.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_q30 = sum(_direct_q30.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_q90 = sum(_direct_q90.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
+        _combo_all = sum(_direct_all.get(_pk, 0.0) * _pieces_for(_pk) for _pk in _parents)
         _combo_last = max((_direct_last.get(_pk, "") for _pk in _parents), default="")
         _it["individual_forecast_30d"] = _direct_fc30.get(_ku, 0.0)
         _it["combo_forecast_30d"] = _combo_fc30
@@ -8205,6 +8214,7 @@ select.lg-in option{background:#fff;color:#1a1610}
             <th>Type</th>
             <th>Channel</th>
             <th>Individual Sold</th>
+            <th class="rev-only">Avg Selling Price</th>
             <th class="rev-only">Discount %</th>
             <th class="rev-only">Net Revenue</th>
           </tr></thead>
@@ -10138,6 +10148,113 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
   },0);
   return {q7:win(D7),q15:win(D15),q30:win(D30),sold:kept.reduce((sum,e)=>sum+(Number(e&&e.qty)||0),0)};
 }
+/* Arithmetic mean of valid COSA Selling Price cells under the same active
+   sales filters as Sold Qty. This is deliberately row-based (not revenue/qty),
+   and always reads the requested SKU's own entries so a CMB child never
+   inherits its parent CMB's selling price. */
+function cnxAvgSellingPriceForItem(rawItem, saleCtx){
+  const item=roExactSkuItem(rawItem||{}),ctx=saleCtx||{};
+  const sourceField=ctx.sourceField||'sales_entries';
+  const rows=Array.isArray(item&&item[sourceField])?item[sourceField]:[];
+  const types=Array.isArray(ctx.types)?ctx.types:[],channels=Array.isArray(ctx.channels)?ctx.channels:[];
+  const subChannels=Array.isArray(ctx.subChannels)?ctx.subChannels:[],marketplaces=Array.isArray(ctx.marketplaces)?ctx.marketplaces:[];
+  const months=Array.isArray(ctx.months)?ctx.months:[],monthSet=new Set(months);
+  const customer=String(ctx.customer||'').trim().toLowerCase(),fy=String(ctx.fy||'').trim();
+  const d1=String(ctx.d1||'').trim(),d2=String(ctx.d2||'').trim();
+  const marketplaceOf=e=>{try{if(typeof _sdSorMarketplace==='function')return String(_sdSorMarketplace(e)||'');}catch(_e){}return String(e&&e.sub_channel||e&&e.cust||'').trim();};
+  const vals=[];
+  rows.forEach(e=>{
+    if(types.length&&!types.includes(e.type))return;
+    const ch=ctx.businessChannel?cnxBusinessChannelOfEntry(e):String(e&&e.channel||'').trim();
+    if(channels.length&&!channels.includes(ch))return;
+    if(subChannels.length&&!subChannels.includes(e.sub_channel))return;
+    if(marketplaces.length&&!marketplaces.includes(marketplaceOf(e)))return;
+    if(customer&&!String(e&&e.cust||'').toLowerCase().includes(customer))return;
+    if(fy&&String(e&&e.fy||'').trim()!==fy)return;
+    const d=cnxSaleEntryDate(e,ctx);
+    if(months.length&&(!d||!monthSet.has(d.slice(0,7))))return;
+    if((d1||d2)&&(!d||(d1&&d<d1)||(d2&&d>d2)))return;
+    const n=Number(e&&e.sp);
+    if(e&&e.sp_valid===true&&Number.isFinite(n))vals.push(n);
+  });
+  return vals.length?vals.reduce((s,n)=>s+n,0)/vals.length:null;
+}
+function cnxAvgSpText(value){return value==null||!Number.isFinite(Number(value))?'—':fmt(Number(value));}
+/* Authoritative child pieces-per-CMB resolver.
+   Priority:
+   1) All Product -> Pack Details (via the same Operations pack parser),
+   2) parsed combo_details.component_qty / repeated combo SKU occurrences,
+   3) safe fallback = 1.
+   This keeps CMB child sold qty correct everywhere. Example: if one CMB sells 1
+   and Pack Details says Set of 2 for its only child, that child consumes 2 units. */
+let _cnxComponentQtyMasterRef = null;
+let _cnxComponentQtyCache = new WeakMap();
+function cnxComponentQtyMap(parent){
+  if (_cnxComponentQtyMasterRef !== master) {
+    _cnxComponentQtyMasterRef = master;
+    _cnxComponentQtyCache = new WeakMap();
+  }
+  if (!parent || typeof parent !== 'object') return new Map();
+  const cached = _cnxComponentQtyCache.get(parent);
+  if (cached) return cached;
+  const map = new Map();
+  const keyOf = v => String(v || '').trim().toUpperCase();
+
+  // Base quantity from parsed Combo Details / repeated occurrences.
+  (Array.isArray(parent.combo_details) ? parent.combo_details : []).forEach(ch => {
+    const ck = keyOf(ch && ch.sku);
+    if (!ck) return;
+    const q = Math.max(1, Math.round(Number(ch && ch.component_qty) || 1));
+    map.set(ck, Math.max(map.get(ck) || 1, q));
+  });
+
+  // Pack Details is authoritative for pack/set counts. Reuse the existing
+  // Operations parser because it already handles cases such as Set of 2,
+  // Pack of 7 buttons, Big/Small/Xtra Small buttons, brooches, rakhis, etc.
+  try {
+    if (typeof _opAvailChildren === 'function' && typeof _opAvailRequiredQtys === 'function') {
+      const kids = _opAvailChildren(parent) || [];
+      const req = _opAvailRequiredQtys(parent, kids);
+      kids.forEach(k => {
+        const kk = keyOf(k && k.sku);
+        if (!kk) return;
+        const q = Math.max(1, Math.round(Number(req && req.get ? req.get(k.sku) : 1) || 1));
+        map.set(kk, Math.max(map.get(kk) || 1, q));
+      });
+    }
+  } catch (_e) {}
+
+  // Generic single-child fallback for Pack Details such as exactly "Set of 2"
+  // or "Pack of 3" where no product-kind word is present. With multiple
+  // distinct children we intentionally do not invent a split.
+  try {
+    const childKeys = Array.from(map.keys());
+    if (childKeys.length === 1) {
+      const pack = String(parent && parent.pack_details || '').trim();
+      const m = pack.match(/\b(?:set|pack)\s*(?:of\s*)?(\d+(?:\.0+)?)\b/i)
+        || pack.match(/^\s*(\d+(?:\.0+)?)\s*(?:pcs?|pieces?|units?)?\s*$/i);
+      if (m) {
+        const q = Math.max(1, Math.round(Number(m[1]) || 1));
+        map.set(childKeys[0], Math.max(map.get(childKeys[0]) || 1, q));
+      }
+    }
+  } catch (_e) {}
+
+  _cnxComponentQtyCache.set(parent, map);
+  return map;
+}
+function cnxChildComponentQty(parent, childSku){
+  const target = String(childSku || '').trim().toUpperCase();
+  if (!target) return 1;
+  const compact = target.replace(/[^A-Z0-9]/g, '');
+  const map = cnxComponentQtyMap(parent);
+  if (map.has(target)) return Math.max(1, Number(map.get(target)) || 1);
+  for (const [k,v] of map.entries()) {
+    if (String(k).replace(/[^A-Z0-9]/g, '') === compact) return Math.max(1, Number(v) || 1);
+  }
+  return 1;
+}
+
 function cnxSoldSplit(rawItem, saleCtx, options){
   const item = roExactSkuItem(rawItem || {});
   const opts = options || {};
@@ -10158,7 +10275,11 @@ function cnxSoldSplit(rawItem, saleCtx, options){
     if (!pk || seen.has(pk)) return;
     seen.add(pk);
     const t = cnxSaleTotalsForItem(parent, saleCtx || {});
-    inCmb.q7 += Number(t.q7)||0; inCmb.q15 += Number(t.q15)||0; inCmb.q30 += Number(t.q30)||0; inCmb.sold += Number(t.sold)||0;
+    const pieces = cnxChildComponentQty(parent, childKey);
+    inCmb.q7 += (Number(t.q7)||0) * pieces;
+    inCmb.q15 += (Number(t.q15)||0) * pieces;
+    inCmb.q30 += (Number(t.q30)||0) * pieces;
+    inCmb.sold += (Number(t.sold)||0) * pieces;
   });
   return {individual,inCmb,total:{q7:individual.q7+inCmb.q7,q15:individual.q15+inCmb.q15,q30:individual.q30+inCmb.q30,sold:individual.sold+inCmb.sold},parents};
 }
@@ -10167,10 +10288,15 @@ function cnxComboSoldFromEventRows(rawSku, rows){
   if(!childKey)return 0;
   const parents=cnxComboParentIndex().get(childKey)||[];
   if(!parents.length)return 0;
-  const parentKeys=new Set(parents.map(p=>String(p&&p.sku||'').trim().toUpperCase()).filter(Boolean));
+  const parentQty=new Map();
+  parents.forEach(p=>{
+    const pk=String(p&&p.sku||'').trim().toUpperCase();
+    if(pk) parentQty.set(pk,cnxChildComponentQty(p,childKey));
+  });
   return (rows||[]).reduce((sum,e)=>{
     const sku=String(e&&e.sku||e&&e.item&&e.item.sku||'').trim().toUpperCase();
-    return sum+(parentKeys.has(sku)?Math.max(0,Number(e&&e.qty)||0):0);
+    const pieces=parentQty.get(sku)||0;
+    return sum+(pieces?Math.max(0,Number(e&&e.qty)||0)*pieces:0);
   },0);
 }
 function cnxCurrentSaleContext(){
@@ -11066,12 +11192,15 @@ function _sdUsageContext(item){
   const sources = [item].concat(parents);
   const rows = [];
   sources.forEach((sourceItem, sourceNo) => {
+    const pieces = sourceNo === 0 ? 1 : cnxChildComponentQty(sourceItem, directKey);
     _sdFilteredOrderEntries(sourceItem).forEach((entry, lineIndex) => {
+      const usageEntry = sourceNo === 0 ? entry : {...entry, qty:(Number(entry&&entry.qty)||0) * pieces};
       rows.push({
-        entry,
+        entry:usageEntry,
         sourceItem,
         sourceSku:_opsSkuKey(sourceItem?.sku),
         isDirect:sourceNo === 0,
+        piecesPerCmb:pieces,
         lineIndex,
       });
     });
@@ -11191,6 +11320,7 @@ function _sdRenderFilteredPanels(item, ents, overallDiscPct, overallAvgSp, usage
   const avail = stock + wip;
   const totalQty = ents.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
   const totalRev = ents.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
+  const filteredArithmeticAsp = (()=>{const vals=ents.filter(e=>e&&e.sp_valid===true&&Number.isFinite(Number(e.sp))).map(e=>Number(e.sp));return vals.length?vals.reduce((s,n)=>s+n,0)/vals.length:null;})();
   const usage = usageContext || _sdUsageContext(item);
   const usageEntries = usage.entries || ents;
   const sellThrough = _sdSellThroughStats(item, usageEntries);
@@ -11523,11 +11653,12 @@ function renderSdTable(){
       <td>${safeText(e.type)}</td>
       <td>${safeText(e.channel)}</td>
       <td class="gold">${q}</td>
+      <td class="rev-only">${cnxAvgSpText(filteredArithmeticAsp)}</td>
       <td class="rev-only">${dPct===null?'—':dPct+'%'}</td>
       <td class="rev-only green">${fmt(rv)}</td>
     </tr>`;
     }).join('')
-    : '<tr><td colspan="7" class="tno-data" style="padding:30px">No transactions for the selected filters.</td></tr>';
+    : '<tr><td colspan="8" class="tno-data" style="padding:30px">No transactions for the selected filters.</td></tr>';
   }
 }
 
@@ -11831,7 +11962,8 @@ function exportSD(fmtType){
   const mrp = parseFloat(item.mrp) || 0;
   const productDiscountContext = _sdMarketplaceProductDiscountContext(item);
   const exportSellThrough = _sdSellThroughStats(item, ents);
-  const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Individual Sold','In CMBs Sold','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const filteredArithmeticAsp=(()=>{const vals=ents.filter(e=>e&&e.sp_valid===true&&Number.isFinite(Number(e.sp))).map(e=>Number(e.sp));return vals.length?vals.reduce((s,n)=>s+n,0)/vals.length:null;})();
+  const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Individual Sold','In CMBs Sold','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Avg Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sourceDisc = _sdProductDiscountForEntry(item,e,productDiscountContext);
@@ -11854,7 +11986,7 @@ function exportSD(fmtType){
       'In CMBs Sold': 0,
       'Filtered STR': exportSellThrough.rate.toFixed(1) + '%',
       'MRP': mrp,
-      ...(emp0 ? {} : {'Selling Price': sourceActive && !sourceDisc ? '' : sp, 'Discount %': discPct===null ? '' : discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
+      ...(emp0 ? {} : {'Selling Price': sourceActive && !sourceDisc ? '' : sp, 'Avg Selling Price':filteredArithmeticAsp==null?'':Number(filteredArithmeticAsp.toFixed(2)), 'Discount %': discPct===null ? '' : discPct + '%', 'Net Revenue': parseFloat(e.rev) || 0}),
       'Image Link': item.image_url || '',
     };
   });
@@ -12496,7 +12628,8 @@ function applyF(){
     revenueShareMap.set(_skuRevenueKey(item.sku), itemFilteredRevenue);
 
     if (drill) {
-      fe.forEach(e => txns.push({ ...e, sku: item.sku, sku_name: item.sku_name }));
+      const filteredAvgSp=cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true});
+      fe.forEach(e => txns.push({ ...e, sku: item.sku, sku_name: item.sku_name, avg_selling_price:filteredAvgSp }));
     } else if (cards.length < CAP) {
       const cardItem = {
         ...item,
@@ -12633,6 +12766,7 @@ function applyF(){
           summaryRows.push({
             month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',taxon:item.taxon||'',cn_name:item.cn_name||iv.cn||'',
             month_qty:monthQty,selected_months_qty:selectedMonthsQty,last_3m_qty:last3Qty,last_1y_qty:last1yQty,
+            avg_selling_price:cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true}),
             inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
             image_url:iv.img||'',cmbs:cmbNames,best_cmb:bestCmb,best_cmb_name:bestCmbName,best_cmb_sold_qty:bestCmbQty,best_cmb_image_url:bestCmbImage
           });
@@ -12665,6 +12799,7 @@ function applyF(){
               <td class="gold"><b>${Math.round(Number(t.selected_months_qty)||0)}</b></td>
               <td class="gold" title="${safeText(last3Label)}"><b>${Math.round(Number(t.last_3m_qty)||0)}</b></td>
               <td class="gold" title="${safeText(last1yLabel)}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
+              <td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
               <td>${safeText(t.cn_name||'')}</td>
               <td class="${t.inv_stock>10?'red':t.inv_stock>0?'orange':'muted'}">${t.inv_stock}</td>
               <td class="${t.inv_wip>10?'orange':t.inv_wip>0?'gold':'muted'}">${t.inv_wip}</td>
@@ -12684,7 +12819,7 @@ function applyF(){
               <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
             </div>
             <table class="ro"><thead><tr>
-              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>CN Name</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
+              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th><th>CN Name</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
             </tr></thead><tbody>${rowsHtml}</tbody></table>
             <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + each filtered CMB's sold qty × that child's required pieces in the CMB. Customer, Type, Channel, Sub-Channel, FY, Date and Month filters are applied before quantity calculations. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
             ${displayTxns.length>MATRIX_RENDER_CAP?`<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} SKUs. Export includes all rows.</div>`:''}
@@ -12729,13 +12864,13 @@ function applyF(){
               yearQtyCache.set(sk,cnxSoldSplit(item,yctx,{allowedParentSkus:matrixActiveSkuScope}).total.sold);
             }
             const iv=invBy[sk]||{s:0,w:0,b:0,img:'',cn:''};
-            return {month_mode:true,month_key:r.month_key,date:matrixMonthLabel(r.month_key),sku:r.sku,sku_name:r.sku_name,cn_name:item.cn_name||iv.cn||'',qty:Number(ms.individual.sold)||0,combo_qty:Number(ms.inCmb.sold)||0,total_qty:Number(ms.total.sold)||0,last_1y_qty:Number(yearQtyCache.get(sk))||0,rev:Number(r.rev)||0};
+            return {month_mode:true,month_key:r.month_key,date:matrixMonthLabel(r.month_key),sku:r.sku,sku_name:r.sku_name,cn_name:item.cn_name||iv.cn||'',qty:Number(ms.individual.sold)||0,combo_qty:Number(ms.inCmb.sold)||0,total_qty:Number(ms.total.sold)||0,last_1y_qty:Number(yearQtyCache.get(sk))||0,avg_selling_price:cnxAvgSellingPriceForItem(item,monthCtx),rev:Number(r.rev)||0};
           }).sort((a,b)=>b.month_key.localeCompare(a.month_key)||(b.total_qty-a.total_qty)||String(a.sku).localeCompare(String(b.sku)));
           displayTxns.forEach(r=>{const x=pivotMap.get(String(r.sku||'').trim().toUpperCase());if(!x)return;x.combo_qty+=Number(r.combo_qty)||0;x.total_qty+=Number(r.total_qty)||0;x.last_1y_qty=Number(r.last_1y_qty)||0;});
         }
 
         _matrixTxns=displayTxns;
-        _matrixPivot=Array.from(pivotMap.values()).map(x=>({sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,customer_count:x.customers.size,customer_names:Array.from(x.customers).sort()})).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
+        _matrixPivot=Array.from(pivotMap.values()).map(x=>{const it=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true};return {sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,avg_selling_price:cnxAvgSellingPriceForItem(it,ctx),customer_count:x.customers.size,customer_names:Array.from(x.customers).sort()};}).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
 
         const MATRIX_RENDER_CAP = 150;
         const visibleTxns=displayTxns.slice(0,MATRIX_RENDER_CAP), visiblePivot=_matrixPivot.slice(0,MATRIX_RENDER_CAP);
@@ -12751,11 +12886,12 @@ function applyF(){
             <td class="gold">${Math.round(Number(t.combo_qty)||0)}</td>
             <td class="gold"><b>${Math.round(Number(t.total_qty)||0)}</b></td>
             <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(rollingYear.end.slice(0,7)))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
+            <td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
-            <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td>
+            <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
         }).join('');
 
@@ -12771,6 +12907,7 @@ function applyF(){
             <td class="gold" title="${escHtml((x.customer_names||[]).join(', '))}">${Number(x.customer_count||0).toLocaleString('en-IN')}</td>
             <td class="gold">${Math.round(Number(x.qty)||0)}</td><td class="gold">${Math.round(combo)}</td>
             ${monthMode?`<td class="gold"><b>${Math.round(total)}</b></td><td class="gold"><b>${Math.round(Number(x.last_1y_qty)||0)}</b></td>`:''}
+            <td class="gold"><b>${cnxAvgSpText(x.avg_selling_price)}</b></td>
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td></tr>`;
         }).join('');
 
@@ -12785,7 +12922,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
-            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
+            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
           ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
@@ -12795,7 +12932,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
           ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
@@ -12858,6 +12995,7 @@ function _matrixBuildPayload(kind){
         return {
           month_mode:true,sku:t.sku,taxon:t.taxon||iv.taxon||'',cn_name:t.cn_name||iv.cn||'',month_qty:{...(t.month_qty||{})},
           selected_months_qty:Number(t.selected_months_qty)||0,last_3m_qty:Number(t.last_3m_qty)||0,last_1y_qty:Number(t.last_1y_qty)||0,
+          avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price),
           revenue:showRev?_matrixRevenueExportValue(t.rev):null,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
           image_url:iv.img||t.image_url||'',cmbs:Array.isArray(t.cmbs)?t.cmbs:[],best_cmb:t.best_cmb||'',best_cmb_sold_qty:Number(t.best_cmb_sold_qty)||0,
           best_cmb_name:t.best_cmb_name||'',best_cmb_image_url:t.best_cmb_image_url||'',one_year_start:_matrixOneYearStart,one_year_end:_matrixOneYearEnd
@@ -12865,7 +13003,7 @@ function _matrixBuildPayload(kind){
       }
       return {
         date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
-        qty: parseFloat(t.qty) || 0, combo_qty: 0, revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
+        qty: parseFloat(t.qty) || 0, combo_qty: 0, avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
         image_url: iv.img || ''
       };
@@ -12881,7 +13019,7 @@ function _matrixBuildPayload(kind){
     const comboQty=_matrixMonthMode?(Number(p.combo_qty)||0):cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
     return {
       month_mode:_matrixMonthMode, sku: p.sku, cn_name: item.cn_name || iv.cn || '', customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty,
-      total_qty:_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0), last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, revenue: showRev ? _matrixRevenueExportValue(p.rev) : null,
+      total_qty:_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0), last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, avg_selling_price:p.avg_selling_price==null?null:Number(p.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
       image_url: iv.img || '', one_year_start:_matrixOneYearStart, one_year_end:_matrixOneYearEnd
     };
@@ -12898,28 +13036,29 @@ function exportMatrixCSV(kind){
     if(monthExport){
       const monthKeys=meta.months.length?meta.months:Object.keys(rows[0].month_qty||{}).sort();
       const monthHeaders=monthKeys.map(k=>`${matrixMonthLabel(k)} Total Sold Qty`);
-      headers=['SKU','Taxon'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link']);
+      headers=['SKU','Taxon'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','Avg Selling Price','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link']);
       csvRows=rows.map(r=>{
         const line=[r.sku,r.taxon||'']; monthKeys.forEach(k=>line.push(Number(r.month_qty?.[k])||0));
-        line.push(r.selected_months_qty||0,r.last_3m_qty||0,r.last_1y_qty||0,r.cn_name||'');
+        line.push(r.selected_months_qty||0,r.last_3m_qty||0,r.last_1y_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2)),r.cn_name||'');
         if(showRev)line.push(r.revenue);
         line.push(r.inv_stock,r.inv_wip,r.blocked_qty,r.image_url||'',(r.cmbs||[]).join(', '),(r.best_cmb||'')+(r.best_cmb_name?' · '+r.best_cmb_name:''),r.best_cmb_image_url||'');
         return line;
       });
     }else{
-      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
+      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold','Avg Selling Price'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
       csvRows = rows.map(r => {
-        const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.qty, r.combo_qty||0];
+        const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.qty, r.combo_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2))];
         if (showRev) line.push(r.revenue);
         line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url);
         return line;
       });
     }
   } else {
-    headers = ['SKU','CN Name','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(monthExport?['Total Sold Qty','Last 1 Year Sold Qty']:[]).concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
+    headers = ['SKU','CN Name','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(monthExport?['Total Sold Qty','Last 1 Year Sold Qty']:[]).concat(['Avg Selling Price']).concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
     csvRows = rows.map(r => {
       const line = [r.sku, r.cn_name||'', r.customers||'', r.customer_count||0, r.qty, r.combo_qty||0];
       if(monthExport)line.push(r.total_qty||0,r.last_1y_qty||0);
+      line.push(r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2)));
       if (showRev) line.push(r.revenue);
       line.push(r.inv_stock, r.inv_wip, r.image_url);
       return line;
@@ -13197,7 +13336,7 @@ function applyRO(){
     if (colFiltersBar) colFiltersBar.style.display = 'none';
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
-      ...e, sku: item.sku, sku_name: item.sku_name,
+      ...e, sku: item.sku, sku_name: item.sku_name, avg_selling_price:cnxAvgSellingPriceForItem(item,roSaleCtx),
       inv_stock: roInvStock(item, roInvCtx), inv_wip: wipOf(item),
       image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
     })));
@@ -13215,6 +13354,7 @@ function applyRO(){
       <th>Channel</th>
       <th>Individual Sold</th>
       <th>In CMBs Sold</th>
+      ${empTx ? '' : '<th>Avg Selling Price</th>'}
       ${empTx ? '' : '<th>Discount %</th>'}
       <th>Inv Stock</th>
       <th>${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv (WIP)'}</th>
@@ -13249,6 +13389,7 @@ function applyRO(){
         <td>${safeText(t.channel)}</td>
         <td class="gold">${tq}</td>
         <td class="muted">0</td>
+        ${empTx ? '' : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`}
         ${empTx ? '' : `<td>${tDisc}%</td>`}
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
@@ -13271,6 +13412,7 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('qty_1m',this)">30D Sale</th>
     <th class="sort-arrow" onclick="sortRO('final_qty',this)">Individual Sold</th>
     <th>In CMBs Sold</th>
+    ${LOGIN_ROLE==='employee' ? '' : `<th title="Arithmetic average of valid COSA Selling Price rows under active filters">Avg Selling Price</th>`}
     ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_fDiscPct',this)" title="Overall average discount % vs MRP — updates with Date/Channel/Type filters">Discount %</th>`}
     <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
     <th class="sort-arrow" onclick="sortRO('inv_wip',this)">${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv WIP'}</th>
@@ -13328,6 +13470,7 @@ function applyRO(){
       <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
       <td class="gold">${Math.round(cmbSold)}</td>
+      ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,roSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
@@ -13504,6 +13647,7 @@ function applyColFilters(){
       <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
       <td class="gold">${Math.round(cmbSold)}</td>
+      ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,cfSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
@@ -13560,7 +13704,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -13587,7 +13731,7 @@ function exportRO(fmtType){
       'Individual Sold': parseFloat(t.qty) || 0,
       'In CMBs Sold': 0,
       'MRP': mrp0,
-      ...(emp0 ? {} : {'Net Revenue': parseFloat(t.rev) || 0, 'Discount %': discPct0 + '%'}),
+      ...(emp0 ? {} : {'Avg Selling Price':t.avg_selling_price==null?'':Number(t.avg_selling_price.toFixed(2)),'Net Revenue': parseFloat(t.rev) || 0, 'Discount %': discPct0 + '%'}),
       'Inv Stock': parentStock,
       'Inv WIP': parentWip,
       'Remark': roRemarks[t.sku] || '',
@@ -13611,9 +13755,9 @@ function exportRO(fmtType){
           'Pack Details':c.pack_details||packMap[childKey]||'',
           Customer:t.cust, Type:t.type,
           'Individual Sold':0,
-          'In CMBs Sold':parseFloat(t.qty)||0,
+          'In CMBs Sold':(parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku),
           'MRP':parseFloat(c.mrp)||parseFloat(mrpMap[childKey])||0,
-          ...(emp0?{}:{'Net Revenue':'','Discount %':''}),
+          ...(emp0?{}:{'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(childItem,{types:typeSelTx,channels:chanSelTx,subChannels:subChanSelTx,customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''});return v==null?'':Number(v.toFixed(2));})(),'Net Revenue':'','Discount %':''}),
           'Inv Stock':childStock,
           'Inv WIP':childWip,
           'Remark':'Child SKU of '+t.sku,
@@ -13671,7 +13815,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -13692,7 +13836,7 @@ function exportRO(fmtType){
       'Individual Sold': Math.round(rSold),
       'In CMBs Sold': Math.round(parentCmbSold),
       'MRP': parseFloat(item.mrp) || 0,
-      ...(emp1 ? {} : {'Selling Price': parseFloat(item.last_selling_price) || 0, 'Discount %': (item._fDiscPct||0) + '%'}),
+      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Discount %': (item._fDiscPct||0) + '%'}),
       'Inv Stock': chStock(item),
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
@@ -14264,13 +14408,14 @@ function _renderComboDetails(combo_details, comboStockFn, comboWipFn, wipLabel, 
     const exactChild = roExactSkuItem(c);
     const direct = cnxSaleTotalsForItem(exactChild, saleContext || {});
     const base = parentSaleVals || {q7:0,q15:0,q30:0,sold:0};
-    // This nested child row belongs to this one parent CMB. Its CMB usage must
-    // therefore equal this parent CMB's sale only; direct child sales stay
-    // separate and are never added into the parent-usage number.
-    const cQ7 = Math.round(base.q7);
-    const cQ15 = Math.round(base.q15);
-    const cQ30 = Math.round(base.q30);
-    const cSold = Math.round(base.sold);
+    const parentForQty = (typeof parentSales === 'object' && parentSales && parentSales._parentItem) ? parentSales._parentItem : null;
+    const pieces = parentForQty ? cnxChildComponentQty(parentForQty, c.sku) : Math.max(1, Math.round(Number(c&&c.component_qty)||1));
+    // This nested child row belongs to this one parent CMB. Child usage =
+    // parent CMB sold qty x pieces required in one CMB from All Product Pack Details.
+    const cQ7 = Math.round(base.q7 * pieces);
+    const cQ15 = Math.round(base.q15 * pieces);
+    const cQ30 = Math.round(base.q30 * pieces);
+    const cSold = Math.round(base.sold * pieces);
     const individualSold = Math.round(direct.sold);
     const skuEscC = String(c.sku).replace(/'/g, "\\\\'");
     return '<div class="combo-detail">'
@@ -15426,7 +15571,7 @@ function _rkhComboBoxHtml(combo_details,parentSku,parentSold){
       + (c.found ? '' : ' <span class="muted" style="font-size:.66rem">(not in inv)</span>')
       + '<div class="combo-grid">'
       + '<span>Individual Sold <b>' + Math.round(childDirect).toLocaleString('en-IN') + '</b></span>'
-      + '<span>In This CMB Sold <b>' + Math.round(thisParentSold).toLocaleString('en-IN') + '</b></span>'
+      + '<span>In This CMB Sold <b>' + Math.round(thisParentSold * cnxChildComponentQty(parentItem, c.sku)).toLocaleString('en-IN') + '</b></span>'
       + '<span>Inv Stock <b>' + (parseInt(c.inv_stock) || 0) + '</b></span>'
       + '<span>Inv WIP <b>' + (parseInt(c.inv_wip) || 0) + '</b></span>'
       + '</div></div>';
@@ -15937,7 +16082,7 @@ function exportRakhiOverallSummaryCSV(){
       const childDirect=cnxSaleTotalsForItem(childItem,rkhCtx).sold;
       data.push([
         String(c.sku||'').trim().toUpperCase(), childItem.cn_name || c.cn_name || '', '— Set Item', r.sku, exportSkuName(c.sku,c.sku_name),
-        stock, wip, stock+wip, Math.round(childDirect), Math.round(r.sales),
+        stock, wip, stock+wip, Math.round(childDirect), Math.round((Number(r.sales)||0) * cnxChildComponentQty(parentItem, c.sku)),
         '', '', '', '', '', ...(emp?[]:['']), '', '', 'Child SKU of '+r.sku
       ]);
     });
@@ -16061,7 +16206,7 @@ function exportRakhi(){
       data.push([
         'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), c.cn_name||'', c.religion_class||'Unclassified', '', '',
         ...(emp ? [] : ['']),
-        Math.round(childDirect), Math.round(r.qty), parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
+        Math.round(childDirect), Math.round((Number(r.qty)||0) * cnxChildComponentQty(parentItem, c.sku)), parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
     });
   });
@@ -16662,54 +16807,7 @@ let _rakhiCommonSkuRows = [];
 let _rakhiCommonCmbRows = [];
 
 function _rkhComboChildQtyPerCmb(parent, childSku){
-  const target = String(childSku || '').trim().toUpperCase();
-  if (!target) return 0;
-
-  // First trust the raw Stone Details / combo text because it preserves repeated
-  // occurrences that older combo_details snapshots used to dedupe. We also
-  // understand common explicit quantity notations such as "RKH-0077 x 2",
-  // "2 x RKH-0077", "RKH-0077 (2 pcs)" and repeated literal SKU entries.
-  const raw = String((parent && (parent.combo_skus || parent.gift_set_stone_details)) || '').toUpperCase();
-  if (raw) {
-    const escaped = target
-      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/[-_\s]+/g, '[-_\\s]*');
-    let re = null;
-    try {
-      // Do not match the target as a prefix of another alphanumeric/SKU variant.
-      re = new RegExp('(^|[^A-Z0-9])(' + escaped + ')(?![A-Z0-9_\\-(])', 'g');
-    } catch (_e) {}
-    if (re) {
-      let total = 0, m;
-      while ((m = re.exec(raw)) !== null) {
-        const skuStart = m.index + String(m[1] || '').length;
-        const before = raw.slice(Math.max(0, skuStart - 18), skuStart);
-        const after = raw.slice(re.lastIndex, re.lastIndex + 30);
-        const beforeQty = before.match(/(\d+)\s*[X×*]\s*$/i);
-        const afterQty = after.match(/^\s*(?:[X×*]\s*(\d+)|(?:QTY|QUANTITY)\s*[:=\-]?\s*(\d+)|(\d+)\s*(?:PCS?|PIECES?|UNITS?)|\(\s*(\d+)\s*(?:PCS?|PIECES?|UNITS?)?\s*\))/i);
-        const q = Math.max(1, parseInt(
-          (afterQty && (afterQty[1] || afterQty[2] || afterQty[3] || afterQty[4])) ||
-          (beforeQty && beforeQty[1]) || 1,
-          10
-        ) || 1);
-        total += q;
-        if (re.lastIndex === m.index) re.lastIndex += 1;
-      }
-      if (total > 0) return total;
-    }
-  }
-
-  // Fallback to the parsed combo_details. New server data includes component_qty
-  // on each exact child record; old cached data still safely falls back to 1.
-  const targetCompact = target.replace(/[^A-Z0-9]/g, '');
-  const details = Array.isArray(parent && parent.combo_details) ? parent.combo_details : [];
-  let fallback = 0;
-  details.forEach(child => {
-    const sku = String((child && child.sku) || '').trim().toUpperCase();
-    if (!sku || sku.replace(/[^A-Z0-9]/g, '') !== targetCompact) return;
-    fallback += Math.max(1, Math.round(Number(child && child.component_qty) || 1));
-  });
-  return Math.max(1, fallback || 1);
+  return cnxChildComponentQty(parent, childSku);
 }
 
 function _rkhBuildCommonSkus(){
@@ -16759,6 +16857,7 @@ function _rkhBuildCommonSkus(){
           sku_name: childItem.sku_name || child.sku_name || '',
           image_url: childItem.image_url || child.image_url || '',
           individual_sold: individualSold,
+          avg_selling_price: cnxAvgSellingPriceForItem(childItem, saleCtx),
           in_cmb_sold: 0,
           total_sold: individualSold,
           total_cmb_sold: 0,
@@ -16944,6 +17043,7 @@ function renderRakhiCommonSkus(){
       <td class="rkh-metric">${Math.round(Number(r.individual_sold)||0).toLocaleString('en-IN')}</td>
       <td class="rkh-metric">${Math.round(Number(r.in_cmb_sold)||0).toLocaleString('en-IN')}</td>
       <td class="rkh-metric"><b>${Math.round(Number(r.total_sold)||0).toLocaleString('en-IN')}</b></td>
+      <td class="rkh-metric"><b>${cnxAvgSpText(r.avg_selling_price)}</b></td>
       <td class="rkh-metric">${r.parents.length.toLocaleString('en-IN')}</td>
       <td style="white-space:normal;line-height:1.7">${parents || '—'}</td>
     </tr>`;
@@ -16952,9 +17052,9 @@ function renderRakhiCommonSkus(){
   const scopeText = rt === 'All' ? 'All Types' : rt;
   host.innerHTML = `<div class="small-note" style="padding:10px 12px;border-bottom:1px solid #eadfca"><b>${list.length.toLocaleString('en-IN')}</b> Rakhi child SKUs · Individual <b>${Math.round(totalIndividual).toLocaleString('en-IN')}</b> · In CMBs <b>${Math.round(totalInCmb).toLocaleString('en-IN')}</b> · Total Sold <b>${Math.round(totalSold).toLocaleString('en-IN')}</b> · ${_rakhiCommonCmbRows.length.toLocaleString('en-IN')} CMBs · ${escHtml(scopeText)} · FY 2026-27</div>
     <table class="ro rkh-grid rkh-common-summary" style="width:100%;min-width:1180px;border-collapse:collapse">
-      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Used In Rakhi CMBs</th><th>Parent Rakhi CMB SKUs (× pieces/CMB)</th></tr></thead>
+      <thead><tr><th>Photo</th><th>Child Rakhi SKU</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Avg Selling Price</th><th>Used In Rakhi CMBs</th><th>Parent Rakhi CMB SKUs (× pieces/CMB)</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><th colspan="2" style="text-align:right">TOTAL</th><th class="rkh-metric">${Math.round(totalIndividual).toLocaleString('en-IN')}</th><th class="rkh-metric">${Math.round(totalInCmb).toLocaleString('en-IN')}</th><th class="rkh-metric"><b>${Math.round(totalSold).toLocaleString('en-IN')}</b></th><th colspan="2"></th></tr></tfoot>
+      <tfoot><tr><th colspan="2" style="text-align:right">TOTAL</th><th class="rkh-metric">${Math.round(totalIndividual).toLocaleString('en-IN')}</th><th class="rkh-metric">${Math.round(totalInCmb).toLocaleString('en-IN')}</th><th class="rkh-metric"><b>${Math.round(totalSold).toLocaleString('en-IN')}</b></th><th></th><th colspan="2"></th></tr></tfoot>
     </table>`;
 }
 
@@ -16974,6 +17074,7 @@ async function exportRakhiCommonSkusExcel(){
     individual_sold: Number(r.individual_sold) || 0,
     in_cmb_sold: Number(r.in_cmb_sold) || 0,
     total_sold: (Number(r.individual_sold) || 0) + (Number(r.in_cmb_sold) || 0),
+    avg_selling_price:r.avg_selling_price==null?null:Number(r.avg_selling_price),
     total_cmb_sold: Number(r.in_cmb_sold) || 0,
     cmb_count: Array.isArray(r.parents) ? r.parents.length : 0,
     parent_cmbs: (r.parents || []).map(p => `${p.sku}${(Number(p.pieces_per_cmb)||1)>1 ? ` x${Math.round(Number(p.pieces_per_cmb)||1)}` : ''}`).join(', '),
@@ -18310,7 +18411,7 @@ function exportRepeatPlanner(){
       const childKey=String(c&&c.sku||'').trim().toUpperCase(); if(!childKey||seen.has(childKey))return; seen.add(childKey);
       const child=_masterSkuMap[childKey]||c||{};
       const childDirect=Math.max(0,_opsQtyForWindow(child,Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30'))));
-      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round(r.sold),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
+      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round((Number(r.sold)||0) * cnxChildComponentQty(r.item, childKey)),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
     });
   });
   _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','Category','Image Link','Individual Sold','In CMBs Sold','Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
@@ -29370,6 +29471,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                 "individual_sold": individual,
                 "in_cmb_sold": in_cmb,
                 "total_sold": individual + in_cmb,
+                "avg_selling_price": (to_num(raw.get("avg_selling_price")) if raw.get("avg_selling_price") is not None else ""),
                 "cmb_count": cmb_count,
                 "parent_cmbs": parent_labels,
                 "parent_cmb_breakdown": parent_breakdown,
@@ -29411,7 +29513,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
         # ===== Sheet 1: Child SKU Sales =====
         child_headers = [
             "Child Rakhi SKU", "CN Name", "SKU Name", "Individual Sold", "In CMBs Sold",
-            "Total Sold Qty", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs (x pieces/CMB)",
+            "Total Sold Qty", "Avg Selling Price", "Used In Rakhi CMBs", "Parent Rakhi CMB SKUs (x pieces/CMB)",
             "CMB Sales Breakdown", "Image Link"
         ]
         _style_title_and_headers(
@@ -29428,6 +29530,7 @@ def api_rakhi_child_cmb_sales_export_xlsx():
                 float(row["individual_sold"]),
                 float(row["in_cmb_sold"]),
                 float(row["total_sold"]),
+                row.get("avg_selling_price", ""),
                 int(row["cmb_count"]),
                 _safe_excel_text(row["parent_cmbs"]),
                 _safe_excel_text(row["parent_cmb_breakdown"]),
@@ -29436,12 +29539,12 @@ def api_rakhi_child_cmb_sales_export_xlsx():
             for col, value in enumerate(values, 1):
                 cell = ws.cell(r_idx, col, value)
                 cell.border = border
-                cell.alignment = center if col in (4, 5, 6, 7) else left
-                if col in (4, 5, 6, 7):
+                cell.alignment = center if col in (4, 5, 6, 7, 8) else left
+                if col in (4, 5, 6, 7, 8):
                     cell.number_format = '#,##0.##'
             image_url = str(row["image_url"] or "").strip()
             if image_url.lower().startswith(("http://", "https://")):
-                cell = ws.cell(r_idx, 10)
+                cell = ws.cell(r_idx, 11)
                 cell.hyperlink = image_url
                 cell.style = "Hyperlink"
 
@@ -29812,13 +29915,13 @@ def api_overall_export_xlsx():
         if kind == "pivot":
             headers = ["SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] \
                       + (["Total Sold Qty", "Last 1 Year Sold Qty"] if month_mode else []) \
-                      + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Image Link"]
+                      + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Image Link"]
         else:
             if month_mode:
-                headers = ["SKU", "Taxon"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "CN Name"] \
+                headers = ["SKU", "Taxon"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Used in CMBs", "Best Sold in This CMB", "Best CMB Image Link"]
             else:
-                headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+                headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
                           + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
 
         ws.append(headers)
@@ -29826,12 +29929,13 @@ def api_overall_export_xlsx():
             c.font = Font(bold=True, color="FFFFFF")
             c.fill = PatternFill("solid", fgColor="8C7A42")
 
-        num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Total Sold Qty", "Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"} | set(month_headers)
+        num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Total Sold Qty", "Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"} | set(month_headers)
         for r in rows:
             if kind == "pivot":
                 line = [r.get("sku", ""), r.get("cn_name", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if month_mode:
                     line += [r.get("total_qty", 0), r.get("last_1y_qty", 0)]
+                line.append(r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "")
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
@@ -29839,13 +29943,13 @@ def api_overall_export_xlsx():
                 if month_mode:
                     mq = r.get("month_qty") or {}
                     line = [r.get("sku", ""), r.get("taxon", "")] + [mq.get(k, 0) for k in month_keys] \
-                           + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("cn_name", "")]
+                           + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "", r.get("cn_name", "")]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or "",
                              ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), r.get("best_cmb_image_url", "") or ""]
                 else:
-                    line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0)]
+                    line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
@@ -29977,13 +30081,13 @@ def api_overall_export_pdf():
 
         if kind == "pivot":
             headers = ["Photo", "SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] \
-                      + (["Total Sold", "Last 1Y Sold"] if month_mode else []) + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP"]
+                      + (["Total Sold", "Last 1Y Sold"] if month_mode else []) + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP"]
         else:
             if month_mode:
-                headers = ["Photo", "SKU", "Taxon"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "CN Name"] \
+                headers = ["Photo", "SKU", "Taxon"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "Avg Selling Price", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Blocked", "Used in CMBs", "Best CMB", "Best CMB Image"]
             else:
-                headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold"] + (["Net Revenue"] if show_rev else []) \
+                headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
                           + ["Stock", "WIP", "Blocked"]
 
         table_data = [headers]
@@ -29993,6 +30097,7 @@ def api_overall_export_pdf():
                 line = [img_cell, r.get("sku", ""), r.get("cn_name", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
                 if month_mode:
                     line += [r.get("total_qty", 0), r.get("last_1y_qty", 0)]
+                line.append(r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "")
                 if show_rev:
                     line.append(r.get("revenue", 0))
                 line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
@@ -30000,13 +30105,13 @@ def api_overall_export_pdf():
                 if month_mode:
                     mq = r.get("month_qty") or {}
                     line = [img_cell, r.get("sku", ""), r.get("taxon", "")] + [mq.get(k, 0) for k in month_keys] \
-                           + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("cn_name", "")]
+                           + [r.get("selected_months_qty", 0), r.get("last_3m_qty", 0), r.get("last_1y_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "", r.get("cn_name", "")]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0),
                              ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), _link_flowable(r.get("best_cmb_image_url"))]
                 else:
-                    line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0)]
+                    line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
