@@ -18453,16 +18453,16 @@ function exportRepeatPlanner(){
   const out=[];
   rows.forEach(r=>{
     const children=Array.isArray(r.item&&r.item.combo_details)?r.item.combo_details:[];
-    out.push([r.sku,children.length?'Gift Set':'Product','',exportSkuName(r.sku,r.skuName),r.taxon,r.image,Math.round(r.sold),Math.round(r.cmbSold||0),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]);
+    out.push([r.sku,children.length?'Gift Set':'Product','',exportSkuName(r.sku,r.skuName),exportCnName(r.sku,(r.item&&r.item.cn_name)||''),r.taxon,r.image,Math.round(r.sold),Math.round(r.cmbSold||0),Number((Number(r.item&&r.item.total_net_revenue)||0).toFixed(2)),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]);
     const seen=new Set();
     children.forEach(c=>{
       const childKey=String(c&&c.sku||'').trim().toUpperCase(); if(!childKey||seen.has(childKey))return; seen.add(childKey);
       const child=_masterSkuMap[childKey]||c||{};
       const childDirect=Math.max(0,_opsQtyForWindow(child,Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30'))));
-      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round((Number(r.sold)||0) * cnxChildComponentQty(r.item, childKey)),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
+      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),exportCnName(childKey,child.cn_name||c.cn_name||''),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round((Number(r.sold)||0) * cnxChildComponentQty(r.item, childKey)),Number((Number(child.total_net_revenue??c.total_net_revenue)||0).toFixed(2)),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
     });
   });
-  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','Category','Image Link','Individual Sold','In CMBs Sold','Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
+  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','CN Name','Category','Image Link','Individual Sold','In CMBs Sold','Net Revenue','Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
 }
 
 function _buildComboRiskRows(){
