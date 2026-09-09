@@ -2348,11 +2348,10 @@ def _refresh_data():
     I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
-    # AF (zero-based index 31) = internal CN Name. Exact header match is
-    # preferred; positional fallback protects against harmless header edits.
-    I_CN_NAME = find_col(inv.columns, "CN Name", "Name")
-    if I_CN_NAME is None and len(inv.columns) > 31:
-        I_CN_NAME = inv.columns[31]
+    # All Product column AF (zero-based index 31) is the authoritative CN Name.
+    # Do not resolve the generic "Name" header elsewhere in the sheet: it can
+    # silently select a different product-name column and leave CN Name blank.
+    I_CN_NAME = inv.columns[31] if len(inv.columns) > 31 else find_col(inv.columns, "CN Name")
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
                  and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()]
     I_STK = stk_cands[0] if stk_cands else find_col(inv.columns,"Inv. Stock","stock")
@@ -13690,6 +13689,22 @@ function resetRO(){
   applyRO();
 }
 
+// Repeat Orders summary export keeps product identity in the correct columns:
+// parent CMB + its unique child SKU codes stay together in SKU, while SKU Name
+// contains only the real catalogue product name (never Stone Details/child SKUs).
+function roExportCombinedSku(item){
+  const codes=[];
+  const add=v=>{const s=String(v||'').trim();if(s&&!codes.some(x=>x.toUpperCase()===s.toUpperCase()))codes.push(s);};
+  add(item&&item.sku);
+  (Array.isArray(item&&item.combo_details)?item.combo_details:[]).forEach(c=>add(c&&c.sku));
+  return codes.join(', ');
+}
+function roExportProductName(item){
+  const sku=String(item&&item.sku||'').trim();
+  const name=String(item&&item.sku_name||'').trim();
+  return name&&name.toUpperCase()!==sku.toUpperCase()?name:'';
+}
+
 function exportRO(fmtType){
   if (roTxns) {
     if (!roTxns.length) { alert('No transactions to export.'); return; }
@@ -13818,7 +13833,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -13827,8 +13842,9 @@ function exportRO(fmtType){
     const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
-      SKU: item.sku,
-      'SKU Name': exportSkuName(item.sku, item.sku_name),
+      SKU: roExportCombinedSku(item),
+      'CN Name': exportCnName(item.sku,item.cn_name||''),
+      'SKU Name': roExportProductName(item),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
@@ -13839,7 +13855,7 @@ function exportRO(fmtType){
       'Individual Sold': Math.round(rSold),
       'In CMBs Sold': Math.round(parentCmbSold),
       'MRP': parseFloat(item.mrp) || 0,
-      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Discount %': (item._fDiscPct||0) + '%'}),
+      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Net Revenue':Number((Number(item._fRev??item.total_net_revenue??0)||0).toFixed(2)), 'Discount %': (item._fDiscPct||0) + '%'}),
       'Inv Stock': chStock(item),
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
