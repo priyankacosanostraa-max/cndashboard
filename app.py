@@ -8765,8 +8765,11 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
     <div class="fc"><label class="fl">Taxon (select one or more)</label>
       <select class="fs" id="prodTaxon" onchange="loadProduction()"><option value="">All Taxons</option></select></div>
-    <div class="fc"><label class="fl">Search SKU</label>
-      <input class="fi" id="prodSku" placeholder="type SKU…" oninput="prodSearchDebounced()"></div>
+    <div class="fc" style="min-width:240px"><label class="fl">Search SKU (type one, press Enter/comma to add more)</label>
+      <div class="prod-sku-multi" id="prodSkuMultiWrap" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid #d8cfa8;border-radius:8px;padding:6px 8px;background:#fff;min-height:38px">
+        <span id="prodSkuChips" style="display:flex;flex-wrap:wrap;gap:6px"></span>
+        <input class="fi" id="prodSku" style="border:none;outline:none;flex:1;min-width:110px;padding:2px" placeholder="type SKU…" oninput="prodSearchDebounced()" onkeydown="prodSkuKeydown(event)">
+      </div></div>
     <div class="fc"><label class="fl">Search Order No.</label>
       <input class="fi" id="prodOrderNo" placeholder="type order no…" oninput="prodSearchDebounced()"></div>
     <div class="fc"><label class="fl">Order date from</label>
@@ -17474,8 +17477,46 @@ window.sortProd = sortProd;
 let _prodFilled = false;
 let _prodSearchTimer = null;
 function prodSearchDebounced(){ clearTimeout(_prodSearchTimer); _prodSearchTimer = setTimeout(loadProduction, 300); }
+// ── Multi-SKU search (Production tab) ──────────────────────────────────────
+// Chips list of committed SKUs the user has added (Enter / comma). The live
+// text still typed in the box (not yet committed) is also applied as an
+// extra OR'd search term, so results update as-you-type just like before.
+let _prodSkuList = [];
+function renderProdSkuChips(){
+  const host = document.getElementById('prodSkuChips');
+  if (!host) return;
+  host.innerHTML = _prodSkuList.map((v,i) =>
+    `<span class="prod-sku-chip" style="display:inline-flex;align-items:center;gap:5px;background:#f3f6fb;border:1px solid #d8cfa8;border-radius:14px;padding:3px 8px;font-size:12px;font-weight:700">${escHtml(v)}<span onclick="prodSkuRemoveChip(${i})" style="cursor:pointer;color:#8c1a1a;font-weight:900">&times;</span></span>`
+  ).join('');
+}
+function prodSkuAddChip(raw){
+  const v = String(raw||'').trim();
+  if (!v) return;
+  if (!_prodSkuList.some(x => x.toLowerCase() === v.toLowerCase())) _prodSkuList.push(v);
+  renderProdSkuChips();
+}
+function prodSkuRemoveChip(i){
+  _prodSkuList.splice(i,1);
+  renderProdSkuChips();
+  loadProduction();
+}
+function prodSkuKeydown(ev){
+  const el = ev.target;
+  if (ev.key === 'Enter' || ev.key === ','){
+    ev.preventDefault();
+    prodSkuAddChip(el.value);
+    el.value = '';
+    loadProduction();
+  } else if (ev.key === 'Backspace' && !el.value && _prodSkuList.length){
+    // Backspace on an empty box removes the last chip, same as most tag inputs.
+    _prodSkuList.pop();
+    renderProdSkuChips();
+    loadProduction();
+  }
+}
+window.prodSkuKeydown = prodSkuKeydown; window.prodSkuRemoveChip = prodSkuRemoveChip;
 function _productionQueryString(forceFresh=false){
-  const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',sku:'prodSku',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
+  const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
   const params=new URLSearchParams();
   Object.entries(fields).forEach(([key,id])=>{
     if(key==='taxon'){
@@ -17483,6 +17524,11 @@ function _productionQueryString(forceFresh=false){
       if(vals.length) vals.forEach(v=>params.append(key,v)); else params.set(key,'');
     }else params.set(key,document.getElementById(id)?.value||'');
   });
+  // Multiple SKUs: committed chips + whatever is still being typed live.
+  const liveSku = (document.getElementById('prodSku')?.value||'').trim();
+  const skuTerms = _prodSkuList.slice();
+  if (liveSku && !skuTerms.some(x => x.toLowerCase() === liveSku.toLowerCase())) skuTerms.push(liveSku);
+  if (skuTerms.length) skuTerms.forEach(v=>params.append('sku', v)); else params.set('sku','');
   params.set('cn_name',document.getElementById('cnGlobalSearch')?.value||'');
   if(forceFresh) params.set('fresh','1');
   return params.toString();
@@ -17628,6 +17674,8 @@ function resetProduction(){
   ['prodSku','prodOrderNo','prodOD1','prodOD2','prodDD1','prodDD2'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   ['prodChannel','prodType','prodBalance','prodSort'].forEach(id => { const e=document.getElementById(id); if(e) e.value=''; });
   cnxResetCategorySelection('prodTaxon');
+  _prodSkuList = [];
+  renderProdSkuChips();
   loadProduction(true);
 }
 async function exportProduction(format){
@@ -26844,7 +26892,14 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
 
     # Filters apply
     cf = channel_filter.strip().lower()
-    sq = sku_query.strip().lower()
+    # sku_query can be a single string (legacy) or a list/tuple of multiple
+    # SKUs (Production tab multi-SKU search). Each term is matched as a
+    # case-insensitive substring against the row SKU; a row matches if ANY
+    # of the given SKU terms match (OR logic), same as the Taxon multi-select.
+    if isinstance(sku_query, (list, tuple, set)):
+        sqs = [str(v).strip().lower() for v in sku_query if str(v).strip()]
+    else:
+        sqs = [v.strip().lower() for v in str(sku_query or "").split("|||") if v.strip()]
     oq = order_query.strip().lower()
     cnq = cn_query.strip().lower()
     if isinstance(taxon_filter, (list, tuple, set)):
@@ -26889,7 +26944,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             continue
         if bo == "no" and _production_has_balance(r.get("bal_qty")):
             continue
-        if sq and sq not in r["sku"].lower():
+        if sqs and not any(s in r["sku"].lower() for s in sqs):
             continue
         if oq and oq not in r["order_no"].lower():
             continue
@@ -30225,7 +30280,7 @@ def api_production():
 def _production_request_filters():
     return {
         "channel_filter": request.args.get("channel", "").strip(),
-        "sku_query": request.args.get("sku", "").strip(),
+        "sku_query": [v.strip() for v in request.args.getlist("sku") if v.strip()],
         "od1": request.args.get("od1", "").strip(),
         "od2": request.args.get("od2", "").strip(),
         "dd1": request.args.get("dd1", "").strip(),
@@ -30420,7 +30475,7 @@ def api_production_export_xlsx():
             ("Channel Filter", _marketplace_display_text(filters.get("channel_filter") or "All")),
             ("Type Filter", _marketplace_display_text(filters.get("type_filter") or "All")),
             ("Category Filter", ", ".join(filters.get("taxon_filter") or []) or "All"),
-            ("SKU Search", filters.get("sku_query") or "All"),
+            ("SKU Search", ", ".join(filters.get("sku_query") or []) or "All"),
             ("Order No. Search", filters.get("order_query") or "All"),
             ("Order Date From", filters.get("od1") or "All"),
             ("Order Date To", filters.get("od2") or "All"),
