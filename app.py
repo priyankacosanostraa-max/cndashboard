@@ -2348,10 +2348,11 @@ def _refresh_data():
     I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
-    # All Product column AF (zero-based index 31) is the authoritative CN Name.
-    # Do not resolve the generic "Name" header elsewhere in the sheet: it can
-    # silently select a different product-name column and leave CN Name blank.
-    I_CN_NAME = inv.columns[31] if len(inv.columns) > 31 else find_col(inv.columns, "CN Name")
+    # AF (zero-based index 31) = internal CN Name. Exact header match is
+    # preferred; positional fallback protects against harmless header edits.
+    I_CN_NAME = find_col(inv.columns, "CN Name", "Name")
+    if I_CN_NAME is None and len(inv.columns) > 31:
+        I_CN_NAME = inv.columns[31]
     stk_cands = [c for c in inv.columns if "inv" in c.lower() and "stock" in c.lower()
                  and "3p" not in c.lower() and "web" not in c.lower() and "myntr" not in c.lower()]
     I_STK = stk_cands[0] if stk_cands else find_col(inv.columns,"Inv. Stock","stock")
@@ -7716,7 +7717,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           </div>
         </div>
         <div class="fc"><label class="fl">Customer Name</label>
-          <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="applyF_d()">
+          <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="cnxUpdateCustSuggest('fCust','custList');applyF_d()">
           <datalist id="custList"></datalist></div>
         <div class="fc"><label class="fl">Sheet Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
@@ -7842,7 +7843,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
           <div id="rPackChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Customer Name</label>
-          <input class="fi" id="rCust" list="custList2" placeholder="type customer…" oninput="applyRO_d()">
+          <input class="fi" id="rCust" list="custList2" placeholder="type customer…" oninput="cnxUpdateCustSuggest('rCust','custList2');applyRO_d()">
           <datalist id="custList2"></datalist></div>
         <div class="fc"><label class="fl">Dispatch Date From</label>
           <input class="fi" type="date" id="rD1" onchange="applyRO()" style="margin-bottom:8px">
@@ -10536,6 +10537,34 @@ function _debounce(fn, ms){
   let t = null;
   return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
 }
+/* ── Customer Name suggestions (Google-Sheets style autocomplete) ──
+   Har keystroke par poori allCusts list ke against match karta hai
+   (sirf pehle 300 customers tak limited nahi), taaki koi bhi customer
+   ka naam type karte hi turant dikh jaye — chahe wo alphabetically
+   list me kahin bhi ho. ── */
+function cnxUpdateCustSuggest(inputId, listId){
+  const inp = document.getElementById(inputId);
+  const dl  = document.getElementById(listId);
+  if (!inp || !dl) return;
+  const q = String(inp.value || '').trim().toLowerCase();
+  const CAP = 200;
+  let matches;
+  if (!q) {
+    matches = allCusts.slice(0, CAP);
+  } else {
+    matches = [];
+    for (let i = 0; i < allCusts.length; i++) {
+      const c = allCusts[i];
+      if (String(c).toLowerCase().includes(q)) {
+        matches.push(c);
+        if (matches.length >= CAP) break;
+      }
+    }
+  }
+  dl.innerHTML = matches.map(c => `<option value="${escHtml(c)}"></option>`).join('');
+}
+window.cnxUpdateCustSuggest = cnxUpdateCustSuggest;
+
 const applyRO_d = _debounce(function(){ try{ applyRO(); }catch(e){ console.error(e); } }, 280);
 const applyF_d  = _debounce(function(){ try{ applyF(); }catch(e){ console.error(e); } }, 280);
 const applyInsights_d = _debounce(function(){ try{ applyInsights(); }catch(e){ console.error(e); } }, 280);
@@ -12274,11 +12303,14 @@ function loadData(force){
       // Chromium. Filtering still accepts any typed customer; this cap only
       // limits the browser's suggestion DOM.
       const CUSTOMER_SUGGESTION_CAP = 300;
-      const custOpts = allCusts.slice(0, CUSTOMER_SUGGESTION_CAP).map(c => `<option value="${c}"></option>`).join('');
+      const custOpts = allCusts.slice(0, CUSTOMER_SUGGESTION_CAP).map(c => `<option value="${escHtml(c)}"></option>`).join('');
       const c1 = document.getElementById('custList');
       const c2 = document.getElementById('custList2');
       if (c1) c1.innerHTML = custOpts;
       if (c2) c2.innerHTML = custOpts;
+      // Suggestions refresh live against the FULL customer list on every
+      // keystroke via cnxUpdateCustSuggest() (wired on the input's oninput),
+      // so this initial fill is only a placeholder shown before typing.
 
       const taxHtml = '<option value="All">All Categories</option>' + allTaxons.map(t => `<option value="${t}">${t}</option>`).join('');
       const platHtml = '<option value="All">All Platings</option>' + allPlatings.map(p => `<option value="${p}">${p}</option>`).join('');
@@ -13689,22 +13721,6 @@ function resetRO(){
   applyRO();
 }
 
-// Repeat Orders summary export keeps product identity in the correct columns:
-// parent CMB + its unique child SKU codes stay together in SKU, while SKU Name
-// contains only the real catalogue product name (never Stone Details/child SKUs).
-function roExportCombinedSku(item){
-  const codes=[];
-  const add=v=>{const s=String(v||'').trim();if(s&&!codes.some(x=>x.toUpperCase()===s.toUpperCase()))codes.push(s);};
-  add(item&&item.sku);
-  (Array.isArray(item&&item.combo_details)?item.combo_details:[]).forEach(c=>add(c&&c.sku));
-  return codes.join(', ');
-}
-function roExportProductName(item){
-  const sku=String(item&&item.sku||'').trim();
-  const name=String(item&&item.sku_name||'').trim();
-  return name&&name.toUpperCase()!==sku.toUpperCase()?name:'';
-}
-
 function exportRO(fmtType){
   if (roTxns) {
     if (!roTxns.length) { alert('No transactions to export.'); return; }
@@ -13833,7 +13849,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -13842,9 +13858,8 @@ function exportRO(fmtType){
     const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
-      SKU: roExportCombinedSku(item),
-      'CN Name': exportCnName(item.sku,item.cn_name||''),
-      'SKU Name': roExportProductName(item),
+      SKU: item.sku,
+      'SKU Name': exportSkuName(item.sku, item.sku_name),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
@@ -13855,7 +13870,7 @@ function exportRO(fmtType){
       'Individual Sold': Math.round(rSold),
       'In CMBs Sold': Math.round(parentCmbSold),
       'MRP': parseFloat(item.mrp) || 0,
-      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Net Revenue':Number((Number(item._fRev??item.total_net_revenue??0)||0).toFixed(2)), 'Discount %': (item._fDiscPct||0) + '%'}),
+      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Discount %': (item._fDiscPct||0) + '%'}),
       'Inv Stock': chStock(item),
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
@@ -18423,16 +18438,6 @@ function _opsQtyForWindow(it, days){
   if (days===90) return _opsNum(it.qty_3m);
   return _opsNum(it.qty_1m);
 }
-function _opsRevenueForWindow(it, days){
-  const rows=Array.isArray(it&&it.sales_entries)?it.sales_entries:[];
-  const now=_bizIso(todayISO)||new Date().toISOString().slice(0,10);
-  const start=_bizShift(now,-Math.max(0,Number(days||30)-1));
-  return rows.reduce((sum,e)=>{
-    const d=_bizEntryDate(e);
-    if(!d||d<start||d>now)return sum;
-    return sum+(_opsNum(e&&e.rev)||0);
-  },0);
-}
 
 function _buildRepeatPlannerRows(){
   const win = Math.max(1, parseInt(document.getElementById('rpWindow')?.value || '30'));
@@ -18441,7 +18446,6 @@ function _buildRepeatPlannerRows(){
   _rpRows = (master||[]).map(it=>{
     const sold = Math.max(0,_opsQtyForWindow(it,win));
     const cmbSold=(cnxComboParentIndex().get(String(it.sku||'').trim().toUpperCase())||[]).reduce((sum,parent)=>sum+Math.max(0,_opsQtyForWindow(parent,win)),0);
-    const netRevenue=_opsRevenueForWindow(it,win);
     const totalSold = sold + cmbSold;
     const drr = totalSold/win;
     const stock = Math.max(0,_opsNum(it.inv_stock));
@@ -18452,7 +18456,7 @@ function _buildRepeatPlannerRows(){
     const rec = Math.max(0,Math.ceil(raw));
     const cover = drr>0 ? stock/drr : null;
     const risk = stock<=0 && drr>0 ? {key:'critical',label:'OOS — Order Now'} : rec>0 && cover!==null && cover<=lead ? {key:'high',label:'Below Lead-Time Cover'} : rec>0 ? {key:'medium',label:'Repeat Required'} : {key:'good',label:'Covered'};
-    return {item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),cnName:String(it.cn_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),sold,cmbSold,netRevenue,totalSold,drr,stock,wip,leadDemand,safetyStock,recommended:rec,cover,risk};
+    return {item:it,sku:String(it.sku||''),skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),sold,cmbSold,totalSold,drr,stock,wip,leadDemand,safetyStock,recommended:rec,cover,risk};
   }).filter(r=>r.sku && r.drr>0).sort((a,b)=>b.recommended-a.recommended || (a.cover??1e9)-(b.cover??1e9));
   _opsFillTaxon('rpTaxon',_rpRows,r=>r.taxon);
   return _rpRows;
@@ -18464,37 +18468,32 @@ function _repeatPlannerFiltered(){
   const taxonSel=cnxSelectedCategoryValues('rpTaxon');
   const need=document.getElementById('rpNeedOnly')?.value||'yes';
   const minDrr=Math.max(0,_opsNum(document.getElementById('rpMinDrr')?.value||0));
-  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName} ${r.cnName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&cnxCategoryMatches(taxonSel,r.taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
+  return rows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(group==='All'||r.group===group)&&cnxCategoryMatches(taxonSel,r.taxon)&&(need!=='yes'||r.recommended>0)&&r.drr>=minDrr);
 }
 function loadRepeatPlanner(){ _rpRows=[]; _buildRepeatPlannerRows(); renderRepeatPlanner(); }
 function renderRepeatPlanner(){
   _rpRows=[]; _buildRepeatPlannerRows();
   const rows=_repeatPlannerFiltered(); const win=Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30')); const sum=document.getElementById('rpSummary'); const host=document.getElementById('rpContent'); if(!host)return;
-  const emp=LOGIN_ROLE==='employee';
   const recQty=rows.reduce((s,r)=>s+r.recommended,0); const leadDemand=rows.reduce((s,r)=>s+r.leadDemand,0); const avail=rows.reduce((s,r)=>s+r.stock+r.wip,0); const urgent=rows.filter(r=>r.risk.key==='critical'||r.risk.key==='high').length;
   if(sum) sum.innerHTML=_opsKpi('Products Needing Repeat',rows.filter(r=>r.recommended>0).length.toLocaleString('en-IN'),'Current filter')+_opsKpi('Suggested Repeat Qty',Math.round(recQty).toLocaleString('en-IN'),'Rounded up by SKU')+_opsKpi('Expected Sales During Lead Time',Math.round(leadDemand).toLocaleString('en-IN'),'Daily demand (Individual + CMB) × lead days')+_opsKpi('Urgent Products',urgent.toLocaleString('en-IN'),`Available stock/WIP ${Math.round(avail).toLocaleString('en-IN')}`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.cnName||'—')}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.sold).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.cmbSold||0).toLocaleString('en-IN')}</td>${emp?'':`<td class="ops-num rev-only" style="font-weight:800">${fmt(r.netRevenue||0)}</td>`}<td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.leadDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.safetyStock).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.recommended>0?'#b3261e':'#15803d'}">${r.recommended.toLocaleString('en-IN')}</td><td class="ops-num">${r.cover===null?'—':_oosDaysText(r.cover)}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
-  const columnCount=emp?15:16;
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>CN Name</th><th>Category</th><th title="Standalone SKU sales inside the selected sales period">Individual Sold (${win}D)</th><th title="Sales of all parent CMBs using this SKU inside the same period">In CMBs Sold (${win}D)</th>${emp?'':`<th class="rev-only" title="COSA Net Revenue for this SKU inside the selected ${win}-day sales period">Net Revenue (${win}D)</th>`}<th title="(Individual Sold + In CMBs Sold) ÷ selected days">Daily Demand Rate</th><th>Stock</th><th>WIP</th><th>Expected Sales During Lead Time</th><th>Extra Safety Stock</th><th>Suggested Repeat Qty</th><th>Stock Cover (Days)</th><th>Status</th></tr></thead><tbody>${body||`<tr><td colspan="${columnCount}" class="ops-empty">No products match the current planning filters.</td></tr>`}</tbody></table>`;
+  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.sold).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.cmbSold||0).toLocaleString('en-IN')}</td><td class="ops-num">${r.drr.toFixed(2)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.leadDemand).toLocaleString('en-IN')}</td><td class="ops-num">${Math.ceil(r.safetyStock).toLocaleString('en-IN')}</td><td class="ops-num" style="font-weight:900;color:${r.recommended>0?'#b3261e':'#15803d'}">${r.recommended.toLocaleString('en-IN')}</td><td class="ops-num">${r.cover===null?'—':_oosDaysText(r.cover)}</td><td>${_opsRiskBadge(r.risk.key,r.risk.label)}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Category</th><th title="Standalone SKU sales inside the selected sales period">Individual Sold (${win}D)</th><th title="Sales of all parent CMBs using this SKU inside the same period">In CMBs Sold (${win}D)</th><th title="(Individual Sold + In CMBs Sold) ÷ selected days">Daily Demand Rate</th><th>Stock</th><th>WIP</th><th>Expected Sales During Lead Time</th><th>Extra Safety Stock</th><th>Suggested Repeat Qty</th><th>Stock Cover (Days)</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No products match the current planning filters.</td></tr>'}</tbody></table>`;
 }
 function exportRepeatPlanner(){
   const rows=_repeatPlannerFiltered(); if(!rows.length){alert('No repeat-planner rows to export');return;}
-  const emp=LOGIN_ROLE==='employee';
-  const win=Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30'));
   const out=[];
   rows.forEach(r=>{
     const children=Array.isArray(r.item&&r.item.combo_details)?r.item.combo_details:[];
-    out.push([r.sku,children.length?'Gift Set':'Product','',exportSkuName(r.sku,r.skuName),exportCnName(r.sku,r.cnName||''),r.taxon,r.image,Math.round(r.sold),Math.round(r.cmbSold||0),...(emp?[]:[Number((r.netRevenue||0).toFixed(2))]),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]);
+    out.push([r.sku,children.length?'Gift Set':'Product','',exportSkuName(r.sku,r.skuName),exportCnName(r.sku,(r.item&&r.item.cn_name)||''),r.taxon,r.image,Math.round(r.sold),Math.round(r.cmbSold||0),Number((Number(r.item&&r.item.total_net_revenue)||0).toFixed(2)),Number(r.drr.toFixed(3)),Math.round(r.stock),Math.round(r.wip),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,r.cover===null?'':Number(r.cover.toFixed(2)),r.risk.label]);
     const seen=new Set();
     children.forEach(c=>{
       const childKey=String(c&&c.sku||'').trim().toUpperCase(); if(!childKey||seen.has(childKey))return; seen.add(childKey);
       const child=_masterSkuMap[childKey]||c||{};
-      const childDirect=Math.max(0,_opsQtyForWindow(child,win));
-      const childRevenue=_opsRevenueForWindow(child,win);
-      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),exportCnName(childKey,child.cn_name||c.cn_name||''),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round((Number(r.sold)||0) * cnxChildComponentQty(r.item, childKey)),...(emp?[]:[Number(childRevenue.toFixed(2))]),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
+      const childDirect=Math.max(0,_opsQtyForWindow(child,Math.max(1,parseInt(document.getElementById('rpWindow')?.value||'30'))));
+      out.push([childKey,'— Set Item',r.sku,exportSkuName(childKey,child.sku_name||c.sku_name),exportCnName(childKey,child.cn_name||c.cn_name||''),child.taxon||c.taxon||'',child.image_url||c.image_url||'',Math.round(childDirect),Math.round((Number(r.sold)||0) * cnxChildComponentQty(r.item, childKey)),Number((Number(child.total_net_revenue??c.total_net_revenue)||0).toFixed(2)),Number(r.drr.toFixed(3)),Math.round(_opsNum(child.inv_stock??c.inv_stock)),Math.round(_opsNum(child.inv_wip??c.inv_wip)),Math.ceil(r.leadDemand),Math.ceil(r.safetyStock),r.recommended,'','Child SKU of '+r.sku]);
     });
   });
-  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','CN Name','Category','Image Link','Individual Sold','In CMBs Sold',...(emp?[]:[`Net Revenue (${win}D)`]),'Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
+  _dlCsv(['SKU','Row Type','Parent CMB','SKU Name','CN Name','Category','Image Link','Individual Sold','In CMBs Sold','Net Revenue','Daily Demand Rate','Stock','WIP','Expected Sales During Lead Time','Extra Safety Stock','Suggested Repeat Qty','Stock Cover Days','Status'],out,'repeat_order_plan');
 }
 
 function _buildComboRiskRows(){
