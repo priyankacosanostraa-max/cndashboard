@@ -12529,6 +12529,11 @@ function applyF(){
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
   const subChanSel = getSelectedSubChannels('fSubChan');
+  // Channel/Type-aware Inv Stock/WIP — same context used by the Repeat Orders
+  // tab and the Overview export, so a Type/Channel filter (e.g. Website,
+  // Marketplace, Purchase/Designer) shows that channel's own WIP on screen too.
+  const matrixInvCtx = roInvContext(typeSel, chanSel, subChanSel);
+  const empF = LOGIN_ROLE === 'employee';
   const taxonSel = cnxSelectedCategoryValues('fTaxon');
   const relClassQ = document.getElementById('fRelClass')?.value || 'All';
   const cnTagQ = document.getElementById('fCnTag')?.value || 'All';
@@ -12680,7 +12685,8 @@ function applyF(){
         qty_3m: anyEntryFilter ? Math.round(q3m) : item.qty_3m,
         qty_6m: anyEntryFilter ? Math.round(q6m) : item.qty_6m,
         qty_1y: anyEntryFilter ? Math.round(q1y) : item.qty_1y,
-        rev_yesterday: yRev, rev_month: mRev, rev_fy: fRev, rev_prev_fy: pfRev
+        rev_yesterday: yRev, rev_month: mRev, rev_fy: fRev, rev_prev_fy: pfRev,
+        inv_stock: roInvStock(item, matrixInvCtx), inv_wip: roInvWip(item, matrixInvCtx)
       };
       cards.push({ mrp: parseFloat(item.mrp) || 0, render: () => mkCard(cardItem, itemFilteredRevenue, null, false, true) });
     }
@@ -12701,7 +12707,7 @@ function applyF(){
         const invBy = {};
         (master || []).forEach(it => {
           const k=String(it && it.sku || '').trim().toUpperCase();
-          if(k) invBy[k] = {s:it.inv_stock,w:it.inv_wip,b:it.blocked_qty,img:it.image_url,cn:it.cn_name||''};
+          if(k) invBy[k] = {s:roInvStock(it, matrixInvCtx),w:roInvWip(it, matrixInvCtx),b:it.blocked_qty,img:it.image_url,cn:it.cn_name||''};
         });
 
         // Build monthly sales once for every SKU under the active transaction
@@ -12712,6 +12718,7 @@ function applyF(){
           const sk=String(srcItem && srcItem.sku || '').trim().toUpperCase();
           if(!sk)return;
           const qtyByMonth=Object.create(null);
+          const revByMonth=Object.create(null);
           (srcItem.sales_entries || []).forEach(e => {
             if (custQ && !String(e && e.cust || '').toLowerCase().includes(custQ)) return;
             if (!typeOk(e && e.type) || !chanOk(e) || !subChanOk(e && e.sub_channel)) return;
@@ -12722,10 +12729,12 @@ function applyF(){
             if(d2 && ed>d2)return;
             const mk=ed.slice(0,7);
             qtyByMonth[mk]=(qtyByMonth[mk]||0)+(Number(e && e.qty)||0);
+            revByMonth[mk]=(revByMonth[mk]||0)+(Number(e && e.rev)||0);
           });
-          monthSalesBySku.set(sk,{qtyByMonth});
+          monthSalesBySku.set(sk,{qtyByMonth,revByMonth});
         });
         const monthOwnQty=(sk,mk)=>Number(monthSalesBySku.get(sk)?.qtyByMonth?.[mk])||0;
+        const monthOwnRev=(sk,mk)=>Number(monthSalesBySku.get(sk)?.revByMonth?.[mk])||0;
 
         // Overview month view shows CHILD SKUs instead of CMB parents. Keep the
         // child's own sales completely authoritative: its individual Net Revenue
@@ -12748,7 +12757,12 @@ function applyF(){
           return Math.max(1,q||1);
         };
 
-        // Net Revenue is intentionally not calculated in Overview.
+        // Net Revenue = the SKU's own individual filtered net revenue for the
+        // selected months (sum of e.rev from COSA sales entries after the
+        // active Customer/Type/Channel/Sub-Channel/FY/Date filters). CMB
+        // revenue is booked under the CMB SKU itself, so it is not re-added
+        // here — that would double-count the same rupee under both the CMB
+        // and its child SKUs.
         const last3Keys=matrixRollingMonthKeys(latestMonthKey,3);
         // Last 1 Year follows the oldest selected month, not the latest one.
         // Exact requested example: Jun/Jul/Aug 2026 -> May 2025 through May 2026.
@@ -12776,11 +12790,12 @@ function applyF(){
           };
 
           const monthQty={};
-          let selectedMonthsQty=0;
+          let selectedMonthsQty=0, selectedMonthsRev=0;
           monthSel.forEach(mk=>{
             const q=totalForMonth(mk);
             monthQty[mk]=q;
             selectedMonthsQty+=q;
+            selectedMonthsRev+=monthOwnRev(sk,mk);
           });
           // Keep month-filter semantics: only SKUs sold in one of the selected
           // months appear. Combo-only child sales are included in this decision.
@@ -12808,6 +12823,7 @@ function applyF(){
             month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',taxon:item.taxon||'',cn_name:item.cn_name||iv.cn||'',
             month_qty:monthQty,selected_months_qty:selectedMonthsQty,last_3m_qty:last3Qty,last_1y_qty:last1yQty,
             avg_selling_price:cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true}),
+            rev:selectedMonthsRev,
             inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
             image_url:iv.img||'',cmbs:cmbNames,best_cmb:bestCmb,best_cmb_name:bestCmbName,best_cmb_sold_qty:bestCmbQty,best_cmb_image_url:bestCmbImage
           });
@@ -12842,6 +12858,7 @@ function applyF(){
               <td class="gold" title="${safeText(last1yLabel)}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
               <td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
               <td>${safeText(t.cn_name||'')}</td>
+              ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
               <td class="${t.inv_stock>10?'red':t.inv_stock>0?'orange':'muted'}">${t.inv_stock}</td>
               <td class="${t.inv_wip>10?'orange':t.inv_wip>0?'gold':'muted'}">${t.inv_wip}</td>
               <td class="${t.blocked_qty>0?'red':'muted'}">${t.blocked_qty}</td>
@@ -12860,9 +12877,9 @@ function applyF(){
               <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
             </div>
             <table class="ro"><thead><tr>
-              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th><th>CN Name</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
+              <th>SKU</th><th>Taxon</th>${monthHeaders}<th>Selected Months Sold Qty</th><th>Last 3 Months Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th><th>CN Name</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Used in CMBs</th><th>Best Sold in This CMB</th><th>Best CMB Image Link</th>
             </tr></thead><tbody>${rowsHtml}</tbody></table>
-            <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + each filtered CMB's sold qty × that child's required pieces in the CMB. Customer, Type, Channel, Sub-Channel, FY, Date and Month filters are applied before quantity calculations. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
+            <div class="ops-note"><b>Sold Qty</b> = Individual SKU sales + each filtered CMB's sold qty × that child's required pieces in the CMB. <b>Net Revenue</b> = the SKU's own filtered sales revenue only (CMB revenue is booked under the CMB SKU). Customer, Type, Channel, Sub-Channel, FY, Date and Month filters are applied before quantity/revenue calculations. CMB parent SKUs are hidden. <b>Last 3 Months</b>: ${safeText(last3Label)}. <b>Last 1 Year</b>: ${safeText(last1yLabel)}. Best CMB is based on the selected months and the same active transaction filters.</div>
             ${displayTxns.length>MATRIX_RENDER_CAP?`<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} SKUs. Export includes all rows.</div>`:''}
           </div>`;
         }
@@ -12872,7 +12889,7 @@ function applyF(){
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
       } else {
         const invBy = {};
-        master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || '', taxon: it.taxon || ''}; });
+        master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: roInvStock(it, matrixInvCtx), w: roInvWip(it, matrixInvCtx), b: it.blocked_qty, img: it.image_url, cn: it.cn_name || '', taxon: it.taxon || ''}; });
 
         const pivotMap = new Map();
         rawTxns.forEach(t => {
@@ -12911,7 +12928,7 @@ function applyF(){
         }
 
         _matrixTxns=displayTxns;
-        _matrixPivot=Array.from(pivotMap.values()).map(x=>{const it=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true};return {sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,avg_selling_price:cnxAvgSellingPriceForItem(it,ctx),customer_count:x.customers.size,customer_names:Array.from(x.customers).sort()};}).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
+        _matrixPivot=Array.from(pivotMap.values()).map(x=>{const it=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true};return {sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,avg_selling_price:cnxAvgSellingPriceForItem(it,ctx),customer_count:x.customers.size,customer_names:Array.from(x.customers).sort(),rev:x.rev||0};}).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
 
         const MATRIX_RENDER_CAP = 150;
         const visibleTxns=displayTxns.slice(0,MATRIX_RENDER_CAP), visiblePivot=_matrixPivot.slice(0,MATRIX_RENDER_CAP);
@@ -12928,11 +12945,13 @@ function applyF(){
             <td class="gold"><b>${Math.round(Number(t.total_qty)||0)}</b></td>
             <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(rollingYear.end.slice(0,7)))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
             <td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
+            ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
             <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
+            ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
         }).join('');
 
@@ -12949,6 +12968,7 @@ function applyF(){
             <td class="gold">${Math.round(Number(x.qty)||0)}</td><td class="gold">${Math.round(combo)}</td>
             ${monthMode?`<td class="gold"><b>${Math.round(total)}</b></td><td class="gold"><b>${Math.round(Number(x.last_1y_qty)||0)}</b></td>`:''}
             <td class="gold"><b>${cnxAvgSpText(x.avg_selling_price)}</b></td>
+            ${empF?'':`<td class="gold"><b>${fmt(x.rev||0)}</b></td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td></tr>`;
         }).join('');
 
@@ -12963,7 +12983,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
-            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
+            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
           ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
@@ -12973,7 +12993,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Avg Selling Price</th><th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
           ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
@@ -13013,9 +13033,9 @@ function _matrixExportMeta(){
   if(months.length) parts.push(months.join('_'));
   return { custQ, d1, d2, months, base: parts.join('_') };
 }
-function _matrixInvLookup(){
+function _matrixInvLookup(invCtx){
   const invBy = {};
-  master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: it.inv_stock, w: it.inv_wip, b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
+  master.forEach(it => { const k=String(it.sku||'').trim().toUpperCase(); if(k) invBy[k] = {s: roInvStock(it, invCtx), w: roInvWip(it, invCtx), b: it.blocked_qty, img: it.image_url, cn: it.cn_name || ''}; });
   return invBy;
 }
 function _matrixRevenueExportValue(v){
@@ -13026,9 +13046,14 @@ function _matrixRevenueExportValue(v){
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }
 function _matrixBuildPayload(kind){
-  // Net Revenue is intentionally excluded from Overview dashboard exports.
-  const showRev = false;
-  const invBy = _matrixInvLookup();
+  // Net Revenue is included in Overview exports for everyone except the
+  // employee role (financial figures stay hidden from employees app-wide).
+  const showRev = LOGIN_ROLE !== 'employee';
+  // Channel/Type-aware Inv Stock/WIP — same active Sheet Type / Sub-Channel
+  // filter context as the screen, same as the Repeat Orders tab export.
+  const typeSel=getSelectedTypes('fType'), chanSel=getSelectedChannels('fChan'), subChanSel=getSelectedSubChannels('fSubChan');
+  const matrixInvCtx = roInvContext(typeSel, chanSel, subChanSel);
+  const invBy = _matrixInvLookup(matrixInvCtx);
   if (kind === 'transactions'){
     return _matrixTxns.map(t => {
       const iv = invBy[String(t.sku||'').trim().toUpperCase()] || {s:0, w:0, b:0, img:'', cn:''};
@@ -13050,7 +13075,6 @@ function _matrixBuildPayload(kind){
       };
     });
   }
-  const typeSel=getSelectedTypes('fType'), chanSel=getSelectedChannels('fChan'), subChanSel=getSelectedSubChannels('fSubChan');
   const fyRaw=document.getElementById('fFY')?.value||'All FYs', d1=document.getElementById('fD1')?.value||'', d2=document.getElementById('fD2')?.value||'';
   const scope=(matrixPastedSkuSet instanceof Set) ? matrixPastedSkuSet : (selectedSkuSet&&selectedSkuSet.size?selectedSkuSet:null);
   return _matrixPivot.map(p => {
@@ -13070,7 +13094,7 @@ function exportMatrixCSV(kind){
   const rows = _matrixBuildPayload(kind);
   if (!rows.length){ alert('No filtered data to export.'); return; }
   const meta = _matrixExportMeta();
-  const showRev = false;
+  const showRev = LOGIN_ROLE !== 'employee';
   let headers, csvRows;
   const monthExport=!!(rows[0]&&rows[0].month_mode);
   if (kind === 'transactions'){
@@ -13751,6 +13775,7 @@ function exportRO(fmtType){
       const skuKey=String(t.sku||'').trim().toUpperCase();
       const parentExact=roExactSkuItem(itemMap[skuKey]||t);
       const parentItem=parentExact;
+      // Channel/Type-aware Inv Stock/WIP — same context as the screen.
       const parentStock=roInvStock(parentExact, roInvCtxTx);
       const parentWip=roAnuModeTx ? roAnuWipFor(parentExact.sku || t.sku) : roInvWip(parentExact, roInvCtxTx);
       const children=Array.isArray(parentItem.combo_details)?parentItem.combo_details:[];
@@ -30012,7 +30037,7 @@ def api_overall_export_xlsx():
         kind  = payload.get("kind", "transactions")
         rows  = payload.get("rows") or []
         title = (payload.get("title") or "overall_details").strip() or "overall_details"
-        show_rev = False  # Overview Net Revenue intentionally removed from all exports
+        show_rev = session.get("role") != "employee"  # Net Revenue hidden only from employee role, same as elsewhere
         month_mode = bool(rows) and bool(rows[0].get("month_mode"))
         month_keys = sorted({str(k) for r in rows for k in ((r.get("month_qty") or {}).keys()) if re.match(r"^\d{4}-\d{2}$", str(k))}) if month_mode else []
         month_headers = [datetime.strptime(k, "%Y-%m").strftime("%B %Y") + " Total Sold Qty" for k in month_keys]
@@ -30116,7 +30141,7 @@ def api_overall_export_pdf():
         kind  = payload.get("kind", "transactions")
         rows  = payload.get("rows") or []
         title = payload.get("title") or "Overall Details"
-        show_rev = False  # Overview Net Revenue intentionally removed from all exports
+        show_rev = session.get("role") != "employee"  # Net Revenue hidden only from employee role, same as elsewhere
         month_mode = bool(rows) and bool(rows[0].get("month_mode"))
         month_keys = sorted({str(k) for r in rows for k in ((r.get("month_qty") or {}).keys()) if re.match(r"^\d{4}-\d{2}$", str(k))}) if month_mode else []
         month_headers = [datetime.strptime(k, "%Y-%m").strftime("%B %Y") + " Sold" for k in month_keys]
