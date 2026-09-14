@@ -3886,7 +3886,14 @@ def _refresh_data():
             "wip_customer": int(it.get("inv_wip_customer") or 0),
             "wip_customize": int(it.get("inv_wip_customize") or 0),
         }
-    _sku_re = re.compile(r"[A-Za-z]{1,5}[-_ ]?\d{2,5}(?:[-_(][A-Za-z0-9)]+)*")
+    # NOTE: the suffix group's character class must include "(" as well as ")",
+    # otherwise variant suffixes written as "_(P)" / "_(S)" / "_(X)" (e.g. BT
+    # button size codes) get truncated to just the base SKU (BT-0630_(P) ->
+    # BT-0630). That collapses distinct size variants into one non-existent
+    # "base" SKU inside combo_details, which then shows wrong/zero Inv Stock
+    # and WIP for those child rows (seen mainly on BT SKUs) even though the
+    # SKU's own row elsewhere shows the correct stock.
+    _sku_re = re.compile(r"[A-Za-z]{1,5}[-_ ]?\d{2,5}(?:[-_(][A-Za-z0-9()]+)*")
     for it in compiled:
         combo = it.get("combo_skus") or ""
         it["combo_details"] = []
@@ -8765,10 +8772,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       <select class="fs" id="prodType" onchange="loadProduction()"><option value="">All Types</option></select></div>
     <div class="fc"><label class="fl">Taxon (select one or more)</label>
       <select class="fs" id="prodTaxon" onchange="loadProduction()"><option value="">All Taxons</option></select></div>
-    <div class="fc" style="min-width:240px"><label class="fl">Search SKU (type one, press Enter/comma to add more)</label>
+    <div class="fc" style="min-width:240px"><label class="fl">Search SKU (type one, press Enter/comma to add more, or paste multiple)</label>
       <div class="prod-sku-multi" id="prodSkuMultiWrap" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;border:1px solid #d8cfa8;border-radius:8px;padding:6px 8px;background:#fff;min-height:38px">
         <span id="prodSkuChips" style="display:flex;flex-wrap:wrap;gap:6px"></span>
-        <input class="fi" id="prodSku" style="border:none;outline:none;flex:1;min-width:110px;padding:2px" placeholder="type SKU…" oninput="prodSearchDebounced()" onkeydown="prodSkuKeydown(event)">
+        <input class="fi" id="prodSku" style="border:none;outline:none;flex:1;min-width:110px;padding:2px" placeholder="type SKU…" oninput="prodSearchDebounced()" onkeydown="prodSkuKeydown(event)" onpaste="prodSkuPaste(event)">
       </div></div>
     <div class="fc"><label class="fl">Search Order No.</label>
       <input class="fi" id="prodOrderNo" placeholder="type order no…" oninput="prodSearchDebounced()"></div>
@@ -17545,7 +17552,23 @@ function prodSkuKeydown(ev){
     loadProduction();
   }
 }
-window.prodSkuKeydown = prodSkuKeydown; window.prodSkuRemoveChip = prodSkuRemoveChip;
+// Paste multiple SKUs at once (comma, space, tab, semicolon, pipe or new-line
+// separated) — same behaviour as the Repeat Orders / Overview paste boxes.
+// A single-SKU paste (no separator) is left alone so normal typing/Enter
+// still works exactly as before.
+function prodSkuPaste(ev){
+  const cd = ev.clipboardData || window.clipboardData;
+  const text = cd ? cd.getData('text') : '';
+  if (!text || !text.trim()) return;
+  const tokens = text.split(/[\s,;|]+/).map(t => t.trim()).filter(Boolean);
+  if (tokens.length <= 1) return; // let the default single-value paste happen
+  ev.preventDefault();
+  tokens.forEach(t => prodSkuAddChip(t));
+  const el = document.getElementById('prodSku');
+  if (el) el.value = '';
+  loadProduction();
+}
+window.prodSkuKeydown = prodSkuKeydown; window.prodSkuRemoveChip = prodSkuRemoveChip; window.prodSkuPaste = prodSkuPaste;
 function _productionQueryString(forceFresh=false){
   const fields={channel:'prodChannel',balance:'prodBalance',type:'prodType',taxon:'prodTaxon',order_no:'prodOrderNo',od1:'prodOD1',od2:'prodOD2',dd1:'prodDD1',dd2:'prodDD2',sort:'prodSort'};
   const params=new URLSearchParams();
