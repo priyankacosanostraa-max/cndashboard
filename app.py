@@ -11695,7 +11695,7 @@ function renderSdTable(){
       <td>${safeText(e.type)}</td>
       <td>${safeText(e.channel)}</td>
       <td class="gold">${q}</td>
-      <td class="rev-only">${cnxAvgSpText(filteredArithmeticAsp)}</td>
+      <td class="rev-only">${cnxAvgSpText(sp)}</td>
       <td class="rev-only">${dPct===null?'—':dPct+'%'}</td>
       <td class="rev-only green">${fmt(rv)}</td>
     </tr>`;
@@ -12591,7 +12591,7 @@ function applyF(){
   const cards = [];
   const revenueShareMap = new Map();
   const CAP = 120;
-  const drill = !!(custQ || d1 || d2 || monthMode);
+  const drill = true; // Overview: Transactions table always shown (filtered by active filters when any are set)
   const anyEntryFilter = !!(custQ || d1 || d2 || monthMode || typeSel.length || chanSel.length || subChanSel.length || fyQ !== 'All FYs');
   const txns = [];
   const matrixEligibleItems = new Map();
@@ -13404,10 +13404,10 @@ function applyRO(){
   }
 
   const vt = document.getElementById('roViewToggle');
-  if (vt) vt.style.display = drill ? 'flex' : 'none';
+  if (vt) vt.style.display = 'flex';
   const colFiltersBar = document.getElementById('roColFilters');
 
-  if (drill && RO_VIEW === 'txns') {
+  if (RO_VIEW === 'txns') {
     if (colFiltersBar) colFiltersBar.style.display = 'none';
     const txns = [];
     filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
