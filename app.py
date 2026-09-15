@@ -2321,9 +2321,13 @@ def _refresh_data():
 
     # ── Inventory columns ────────────────────────────────────
     # Live All Product source-of-truth layout: B=SKU, E=Image Link, N=MRP.
-    # Header matching is primary; physical fallbacks prevent a harmless header
-    # spelling change from silently selecting S.No/Image or returning zeros.
-    I_SKU = find_col(inv.columns, "SKU") or (inv.columns[1] if len(inv.columns) > 1 else inv.columns[0])
+    # Physical column B is now PRIMARY: the sheet also carries a derived
+    # helper column ("SKU_1" etc, e.g. "BT-1046_(X)_1") right next to it, and
+    # that must never be picked up as the SKU value — most visible on BT
+    # (button) SKUs, whose "_(P)/_(S)/_(X)" suffixes made a stray "_1" easy
+    # to miss. Header-name search is only a fallback for when column B is
+    # missing entirely (e.g. sheet re-shuffled with fewer columns).
+    I_SKU = (inv.columns[1] if len(inv.columns) > 1 else None) or find_col(inv.columns, "SKU") or inv.columns[0]
     # Image Link is authoritative in physical column E. Prefer an exact
     # Image-Link header, then E, and only then a generic image-looking field.
     # This prevents column D (often just named "Image") from being selected
@@ -12946,13 +12950,15 @@ function applyF(){
             <td class="gold" title="${safeText(matrixMonthLabel(rollingYear.start.slice(0,7))+' to '+matrixMonthLabel(rollingYear.end.slice(0,7)))}"><b>${Math.round(Number(t.last_1y_qty)||0)}</b></td>
             <td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
-            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
+            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td>
+            <td class="gold"><b>${Math.round((Number(t.qty)||0)+(Number(t.combo_qty)||0))}</b></td></tr>`;
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
             <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
-            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td></tr>`;
+            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td>
+            <td class="gold"><b>${Math.round(Number(t.qty)||0)}</b></td></tr>`;
         }).join('');
 
         const pivotRowsHtml=visiblePivot.map(x=>{
@@ -12969,7 +12975,8 @@ function applyF(){
             ${monthMode?`<td class="gold"><b>${Math.round(total)}</b></td><td class="gold"><b>${Math.round(Number(x.last_1y_qty)||0)}</b></td>`:''}
             <td class="gold"><b>${cnxAvgSpText(x.avg_selling_price)}</b></td>
             ${empF?'':`<td class="gold"><b>${fmt(x.rev||0)}</b></td>`}
-            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td></tr>`;
+            <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td>
+            <td class="gold"><b>${Math.round(total)}</b></td></tr>`;
         }).join('');
 
         const exportBtns = kind => `
@@ -12983,7 +12990,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
-            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th>`}
+            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
           ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
@@ -12993,7 +13000,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('pivot')}</div>
           </div>
           <table class="ro"><thead><tr>
-            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th>
+            <th>SKU</th><th>Customers</th><th>Individual Sold</th><th>In CMBs Sold</th>${monthMode?'<th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th>':''}<th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Total Sold</th>
           </tr></thead><tbody>${pivotRowsHtml}</tbody></table>
           ${_matrixPivot.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${_matrixPivot.length.toLocaleString('en-IN')} summary rows. Export includes all rows.</div>` : ''}</div>`;
       }
@@ -13064,14 +13071,16 @@ function _matrixBuildPayload(kind){
           avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price),
           revenue:showRev?_matrixRevenueExportValue(t.rev):null,inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
           image_url:iv.img||t.image_url||'',cmbs:Array.isArray(t.cmbs)?t.cmbs:[],best_cmb:t.best_cmb||'',best_cmb_sold_qty:Number(t.best_cmb_sold_qty)||0,
-          best_cmb_name:t.best_cmb_name||'',best_cmb_image_url:t.best_cmb_image_url||'',one_year_start:_matrixOneYearStart,one_year_end:_matrixOneYearEnd
+          best_cmb_name:t.best_cmb_name||'',best_cmb_image_url:t.best_cmb_image_url||'',one_year_start:_matrixOneYearStart,one_year_end:_matrixOneYearEnd,
+          total_sold:Number(t.selected_months_qty)||0
         };
       }
+      const qty0 = parseFloat(t.qty) || 0;
       return {
         date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
-        qty: parseFloat(t.qty) || 0, combo_qty: 0, avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
+        qty: qty0, combo_qty: 0, avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
-        image_url: iv.img || ''
+        image_url: iv.img || '', total_sold: qty0
       };
     });
   }
@@ -13082,11 +13091,12 @@ function _matrixBuildPayload(kind){
     const item=_masterSkuMap[String(p.sku||'').trim().toUpperCase()]||{sku:p.sku};
     const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
     const comboQty=_matrixMonthMode?(Number(p.combo_qty)||0):cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
+    const totalQty0=_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0);
     return {
       month_mode:_matrixMonthMode, sku: p.sku, cn_name: item.cn_name || iv.cn || '', customer_count:Number(p.customer_count||0), customers:(p.customer_names||[]).join(', '), qty: p.qty, combo_qty: comboQty,
-      total_qty:_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0), last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, avg_selling_price:p.avg_selling_price==null?null:Number(p.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(p.rev) : null,
+      total_qty:totalQty0, last_1y_qty:_matrixMonthMode?(Number(p.last_1y_qty)||0):0, avg_selling_price:p.avg_selling_price==null?null:Number(p.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(p.rev) : null,
       inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0,
-      image_url: iv.img || '', one_year_start:_matrixOneYearStart, one_year_end:_matrixOneYearEnd
+      image_url: iv.img || '', one_year_start:_matrixOneYearStart, one_year_end:_matrixOneYearEnd, total_sold: totalQty0
     };
   });
 }
@@ -13101,31 +13111,31 @@ function exportMatrixCSV(kind){
     if(monthExport){
       const monthKeys=meta.months.length?meta.months:Object.keys(rows[0].month_qty||{}).sort();
       const monthHeaders=monthKeys.map(k=>`${matrixMonthLabel(k)} Total Sold Qty`);
-      headers=['SKU','Taxon'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','Avg Selling Price','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link']);
+      headers=['SKU','Taxon'].concat(monthHeaders).concat(['Selected Months Sold Qty','Last 3 Months Sold Qty','Last 1 Year Sold Qty','Avg Selling Price','CN Name']).concat(showRev?['Net Revenue']:[]).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Used in CMBs','Best Sold in This CMB','Best CMB Image Link','Total Sold']);
       csvRows=rows.map(r=>{
         const line=[r.sku,r.taxon||'']; monthKeys.forEach(k=>line.push(Number(r.month_qty?.[k])||0));
         line.push(r.selected_months_qty||0,r.last_3m_qty||0,r.last_1y_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2)),r.cn_name||'');
         if(showRev)line.push(r.revenue);
-        line.push(r.inv_stock,r.inv_wip,r.blocked_qty,r.image_url||'',(r.cmbs||[]).join(', '),(r.best_cmb||'')+(r.best_cmb_name?' · '+r.best_cmb_name:''),r.best_cmb_image_url||'');
+        line.push(r.inv_stock,r.inv_wip,r.blocked_qty,r.image_url||'',(r.cmbs||[]).join(', '),(r.best_cmb||'')+(r.best_cmb_name?' · '+r.best_cmb_name:''),r.best_cmb_image_url||'',r.total_sold||0);
         return line;
       });
     }else{
-      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold','Avg Selling Price'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link']);
+      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold','Avg Selling Price'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Total Sold']);
       csvRows = rows.map(r => {
         const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.qty, r.combo_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2))];
         if (showRev) line.push(r.revenue);
-        line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url);
+        line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url, r.total_sold||0);
         return line;
       });
     }
   } else {
-    headers = ['SKU','CN Name','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(monthExport?['Total Sold Qty','Last 1 Year Sold Qty']:[]).concat(['Avg Selling Price']).concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link']);
+    headers = ['SKU','CN Name','Customers','Customer Count','Individual Sold','In CMBs Sold'].concat(monthExport?['Total Sold Qty','Last 1 Year Sold Qty']:[]).concat(['Avg Selling Price']).concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Image Link','Total Sold']);
     csvRows = rows.map(r => {
       const line = [r.sku, r.cn_name||'', r.customers||'', r.customer_count||0, r.qty, r.combo_qty||0];
       if(monthExport)line.push(r.total_qty||0,r.last_1y_qty||0);
       line.push(r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2)));
       if (showRev) line.push(r.revenue);
-      line.push(r.inv_stock, r.inv_wip, r.image_url);
+      line.push(r.inv_stock, r.inv_wip, r.image_url, r.total_sold||0);
       return line;
     });
   }
@@ -13423,7 +13433,8 @@ function applyRO(){
       ${empTx ? '' : '<th>Discount %</th>'}
       <th>Inv Stock</th>
       <th>${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv (WIP)'}</th>
-      <th style="min-width:160px">Remark</th>`;
+      <th style="min-width:160px">Remark</th>
+      <th>Total Sold</th>`;
 
     if (!txns.length) {
       if (tbody) tbody.innerHTML = '';
@@ -13459,9 +13470,10 @@ function applyRO(){
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
         <td><input type="text" class="ro-remark" value="${(roRemarks[t.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)"></td>
+        <td class="gold"><b>${Math.round(tq)}</b></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
-      ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
+      ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
       : '');
     updateExportHint();
     return;
@@ -13485,7 +13497,8 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('forecast_60d',this)" title="Expected units to sell in the next 60 days. Based on recent sales velocity: last 60 days weighted 70%, last 180 days 30%, plus a small trend adjustment.">Forecast 60D</th>
     <th class="sort-arrow" onclick="sortRO('reorder_qty',this)" title="Next 60 days expected demand minus current stock + WIP">Reorder Qty</th>
     <th>Remark</th>
-    <th>Remark 2</th>`;
+    <th>Remark 2</th>
+    <th>Total Sold</th>`;
 
   if (!filtered.length) {
     if (tbody) tbody.innerHTML = '';
@@ -13544,9 +13557,10 @@ function applyRO(){
       <td><span class="forecast-pill" style="background:#fff4e0;color:#b45309;border-color:#f3d9a8">${item.reorder_qty || 0}</span></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
+      <td class="gold"><b>${Math.round((parseFloat(qty)||0) + (parseFloat(cmbSold)||0))}</b></td>
     </tr>`;
   }).join('') + (filtered.length > RO_CAP
-    ? `<tr><td colspan="15" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
+    ? `<tr><td colspan="16" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
     : '');
 
   const allBox = document.getElementById('roSelectAll');
@@ -13769,7 +13783,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -13802,6 +13816,7 @@ function exportRO(fmtType){
       'Inv WIP': parentWip,
       'Remark': roRemarks[t.sku] || '',
       'Image Link': t.image_url || '',
+      'Total Sold': (parseFloat(t.qty) || 0) + 0,
       });
       children.forEach(c=>{
         const childKey=String(c.sku||'').trim().toUpperCase();
@@ -13827,7 +13842,8 @@ function exportRO(fmtType){
           'Inv Stock':childStock,
           'Inv WIP':childWip,
           'Remark':'Child SKU of '+t.sku,
-          'Image Link':c.image_url||''
+          'Image Link':c.image_url||'',
+          'Total Sold': 0 + ((parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku))
         });
       });
     });
@@ -13881,7 +13897,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -13916,6 +13932,7 @@ function exportRO(fmtType){
       'Remark': roRemarks[item.sku] || '',
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
+      'Total Sold': Math.round(rSold) + Math.round(parentCmbSold),
     });
     // One-row-per-SKU export: child CMB usage is already captured in the main
     // SKU row's "In CMBs Sold" column, so child rows are intentionally not
@@ -30049,21 +30066,21 @@ def api_overall_export_xlsx():
         if kind == "pivot":
             headers = ["SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] \
                       + (["Total Sold Qty", "Last 1 Year Sold Qty"] if month_mode else []) \
-                      + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Image Link"]
+                      + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Image Link", "Total Sold"]
         else:
             if month_mode:
                 headers = ["SKU", "Taxon"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "CN Name"] \
-                          + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Used in CMBs", "Best Sold in This CMB", "Best CMB Image Link"]
+                          + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Used in CMBs", "Best Sold in This CMB", "Best CMB Image Link", "Total Sold"]
             else:
                 headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
-                          + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link"]
+                          + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Total Sold"]
 
         ws.append(headers)
         for c in ws[1]:
             c.font = Font(bold=True, color="FFFFFF")
             c.fill = PatternFill("solid", fgColor="8C7A42")
 
-        num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Total Sold Qty", "Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty"} | set(month_headers)
+        num_cols = {"Customer Count", "Individual Sold", "In CMBs Sold", "Total Sold Qty", "Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "Net Revenue", "Inv Stock", "Inv (WIP)", "Blocked Qty", "Total Sold"} | set(month_headers)
         for r in rows:
             if kind == "pivot":
                 line = [r.get("sku", ""), r.get("cn_name", ""), r.get("customers", ""), r.get("customer_count", 0), r.get("qty", 0), r.get("combo_qty", 0)]
@@ -30072,7 +30089,7 @@ def api_overall_export_xlsx():
                 line.append(r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "")
                 if show_rev:
                     line.append(r.get("revenue", 0))
-                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or ""]
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("image_url", "") or "", r.get("total_sold", 0)]
             else:
                 if month_mode:
                     mq = r.get("month_qty") or {}
@@ -30081,12 +30098,12 @@ def api_overall_export_xlsx():
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or "",
-                             ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), r.get("best_cmb_image_url", "") or ""]
+                             ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), r.get("best_cmb_image_url", "") or "", r.get("total_sold", 0)]
                 else:
                     line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
-                    line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or ""]
+                    line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or "", r.get("total_sold", 0)]
             ws.append(line)
 
         for col_idx, h in enumerate(headers, start=1):
@@ -30215,14 +30232,14 @@ def api_overall_export_pdf():
 
         if kind == "pivot":
             headers = ["Photo", "SKU", "CN Name", "Customers", "Customer Count", "Individual Sold", "In CMBs Sold"] \
-                      + (["Total Sold", "Last 1Y Sold"] if month_mode else []) + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP"]
+                      + (["Total Sold Qty", "Last 1Y Sold"] if month_mode else []) + ["Avg Selling Price"] + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Total Sold"]
         else:
             if month_mode:
                 headers = ["Photo", "SKU", "Taxon"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "Avg Selling Price", "CN Name"] \
-                          + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Blocked", "Used in CMBs", "Best CMB", "Best CMB Image"]
+                          + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Blocked", "Used in CMBs", "Best CMB", "Best CMB Image", "Total Sold"]
             else:
                 headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
-                          + ["Stock", "WIP", "Blocked"]
+                          + ["Stock", "WIP", "Blocked", "Total Sold"]
 
         table_data = [headers]
         for r in rows:
@@ -30234,7 +30251,7 @@ def api_overall_export_pdf():
                 line.append(r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else "")
                 if show_rev:
                     line.append(r.get("revenue", 0))
-                line += [r.get("inv_stock", 0), r.get("inv_wip", 0)]
+                line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("total_sold", 0)]
             else:
                 if month_mode:
                     mq = r.get("month_qty") or {}
@@ -30243,12 +30260,12 @@ def api_overall_export_pdf():
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0),
-                             ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), _link_flowable(r.get("best_cmb_image_url"))]
+                             ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), _link_flowable(r.get("best_cmb_image_url")), r.get("total_sold", 0)]
                 else:
                     line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
-                    line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0)]
+                    line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("total_sold", 0)]
             table_data.append(line)
 
         tbl = Table(table_data, repeatRows=1)
