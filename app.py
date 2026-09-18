@@ -27278,10 +27278,21 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # Leaderboard finalize + rank (by % achieved)
     leaderboard = []
     for L in lb.values():
+        if L["stakeholder"].strip().lower() == "mahesh":
+            # Mahesh's leaderboard row: show Channel as just "Marketplace" and
+            # source his Achieved/Achievement/Projected from the COSA sheet's
+            # Type = Marketplace net revenue (act bucket), not the sum across
+            # his individual target channels. Target (sp_target)/Qty untouched.
+            L.pop("channels", None)
+            L["channel"] = "Marketplace"
+            mp_actual = act.get((month_filter, "marketplace"), {"rev": 0.0, "qty": 0.0})["rev"]
+            L["sp_actual"] = mp_actual
+            L["proj_rev"] = mp_actual * pace if pace else mp_actual
+        else:
+            L["channel"] = ", ".join(sorted(L.pop("channels"))) if L.get("channels") else "—"
         L["pct_achieved"] = round((L["sp_actual"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["proj_pct"] = round((L["proj_rev"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["sp_short"] = L["sp_target"] - L["sp_actual"]
-        L["channel"] = ", ".join(sorted(L.pop("channels"))) if L.get("channels") else "—"
         leaderboard.append(L)
     leaderboard.sort(key=lambda x: x["pct_achieved"], reverse=True)
     for i, L in enumerate(leaderboard): L["rank"] = i + 1
