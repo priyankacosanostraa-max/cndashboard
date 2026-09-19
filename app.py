@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.30 (TARGET TAB · NEW DAILY TARGET REPORT)
+# - Target tab me naya "Daily Target Report" table: channel-wise Projected vs
+#   Actual vs Short vs Achievement % for Yesterday aur Day Before, CSV + Excel export.
+# - Actual = cosa_orderdate Net Revenue (col I); channel = Customer Name + Type.
+# - Website Rs 1.5L/day, Purchase Rs 2L/day (19-30 Sep 2026); baaki channels
+#   Sept projection sheet se. Koi existing table / logic change nahi kiya.
+# ============================================================
 # Cosa Nostraa — V24.29 (PAYMENTS WEEK RECEIVED = ACTUAL BANK INWARD SOURCE)
 # - Week-wise Payment Received now uses Planning -> `recvd vs paid` actual received
 #   entries by transaction Date, so Purchase Week 1 reconciles to Planning Actual.
@@ -9440,6 +9447,20 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
   </div>
   <div id="drgMarketplaceContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+
+  <div class="insights-head" style="margin-top:26px">
+    <div>
+      <div class="insights-title">Daily Target Report</div>
+      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Day Before. Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet.</div>
+    </div>
+    <div class="insight-toolbar-actions">
+      <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDTR(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDTR()">Export CSV</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDTRExcel()">Export Excel</button>
+    </div>
+  </div>
+  <div id="dtrContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
   </div>
 
 
@@ -15407,6 +15428,99 @@ function exportDRGMarketplaceExcel(){
 window.loadDRGMarketplace = loadDRGMarketplace;
 window.exportDRGMarketplace = exportDRGMarketplace;
 window.exportDRGMarketplaceExcel = exportDRGMarketplaceExcel;
+
+/* ── DAILY TARGET REPORT (Target tab, 4th table) ── */
+let _dtrData = null;
+function _dtrAsOfParam(){
+  const el = document.getElementById('dtrAsOf');
+  return el && el.value ? el.value : '';
+}
+function loadDTR(force=false){
+  const host = document.getElementById('dtrContent');
+  if (!host) return;
+  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
+  const qs = [];
+  const asof = _dtrAsOfParam();
+  if (asof) qs.push('asof=' + encodeURIComponent(asof));
+  if (force) qs.push('fresh=1');
+  fetch('/api/daily_target_report' + (qs.length ? '?' + qs.join('&') : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => {
+      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      _dtrData = d;
+      const el = document.getElementById('dtrAsOf');
+      if (el && !el.value) el.value = d.asof;
+      renderDTRTable();
+    })
+    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+}
+function _dtrPct(v){
+  if (v === null || v === undefined) return '';
+  const cls = v >= 100 ? 'green' : v >= 70 ? 'orange' : 'red';
+  return '<span class="' + cls + '" style="font-weight:800">' + v + '%</span>';
+}
+function _dtrCells(b, bold){
+  const w = bold ? 'font-weight:900' : '';
+  const proj = (b.projected === null || b.projected === undefined) ? 'NA' : fmt(b.projected);
+  let short = '';
+  if (b.short !== null && b.short !== undefined){
+    short = b.short > 0 ? '<span class="red" style="font-weight:800">' + fmt(b.short) + '</span>' : '<span class="green" style="font-weight:800">✓ Met</span>';
+  }
+  return '<td style="' + w + '">' + proj + '</td>'
+       + '<td style="font-weight:800">' + fmt(b.actual) + '</td>'
+       + '<td>' + short + '</td>'
+       + '<td>' + _dtrPct(b.ach) + '</td>';
+}
+function renderDTRTable(){
+  const host = document.getElementById('dtrContent');
+  const d = _dtrData;
+  if (!host || !d) return;
+  const rowsHtml = (d.rows||[]).map(r => '<tr><td style="font-weight:700">' + escHtml(r.channel) + '</td>'
+    + _dtrCells(r.yesterday, false) + _dtrCells(r.day_before, false) + '</tr>').join('');
+  const t = d.totals || {};
+  const totalRow = '<tr style="background:#eef7ea;font-weight:900"><td>TOTAL</td>'
+    + _dtrCells(t.yesterday, true) + _dtrCells(t.day_before, true) + '</tr>';
+  host.innerHTML = '<p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">'
+    + 'As of: ' + escHtml(d.asof_label||'') + ' &nbsp;•&nbsp; Yesterday: ' + escHtml(d.yesterday_label||'')
+    + ' &nbsp;•&nbsp; Day Before: ' + escHtml(d.day_before_label||'')
+    + ' &nbsp;•&nbsp; Projection window: 19-Sep to 30-Sep-2026 (NA = no projection for that date)</p>'
+    + '<table class="ro" style="width:100%;min-width:980px"><thead>'
+    + '<tr><th rowspan="2">Channel</th><th colspan="4" style="text-align:center">Yesterday · ' + escHtml(d.yesterday_label||'') + '</th>'
+    + '<th colspan="4" style="text-align:center">Day Before · ' + escHtml(d.day_before_label||'') + '</th></tr>'
+    + '<tr><th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th>'
+    + '<th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th></tr>'
+    + '</thead><tbody>' + rowsHtml + totalRow + '</tbody></table>';
+}
+function _dtrCsvBlock(b){
+  return [
+    (b.projected === null || b.projected === undefined) ? 'NA' : drgFmtNum(b.projected),
+    drgFmtNum(b.actual),
+    (b.short === null || b.short === undefined) ? '' : drgFmtNum(b.short),
+    (b.ach === null || b.ach === undefined) ? '' : b.ach
+  ];
+}
+function exportDTR(){
+  const d = _dtrData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  const sub = ['Projected','Actual','Short','Achievement %'];
+  const head1 = ['Daily Target Report - ' + d.asof_label, 'Yesterday - ' + d.yesterday_label, '', '', '', 'Day Before - ' + d.day_before_label, '', '', ''];
+  const head2 = ['Channel'].concat(sub, sub);
+  const rows = d.rows.map(r => [r.channel].concat(_dtrCsvBlock(r.yesterday), _dtrCsvBlock(r.day_before)));
+  rows.push(['TOTAL'].concat(_dtrCsvBlock(d.totals.yesterday), _dtrCsvBlock(d.totals.day_before)));
+  const csv = [head1, head2].concat(rows).map(r => r.map(c => {
+    const s = String(c==null?'':c);
+    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'daily_target_report_' + d.asof + '.csv'; a.click();
+}
+function exportDTRExcel(){
+  const d = _dtrData;
+  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
+  window.location.href = '/api/daily_target_report/export.xlsx?asof=' + encodeURIComponent(d.asof || '');
+}
+window.loadDTR = loadDTR; window.exportDTR = exportDTR; window.exportDTRExcel = exportDTRExcel; window.renderDTRTable = renderDTRTable;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -22925,7 +23039,7 @@ showTab = function(t){
   if (t === 'weboos') setTimeout(()=>{ try{ loadWebsiteOos(false); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
-  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); loadDRGMarketplace(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); loadDRGMarketplace(false); loadDTR(false); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
@@ -28429,6 +28543,308 @@ def api_daily_revenue_glimpse_marketplace():
         return jsonify(_build_daily_revenue_glimpse_marketplace(force=fresh))
     except Exception as e:
         return jsonify({"error": f"marketplace daily revenue glimpse build failed: {e}"}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════
+# DAILY TARGET REPORT (Target tab) — V24.30
+# Channel-wise daily Projected vs Actual for Yesterday and Day Before.
+#   • Actual  : cosa_orderdate (COSA_ORDERDATE_URL) only — A=Order Date,
+#               I=Net Revenue, J=Customer Name, K=Type. Channel bucket is
+#               derived from Customer Name first, then Type.
+#   • Website : Rs 1,50,000 / day  |  Purchase : Rs 2,00,000 / day
+#               (19-Sep-2026 to 30-Sep-2026)
+#   • Others  : per-day Sept projection sheet (trackor_target.xlsx), below.
+# Nothing else in the dashboard reads or changes these values.
+# ══════════════════════════════════════════════════════════════════════
+_DTR_ROWS = ["Website", "Purchase", "Myntra", "Amazon", "Nykaa", "Flipkart",
+             "Tata Cliq", "AJIO", "Blinkit", "Instamart", "Pernia", "Others"]
+_DTR_SHEET_COLS = ("Myntra", "Amazon", "Nykaa", "Flipkart", "Tata Cliq",
+                   "AJIO", "Blinkit", "Instamart", "Pernia", "Others")
+_DTR_WEBSITE_PER_DAY = 150000      # 1.5 lakh / day
+_DTR_PURCHASE_PER_DAY = 200000     # 2 lakh / day
+_DTR_START = "2026-09-19"
+_DTR_END = "2026-09-30"
+# Per-day projection (Sept projection sheet), order == _DTR_SHEET_COLS.
+_DTR_PROJECTION = {
+    "2026-09-19": (10000, 5000, 5000, 0, 2000, 0, 0, 0, 5000, 2000),
+    "2026-09-20": (10000, 5000, 5000, 0, 2500, 0, 0, 0, 5000, 2000),
+    "2026-09-21": (12000, 5000, 7000, 0, 2500, 1000, 0, 1000, 5000, 2000),
+    "2026-09-22": (15000, 5000, 7000, 0, 0, 1000, 0, 1000, 5000, 2000),
+    "2026-09-23": (15000, 5000, 7000, 0, 0, 1000, 0, 0, 5000, 2000),
+    "2026-09-24": (15000, 5000, 8000, 0, 2500, 1000, 2499, 1500, 5000, 2000),
+    "2026-09-25": (15000, 5000, 10000, 0, 2000, 1000, 0, 0, 5000, 2500),
+    "2026-09-26": (20000, 5000, 12000, 1500, 2000, 1500, 2499, 1500, 5000, 2500),
+    "2026-09-27": (25000, 15000, 12000, 1500, 2000, 1500, 2499, 1000, 5000, 2500),
+    "2026-09-28": (25000, 25000, 8000, 1500, 2000, 1500, 0, 0, 5000, 2500),
+    "2026-09-29": (22000, 25000, 8000, 1500, 2000, 1500, 2499, 0, 5000, 2500),
+    "2026-09-30": (22000, 25000, 8000, 1500, 2000, 1500, 2499, 0, 5000, 2500),
+}
+_DTR_CACHE = {"daily": None, "meta": None, "ts": 0}
+_DTR_TTL = 300
+
+
+def _dtr_compact(v):
+    return re.sub(r"[^a-z0-9]", "", str(v or "").casefold())
+
+
+def _dtr_bucket(customer, typ):
+    """Customer Name + Type -> Daily Target Report row.
+    Customer Name marketplace keywords win (same as the rest of the app);
+    then Type decides Website / Purchase / quick-commerce; everything else
+    (Exhibition, Bulk, Marketplace/SOR, FNP, Fern, Mirraw ...) is Others."""
+    if _is_amazon_fba_value(customer, typ):
+        return "Amazon"
+    c = _dtr_compact(customer)
+    t = _dtr_compact(typ)
+    if "myntra" in c:    return "Myntra"
+    if "nykaa" in c:     return "Nykaa"
+    if "ajio" in c:      return "AJIO"
+    if "tata" in c:      return "Tata Cliq"
+    if "flipkart" in c:  return "Flipkart"
+    if "amazon" in c:    return "Amazon"
+    if "blinkit" in c:   return "Blinkit"
+    if "instamart" in c or "swiggy" in c: return "Instamart"
+    if "pernia" in c:    return "Pernia"
+    if t in ("website", "online"): return "Website"
+    if t == "purchase":  return "Purchase"
+    if "blinkit" in t:   return "Blinkit"
+    if "instamart" in t or "swiggy" in t: return "Instamart"
+    if "pernia" in t:    return "Pernia"
+    return "Others"
+
+
+def _dtr_fetch_daily(force=False):
+    """{iso_date: {bucket: selling_price_sum}} from cosa_orderdate."""
+    if (not force and _DTR_CACHE["daily"] is not None
+            and time.time() - _DTR_CACHE["ts"] < _DTR_TTL):
+        return _DTR_CACHE["daily"], (_DTR_CACHE["meta"] or {})
+    df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+    df.columns = [str(c).strip() for c in df.columns]
+    cols = list(df.columns)
+
+    def _idx(pos, *names):
+        # Physical column is authoritative (same mapping as the other
+        # cossa_orderdate tables); header lookup is only a fallback.
+        if len(cols) > pos:
+            return pos
+        nm = find_col(df.columns, *names)
+        return cols.index(nm) if nm in cols else None
+
+    i_date = None
+    nm = find_col(df.columns, "Order Date", "order date", "orderdate")
+    if nm in cols:
+        i_date = cols.index(nm)
+    if i_date is None:
+        i_date = _idx(0, "Dispatch Date", "date")
+    i_sp = _idx(8, "Net Revenue", "net rev", "revenue")
+    i_cust = _idx(9, "Customer Name", "customer", "client", "party")
+    i_type = _idx(10, "Type", "channel", "mode")
+    if i_date is None or i_sp is None:
+        raise ValueError("cosa_orderdate: Order Date / Net Revenue column not found")
+
+    dates = df.iloc[:, i_date].tolist()
+    sps = df.iloc[:, i_sp].tolist()
+    custs = df.iloc[:, i_cust].tolist() if i_cust is not None else [""] * len(dates)
+    types = df.iloc[:, i_type].tolist() if i_type is not None else [""] * len(dates)
+
+    daily = {}
+    used = 0
+    for d_raw, sp_raw, c_raw, t_raw in zip(dates, sps, custs, types):
+        dt = parse_date_any(d_raw)
+        if dt is None:
+            continue
+        sp = float(to_num(sp_raw) or 0)
+        if sp == 0:
+            continue
+        b = _dtr_bucket(c_raw, t_raw)
+        slot = daily.setdefault(dt.strftime("%Y-%m-%d"), {})
+        slot[b] = slot.get(b, 0.0) + sp
+        used += 1
+    meta = {
+        "rows_total": len(dates), "rows_used": used,
+        "date_column": cols[i_date] if i_date is not None else "",
+        "price_column": cols[i_sp] if i_sp is not None else "",
+        "customer_column": cols[i_cust] if i_cust is not None else "",
+        "type_column": cols[i_type] if i_type is not None else "",
+    }
+    _DTR_CACHE.update({"daily": daily, "meta": meta, "ts": time.time()})
+    return daily, meta
+
+
+def _dtr_projection_for(iso):
+    """{bucket: projected} for one date, or None when the date is outside the
+    19-Sep-2026 .. 30-Sep-2026 projection window."""
+    if not (_DTR_START <= iso <= _DTR_END):
+        return None
+    vals = _DTR_PROJECTION.get(iso)
+    if vals is None:
+        return None
+    p = {"Website": float(_DTR_WEBSITE_PER_DAY), "Purchase": float(_DTR_PURCHASE_PER_DAY)}
+    for name, v in zip(_DTR_SHEET_COLS, vals):
+        p[name] = float(v)
+    return p
+
+
+def _dtr_day_block(iso, daily):
+    proj = _dtr_projection_for(iso)
+    act = daily.get(iso, {})
+    out = {}
+    tp = 0.0
+    ta = 0.0
+    for b in _DTR_ROWS:
+        a = float(act.get(b, 0.0))
+        p = proj.get(b) if proj else None
+        ta += a
+        if p is not None:
+            tp += p
+        out[b] = {
+            "projected": p, "actual": a,
+            "short": (max(0.0, p - a) if p is not None else None),
+            "ach": (round(a / p * 100, 1) if p else None),
+        }
+    tot = {
+        "projected": (tp if proj else None), "actual": ta,
+        "short": (max(0.0, tp - ta) if proj else None),
+        "ach": (round(ta / tp * 100, 1) if proj and tp else None),
+    }
+    return out, tot
+
+
+def _build_daily_target_report(asof=None, force=False):
+    daily, meta = _dtr_fetch_daily(force=force)
+    today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    if asof:
+        try:
+            today_dt = datetime.strptime(str(asof).strip()[:10], "%Y-%m-%d")
+        except Exception:
+            pass
+    yest_dt = today_dt - timedelta(days=1)
+    dbef_dt = today_dt - timedelta(days=2)
+    y_iso = yest_dt.strftime("%Y-%m-%d")
+    d_iso = dbef_dt.strftime("%Y-%m-%d")
+    y_rows, y_tot = _dtr_day_block(y_iso, daily)
+    d_rows, d_tot = _dtr_day_block(d_iso, daily)
+    rows = []
+    for b in _DTR_ROWS:
+        rows.append({"channel": b, "yesterday": y_rows[b], "day_before": d_rows[b]})
+    return {
+        "rows": rows,
+        "totals": {"yesterday": y_tot, "day_before": d_tot},
+        "asof": today_dt.strftime("%Y-%m-%d"),
+        "asof_label": today_dt.strftime("%d-%b-%Y"),
+        "yesterday_iso": y_iso, "yesterday_label": yest_dt.strftime("%d-%b"),
+        "day_before_iso": d_iso, "day_before_label": dbef_dt.strftime("%d-%b"),
+        "website_per_day": _DTR_WEBSITE_PER_DAY,
+        "purchase_per_day": _DTR_PURCHASE_PER_DAY,
+        "window": [_DTR_START, _DTR_END],
+        "source_meta": meta,
+    }
+
+
+@app.route("/api/daily_target_report")
+def api_daily_target_report():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+        return jsonify(_build_daily_target_report(asof=request.args.get("asof"), force=fresh))
+    except Exception as e:
+        return jsonify({"error": f"daily target report build failed: {e}"}), 500
+
+
+@app.route("/api/daily_target_report/export.xlsx")
+def api_daily_target_report_export_xlsx():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        rep = _build_daily_target_report(asof=request.args.get("asof"), force=False)
+        NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Daily Target Report"
+        title_fill = PatternFill("solid", fgColor="000000")
+        title_font = Font(bold=True, color="FFFFFF", size=12)
+        grp_fill = PatternFill("solid", fgColor="E7D19A")
+        head_fill = PatternFill("solid", fgColor="C9DAF8")
+        total_fill = PatternFill("solid", fgColor="C9DAF8")
+        thin = Side(style="thin", color="CCCCCC")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        center = Alignment(horizontal="center", vertical="center")
+        n_cols = 9
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n_cols)
+        c = ws.cell(row=1, column=1, value="Daily Target Report - " + rep["asof_label"])
+        c.fill = title_fill; c.font = title_font; c.alignment = center
+        for col in range(1, n_cols + 1):
+            ws.cell(row=1, column=col).fill = title_fill
+
+        ws.merge_cells(start_row=2, start_column=1, end_row=3, end_column=1)
+        ws.cell(row=2, column=1, value="Channel")
+        ws.merge_cells(start_row=2, start_column=2, end_row=2, end_column=5)
+        ws.cell(row=2, column=2, value="Yesterday - " + rep["yesterday_label"])
+        ws.merge_cells(start_row=2, start_column=6, end_row=2, end_column=9)
+        ws.cell(row=2, column=6, value="Day Before - " + rep["day_before_label"])
+        sub = ["Projected", "Actual", "Short", "Achievement %"]
+        for k, h in enumerate(sub + sub):
+            ws.cell(row=3, column=2 + k, value=h)
+        for r_ in (2, 3):
+            for col in range(1, n_cols + 1):
+                cell = ws.cell(row=r_, column=col)
+                cell.fill = grp_fill if r_ == 2 else head_fill
+                cell.font = Font(bold=True)
+                cell.alignment = center
+                cell.border = border
+
+        def _put(row_i, base_col, blk, bold=False, fill=None):
+            p, a, s, ach = blk["projected"], blk["actual"], blk["short"], blk["ach"]
+            vals = [
+                round(p) if p is not None else "NA",
+                round(a),
+                round(s) if s is not None else "",
+                ach if ach is not None else "",
+            ]
+            for k, v in enumerate(vals):
+                cell = ws.cell(row=row_i, column=base_col + k, value=v)
+                if k < 3 and isinstance(v, (int, float)):
+                    cell.number_format = NUM_FMT
+                if k == 3 and isinstance(v, (int, float)):
+                    cell.number_format = '0.0"%"'
+                    cell.font = Font(bold=True, color=("2F7D32" if v >= 100 else ("D98200" if v >= 70 else "C62828")))
+                elif bold:
+                    cell.font = Font(bold=True)
+                cell.border = border
+                if fill:
+                    cell.fill = fill
+
+        r_idx = 4
+        for r in rep["rows"]:
+            cell = ws.cell(row=r_idx, column=1, value=r["channel"])
+            cell.font = Font(bold=True); cell.border = border
+            _put(r_idx, 2, r["yesterday"])
+            _put(r_idx, 6, r["day_before"])
+            r_idx += 1
+        cell = ws.cell(row=r_idx, column=1, value="TOTAL")
+        cell.font = Font(bold=True); cell.fill = total_fill; cell.border = border
+        _put(r_idx, 2, rep["totals"]["yesterday"], bold=True, fill=total_fill)
+        _put(r_idx, 6, rep["totals"]["day_before"], bold=True, fill=total_fill)
+
+        widths = [22, 14, 14, 14, 15, 14, 14, 14, 15]
+        for i, w in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+        ws.freeze_panes = "B4"
+
+        bio = io.BytesIO()
+        wb.save(bio); bio.seek(0)
+        fname = "daily_target_report_" + rep["asof"] + ".xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = "attachment; filename=" + fname
+        return resp
+    except Exception as e:
+        return jsonify({"error": f"daily target report excel export failed: {e}"}), 500
 
 
 def _build_daily_revenue_glimpse(force=False):
