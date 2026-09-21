@@ -463,6 +463,18 @@ INV_LIVE_GID = os.environ.get("INV_LIVE_GID", "721993413").strip()   # Final
 INV_URL   = os.environ.get("INV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv").strip()
 COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
 COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
+# Historical sales are stored beside this script by default. Railway/GitHub
+# deployments can override the location with HISTORICAL_SALES_XLSX. The two
+# sources never overlap: Excel is authoritative before 2026-04-01 (FY26-27),
+# while the live COSA feeds are authoritative from that date onward.
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+HISTORICAL_SALES_XLSX = os.environ.get(
+    "HISTORICAL_SALES_XLSX",
+    os.path.join(_APP_DIR, "fy23-26.xlsx"),
+).strip()
+if HISTORICAL_SALES_XLSX and not os.path.isabs(HISTORICAL_SALES_XLSX):
+    HISTORICAL_SALES_XLSX = os.path.join(_APP_DIR, HISTORICAL_SALES_XLSX)
+HISTORICAL_SALES_CUTOFF = "2026-04-01"
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
 TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
 MYNTRA_SALES_URL = os.environ.get("MYNTRA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1751797609&single=true&output=csv")
@@ -1526,6 +1538,69 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     raise last_err
 
 
+def _merge_historical_sales(live_frame, date_candidates, debug=None, source_name="COSA"):
+    """Partition sales cleanly at FY26-27 and prepend the Excel history.
+
+    The workbook uses the dashboard's canonical COSA columns. Dispatch Date is
+    also the historical order-date proxy because the supplied archive contains
+    no separate Order Date field. Missing/unreadable history is non-fatal so a
+    deployment can still serve current live data, with the error exposed in the
+    existing debug payload/logs.
+    """
+    live_frame = live_frame if isinstance(live_frame, pd.DataFrame) else pd.DataFrame()
+    cutoff = pd.Timestamp(HISTORICAL_SALES_CUTOFF)
+    history_path = HISTORICAL_SALES_XLSX
+    if not history_path or not os.path.isfile(history_path):
+        msg = f"historical sales file not found: {history_path or '(not configured)'}"
+        if isinstance(debug, dict):
+            debug.setdefault("errors", []).append(msg)
+        print(msg)
+        return live_frame
+
+    try:
+        history = pd.read_excel(history_path, sheet_name=0, dtype=object)
+        history.columns = [str(c).strip() for c in history.columns]
+        hist_date_col = find_col(history.columns, "Dispatch Date", "dispatch date", "date")
+        if hist_date_col is None:
+            raise ValueError("Dispatch Date column is missing")
+
+        hist_dates = pd.to_datetime(history[hist_date_col], errors="coerce")
+        invalid_hist_dates = int(hist_dates.isna().sum())
+        history = history.loc[hist_dates.notna() & (hist_dates < cutoff)].copy()
+        history[hist_date_col] = hist_dates.loc[history.index]
+
+        live_date_col = find_col(live_frame.columns, *date_candidates)
+        if live_date_col is None:
+            raise ValueError(f"{source_name} date column is missing")
+        live_dates = pd.to_datetime(live_frame[live_date_col], errors="coerce")
+        # Bad/blank live dates are retained for legacy behaviour; every valid
+        # pre-cutoff live row is excluded because Excel owns that period.
+        live_current = live_frame.loc[live_dates.isna() | (live_dates >= cutoff)].copy()
+
+        # For order-date views, map the archive's Dispatch Date into the live
+        # feed's date column. All remaining canonical columns align by name.
+        if live_date_col != hist_date_col:
+            history[live_date_col] = history[hist_date_col]
+
+        combined = pd.concat([history, live_current], ignore_index=True, sort=False)
+        if isinstance(debug, dict):
+            debug.setdefault("historical_sales", {})[source_name] = {
+                "path": os.path.basename(history_path),
+                "cutoff": HISTORICAL_SALES_CUTOFF,
+                "historical_rows": int(len(history)),
+                "live_rows": int(len(live_current)),
+                "invalid_historical_dates_skipped": invalid_hist_dates,
+            }
+        del history, live_current
+        return combined
+    except Exception as exc:
+        msg = f"historical sales ({source_name}): {exc}"
+        if isinstance(debug, dict):
+            debug.setdefault("errors", []).append(msg)
+        print(msg)
+        return live_frame
+
+
 _DAILY_REPORT_MARKETPLACES = {"myntra", "nykaa", "amazon", "amazon fba", "flipkart", "ajio", "tata", "tata cliq"}
 
 def _daily_reporting_order_key(value):
@@ -2318,6 +2393,13 @@ def _refresh_data():
         _DF_REFS["inv"] = inv; _DF_REFS["cosa"] = cosa
         inv.columns   = [str(c).strip() for c in inv.columns]
         cosa.columns = [str(c).strip() for c in cosa.columns]
+        cosa = _merge_historical_sales(
+            cosa,
+            ("Dispatch Date", "dispatch date", "date"),
+            dbg,
+            "COSA dispatch-date",
+        )
+        _DF_REFS["cosa"] = cosa
     except Exception as e:
         dbg["errors"].append(f"load: {e}")
         CACHE["debug"] = dbg
@@ -3223,8 +3305,17 @@ def _refresh_data():
     try:
         _wstage("fetching", "Downloading order-date sales sheet for Rakhi…")
         cosa_od = _fetch_csv_fresh(COSA_ORDERDATE_URL)
-        _DF_REFS["cosa_orderdate"] = cosa_od
         cosa_od.columns = [str(c).strip() for c in cosa_od.columns]
+        cosa_od = _merge_historical_sales(
+            cosa_od,
+            (
+                "cossa_orderdate", "cosa_orderdate", "Cossa Order Date", "COSA Order Date",
+                "Order Date", "order date", "orderdate",
+            ),
+            dbg,
+            "cossa_orderdate",
+        )
+        _DF_REFS["cosa_orderdate"] = cosa_od
         od_cols = list(cosa_od.columns)
         def _od_at(i): return od_cols[i] if len(od_cols) > i else None
 
