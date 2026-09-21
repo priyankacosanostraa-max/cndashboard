@@ -28791,12 +28791,14 @@ def _dtr_day_block(iso, daily):
         out[b] = {
             "projected": p, "actual": a,
             "short": (max(0.0, p - a) if p is not None else None),
-            "ach": (round(a / p * 100, 1) if p else None),
+            # Target tab display/export is capped at 100% even when actual
+            # exceeds the daily projection. Actual and Short stay unchanged.
+            "ach": (round(min(100.0, a / p * 100), 1) if p else None),
         }
     tot = {
         "projected": (tp if proj else None), "actual": ta,
         "short": (max(0.0, tp - ta) if proj else None),
-        "ach": (round(ta / tp * 100, 1) if proj and tp else None),
+        "ach": (round(min(100.0, ta / tp * 100), 1) if proj and tp else None),
     }
     return out, tot
 
