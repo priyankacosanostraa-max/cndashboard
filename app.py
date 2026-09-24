@@ -1,3 +1,11 @@
+# Cosa Nostraa — V24.32 (WEBSITE RETURNS · CURRENT MONTH KPIs)
+# - Website Returns tab ke top par naye 4 KPIs (current calendar month, filters se
+#   independent): Current Month Orders, Total Returns (+%), COD Returns (+%),
+#   Prepaid Returns (+%). Order = unique Website Display Order Code (Order Date se),
+#   Return = Website sheet return fields ya BlueDart RT/RD (order-level, ek baar).
+#   COD % = COD returns / COD orders, Prepaid % = Prepaid returns / Prepaid orders.
+# - Baaki Website Returns filters/tables/pie/exports aur koi tab change nahi.
+# ============================================================
 # Cosa Nostraa — V24.31 (TARGET TAB · QTY TARGET ADDED)
 # - Target tab ke teeno tables (Target vs Actual, Daily Revenue Glimpse, Daily
 #   Revenue Glimpse - Marketplace Sheet Sales) me ab Qty bhi dikhta hai: Qty Target
@@ -8399,6 +8407,9 @@ select.lg-in option{background:#fff;color:#1a1610}
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="loadWebsiteReturns(true)">Refresh Live Sheet</button>
       </div>
     </div>
+
+    <div class="ops-section-head" style="margin-top:14px"><div><div class="ops-section-title" id="wrMonthTitle">Current Month · Orders &amp; Returns</div><div class="small-note">Fixed to the current calendar month — not affected by the filters below. Orders = unique Website Display Order Code by Order Date. A return = Website sheet return fields or BlueDart RT/RD, counted once per order. COD / Prepaid % = that payment mode's returns ÷ that payment mode's orders.</div></div></div>
+    <div id="wrMonthKpis" class="ops-kpis" style="margin:0 0 14px"><div class="small-note">Loading current month…</div></div>
 
     <div class="filter-box" style="margin:12px 0 14px">
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;align-items:end">
@@ -20801,6 +20812,7 @@ function renderWebsiteReturnsOverview(data=_websiteReturnsOverview){
     if(donut)donut.innerHTML='<div class="small-note">Website order denominator has not loaded yet.</div>';
     return;
   }
+  renderWebsiteReturnsMonthKpis(data.month_summary);
   const s=data.summary||{};
   const total=Math.max(0,Number(s.total_orders||0));
   const actualReturned=Math.max(0,Number(s.returned_orders||0));
@@ -21021,6 +21033,7 @@ async function loadWebsiteReturnsOverview(force=false){
     if(seq!==_websiteReturnsOverviewSeq)return;
     const msg=escHtml(e?.message||e);
     if(donut)donut.innerHTML=`<div class="small-note">Could not load Website order denominator: ${msg}</div>`;
+    const _mk=_wrEl('wrMonthKpis');if(_mk&&!_websiteReturnsOverview)_mk.innerHTML=`<div class="small-note">Could not load current month KPIs: ${msg}</div>`;
     const n=_wrEl('wrOrderSummaryNote');if(n)n.textContent='Website order-level summary failed to load. Return analysis may still be available; retry Refresh Live Sheet.';
   }finally{
     if(seq===_websiteReturnsOverviewSeq){
@@ -21108,6 +21121,23 @@ function _wrSetDatalist(id, values){
 }
 function _wrKpi(label,value,sub){
   return `<div class="ops-kpi"><div class="ops-kpi-label">${escHtml(label)}</div><div class="ops-kpi-value">${escHtml(String(value))}</div><div class="ops-kpi-sub">${escHtml(sub||'')}</div></div>`;
+}
+function _wrKpiPct(label,count,pctText,sub){
+  return `<div class="ops-kpi"><div class="ops-kpi-label">${escHtml(label)}</div><div class="ops-kpi-value">${escHtml(String(count))} <span style="font-size:17px;font-weight:700;color:#8b3f23;white-space:nowrap">(${escHtml(pctText)})</span></div><div class="ops-kpi-sub">${escHtml(sub||'')}</div></div>`;
+}
+function renderWebsiteReturnsMonthKpis(m){
+  const host=_wrEl('wrMonthKpis'); if(!host)return;
+  if(!m){host.innerHTML='<div class="small-note">Current month data is not available.</div>';return;}
+  const title=_wrEl('wrMonthTitle');
+  if(title)title.textContent=`Current Month · ${m.month_label||''} · Orders & Returns`;
+  const n=v=>Number(v||0).toLocaleString('en-IN');
+  const p=v=>Number(v||0).toFixed(1)+'%';
+  const uncO=Number(m.unclassified_orders||0), uncR=Number(m.unclassified_returns||0);
+  host.innerHTML=
+    _wrKpi('Current Month Orders',n(m.total_orders),`${m.range_label||''} · COD ${n(m.cod_orders)} · Prepaid ${n(m.prepaid_orders)}${uncO?` · Unclassified ${n(uncO)}`:''}`)+
+    _wrKpiPct('Total Returns',n(m.total_returns),p(m.total_return_pct),`of ${n(m.total_orders)} orders · COD ${n(m.cod_returns)} + Prepaid ${n(m.prepaid_returns)}${uncR?` + Unclassified ${n(uncR)}`:''}`)+
+    _wrKpiPct('COD Returns',n(m.cod_returns),p(m.cod_return_pct),`of ${n(m.cod_orders)} COD orders · ${p(m.cod_share_of_returns_pct)} of all returns`)+
+    _wrKpiPct('Prepaid Returns',n(m.prepaid_returns),p(m.prepaid_return_pct),`of ${n(m.prepaid_orders)} Prepaid orders · ${p(m.prepaid_share_of_returns_pct)} of all returns`);
 }
 function _wrPaymentMode(r){
   const m=_wrText(r?.payment_mode);
@@ -21369,7 +21399,7 @@ async function exportWebsiteReturnsCsv(){
     _dlCsv(headers,vals,'website_orders_filtered');
   }catch(e){alert('Website orders export failed: '+(e?.message||e));}
 }
-window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.renderWebsiteOrdersTable=renderWebsiteOrdersTable;window.websiteOrdersPage=websiteOrdersPage;window.websiteOrdersPageSizeChanged=websiteOrdersPageSizeChanged;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.websiteReturnsOrderDateChanged=websiteReturnsOrderDateChanged;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
+window.loadWebsiteReturns=loadWebsiteReturns;window.loadWebsiteReturnsOverview=loadWebsiteReturnsOverview;window.renderWebsiteReturns=renderWebsiteReturns;window.renderWebsiteReturnsOverview=renderWebsiteReturnsOverview;window.renderWebsiteReturnsMonthKpis=renderWebsiteReturnsMonthKpis;window.renderWebsiteReturnsAnalytics=renderWebsiteReturnsAnalytics;window.renderWebsiteOrdersTable=renderWebsiteOrdersTable;window.websiteOrdersPage=websiteOrdersPage;window.websiteOrdersPageSizeChanged=websiteOrdersPageSizeChanged;window.applyWebsiteReturnsFilters=applyWebsiteReturnsFilters;window.websiteReturnsOrderDateChanged=websiteReturnsOrderDateChanged;window.resetWebsiteReturnsFilters=resetWebsiteReturnsFilters;window.websiteReturnsApply_d=websiteReturnsApply_d;window.exportWebsiteReturnsCsv=exportWebsiteReturnsCsv;
 
 /* ── WEBSITE OOS AUDIT ──────────────────────────────────────────────────────
    Live Shopify availability + backend Inv Stock.  This tab intentionally does
@@ -26082,6 +26112,64 @@ def _wr_public_order(rec):
     return out
 
 
+def _wr_current_month_summary(orders):
+    """Current calendar month (IST) Website KPIs, independent of UI filters.
+
+    Order  = unique Website column-A Display Order Code, bucketed by its Order Date.
+    Return = rec["returned"] = Website sheet return fields OR BlueDart RT/RD
+             (already deduplicated per order, so one order counts once).
+    COD / Prepaid come from the order-level payment_mode. Return % for a payment
+    mode is returns / orders of that same mode; share % is of all returns.
+    """
+    today = now_ist()
+    month_key = today.strftime("%Y-%m")
+
+    def _pct(part, whole):
+        return round(part * 100.0 / whole, 1) if whole else 0.0
+
+    total = returned = 0
+    cod_orders = cod_returns = 0
+    prepaid_orders = prepaid_returns = 0
+    other_orders = other_returns = 0
+    for rec in orders or []:
+        od = str(rec.get("order_date") or "").strip()
+        od = _wr_iso_date(od) or od
+        if not od or od[:7] != month_key:
+            continue
+        is_ret = bool(rec.get("returned"))
+        mode = rec.get("payment_mode")
+        total += 1
+        returned += 1 if is_ret else 0
+        if mode == "COD":
+            cod_orders += 1
+            cod_returns += 1 if is_ret else 0
+        elif mode == "Prepaid":
+            prepaid_orders += 1
+            prepaid_returns += 1 if is_ret else 0
+        else:
+            other_orders += 1
+            other_returns += 1 if is_ret else 0
+
+    return {
+        "month_key": month_key,
+        "month_label": today.strftime("%b %Y"),
+        "range_label": f"1\u2013{today.day} {today.strftime('%b %Y')}",
+        "total_orders": total,
+        "total_returns": returned,
+        "total_return_pct": _pct(returned, total),
+        "cod_orders": cod_orders,
+        "cod_returns": cod_returns,
+        "cod_return_pct": _pct(cod_returns, cod_orders),
+        "cod_share_of_returns_pct": _pct(cod_returns, returned),
+        "prepaid_orders": prepaid_orders,
+        "prepaid_returns": prepaid_returns,
+        "prepaid_return_pct": _pct(prepaid_returns, prepaid_orders),
+        "prepaid_share_of_returns_pct": _pct(prepaid_returns, returned),
+        "unclassified_orders": other_orders,
+        "unclassified_returns": other_returns,
+    }
+
+
 def _website_returns_overview_payload(force=False):
     """Return the order-level Website denominator under the active UI filters.
 
@@ -26370,6 +26458,7 @@ def _website_returns_overview_payload(force=False):
     ))
 
     return {
+        "month_summary": _wr_current_month_summary(orders),
         "summary": {
             "total_orders": total_orders,
             "returned_orders": len(returned),
