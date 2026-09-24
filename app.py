@@ -1,3 +1,13 @@
+# Cosa Nostraa — V24.31 (TARGET TAB · QTY TARGET ADDED)
+# - Target tab ke teeno tables (Target vs Actual, Daily Revenue Glimpse, Daily
+#   Revenue Glimpse - Marketplace Sheet Sales) me ab Qty bhi dikhta hai: Qty Target
+#   (Target sheet ke "Qty Target" column se) + Qty Achieved/Short/Achievement/
+#   Projected; glimpse tables me YTD / Last Month / This Month / Day Before /
+#   Yesterday Qty + This Month Qty Target + Qty Achievement %.
+# - Daily Target Report (projected vs actual) table untouched. Revenue logic
+#   aur baaki koi feature change nahi kiya. CSV / Excel exports me Qty columns
+#   sabse right side me add hue hain (purane columns ki position same).
+# ============================================================
 # Cosa Nostraa — V24.30 (TARGET TAB · NEW DAILY TARGET REPORT)
 # - Target tab me naya "Daily Target Report" table: channel-wise Projected vs
 #   Actual vs Short vs Achievement % for Yesterday aur Day Before, CSV + Excel export.
@@ -15213,6 +15223,7 @@ function renderTargetTable(){
   }
   const t = d.totals || {};
   const monLabel = d.month_label || d.month_selected || '';
+  const fmtQ = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
 
   // ── 1) Achievement Forecast (overall, this month) ──
   const pctNow = t.pct_achieved || 0;
@@ -15226,6 +15237,18 @@ function renderTargetTable(){
     ? `Day ${d.day_elapsed} of ${d.days_in_month} — projection at current pace.`
     : `Month complete (${d.days_in_month} days).`;
 
+  // Qty (Target sheet "Qty Target") — same achieved / projected view as revenue
+  const qTgtTot = Number(t.qty_target) || 0;
+  const qPctNow = t.qty_pct || 0;
+  const qPctProj = t.proj_qty_pct || 0;
+  const qNowCls = qPctNow >= 100 ? 'green' : qPctNow >= 50 ? 'orange' : 'red';
+  const qProjCls = qPctProj >= 100 ? 'green' : qPctProj >= 80 ? 'orange' : 'red';
+  const qtyNowLine = qTgtTot
+    ? `Qty: <b>${fmtQ(t.qty_actual)}</b> of ${fmtQ(qTgtTot)} target &nbsp;•&nbsp; <span class="${qNowCls}" style="font-weight:900">${qPctNow}%</span>`
+    : `Qty: <b>${fmtQ(t.qty_actual)}</b> sold &nbsp;•&nbsp; Qty target NA`;
+  const qtyProjLine = `Qty projected: <b>${fmtQ(t.proj_qty)}</b>` +
+    (qTgtTot ? ` &nbsp;•&nbsp; <span class="${qProjCls}" style="font-weight:900">${qPctProj}%</span>` : '');
+
   const forecastBlock = `
     <p class="home-sec-label" style="margin-top:6px">Achievement Forecast — ${escHtml(monLabel)}</p>
     <div class="yoy-grid" style="margin-bottom:8px">
@@ -15233,12 +15256,14 @@ function renderTargetTable(){
         <div class="yc-label">Achieved so far</div>
         <div class="yc-val ${nowCls==='green'?'':''}">${fmt(t.sp_actual||0)}</div>
         <div class="yc-sub">of ${fmt(t.sp_target||0)} target &nbsp;•&nbsp; <span class="${nowCls}" style="font-weight:900">${pctNow}%</span></div>
+        <div class="yc-sub" style="margin-top:6px">${qtyNowLine}</div>
       </div>
       <div class="yoy-card">
         <div class="yc-label">Projected (month end)</div>
         <div class="yc-val">${fmt(t.proj_rev||0)}</div>
         <div class="yc-delta ${pctProj>=100?'up':'down'}">${pctProj}% projected</div>
         <div class="yc-sub" style="margin-top:8px"><b class="${projCls}">${verdict}</b><br>${paceNote}</div>
+        <div class="yc-sub" style="margin-top:6px">${qtyProjLine}</div>
       </div>
     </div>`;
 
@@ -15251,6 +15276,25 @@ function renderTargetTable(){
     const projCls2 = proj >= 100 ? 'green' : proj >= 80 ? 'orange' : 'red';
     const medal = L.rank === 1 ? '🥇' : L.rank === 2 ? '🥈' : L.rank === 3 ? '🥉' : L.rank;
     const barW = Math.max(2, Math.min(100, pct));
+    // Qty columns (Target sheet Qty Target vs sold qty)
+    const qT = Number(L.qty_target) || 0, qA = Number(L.qty_actual) || 0;
+    const qShort = (L.qty_short != null) ? Number(L.qty_short) : (qT - qA);
+    const qPct = L.qty_pct || 0, qProj = L.proj_qty_pct || 0;
+    const qPctCls = qPct >= 100 ? 'green' : qPct >= 50 ? 'orange' : 'red';
+    const qProjCls2 = qProj >= 100 ? 'green' : qProj >= 80 ? 'orange' : 'red';
+    const qBarW = Math.max(2, Math.min(100, qPct));
+    const qtyCells = `
+      <td style="border-left:2px solid var(--cn-gold)">${qT ? fmtQ(qT) : 'NA'}</td>
+      <td>${fmtQ(qA)}</td>
+      <td class="${qT ? (qShort>0?'red':'green') : ''}" style="font-weight:800">${qT ? (qShort>0 ? fmtQ(qShort) : '✓ Met') : '—'}</td>
+      <td style="min-width:160px">${qT ? `
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:8px;background:#eee3cf;border-radius:6px;overflow:hidden">
+            <div style="width:${qBarW}%;height:100%;background:linear-gradient(90deg,var(--cn-gold2),var(--cn-gold))"></div>
+          </div>
+          <span class="${qPctCls}" style="font-weight:900;min-width:46px;text-align:right">${qPct}%</span>
+        </div>` : '—'}</td>
+      <td class="${qT ? qProjCls2 : ''}" style="font-weight:800">${qT ? qProj + '%' : '—'}</td>`;
     return `<tr>
       <td style="text-align:center;font-weight:900;font-size:1.05rem">${medal}</td>
       <td style="font-weight:800">${escHtml(L.stakeholder)}</td>
@@ -15267,16 +15311,18 @@ function renderTargetTable(){
         </div>
       </td>
       <td class="${projCls2}" style="font-weight:800">${proj}%</td>
+      ${qtyCells}
     </tr>`;
   }).join('');
 
   const lbBlock = lb.length ? `
     <p class="home-sec-label" style="margin-top:18px">Stakeholder Leaderboard — ${escHtml(monLabel)}</p>
     <div class="ro-table-wrap" style="padding:0;overflow-x:auto">
-      <table class="ro" style="width:100%;min-width:760px">
+      <table class="ro" style="width:100%;min-width:1500px">
         <thead><tr>
           <th style="width:50px;text-align:center">#</th><th>Stake Holder</th><th>Channel</th>
           <th>Target</th><th>Achieved</th><th>Short</th><th>Achievement</th><th>Projected</th>
+          <th style="border-left:2px solid var(--cn-gold)">Qty Target</th><th>Qty Achieved</th><th>Qty Short</th><th>Qty Achievement</th><th>Qty Projected</th>
         </tr></thead>
         <tbody>${lbRows}</tbody>
       </table>
@@ -15287,12 +15333,17 @@ function renderTargetTable(){
 function exportTarget(){
   const d = _tgtData;
   if (!d || !d.leaderboard || !d.leaderboard.length){ alert('No target data to export.'); return; }
-  const headers = ['Rank','Stake Holder','Channel','SP Target','SP Achieved','SP Short','% Achieved','% Projected'];
+  const headers = ['Rank','Stake Holder','Channel','SP Target','SP Achieved','SP Short','% Achieved','% Projected',
+    'Qty Target','Qty Achieved','Qty Short','% Qty Achieved','% Qty Projected'];
   const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, marketplaceDisplayText(L.channel||''), Math.round(L.sp_target),
-    Math.round(L.sp_actual), Math.round(L.sp_short), L.pct_achieved, L.proj_pct]);
+    Math.round(L.sp_actual), Math.round(L.sp_short), L.pct_achieved, L.proj_pct,
+    Math.round(L.qty_target||0), Math.round(L.qty_actual||0), Math.round(L.qty_short||0),
+    L.qty_target ? (L.qty_pct||0) : '', L.qty_target ? (L.proj_qty_pct||0) : '']);
   const t = d.totals||{};
   rows.push(['', 'TOTAL', '', Math.round(t.sp_target||0), Math.round(t.sp_actual||0),
-    Math.round(t.sp_short||0), t.pct_achieved||0, t.proj_pct||0]);
+    Math.round(t.sp_short||0), t.pct_achieved||0, t.proj_pct||0,
+    Math.round(t.qty_target||0), Math.round(t.qty_actual||0), Math.round(t.qty_short||0),
+    t.qty_target ? (t.qty_pct||0) : '', t.qty_target ? (t.proj_qty_pct||0) : '']);
   const csv = [headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -15314,15 +15365,36 @@ function _targetMergeAmazonRows(rows){
   (Array.isArray(rows) ? rows : []).forEach(r => {
     if (!isAmazon(r && r.channel)){ out.push(r); return; }
     if (!amazonRow){ amazonRow = Object.assign({}, r, {channel:'Amazon'}); out.push(amazonRow); return; }
-    ['ytd','last_month','mtd','day_before','yesterday','mtd_target'].forEach(k => {
+    ['ytd','last_month','mtd','day_before','yesterday','mtd_target',
+     'ytd_qty','last_month_qty','mtd_qty','day_before_qty','yesterday_qty','mtd_qty_target'].forEach(k => {
       amazonRow[k] = Number(amazonRow[k]||0) + Number(r[k]||0);
     });
   });
   if (amazonRow){
     amazonRow.mtd_achievement = Number(amazonRow.mtd_target||0)
       ? Math.round((Number(amazonRow.mtd||0) / Number(amazonRow.mtd_target||0) * 100) * 10) / 10 : 0;
+    amazonRow.mtd_qty_achievement = Number(amazonRow.mtd_qty_target||0)
+      ? Math.round((Number(amazonRow.mtd_qty||0) / Number(amazonRow.mtd_qty_target||0) * 100) * 10) / 10 : 0;
   }
   return out;
+}
+/* Qty columns shared by both Daily Revenue Glimpse tables (right of the revenue columns) */
+const _DRG_QTY_HEAD = '<th style="border-left:2px solid var(--cn-gold)">YTD Qty</th><th>Last Month Qty</th><th>This Month Qty</th>' +
+  '<th>Day Before Qty</th><th>Yesterday Qty</th><th>This Month Qty Target</th><th>Qty Achievement %</th>';
+function _drgQtyCells(r, pctCell){
+  const n = (v) => drgFmtNum(v || 0);
+  return `<td style="border-left:2px solid var(--cn-gold);font-weight:800">${n(r.ytd_qty)}</td>
+      <td>${n(r.last_month_qty)}</td>
+      <td style="font-weight:800">${n(r.mtd_qty)}</td>
+      <td>${n(r.day_before_qty)}</td>
+      <td>${n(r.yesterday_qty)}</td>
+      <td>${r.mtd_qty_target ? n(r.mtd_qty_target) : 'NA'}</td>
+      <td>${pctCell(r.mtd_qty_target, r.mtd_qty_achievement)}</td>`;
+}
+function _drgQtyCsvCells(r){
+  return [drgFmtNum(r.ytd_qty||0), drgFmtNum(r.last_month_qty||0), drgFmtNum(r.mtd_qty||0),
+    drgFmtNum(r.day_before_qty||0), drgFmtNum(r.yesterday_qty||0),
+    r.mtd_qty_target ? drgFmtNum(r.mtd_qty_target) : 'NA', r.mtd_qty_target ? (r.mtd_qty_achievement||0) : ''];
 }
 let _drgData = null;
 function loadDRG(force=false){
@@ -15374,6 +15446,7 @@ function renderDRGTable(){
       <td>${fmt(r.yesterday)}</td>
       <td>${r.mtd_target ? fmt(r.mtd_target) : 'NA'}</td>
       <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
+      ${_drgQtyCells(r, pctCell)}
     </tr>`).join('');
   const totalRow = `<tr style="background:#eef7ea;font-weight:900">
       <td>TOTAL</td>
@@ -15384,6 +15457,7 @@ function renderDRGTable(){
       <td>${fmt(t.yesterday)}</td>
       <td>${t.mtd_target ? fmt(t.mtd_target) : 'NA'}</td>
       <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
+      ${_drgQtyCells(t, pctCell)}
     </tr>`;
   host.innerHTML = `
     <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
@@ -15391,10 +15465,11 @@ function renderDRGTable(){
       &nbsp;•&nbsp; This Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; Day Before: ${escHtml(d.day_before_label||'')}
       &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
-    <table class="ro" style="width:100%;min-width:920px">
+    <table class="ro" style="width:100%;min-width:1640px">
       <thead><tr>
         <th>Channel</th><th>YTD</th><th>Last Month</th><th>This Month</th>
         <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th>
+        ${_DRG_QTY_HEAD}
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
@@ -15402,13 +15477,14 @@ function renderDRGTable(){
 function exportDRG(){
   const d = _drgData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %'];
-  const titleRow = [d.title_date || '', '', '', '', '', '', '', ''];
+  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %',
+    'YTD Qty','Last Month Qty','This Month Qty','Day Before Qty','Yesterday Qty','This Month Qty Target','Qty Achievement %'];
+  const titleRow = [d.title_date || '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
   const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
-    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : '']);
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : ''].concat(_drgQtyCsvCells(r)));
   const t = d.totals||{};
   rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
-    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : '']);
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : ''].concat(_drgQtyCsvCells(t)));
   const csv = [titleRow, headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -15461,6 +15537,7 @@ function renderDRGMarketplaceTable(){
       <td>${fmt(r.yesterday)}</td>
       <td>${r.mtd_target ? fmt(r.mtd_target) : 'NA'}</td>
       <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
+      ${_drgQtyCells(r, pctCell)}
     </tr>`).join('');
   const totalRow = `<tr style="background:#eef7ea;font-weight:900">
       <td>TOTAL</td>
@@ -15471,6 +15548,7 @@ function renderDRGMarketplaceTable(){
       <td>${fmt(t.yesterday)}</td>
       <td>${t.mtd_target ? fmt(t.mtd_target) : 'NA'}</td>
       <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
+      ${_drgQtyCells(t, pctCell)}
     </tr>`;
   const warnings = Array.isArray(d.source_errors) && d.source_errors.length
     ? `<p style="color:#a33;font-size:.75rem;margin:6px 0 10px"><b>Source warning:</b> ${d.source_errors.map(escHtml).join(' | ')}</p>`
@@ -15485,10 +15563,11 @@ function renderDRGMarketplaceTable(){
       Price source: Website S (Total Price), Amazon = merged cossa_orderdate H (standard Amazon + former FBA), Flipkart R, Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
     </p>
     ${warnings}
-    <table class="ro" style="width:100%;min-width:920px">
+    <table class="ro" style="width:100%;min-width:1640px">
       <thead><tr>
         <th>Channel</th><th>YTD</th><th>Last Month</th><th>This Month</th>
         <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th>
+        ${_DRG_QTY_HEAD}
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
@@ -15496,13 +15575,14 @@ function renderDRGMarketplaceTable(){
 function exportDRGMarketplace(){
   const d = _drgMarketplaceData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %'];
-  const titleRow = [d.title_date || '', '', '', '', '', '', '', ''];
+  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %',
+    'YTD Qty','Last Month Qty','This Month Qty','Day Before Qty','Yesterday Qty','This Month Qty Target','Qty Achievement %'];
+  const titleRow = [d.title_date || '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
   const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
-    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : '']);
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : ''].concat(_drgQtyCsvCells(r)));
   const t = d.totals||{};
   rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
-    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : '']);
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : ''].concat(_drgQtyCsvCells(t)));
   const csv = [titleRow, headers].concat(rows).map(r => r.map(c => {
     const st = String(c==null?'':c);
     return /[",\n]/.test(st) ? '"'+st.replace(/"/g,'""')+'"' : st;
@@ -27455,30 +27535,38 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
         # Forecast: current pace se mahine ke end tak projected revenue + %.
         proj_rev = actual_rev * pace if pace else actual_rev
         proj_pct = round((proj_rev / t["sp_target"] * 100), 1) if t["sp_target"] else 0.0
+        # Qty ke liye bhi wahi pace-projection + % (Target sheet ka Qty Target).
+        qty_pct = round((actual_qty / t["qty_target"] * 100), 1) if t["qty_target"] else 0.0
+        proj_qty = actual_qty * pace if pace else actual_qty
+        proj_qty_pct = round((proj_qty / t["qty_target"] * 100), 1) if t["qty_target"] else 0.0
         rows.append({
             "month": mk, "month_label": t["month_label"],
             "stakeholder": t["stakeholder"], "channel": t["channel"],
             "qty_target": t["qty_target"], "qty_actual": actual_qty, "qty_short": qty_short,
             "sp_target": t["sp_target"], "sp_actual": actual_rev, "sp_short": sp_short,
             "pct_achieved": pct, "proj_rev": proj_rev, "proj_pct": proj_pct,
+            "qty_pct": qty_pct, "proj_qty": proj_qty, "proj_qty_pct": proj_qty_pct,
         })
         # leaderboard aggregate (per stakeholder, all channels)
         L = lb.setdefault(t["stakeholder"], {"stakeholder": t["stakeholder"], "channels": set(),
-              "sp_target":0.0,"sp_actual":0.0,"qty_target":0.0,"qty_actual":0.0,"proj_rev":0.0})
+              "sp_target":0.0,"sp_actual":0.0,"qty_target":0.0,"qty_actual":0.0,"proj_rev":0.0,"proj_qty":0.0})
         if t.get("channel"):
             L["channels"].add(t["channel"])
         L["sp_target"] += t["sp_target"]; L["sp_actual"] += actual_rev
         L["qty_target"] += t["qty_target"]; L["qty_actual"] += actual_qty
         L["proj_rev"] += proj_rev
+        L["proj_qty"] += proj_qty
 
     # Totals
     tot = {"qty_target":0.0,"qty_actual":0.0,"qty_short":0.0,
-           "sp_target":0.0,"sp_actual":0.0,"sp_short":0.0,"proj_rev":0.0}
+           "sp_target":0.0,"sp_actual":0.0,"sp_short":0.0,"proj_rev":0.0,"proj_qty":0.0}
     for r in rows:
-        for k in ("qty_target","qty_actual","qty_short","sp_target","sp_actual","sp_short","proj_rev"):
+        for k in ("qty_target","qty_actual","qty_short","sp_target","sp_actual","sp_short","proj_rev","proj_qty"):
             tot[k] += r[k]
     tot["pct_achieved"] = round((tot["sp_actual"]/tot["sp_target"]*100),1) if tot["sp_target"] else 0.0
     tot["proj_pct"] = round((tot["proj_rev"]/tot["sp_target"]*100),1) if tot["sp_target"] else 0.0
+    tot["qty_pct"] = round((tot["qty_actual"]/tot["qty_target"]*100),1) if tot["qty_target"] else 0.0
+    tot["proj_qty_pct"] = round((tot["proj_qty"]/tot["qty_target"]*100),1) if tot["qty_target"] else 0.0
 
     # Leaderboard finalize + rank (by % achieved)
     leaderboard = []
@@ -27490,14 +27578,22 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
             # his individual target channels. Target (sp_target)/Qty untouched.
             L.pop("channels", None)
             L["channel"] = "Marketplace"
-            mp_actual = act.get((month_filter, "marketplace"), {"rev": 0.0, "qty": 0.0})["rev"]
+            _mp_slot = act.get((month_filter, "marketplace"), {"rev": 0.0, "qty": 0.0})
+            mp_actual = _mp_slot["rev"]
             L["sp_actual"] = mp_actual
             L["proj_rev"] = mp_actual * pace if pace else mp_actual
+            # Qty achieved bhi usi Marketplace bucket se (revenue jaisa hi rule).
+            mp_qty = _mp_slot["qty"]
+            L["qty_actual"] = mp_qty
+            L["proj_qty"] = mp_qty * pace if pace else mp_qty
         else:
             L["channel"] = ", ".join(sorted(L.pop("channels"))) if L.get("channels") else "—"
         L["pct_achieved"] = round((L["sp_actual"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["proj_pct"] = round((L["proj_rev"]/L["sp_target"]*100),1) if L["sp_target"] else 0.0
         L["sp_short"] = L["sp_target"] - L["sp_actual"]
+        L["qty_pct"] = round((L["qty_actual"]/L["qty_target"]*100),1) if L["qty_target"] else 0.0
+        L["proj_qty_pct"] = round((L["proj_qty"]/L["qty_target"]*100),1) if L["qty_target"] else 0.0
+        L["qty_short"] = L["qty_target"] - L["qty_actual"]
         leaderboard.append(L)
     leaderboard.sort(key=lambda x: x["pct_achieved"], reverse=True)
     for i, L in enumerate(leaderboard): L["rank"] = i + 1
@@ -28162,6 +28258,10 @@ def _fetch_drg_source_rows(force=False):
             continue
         rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
         selling_price = to_num(r.get(C_SP, 0)) if C_SP else 0.0
+        # Qty = cossa_orderdate Final Qty (same column the rest of the app uses).
+        row_qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
+        if not (-100000 <= row_qty <= 100000):
+            row_qty = 0.0
         raw_cust_value = r.get(C_CUST, "Unknown") if C_CUST else "Unknown"
         raw_type_value = r.get(C_TYPE, "Regular") if C_TYPE else "Regular"
         raw_amazon_fba = _is_amazon_fba_value(raw_cust_value, raw_type_value)
@@ -28183,6 +28283,7 @@ def _fetch_drg_source_rows(force=False):
         out.append({
             "date": dt.strftime("%Y-%m-%d"),
             "rev": rev,
+            "qty": float(row_qty),
             "sp": selling_price,
             "channel": channel,
             "sub_channel": sub_channel,
@@ -28208,13 +28309,15 @@ def _fetch_drg_source_rows(force=False):
                 ("Dispatch Date", "Date"),
                 ("Net Revenue", "NetRevenue", "net rev", "Revenue"),
                 ("Customer Name", "Customer", "Client", "Party"),
+                ("Final Qty", "final quantity", "final_qty"),
             ],
-            select_positions=[0, 8, 9],
+            select_positions=[0, 6, 8, 9],
         )
         bdf.columns = [str(c).strip() for c in bdf.columns]
         b_date = _drg_source_position_col(bdf, 0) or find_col(bdf.columns, "Dispatch Date", "Date")
         b_rev = find_col(bdf.columns, "Net Revenue", "NetRevenue", "net rev", "Revenue") or _drg_source_position_col(bdf, 8)
         b_cust = find_col(bdf.columns, "Customer Name", "Customer", "Client", "Party") or _drg_source_position_col(bdf, 9)
+        b_qty = find_col(bdf.columns, "Final Qty", "final quantity", "final_qty") or _drg_source_position_col(bdf, 6)
         for row in _df_chunks(bdf):
             customer = clean(row.get(b_cust, "")) if b_cust else ""
             if "blinkit" not in customer.casefold():
@@ -28223,10 +28326,13 @@ def _fetch_drg_source_rows(force=False):
             if dt is None:
                 continue
             rev = to_num(row.get(b_rev, 0)) if b_rev else 0.0
-            if rev == 0:
+            b_row_qty = to_num(row.get(b_qty, 0)) if b_qty else 0.0
+            if not (-100000 <= b_row_qty <= 100000):
+                b_row_qty = 0.0
+            if rev == 0 and b_row_qty == 0:
                 continue
             out.append({
-                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev),
+                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty),
                 "channel": "", "sub_channel": "", "type": "Blinkit", "customer": customer,
             })
     except Exception:
@@ -28412,6 +28518,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
                 rev = to_num(row.get(price_col, 0))
                 if rev == 0:
                     continue
+                # Qty follows exactly the same row inclusion as revenue above
+                # (cancelled rows already skipped). No qty column -> 1 per line.
+                row_qty = max(0.0, to_num(row.get(qty_col, 0))) if qty_col else 1.0
 
                 bucket = spec.get("fixed_bucket") or ""
                 if not bucket:
@@ -28427,7 +28536,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
                 if allowed_buckets and bucket not in allowed_buckets:
                     continue
 
-                out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "bucket": bucket})
+                out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(row_qty), "bucket": bucket})
                 source_meta["rows_used"] += 1
         except Exception as e:
             source_meta["error"] = str(e)[:240]
@@ -28456,7 +28565,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
         selling_price = float(to_num(entry.get("sp", 0)))
         if not dt_iso or selling_price == 0:
             continue
-        out.append({"date": dt_iso, "rev": selling_price, "bucket": "Amazon"})
+        out.append({"date": dt_iso, "rev": selling_price, "qty": float(entry.get("qty") or 0), "bucket": "Amazon"})
         amazon_extra_meta["rows_used"] += 1
 
     # Blinkit is intentionally sourced from the main COSA sheet, not from
@@ -28476,8 +28585,9 @@ def _fetch_drg_marketplace_source_rows(force=False):
                 ("Dispatch Date", "Date"),
                 ("Selling Price", "selling price", "SP"),
                 ("Customer Name", "Customer", "Client", "Party"),
+                ("Final Qty", "final quantity", "final_qty"),
             ],
-            select_positions=[0, 7, 9],
+            select_positions=[0, 6, 7, 9],
         )
         blinkit_frame.columns = [str(c).strip() for c in blinkit_frame.columns]
         blinkit_meta["rows_total"] = len(blinkit_frame)
@@ -28492,6 +28602,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
         if not b_customer or b_customer not in blinkit_frame.columns:
             b_customer = find_col(blinkit_frame.columns, "Customer Name", "Customer", "Client", "Party")
 
+        b_qty = find_col(blinkit_frame.columns, "Final Qty", "final quantity", "final_qty") or _drg_source_position_col(blinkit_frame, 6)
         blinkit_meta["date_column"] = str(b_date or "")
         blinkit_meta["price_header"] = str(b_price or "")
         blinkit_meta["customer_column"] = str(b_customer or "")
@@ -28512,7 +28623,10 @@ def _fetch_drg_marketplace_source_rows(force=False):
             rev = to_num(row.get(b_price, 0))
             if rev == 0:
                 continue
-            out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "bucket": "Blinkit"})
+            b_row_qty = to_num(row.get(b_qty, 0)) if b_qty else 0.0
+            if not (-100000 <= b_row_qty <= 100000):
+                b_row_qty = 0.0
+            out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty), "bucket": "Blinkit"})
             blinkit_meta["rows_used"] += 1
     except Exception as e:
         blinkit_meta["error"] = str(e)[:240]
@@ -28528,7 +28642,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         if bucket in named_buckets:
             continue
-        out.append({"date": e.get("date", ""), "rev": float(e.get("rev") or 0), "bucket": bucket})
+        out.append({"date": e.get("date", ""), "rev": float(e.get("rev") or 0), "qty": float(e.get("qty") or 0), "bucket": bucket})
         fallback_used += 1
     meta["Remaining channels"] = {
         "sheet": "cossa_orderdate", "price_column": "existing Net Revenue",
@@ -28561,7 +28675,9 @@ def _build_daily_revenue_glimpse_marketplace(force=False):
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
     today_iso = today_dt.strftime("%Y-%m-%d")
 
-    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
+    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0,
+                   "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0,
+                   "yesterday_qty": 0.0, "mtd_qty": 0.0}
                for b in _DRG_ROWS_ORDER}
     for e in src_rows:
         d = e.get("date")
@@ -28572,18 +28688,25 @@ def _build_daily_revenue_glimpse_marketplace(force=False):
             continue
         rev = float(e.get("rev") or 0)
         slot = buckets[b]
+        qty = float(e.get("qty") or 0)
         if fy_start_iso <= d <= today_iso:
             slot["ytd"] += rev
+            slot["ytd_qty"] += qty
         if d == yest_iso:
             slot["yesterday"] += rev
+            slot["yesterday_qty"] += qty
         if d == dbef_iso:
             slot["day_before"] += rev
+            slot["day_before_qty"] += qty
         if lm_start_iso <= d <= lm_end_iso:
             slot["last_month"] += rev
+            slot["last_month_qty"] += qty
         if cm_start_iso <= d <= today_iso:
             slot["mtd"] += rev
+            slot["mtd_qty"] += qty
 
     tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
+    tgt_qty = {b: 0.0 for b in _DRG_ROWS_ORDER}   # Target sheet "Qty Target" (same bucket mapping as SP target)
     for t in targets:
         if t.get("month") != cur_month:
             continue
@@ -28594,23 +28717,36 @@ def _build_daily_revenue_glimpse_marketplace(force=False):
                 matched = b
                 break
         tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
+        tgt_qty[matched if matched else _DRG_OTHER_BUCKET] += (t.get("qty_target") or 0.0)
 
     rows = []
-    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
+    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0,
+           "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0, "yesterday_qty": 0.0,
+           "mtd_qty": 0.0, "mtd_qty_target": 0.0}
     for b in _DRG_ROWS_ORDER:
         slot = buckets[b]
         mtd_target = tgt.get(b, 0.0)
+        mtd_qty_target = tgt_qty.get(b, 0.0)
+        ach_qty = round((slot["mtd_qty"] / mtd_qty_target * 100), 1) if mtd_qty_target else 0.0
         ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
         rows.append({
             "channel": _DRG_LABELS.get(b, b), "ytd": slot["ytd"],
             "last_month": slot["last_month"], "day_before": slot["day_before"],
             "yesterday": slot["yesterday"], "mtd": slot["mtd"],
             "mtd_target": mtd_target, "mtd_achievement": ach,
+            "ytd_qty": slot["ytd_qty"], "last_month_qty": slot["last_month_qty"],
+            "day_before_qty": slot["day_before_qty"], "yesterday_qty": slot["yesterday_qty"],
+            "mtd_qty": slot["mtd_qty"],
+            "mtd_qty_target": mtd_qty_target, "mtd_qty_achievement": ach_qty,
         })
         for key in ("ytd", "last_month", "day_before", "yesterday", "mtd"):
             tot[key] += slot[key]
         tot["mtd_target"] += mtd_target
+        for _qk in ("ytd_qty", "last_month_qty", "day_before_qty", "yesterday_qty", "mtd_qty"):
+            tot[_qk] += slot[_qk]
+        tot["mtd_qty_target"] += mtd_qty_target
     tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
+    tot["mtd_qty_achievement"] = round((tot["mtd_qty"] / tot["mtd_qty_target"] * 100), 1) if tot["mtd_qty_target"] else 0.0
     rows.sort(key=lambda r: r["ytd"], reverse=True)
 
     source_errors = [f"{name}: {m.get('error')}" for name, m in source_meta.items() if m.get("error")]
@@ -28968,7 +29104,9 @@ def _build_daily_revenue_glimpse(force=False):
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
     today_iso    = today_dt.strftime("%Y-%m-%d")
 
-    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0}
+    buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0,
+                   "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0,
+                   "yesterday_qty": 0.0, "mtd_qty": 0.0}
                for b in _DRG_ROWS_ORDER}
 
     for e in src_rows:
@@ -28980,19 +29118,26 @@ def _build_daily_revenue_glimpse(force=False):
         if _is_amazon_fba_value(b):
             b = "Amazon"
         slot = buckets[b]
+        qty = float(e.get("qty") or 0)
         if fy_start_iso <= d <= today_iso:
             slot["ytd"] += rev
+            slot["ytd_qty"] += qty
         if d == yest_iso:
             slot["yesterday"] += rev
+            slot["yesterday_qty"] += qty
         if d == dbef_iso:
             slot["day_before"] += rev
+            slot["day_before_qty"] += qty
         if lm_start_iso <= d <= lm_end_iso:
             slot["last_month"] += rev
+            slot["last_month_qty"] += qty
         if cm_start_iso <= d <= today_iso:
             slot["mtd"] += rev
+            slot["mtd_qty"] += qty
 
     # MTD Target: current month ke Target sheet rows ko bucket ke hisaab se jodo
     tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
+    tgt_qty = {b: 0.0 for b in _DRG_ROWS_ORDER}   # Target sheet "Qty Target" (same bucket mapping as SP target)
     for t in targets:
         if t["month"] != cur_month:
             continue
@@ -29003,12 +29148,17 @@ def _build_daily_revenue_glimpse(force=False):
                 matched = b
                 break
         tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
+        tgt_qty[matched if matched else _DRG_OTHER_BUCKET] += (t.get("qty_target") or 0.0)
 
     rows = []
-    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0}
+    tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0,
+           "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0, "yesterday_qty": 0.0,
+           "mtd_qty": 0.0, "mtd_qty_target": 0.0}
     for b in _DRG_ROWS_ORDER:
         slot = buckets[b]
         mtd_target = tgt.get(b, 0.0)
+        mtd_qty_target = tgt_qty.get(b, 0.0)
+        ach_qty = round((slot["mtd_qty"] / mtd_qty_target * 100), 1) if mtd_qty_target else 0.0
         ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
         rows.append({
             "channel": _DRG_LABELS.get(b, b),
@@ -29016,12 +29166,20 @@ def _build_daily_revenue_glimpse(force=False):
             "last_month": slot["last_month"], "day_before": slot["day_before"],
             "yesterday": slot["yesterday"], "mtd": slot["mtd"],
             "mtd_target": mtd_target, "mtd_achievement": ach,
+            "ytd_qty": slot["ytd_qty"], "last_month_qty": slot["last_month_qty"],
+            "day_before_qty": slot["day_before_qty"], "yesterday_qty": slot["yesterday_qty"],
+            "mtd_qty": slot["mtd_qty"],
+            "mtd_qty_target": mtd_qty_target, "mtd_qty_achievement": ach_qty,
         })
         tot["ytd"]        += slot["ytd"]
         tot["last_month"] += slot["last_month"]; tot["day_before"] += slot["day_before"]
         tot["yesterday"]  += slot["yesterday"];  tot["mtd"]        += slot["mtd"]
         tot["mtd_target"] += mtd_target
+        for _qk in ("ytd_qty", "last_month_qty", "day_before_qty", "yesterday_qty", "mtd_qty"):
+            tot[_qk] += slot[_qk]
+        tot["mtd_qty_target"] += mtd_qty_target
     tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
+    tot["mtd_qty_achievement"] = round((tot["mtd_qty"] / tot["mtd_qty_target"] * 100), 1) if tot["mtd_qty_target"] else 0.0
 
     # Max revenue wale channel sabse upar (YTD ke hisaab se descending sort)
     rows.sort(key=lambda r: r["ytd"], reverse=True)
@@ -30377,7 +30535,9 @@ def api_daily_revenue_glimpse_marketplace_export_xlsx():
         today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
         title_txt = today_dt.strftime("%d - %b - %Y")
         headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
-                   "Yesterday", "This Month Target", "Achievement %"]
+                   "Yesterday", "This Month Target", "Achievement %",
+                   "YTD Qty", "Last Month Qty", "This Month Qty", "Day Before Qty",
+                   "Yesterday Qty", "This Month Qty Target", "Qty Achievement %"]
         n_cols = len(headers)
         NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
 
@@ -30417,6 +30577,17 @@ def api_daily_revenue_glimpse_marketplace_export_xlsx():
             else:
                 ws.cell(row=r_idx, column=7, value="NA")
                 ws.cell(row=r_idx, column=8, value="")
+            ws.cell(row=r_idx, column=9, value=round(r.get("ytd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=10, value=round(r.get("last_month_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=11, value=round(r.get("mtd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=12, value=round(r.get("day_before_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=13, value=round(r.get("yesterday_qty", 0))).number_format = NUM_FMT
+            if r.get("mtd_qty_target"):
+                ws.cell(row=r_idx, column=14, value=round(r["mtd_qty_target"])).number_format = NUM_FMT
+                ws.cell(row=r_idx, column=15, value=r.get("mtd_qty_achievement", 0))
+            else:
+                ws.cell(row=r_idx, column=14, value="NA")
+                ws.cell(row=r_idx, column=15, value="")
             for col in range(1, n_cols + 1):
                 ws.cell(row=r_idx, column=col).border = border
             r_idx += 1
@@ -30433,11 +30604,22 @@ def api_daily_revenue_glimpse_marketplace_export_xlsx():
         else:
             ws.cell(row=r_idx, column=7, value="NA")
             ws.cell(row=r_idx, column=8, value="")
+        ws.cell(row=r_idx, column=9, value=round(tot.get("ytd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=10, value=round(tot.get("last_month_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=11, value=round(tot.get("mtd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=12, value=round(tot.get("day_before_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=13, value=round(tot.get("yesterday_qty", 0))).number_format = NUM_FMT
+        if tot.get("mtd_qty_target"):
+            ws.cell(row=r_idx, column=14, value=round(tot["mtd_qty_target"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=15, value=tot.get("mtd_qty_achievement", 0))
+        else:
+            ws.cell(row=r_idx, column=14, value="NA")
+            ws.cell(row=r_idx, column=15, value="")
         for col in range(1, n_cols + 1):
             cell = ws.cell(row=r_idx, column=col)
             cell.fill = total_fill; cell.font = total_font; cell.border = border
 
-        widths = [26, 14, 14, 14, 12, 12, 16, 14]
+        widths = [26, 14, 14, 14, 12, 12, 16, 14, 12, 14, 14, 14, 14, 18, 16]
         for i, width in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(i)].width = width
 
@@ -30467,7 +30649,9 @@ def api_daily_revenue_glimpse_export_xlsx():
         title_txt = today_dt.strftime("%d - %b - %Y")
 
         headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
-                   "Yesterday", "This Month Target", "Achievement %"]
+                   "Yesterday", "This Month Target", "Achievement %",
+                   "YTD Qty", "Last Month Qty", "This Month Qty", "Day Before Qty",
+                   "Yesterday Qty", "This Month Qty Target", "Qty Achievement %"]
         n_cols = len(headers)
         NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
 
@@ -30512,6 +30696,17 @@ def api_daily_revenue_glimpse_export_xlsx():
             else:
                 ws.cell(row=r_idx, column=7, value="NA")
                 ws.cell(row=r_idx, column=8, value="")
+            ws.cell(row=r_idx, column=9, value=round(r.get("ytd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=10, value=round(r.get("last_month_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=11, value=round(r.get("mtd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=12, value=round(r.get("day_before_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=13, value=round(r.get("yesterday_qty", 0))).number_format = NUM_FMT
+            if r.get("mtd_qty_target"):
+                ws.cell(row=r_idx, column=14, value=round(r["mtd_qty_target"])).number_format = NUM_FMT
+                ws.cell(row=r_idx, column=15, value=r.get("mtd_qty_achievement", 0))
+            else:
+                ws.cell(row=r_idx, column=14, value="NA")
+                ws.cell(row=r_idx, column=15, value="")
             for col in range(1, n_cols + 1):
                 ws.cell(row=r_idx, column=col).border = border
             r_idx += 1
@@ -30529,11 +30724,22 @@ def api_daily_revenue_glimpse_export_xlsx():
         else:
             ws.cell(row=r_idx, column=7, value="NA")
             ws.cell(row=r_idx, column=8, value="")
+        ws.cell(row=r_idx, column=9, value=round(tot.get("ytd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=10, value=round(tot.get("last_month_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=11, value=round(tot.get("mtd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=12, value=round(tot.get("day_before_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=13, value=round(tot.get("yesterday_qty", 0))).number_format = NUM_FMT
+        if tot.get("mtd_qty_target"):
+            ws.cell(row=r_idx, column=14, value=round(tot["mtd_qty_target"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=15, value=tot.get("mtd_qty_achievement", 0))
+        else:
+            ws.cell(row=r_idx, column=14, value="NA")
+            ws.cell(row=r_idx, column=15, value="")
         for col in range(1, n_cols + 1):
             cell = ws.cell(row=r_idx, column=col)
             cell.fill = total_fill; cell.font = total_font; cell.border = border
 
-        widths = [26, 14, 14, 14, 12, 12, 16, 14]
+        widths = [26, 14, 14, 14, 12, 12, 16, 14, 12, 14, 14, 14, 14, 18, 16]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
