@@ -7523,6 +7523,18 @@ body.cnx-large-data .ro-table-wrap,body.cnx-large-data .ops-table-wrap{box-shado
 .rel-compare-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin:15px 0}.rel-compare-chart{overflow:auto;border:1px solid rgba(123,91,33,.11);border-radius:16px;background:#fffefb}.rel-compare-chart svg{display:block;width:100%;min-width:720px;height:300px}.rel-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:9px;font-weight:850;color:#706553}.rel-legend span{display:inline-flex;align-items:center;gap:6px}.rel-legend i{width:10px;height:10px;border-radius:50%;display:inline-block}.rel-note{margin-top:10px;color:#847968;font-size:9px;font-weight:700;line-height:1.55}
 @media(max-width:700px){.sd-search-result{grid-template-columns:1fr auto}.sd-search-result .name{grid-column:1/-1;grid-row:2}.rel-compare-kpis{grid-template-columns:1fr 1fr}}
 
+/* Table headings: always one line (never wrapped or split). Only the cell text in the rows wraps where needed. */
+table th:not(#_h1):not(#_h2),
+table thead th:not(#_h1):not(#_h2){
+  white-space:nowrap !important;
+  overflow-wrap:normal !important;
+  word-break:keep-all !important;
+  hyphens:none !important;
+}
+/* Fixed-width layouts would clip a one-line heading, so let these size to their headings. */
+#prodContent table.prod-table:not(#_h1):not(#_h2),
+#vBulk table.bulk-table:not(#_h1):not(#_h2),
+.ops-page table.ops-table.ops-rank-table:not(#_h1):not(#_h2){table-layout:auto !important}
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -9328,44 +9340,47 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vSmartOps" class="ops-page" style="display:none">
     <div class="ops-head">
       <div>
-        <div class="ops-title">Stock Alerts &amp; Stock Age</div>
-        <div class="ops-sub">Important stock, sales, WIP, return and channel-target alerts, followed by stock age and unsold-stock value.</div>
+        <div class="ops-title">Stock Age</div>
+        <div class="ops-sub">How long each product has gone without a sale, along with its stock and WIP, followed by a high-sale / low-stock planning table.</div>
       </div>
       <div class="ops-actions">
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadSmartOps(true)">Refresh Live Support Data</button>
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportSmartAlerts()">Export Alerts</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadSmartOps(true)">Refresh</button>
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportInventoryAgeing()">Export Stock Age</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportStockSales()">Export Sales vs Stock</button>
       </div>
     </div>
 
     <div class="ops-section">
-      <div class="ops-section-head"><div class="ops-section-title">Stock Alerts</div></div>
+      <div class="ops-section-head"><div class="ops-section-title">Stock Age</div></div>
       <div class="ops-filters">
-        <div class="fc"><label class="fl">Alert</label><select class="fs" id="saType" onchange="renderSmartAlerts()"><option value="All">All Alerts</option><option value="OOS_7">Stockout within 7 Days</option><option value="HIGH_SALE_LOW_WIP">High Sales, Low WIP</option><option value="WIP_OLD">WIP Pending Too Long</option><option value="TARGET_BEHIND">Target Behind</option><option value="HIGH_RETURN">High Return Rate</option></select></div>
-        <div class="fc"><label class="fl">Product Group</label><select class="fs" id="saGroup" onchange="renderSmartAlerts()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="saTaxon" onchange="renderSmartAlerts()"><option value="All">All Categories</option></select></div>
-        <div class="fc"><label class="fl">Search</label><input class="fi" id="saSearch" placeholder="SKU / channel…" oninput="renderSmartAlerts_d()"></div>
-        <div class="fc"><label class="fl">WIP Pending For</label><select class="fs" id="saWipDays" onchange="renderSmartAlerts()"><option value="15">15+ Days</option><option value="30" selected>30+ Days</option><option value="45">45+ Days</option><option value="60">60+ Days</option></select></div>
+        <div class="fc"><label class="fl">Not Sold For</label><select class="fs" id="iaBucket" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="0-15">0–15 Days</option><option value="15-30">15–30 Days</option><option value="30-45">30–45 Days</option><option value="45-60">45–60 Days</option><option value="60-90">60–90 Days</option><option value="90+">90+ Days</option><option value="never">Never Sold</option></select></div>
+        <div class="fc"><label class="fl">Product Group</label><select class="fs" id="iaGroup" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Categories</option></select></div>
+        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing_d()"></div>
+        <div class="fc"><label class="fl">Products to Show</label><select class="fs" id="iaStockOnly" onchange="renderInventoryAgeing()"><option value="yes">Only Products with Stock</option><option value="all">Include Zero-Stock Products</option></select></div>
       </div>
-      <div id="saSummary" class="ops-kpis"></div>
-      <div id="saContent" class="ops-table-wrap"></div>
+      <div id="iaSummary" class="ops-kpis"></div>
+      <div id="iaContent" class="ops-table-wrap"></div>
+      <div class="ops-note">Launch Date is shown when available; otherwise the first date the product sold is shown (marked “First Sold Date”). Final Sold = Individual + In CMB. Stock Ageing = days since the product last sold, counting sales inside CMBs. “Never Sold” products have no sale on record.</div>
     </div>
 
     <div class="ops-divider"></div>
 
     <div class="ops-section">
-      <div class="ops-section-head"><div class="ops-section-title">Stock Age</div></div>
+      <div class="ops-section-head"><div class="ops-section-title">Sales vs Stock</div></div>
       <div class="ops-filters">
-        <div class="fc"><label class="fl">Stock Age</label><select class="fs" id="iaBucket" onchange="renderInventoryAgeing()"><option value="All">All Ages</option><option value="0-30">0–30 Days</option><option value="31-60">31–60 Days</option><option value="61-90">61–90 Days</option><option value="90+">90+ Days</option></select></div>
-        <div class="fc"><label class="fl">Product Group</label><select class="fs" id="iaGroup" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
-        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Categories</option></select></div>
-        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing_d()"></div>
-        <div class="fc"><label class="fl">Sales Activity</label><select class="fs" id="iaSaleActivity" onchange="renderInventoryAgeing()"><option value="all">All Products</option><option value="not60">Not Sold in Last 60 Days</option><option value="sold60">Sold in Last 60 Days</option></select></div>
-        <div class="fc"><label class="fl">Products to Show</label><select class="fs" id="iaStockOnly" onchange="renderInventoryAgeing()"><option value="yes">Only Products with Stock</option><option value="all">Include Zero-Stock Products</option></select></div>
+        <div class="fc"><label class="fl">Show</label><select class="fs" id="hsMode" onchange="renderStockSales()"><option value="HIGH_NO_WIP">High Sale, No WIP</option><option value="LOW_HIGH_STOCK">Low Sale, High Stock</option></select></div>
+        <div class="fc"><label class="fl">Sales Period</label><select class="fs" id="hsPeriod" onchange="renderStockSales()"><option value="7">Last 7 Days</option><option value="15">Last 15 Days</option><option value="30" selected>Last 30 Days</option><option value="all">All Time</option></select></div>
+        <div class="fc"><label class="fl">High Sale = Total Sold At Least</label><input class="fi" id="hsHighSale" type="number" min="0" value="10" oninput="renderStockSales_d()"></div>
+        <div class="fc"><label class="fl">Low Sale = Total Sold Up To</label><input class="fi" id="hsLowSale" type="number" min="0" value="2" oninput="renderStockSales_d()"></div>
+        <div class="fc"><label class="fl">High Stock = Stock At Least</label><input class="fi" id="hsHighStock" type="number" min="0" value="50" oninput="renderStockSales_d()"></div>
+        <div class="fc"><label class="fl">Product Group</label><select class="fs" id="hsGroup" onchange="renderStockSales()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
+        <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="hsTaxon" onchange="renderStockSales()"><option value="All">All Categories</option></select></div>
+        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="hsSearch" placeholder="Search SKU…" oninput="renderStockSales_d()"></div>
       </div>
-      <div id="iaSummary" class="ops-kpis"></div>
-      <div id="iaContent" class="ops-table-wrap"></div>
-      <div class="ops-note">Stock age uses the latest PPC-WIP receiving date when available, then Launch Date, then Last Sale Date. The 60-day sales filter uses each SKU's latest positive sale across all loaded sales data; products never sold are included under “Not Sold”. Stock value uses Cost, with MRP only when Cost is unavailable.</div>
+      <div id="hsSummary" class="ops-kpis"></div>
+      <div id="hsContent" class="ops-table-wrap"></div>
+      <div class="ops-note">High Sale, No WIP = Total Sold in the selected period is at or above the High Sale number and Inv WIP is zero. Low Sale, High Stock = Total Sold is at or below the Low Sale number and Inv Stock is at or above the High Stock number. Total Sold = Individual + In CMB for the selected period. Change the three numbers above to match your own definition of high and low.</div>
     </div>
   </div>
 
@@ -9707,7 +9722,7 @@ let roSortDir = -1;
 // blank All option used by Production) is mutually exclusive with categories.
 const CNX_CATEGORY_SELECT_IDS = [
   'fTaxon','rTaxon','iTaxon','ssTaxon','prodTaxon','scTaxon','oosTaxon',
-  'rpTaxon','crTaxon','saTaxon','iaTaxon','oppTaxon','anomTaxon',
+  'rpTaxon','crTaxon','hsTaxon','iaTaxon','oppTaxon','anomTaxon',
   'concTaxon','dpTaxon','olsTaxon'
 ];
 function cnxSelectedCategoryValues(id){
@@ -10615,7 +10630,7 @@ function cnxRerenderCurrentTabForCn(){
     if(currentTab==='repeatplanner')return renderRepeatPlanner();
     if(currentTab==='comborisk')return renderComboRisk();
     if(currentTab==='operations')return renderOperationsAvailability();
-    if(currentTab==='smartops'){renderSmartAlerts();renderInventoryAgeing();return;}
+    if(currentTab==='smartops'){renderInventoryAgeing();renderStockSales();return;}
     if(currentTab==='opportunity')return renderOpportunityScore();
     if(currentTab==='salesanomaly')return renderSalesAnomalies();
     if(currentTab==='stockstatus')return renderStockStatus();
@@ -11088,7 +11103,7 @@ function _simplifyDashboardHeadings(root){
   const nodes=[];
   if(root&&root.nodeType===1&&root.matches&&root.matches(SIMPLE_HEADING_SELECTOR))nodes.push(root);
   if(root&&root.querySelectorAll)nodes.push(...root.querySelectorAll(SIMPLE_HEADING_SELECTOR));
-  nodes.forEach(el=>{if(el.childElementCount)return;const next=_simpleHeadingText(el.textContent);if(next&&next!==el.textContent.trim())el.textContent=next;});
+  nodes.forEach(el=>{if(el.childElementCount||el.hasAttribute('data-keep-heading'))return;const next=_simpleHeadingText(el.textContent);if(next&&next!==el.textContent.trim())el.textContent=next;});
   const options=[];
   if(root&&root.nodeType===1&&root.matches&&root.matches('option'))options.push(root);
   if(root&&root.querySelectorAll)options.push(...root.querySelectorAll('option'));
@@ -18743,7 +18758,6 @@ let _rpRows = [];
 let _crRows = [];
 let _opsSupport = {production_pending:[], latest_receipts:[], target_rows:[], target_totals:{}, today:''};
 let _opsSupportPromise = null;
-let _smartAlertRows = [];
 let _inventoryAgeRows = [];
 
 function _opNormText(v){
@@ -19361,67 +19375,101 @@ function _loadOpsSupport(fresh){
   return _opsSupportPromise;
 }
 function loadSmartOps(fresh){
-  const a=document.getElementById('saContent'),i=document.getElementById('iaContent'); if(a)a.innerHTML='<div class="ops-empty">Loading live WIP and target support data…</div>'; if(i)i.innerHTML='<div class="ops-empty">Loading inventory ageing…</div>';
-  return _loadOpsSupport(!!fresh).then(()=>{_smartAlertRows=[];_inventoryAgeRows=[];_buildSmartAlertRows();_buildInventoryAgeRows();renderSmartAlerts();renderInventoryAgeing();}).catch(e=>{const m='<div class="ops-empty">Failed: '+escHtml(e.message||e)+'</div>';if(a)a.innerHTML=m;if(i)i.innerHTML=m;});
+  const a=document.getElementById('iaContent'),b=document.getElementById('hsContent');
+  const msg='<div class="ops-empty">Loading stock age…</div>';
+  if(a)a.innerHTML=msg;if(b)b.innerHTML=msg;
+  return _loadOpsSupport(!!fresh).catch(()=>null).then(()=>{_inventoryAgeRows=[];_buildInventoryAgeRows();renderInventoryAgeing();renderStockSales();}).catch(e=>{const m='<div class="ops-empty">Failed: '+escHtml(e.message||e)+'</div>';if(a)a.innerHTML=m;if(b)b.innerHTML=m;});
 }
-function _buildSmartAlertRows(){
-  const rows=[];
-  (master||[]).forEach(it=>{
-    const sku=String(it.sku||''); if(!sku)return; const name=String(it.sku_name||''); const image=String(it.image_url||''); const group=_opsGroup(it); const taxon=String(it.taxon||'General'); const sale30=Math.max(0,_opsNum(it.qty_1m)); const cmbSale30=Math.max(0,Number(cnxSoldSplit(it,{}).inCmb.q30)||0); const demand30=sale30+cmbSale30; const drr=demand30/30; const stock=Math.max(0,_opsNum(it.inv_stock)); const wip=Math.max(0,_opsNum(it.inv_wip)); const cover=drr>0?stock/drr:null;
-    if(drr>0&&cover!==null&&cover<=7) rows.push({type:'OOS_7',typeLabel:'OOS within 7 Days',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:stock<=0?'critical':'high',metric:stock<=0?'OOS':_oosDaysText(cover),detail:`30D demand ${Math.round(demand30)} (${Math.round(sale30)} individual + ${Math.round(cmbSale30)} in CMBs), DRR ${drr.toFixed(2)}, Inv Stock ${Math.round(stock)}, WIP ${Math.round(wip)}`});
-    const sevenDayNeed=drr*7; if(demand30>=10&&wip<sevenDayNeed) rows.push({type:'HIGH_SALE_LOW_WIP',typeLabel:'High Sale, Low WIP',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:wip<=0?'high':'medium',metric:`${Math.round(wip)} WIP`,detail:`30D demand ${Math.round(demand30)} (${Math.round(sale30)} individual + ${Math.round(cmbSale30)} in CMBs); seven-day demand ${Math.ceil(sevenDayNeed)}; stock ${Math.round(stock)}`});
-    const ret=Math.max(0,_opsNum(it.return_qty)); const sold=Math.max(0,_opsNum(it.final_qty)); const retPct=(sold+ret)>0?ret/(sold+ret)*100:0; const threshold=10; if((sold+ret)>=5&&retPct>=threshold) rows.push({type:'HIGH_RETURN',typeLabel:'High Return Rate',entityType:'SKU',entity:sku,name,image,group,taxon,stock,wip,severity:retPct>=20?'critical':'medium',metric:`${retPct.toFixed(1)}%`,detail:`Return Qty ${Math.round(ret)} of ${Math.round(sold+ret)} gross units`});
-  });
-  const wipDays=Math.max(1,_opsNum(document.getElementById('saWipDays')?.value||30));
-  (_opsSupport.production_pending||[]).forEach(p=>{const age=_opsDateDays(p.oldest_order_date);if(age!==null&&age>=wipDays&&_opsNum(p.balance_qty)>0){const it=_masterSkuMap[_opsSkuKey(p.sku)]||{};rows.push({type:'WIP_OLD',typeLabel:'WIP Pending Too Long',entityType:'SKU',entity:String(p.sku||''),name:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock:Math.max(0,_opsNum(it.inv_stock)),wip:Math.max(0,_opsNum(it.inv_wip)),severity:age>=60?'critical':'high',metric:`${age} days`,detail:`Pending balance ${Math.round(_opsNum(p.balance_qty))}; oldest order ${p.oldest_order_date||'—'}; orders ${(p.order_nos||[]).join(', ')}`});}});
-  const targetPct=80;
-  (_opsSupport.target_rows||[]).forEach(t=>{const pp=_opsNum(t.proj_pct);if(_opsNum(t.sp_target)>0&&pp<targetPct){rows.push({type:'TARGET_BEHIND',typeLabel:'Target Significantly Behind',entityType:'Channel',entity:String(t.channel||t.stakeholder||'Channel'),name:String(t.stakeholder||''),image:'',group:'All',taxon:'Channel Target',stock:null,wip:null,severity:pp<60?'critical':'high',metric:`${pp.toFixed(1)}% projected`,detail:`Actual ${fmt(t.sp_actual||0)} of ${fmt(t.sp_target||0)} target; short ${fmt(t.sp_short||0)}`});}});
-  const order={critical:0,high:1,medium:2,good:3}; _smartAlertRows=rows.sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9)||a.typeLabel.localeCompare(b.typeLabel)||a.entity.localeCompare(b.entity));
-  _opsFillTaxon('saTaxon',_smartAlertRows.filter(r=>r.entityType==='SKU'),r=>r.taxon); return _smartAlertRows;
-}
-function _smartAlertsFiltered(){
-  _smartAlertRows=[];_buildSmartAlertRows(); const type=document.getElementById('saType')?.value||'All'; const group=document.getElementById('saGroup')?.value||'All'; const taxSel=cnxSelectedCategoryValues('saTaxon'); const q=String(document.getElementById('saSearch')?.value||'').trim().toLowerCase();
-  return _smartAlertRows.filter(r=>(r.entityType!=='SKU'||cnxSkuMatchesGlobalCn(r.entity))&&(type==='All'||r.type===type)&&(group==='All'||r.group===group||r.entityType==='Channel')&&(r.entityType==='Channel'||cnxCategoryMatches(taxSel,r.taxon))&&(!q||`${r.entity} ${r.name} ${r.typeLabel} ${r.detail}`.toLowerCase().includes(q)));
-}
-function renderSmartAlerts(){
-  const rows=_smartAlertsFiltered();const sum=document.getElementById('saSummary');const host=document.getElementById('saContent');if(!host)return;
-  const count=t=>rows.filter(r=>r.type===t).length;if(sum)sum.innerHTML=_opsKpi('Stockout Risk in 7 Days',count('OOS_7').toLocaleString('en-IN'),'Needs immediate stock action')+_opsKpi('High Sales / Low WIP',count('HIGH_SALE_LOW_WIP').toLocaleString('en-IN'),'WIP below 7-day need')+_opsKpi('WIP Pending Too Long',count('WIP_OLD').toLocaleString('en-IN'),'Based on selected days')+_opsKpi('Other Alerts',(count('TARGET_BEHIND')+count('HIGH_RETURN')).toLocaleString('en-IN'),'Target and return alerts');
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${r.entityType==='SKU'?_opsPhoto(r.image):'<div class="ops-photo-ph">🎯</div>'}</td><td>${r.entityType==='SKU'?`<button class="sku-link" onclick="openSkuDetails('${String(r.entity).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.entity,r.name))}</button>`:`<b>${escHtml(r.entity)}</b><div style="font-size:9px;color:#64748b">${escHtml(r.name)}</div>`}</td><td>${escHtml(r.typeLabel)}</td><td>${_opsRiskBadge(r.severity,r.severity==='critical'?'Critical':r.severity==='high'?'High':'Watch')}</td><td style="font-weight:900">${escHtml(r.metric)}</td><td class="ops-list">${escHtml(r.detail)}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.stock)).toLocaleString('en-IN'):'—'}</td><td class="ops-num">${r.entityType==='SKU'?Math.round(_opsNum(r.wip)).toLocaleString('en-IN'):'—'}</td><td>${escHtml(r.taxon)}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU / Channel</th><th>Alert</th><th>Priority</th><th>Current Value</th><th>What to Check</th><th>Stock</th><th>WIP</th><th>Category</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No stock alerts match the selected filters.</td></tr>'}</tbody></table>`;
-}
-function exportSmartAlerts(){const rows=_smartAlertsFiltered();if(!rows.length){alert('No alert rows to export');return;}_dlCsv(['Item Type','SKU / Channel','CN Name','Name / Owner','Alert','Priority','Current Value','What to Check','Stock','WIP','Category','Image Link'],rows.map(r=>[r.entityType,r.entity,r.entityType==='SKU'?exportCnName(r.entity,r.cn_name||''):'',exportSkuName(r.entity,r.name),r.typeLabel,r.severity,r.metric,r.detail,r.entityType==='SKU'?Math.round(_opsNum(r.stock)):'',r.entityType==='SKU'?Math.round(_opsNum(r.wip)):'',r.taxon,r.image||'']),'stock_alerts');}
 
-function _ageBucket(days){if(days===null)return'Unknown';if(days<=30)return'0-30';if(days<=60)return'31-60';if(days<=90)return'61-90';return'90+';}
-function _iaLatestSaleDate(it){
+/* ── Stock Age: how many days since the SKU last sold ── */
+function _iaSoldBucket(days){if(days===null)return'never';if(days<=15)return'0-15';if(days<=30)return'15-30';if(days<=45)return'30-45';if(days<=60)return'45-60';if(days<=90)return'60-90';return'90+';}
+function _iaSaleDates(it){
   const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
-  let latest='';
-  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(d&&d<=end&&(!latest||d>latest))latest=d;}};
+  let first='',last='';
+  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(!d||d>end)continue;if(!first||d<first)first=d;if(!last||d>last)last=d;}};
   addEntries((it&&it.sales_entries)||[]);
   const key=String(it&&it.sku||'').trim().toUpperCase();
   const seen=new Set();
   (cnxComboParentIndex().get(key)||[]).forEach(parent=>{const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);addEntries((parent&&parent.sales_entries)||[]);});
   const fallback=_bizIso(it&&it.last_dispatch_date);
-  if(fallback&&fallback<=end&&(!latest||fallback>latest))latest=fallback;
-  return latest;
+  if(fallback&&fallback<=end&&(!last||fallback>last))last=fallback;
+  return{first,last};
 }
 function _buildInventoryAgeRows(){
-  const receipts={};(_opsSupport.latest_receipts||[]).forEach(x=>{receipts[_opsSkuKey(x.sku)]=String(x.latest_receiving_date||'');});
-  _inventoryAgeRows=(master||[]).map(it=>{const sku=String(it.sku||'');if(!sku)return null;const lastSale=_iaLatestSaleDate(it);const daysSinceSale=lastSale?_opsDateDays(lastSale):null;let basisDate=_bizIso(receipts[_opsSkuKey(sku)]||'');let basis='Latest PPC-WIP Receiving Date';if(!basisDate&&it.launch_date){basisDate=_bizIso(it.launch_date);basis='Launch Date';}if(!basisDate&&lastSale){basisDate=lastSale;basis='Last Demand Date';}const age=_opsDateDays(basisDate);const stock=Math.max(0,_opsNum(it.inv_stock));const wip=Math.max(0,_opsNum(it.inv_wip));const unitValue=_opsNum(it.cost)>0?_opsNum(it.cost):_opsNum(it.mrp);const value=stock*unitValue;return{item:it,sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock,wip,age,bucket:_ageBucket(age),basisDate,basis,unitValue,value,sale30:Math.max(0,_opsNum(it.qty_1m)),cmbSale30:Math.max(0,Number(cnxSoldSplit(it,{}).inCmb.q30)||0),lastSale,daysSinceSale};}).filter(Boolean).sort((a,b)=>{if(a.age===null&&b.age===null)return b.value-a.value;if(a.age===null)return 1;if(b.age===null)return -1;return a.age-b.age||b.value-a.value;});
-  _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);return _inventoryAgeRows;
+  _inventoryAgeRows=(master||[]).map(it=>{
+    const sku=String(it.sku||'');if(!sku)return null;
+    const sp=cnxSoldSplit(it,{});
+    const dates=_iaSaleDates(it);
+    const launch=_bizIso(it.launch_date);
+    const daysSinceSale=dates.last?_opsDateDays(dates.last):null;
+    const ind=Number(sp.individual.sold)||0,cmb=Number(sp.inCmb.sold)||0;
+    return{sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock:Math.max(0,_opsNum(it.inv_stock)),wip:Math.max(0,_opsNum(it.inv_wip)),launchDate:launch||dates.first||'',launchIsFirstSold:!launch&&!!dates.first,sp,indSold:ind,cmbSold:cmb,finalSold:ind+cmb,lastSale:dates.last,daysSinceSale,bucket:_iaSoldBucket(daysSinceSale)};
+  }).filter(Boolean);
+  _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);
+  _opsFillTaxon('hsTaxon',_inventoryAgeRows,r=>r.taxon);
+  return _inventoryAgeRows;
 }
 function _inventoryAgeFiltered(){
-  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const b=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('iaTaxon');const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const saleActivity=document.getElementById('iaSaleActivity')?.value||'all';const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(b==='All'||r.bucket===b)&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(saleActivity==='all'||(saleActivity==='not60'&&(r.daysSinceSale===null||r.daysSinceSale>=60))||(saleActivity==='sold60'&&r.daysSinceSale!==null&&r.daysSinceSale<60))&&(stockOnly!=='yes'||r.stock>0));
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();
+  const bk=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('iaTaxon');const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';
+  return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(bk==='All'||r.bucket===bk)&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(stockOnly!=='yes'||r.stock>0)).sort((x,y)=>{
+    if(x.daysSinceSale===null&&y.daysSinceSale===null)return y.stock-x.stock;
+    if(x.daysSinceSale===null)return 1;
+    if(y.daysSinceSale===null)return -1;
+    return y.daysSinceSale-x.daysSinceSale||y.stock-x.stock;
+  });
 }
 function renderInventoryAgeing(){
-  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;const units=rows.reduce((s,r)=>s+r.stock,0);const val=rows.reduce((s,r)=>s+r.value,0);const dead=rows.filter(r=>r.bucket==='90+');const deadUnits=dead.reduce((s,r)=>s+r.stock,0);const deadVal=dead.reduce((s,r)=>s+r.value,0);const unsold60=rows.filter(r=>r.daysSinceSale===null||r.daysSinceSale>=60);if(sum)sum.innerHTML=_opsKpi('Stock Units',Math.round(units).toLocaleString('en-IN'),'Products matching all selected filters')+_opsKpi('Stock Value',fmt(val),'Cost; MRP fallback')+_opsKpi('90+ Day Stock',Math.round(deadUnits).toLocaleString('en-IN'),'Based on stock age')+_opsKpi('Not Sold for 60+ Days',unsold60.length.toLocaleString('en-IN'),`${Math.round(unsold60.reduce((s,r)=>s+r.stock,0)).toLocaleString('en-IN')} stock units`)+_opsKpi('90+ Day Value',fmt(deadVal),`${dead.length.toLocaleString('en-IN')} SKUs`);
-  const body=rows.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.image)}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${escHtml(r.group)}</td><td>${escHtml(r.taxon)}</td><td class="ops-num">${Math.round(r.stock).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.wip).toLocaleString('en-IN')}</td><td class="ops-num">${r.age===null?'—':r.age.toLocaleString('en-IN')}</td><td>${_opsRiskBadge(r.bucket==='90+'?'critical':r.bucket==='61-90'?'high':r.bucket==='31-60'?'medium':'good',r.bucket==='Unknown'?'Unknown':r.bucket+' Days')}</td><td>${escHtml(r.basisDate||'—')}<div style="font-size:9px;color:#64748b">${escHtml(r.basis)}</div></td><td class="ops-num">${fmt(r.unitValue)}</td><td class="ops-num" style="font-weight:900">${fmt(r.value)}</td><td class="ops-num">${Math.round(r.sale30).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.cmbSale30||0).toLocaleString('en-IN')}</td><td>${escHtml(r.lastSale||'Never Sold')}</td><td class="ops-num">${r.daysSinceSale===null?'Never':r.daysSinceSale.toLocaleString('en-IN')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th>#</th><th>Photo</th><th>SKU</th><th>Group</th><th>Category</th><th>Stock</th><th>WIP</th><th>Stock Age (Days)</th><th>Stock Age</th><th>Age Calculated From</th><th>Value per Unit</th><th>Stock Value</th><th>Individual Sold (30D)</th><th>In CMBs Sold (30D)</th><th>Last Demand</th><th>Days Since Demand</th></tr></thead><tbody>${body||'<tr><td colspan="16" class="ops-empty">No products match the selected stock-age and sales filters.</td></tr>'}</tbody></table>`;
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();
+  const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;
+  const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
+  if(sum)sum.innerHTML=_opsKpi('Products',n(rows.length),'Matching the selected filters')+_opsKpi('Inv Stock',n(rows.reduce((s,r)=>s+r.stock,0)),'Units')+_opsKpi('Inv WIP',n(rows.reduce((s,r)=>s+r.wip,0)),'Units');
+  const body=rows.map(r=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${_opsPhoto(r.image)}</td><td>${r.launchDate?escHtml(r.launchDate)+(r.launchIsFirstSold?'<div style="font-size:9px;color:#64748b">First Sold Date</div>':''):'—'}</td><td class="ops-num">${n(r.indSold)}</td><td class="ops-num">${n(r.cmbSold)}</td><td class="ops-num"><b>${n(r.finalSold)}</b></td><td class="ops-num">${n(r.stock)}</td><td class="ops-num">${n(r.wip)}</td><td class="ops-num">${r.daysSinceSale===null?'Never Sold':n(r.daysSinceSale)}</td><td>${escHtml(r.lastSale||'Never Sold')}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Launch Date</th><th data-keep-heading>Total Sold (Individual)</th><th data-keep-heading>Total Sold (In CMB)</th><th data-keep-heading>Final Sold</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Stock Ageing (Days Not Sold)</th><th data-keep-heading>Last Sold Date</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
 }
-function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Group','Category','Image Link','Stock','WIP','Stock Age Days','Stock Age','Age Date','Age Calculated From','Value per Unit (Cost/MRP)','Stock Value','Individual Sold (30D)','In CMBs Sold (30D)','Last Demand','Days Since Demand'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.group,r.taxon,r.image,Math.round(r.stock),Math.round(r.wip),r.age===null?'':r.age,r.bucket,r.basisDate,r.basis,Math.round(r.unitValue),Math.round(r.value),Math.round(r.sale30),Math.round(r.cmbSale30||0),r.lastSale||'Never Sold',r.daysSinceSale===null?'Never':r.daysSinceSale]),'stock_age');}
+function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Image Link','Launch Date','Launch Date Source','Total Sold (Individual)','Total Sold (In CMB)','Final Sold','Inv Stock','Inv WIP','Stock Ageing (Days Not Sold)','Last Sold Date'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.image,r.launchDate,r.launchDate?(r.launchIsFirstSold?'First Sold Date':'Launch Date'):'',Math.round(r.indSold),Math.round(r.cmbSold),Math.round(r.finalSold),Math.round(r.stock),Math.round(r.wip),r.daysSinceSale===null?'Never Sold':r.daysSinceSale,r.lastSale||'Never Sold']),'stock_age');}
+
+/* ── Sales vs Stock: High Sale + No WIP  /  Low Sale + High Stock ── */
+function _stockSalesQty(r,period){
+  const k=period==='all'?'sold':'q'+period;
+  const ind=Number(r.sp.individual[k])||0,cmb=Number(r.sp.inCmb[k])||0;
+  return{ind,cmb,total:ind+cmb};
+}
+function _stockSalesFiltered(){
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();
+  const mode=document.getElementById('hsMode')?.value||'HIGH_NO_WIP';
+  const period=document.getElementById('hsPeriod')?.value||'30';
+  const hiSale=Math.max(0,_opsNum(document.getElementById('hsHighSale')?.value));
+  const loSale=Math.max(0,_opsNum(document.getElementById('hsLowSale')?.value));
+  const hiStock=Math.max(0,_opsNum(document.getElementById('hsHighStock')?.value));
+  const g=document.getElementById('hsGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('hsTaxon');const q=String(document.getElementById('hsSearch')?.value||'').trim().toLowerCase();
+  const out=[];
+  _inventoryAgeRows.forEach(r=>{
+    if(!cnxSkuMatchesGlobalCn(r.sku)||(g!=='All'&&r.group!==g)||!cnxCategoryMatches(txSel,r.taxon)||(q&&!`${r.sku} ${r.skuName}`.toLowerCase().includes(q)))return;
+    const s=_stockSalesQty(r,period);
+    const ok=mode==='HIGH_NO_WIP'?(s.total>=hiSale&&s.total>0&&r.wip<=0):(s.total<=loSale&&r.stock>=hiStock&&r.stock>0);
+    if(ok)out.push({r,ind:s.ind,cmb:s.cmb,total:s.total});
+  });
+  out.sort(mode==='HIGH_NO_WIP'?((x,y)=>y.total-x.total||y.r.stock-x.r.stock):((x,y)=>y.r.stock-x.r.stock||x.total-y.total));
+  return out;
+}
+function renderStockSales(){
+  if(!_inventoryAgeRows.length)_buildInventoryAgeRows();
+  const rows=_stockSalesFiltered();const sum=document.getElementById('hsSummary');const host=document.getElementById('hsContent');if(!host)return;
+  const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
+  if(sum)sum.innerHTML=_opsKpi('Products',n(rows.length),'Matching the selected filters')+_opsKpi('Inv Stock',n(rows.reduce((s,x)=>s+x.r.stock,0)),'Units')+_opsKpi('Inv WIP',n(rows.reduce((s,x)=>s+x.r.wip,0)),'Units')+_opsKpi('Total Sold',n(rows.reduce((s,x)=>s+x.total,0)),'Selected period');
+  const body=rows.map(x=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(x.r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(x.r.sku,x.r.skuName))}</button></td><td>${_opsPhoto(x.r.image)}</td><td class="ops-num">${n(x.r.stock)}</td><td class="ops-num">${n(x.r.wip)}</td><td class="ops-num">${n(x.ind)}</td><td class="ops-num">${n(x.cmb)}</td><td class="ops-num"><b>${n(x.total)}</b></td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Sold (Individual)</th><th data-keep-heading>Sold (In CMB)</th><th data-keep-heading>Total Sold</th></tr></thead><tbody>${body||'<tr><td colspan="7" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
+}
+function exportStockSales(){
+  const rows=_stockSalesFiltered();if(!rows.length){alert('No rows to export');return;}
+  const mode=document.getElementById('hsMode')?.value||'HIGH_NO_WIP';
+  _dlCsv(['SKU','SKU Name','Image Link','Inv Stock','Inv WIP','Sold (Individual)','Sold (In CMB)','Total Sold'],rows.map(x=>[x.r.sku,exportSkuName(x.r.sku,x.r.skuName),x.r.image,Math.round(x.r.stock),Math.round(x.r.wip),Math.round(x.ind),Math.round(x.cmb),Math.round(x.total)]),mode==='HIGH_NO_WIP'?'high_sale_no_wip':'low_sale_high_stock');
+}
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
-window.loadSmartOps=loadSmartOps;window.renderSmartAlerts=renderSmartAlerts;window.exportSmartAlerts=exportSmartAlerts;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
+window.loadSmartOps=loadSmartOps;window.renderStockSales=renderStockSales;window.exportStockSales=exportStockSales;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
 
 
 /* ── SKU OPPORTUNITY SCORE ─────────────────────────────── */
@@ -24173,7 +24221,7 @@ const renderPayments_d         = _debounce(()=>renderPayments(), 220);
 const bulkRenderCombo_d        = _debounce(()=>bulkRenderCombo(), 220);
 const renderRepeatPlanner_d    = _debounce(()=>renderRepeatPlanner(), 220);
 const renderComboRisk_d        = _debounce(()=>renderComboRisk(), 220);
-const renderSmartAlerts_d      = _debounce(()=>renderSmartAlerts(), 220);
+const renderStockSales_d       = _debounce(()=>renderStockSales(), 220);
 const renderInventoryAgeing_d  = _debounce(()=>renderInventoryAgeing(), 220);
 const renderOpportunityScore_d = _debounce(()=>renderOpportunityScore(), 220);
 const loadSalesAnomalies_d     = _debounce(()=>loadSalesAnomalies(false), 260);
@@ -24182,7 +24230,7 @@ const renderConcentrationRisk_d= _debounce(()=>renderConcentrationRisk(), 220);
 const renderDemandPatterns_d   = _debounce(()=>renderDemandPatterns(), 220);
 const renderOosLostSales_d     = _debounce(()=>renderOosLostSales(), 220);
 Object.assign(window,{renderStockStatus_d,renderPayments_d,bulkRenderCombo_d,
-  renderRepeatPlanner_d,renderComboRisk_d,renderSmartAlerts_d,
+  renderRepeatPlanner_d,renderComboRisk_d,renderStockSales_d,
   renderInventoryAgeing_d,renderOpportunityScore_d,loadSalesAnomalies_d,
   renderSalesAnomalies_d,renderConcentrationRisk_d,renderDemandPatterns_d,
   renderOosLostSales_d});
