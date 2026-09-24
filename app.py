@@ -2,7 +2,8 @@
 # - Website Returns tab ke top par naye 4 KPIs (current calendar month, filters se
 #   independent): Current Month Orders, Total Returns (+%), COD Returns (+%),
 #   Prepaid Returns (+%). Order = unique Website Display Order Code (Order Date se),
-#   Return = Website sheet return fields ya BlueDart RT/RD (order-level, ek baar).
+#   Return = BlueDart RT/RD + UD (Undelivered) + Website sheet return fields +
+#   Other Partner Return/Undelivered (order-level, ek order ek baar).
 #   COD % = COD returns / COD orders, Prepaid % = Prepaid returns / Prepaid orders.
 # - Baaki Website Returns filters/tables/pie/exports aur koi tab change nahi.
 # ============================================================
@@ -8408,7 +8409,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
 
-    <div class="ops-section-head" style="margin-top:14px"><div><div class="ops-section-title" id="wrMonthTitle">Current Month · Orders &amp; Returns</div><div class="small-note">Fixed to the current calendar month — not affected by the filters below. Orders = unique Website Display Order Code by Order Date. A return = Website sheet return fields or BlueDart RT/RD, counted once per order. COD / Prepaid % = that payment mode's returns ÷ that payment mode's orders.</div></div></div>
+    <div class="ops-section-head" style="margin-top:14px"><div><div class="ops-section-title" id="wrMonthTitle">Current Month · Orders &amp; Returns</div><div class="small-note">Fixed to the current calendar month — not affected by the filters below. Orders = unique Website Display Order Code by Order Date. A return = BlueDart RT / RD (Return to Origin), UD (Undelivered), Website sheet return fields, or Other Partner return / undelivered status — counted once per order. COD / Prepaid % = that payment mode's returns ÷ that payment mode's orders.</div></div></div>
     <div id="wrMonthKpis" class="ops-kpis" style="margin:0 0 14px"><div class="small-note">Loading current month…</div></div>
 
     <div class="filter-box" style="margin:12px 0 14px">
@@ -21135,7 +21136,7 @@ function renderWebsiteReturnsMonthKpis(m){
   const uncO=Number(m.unclassified_orders||0), uncR=Number(m.unclassified_returns||0);
   host.innerHTML=
     _wrKpi('Current Month Orders',n(m.total_orders),`${m.range_label||''} · COD ${n(m.cod_orders)} · Prepaid ${n(m.prepaid_orders)}${uncO?` · Unclassified ${n(uncO)}`:''}`)+
-    _wrKpiPct('Total Returns',n(m.total_returns),p(m.total_return_pct),`of ${n(m.total_orders)} orders · COD ${n(m.cod_returns)} + Prepaid ${n(m.prepaid_returns)}${uncR?` + Unclassified ${n(uncR)}`:''}`)+
+    _wrKpiPct('Total Returns',n(m.total_returns),p(m.total_return_pct),`of ${n(m.total_orders)} orders · RT/RD ${n(m.returns_rt_rd)} · UD ${n(m.returns_ud)} · Other ${n(m.returns_other)}`)+
     _wrKpiPct('COD Returns',n(m.cod_returns),p(m.cod_return_pct),`of ${n(m.cod_orders)} COD orders · ${p(m.cod_share_of_returns_pct)} of all returns`)+
     _wrKpiPct('Prepaid Returns',n(m.prepaid_returns),p(m.prepaid_return_pct),`of ${n(m.prepaid_orders)} Prepaid orders · ${p(m.prepaid_share_of_returns_pct)} of all returns`);
 }
@@ -26116,8 +26117,10 @@ def _wr_current_month_summary(orders):
     """Current calendar month (IST) Website KPIs, independent of UI filters.
 
     Order  = unique Website column-A Display Order Code, bucketed by its Order Date.
-    Return = rec["returned"] = Website sheet return fields OR BlueDart RT/RD
-             (already deduplicated per order, so one order counts once).
+    Return = BlueDart Return to Origin (RT/RD) OR Undelivered (UD) OR Website sheet
+             return fields (rec["returned"]) OR Other-Partner Return/Undelivered
+             (no BlueDart match). Evaluated once per order, so an order never
+             counts twice.
     COD / Prepaid come from the order-level payment_mode. Return % for a payment
     mode is returns / orders of that same mode; share % is of all returns.
     """
@@ -26128,6 +26131,7 @@ def _wr_current_month_summary(orders):
         return round(part * 100.0 / whole, 1) if whole else 0.0
 
     total = returned = 0
+    ret_rt_rd = ret_ud = ret_other = 0
     cod_orders = cod_returns = 0
     prepaid_orders = prepaid_returns = 0
     other_orders = other_returns = 0
@@ -26136,10 +26140,19 @@ def _wr_current_month_summary(orders):
         od = _wr_iso_date(od) or od
         if not od or od[:7] != month_key:
             continue
-        is_ret = bool(rec.get("returned"))
+        stage = _wr_order_stage(rec)
+        is_rt_rd = (stage == "Return to Origin") or bool(rec.get("bluedart_returned"))
+        is_ud = (not is_rt_rd) and stage in ("Undelivered", "Other Partner Undelivered")
+        is_other = (not is_rt_rd) and (not is_ud) and (
+            bool(rec.get("returned")) or stage == "Other Partner Return"
+        )
+        is_ret = bool(is_rt_rd or is_ud or is_other)
         mode = rec.get("payment_mode")
         total += 1
         returned += 1 if is_ret else 0
+        ret_rt_rd += 1 if is_rt_rd else 0
+        ret_ud += 1 if is_ud else 0
+        ret_other += 1 if is_other else 0
         if mode == "COD":
             cod_orders += 1
             cod_returns += 1 if is_ret else 0
@@ -26157,6 +26170,9 @@ def _wr_current_month_summary(orders):
         "total_orders": total,
         "total_returns": returned,
         "total_return_pct": _pct(returned, total),
+        "returns_rt_rd": ret_rt_rd,
+        "returns_ud": ret_ud,
+        "returns_other": ret_other,
         "cod_orders": cod_orders,
         "cod_returns": cod_returns,
         "cod_return_pct": _pct(cod_returns, cod_orders),
