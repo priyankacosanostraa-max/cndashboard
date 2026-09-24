@@ -15659,17 +15659,17 @@ function renderDTRTable(){
   const d = _dtrData;
   if (!host || !d) return;
   const rowsHtml = (d.rows||[]).map(r => '<tr><td style="font-weight:700">' + escHtml(r.channel) + '</td>'
-    + _dtrCells(r.yesterday, false) + _dtrCells(r.day_before, false) + '</tr>').join('');
+    + _dtrCells(r.yesterday, false) + _dtrCells(r.till_now, false) + '</tr>').join('');
   const t = d.totals || {};
   const totalRow = '<tr style="background:#eef7ea;font-weight:900"><td>TOTAL</td>'
-    + _dtrCells(t.yesterday, true) + _dtrCells(t.day_before, true) + '</tr>';
+    + _dtrCells(t.yesterday, true) + _dtrCells(t.till_now, true) + '</tr>';
   host.innerHTML = '<p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">'
     + 'As of: ' + escHtml(d.asof_label||'') + ' &nbsp;•&nbsp; Yesterday: ' + escHtml(d.yesterday_label||'')
-    + ' &nbsp;•&nbsp; Day Before: ' + escHtml(d.day_before_label||'')
+    + ' &nbsp;•&nbsp; Till Now: ' + escHtml(d.till_now_label||'')
     + ' &nbsp;•&nbsp; Projection window: 19-Sep to 30-Sep-2026 (NA = no projection for that date)</p>'
     + '<table class="ro" style="width:100%;min-width:980px"><thead>'
     + '<tr><th rowspan="2">Channel</th><th colspan="4" style="text-align:center">Yesterday · ' + escHtml(d.yesterday_label||'') + '</th>'
-    + '<th colspan="4" style="text-align:center">Day Before · ' + escHtml(d.day_before_label||'') + '</th></tr>'
+    + '<th colspan="4" style="text-align:center">Till Now · ' + escHtml(d.till_now_label||'') + '</th></tr>'
     + '<tr><th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th>'
     + '<th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th></tr>'
     + '</thead><tbody>' + rowsHtml + totalRow + '</tbody></table>';
@@ -15686,10 +15686,10 @@ function exportDTR(){
   const d = _dtrData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
   const sub = ['Projected','Actual','Short','Achievement %'];
-  const head1 = ['Daily Target Report - ' + d.asof_label, 'Yesterday - ' + d.yesterday_label, '', '', '', 'Day Before - ' + d.day_before_label, '', '', ''];
+  const head1 = ['Daily Target Report - ' + d.asof_label, 'Yesterday - ' + d.yesterday_label, '', '', '', 'Till Now - ' + d.till_now_label, '', '', ''];
   const head2 = ['Channel'].concat(sub, sub);
-  const rows = d.rows.map(r => [r.channel].concat(_dtrCsvBlock(r.yesterday), _dtrCsvBlock(r.day_before)));
-  rows.push(['TOTAL'].concat(_dtrCsvBlock(d.totals.yesterday), _dtrCsvBlock(d.totals.day_before)));
+  const rows = d.rows.map(r => [r.channel].concat(_dtrCsvBlock(r.yesterday), _dtrCsvBlock(r.till_now)));
+  rows.push(['TOTAL'].concat(_dtrCsvBlock(d.totals.yesterday), _dtrCsvBlock(d.totals.till_now)));
   const csv = [head1, head2].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -29044,6 +29044,50 @@ def _dtr_day_block(iso, daily):
     return out, tot
 
 
+def _dtr_range_block(start_iso, end_iso, daily):
+    """Cumulative Projected vs Actual vs Short/Achievement %, summed over every
+    date in [start_iso, end_iso] inclusive (used for the 'Till Now' block)."""
+    empty = {"projected": None, "actual": 0.0, "short": None, "ach": None}
+    if end_iso < start_iso:
+        return {b: dict(empty) for b in _DTR_ROWS}, dict(empty)
+    acc = {b: {"projected": 0.0, "actual": 0.0, "has_proj": False} for b in _DTR_ROWS}
+    cur = datetime.strptime(start_iso, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_iso, "%Y-%m-%d")
+    while cur <= end_dt:
+        iso = cur.strftime("%Y-%m-%d")
+        proj = _dtr_projection_for(iso)
+        act = daily.get(iso, {})
+        for b in _DTR_ROWS:
+            acc[b]["actual"] += float(act.get(b, 0.0))
+            p = proj.get(b) if proj else None
+            if p is not None:
+                acc[b]["projected"] += p
+                acc[b]["has_proj"] = True
+        cur += timedelta(days=1)
+    out = {}
+    tp = 0.0
+    ta = 0.0
+    has_tp = False
+    for b in _DTR_ROWS:
+        p = acc[b]["projected"] if acc[b]["has_proj"] else None
+        a = acc[b]["actual"]
+        ta += a
+        if p is not None:
+            tp += p
+            has_tp = True
+        out[b] = {
+            "projected": p, "actual": a,
+            "short": (max(0.0, p - a) if p is not None else None),
+            "ach": (round(min(100.0, (a / p * 100) if p else (100.0 if a else 0.0)), 1) if p is not None else None),
+        }
+    tot = {
+        "projected": (tp if has_tp else None), "actual": ta,
+        "short": (max(0.0, tp - ta) if has_tp else None),
+        "ach": (round(min(100.0, (ta / tp * 100) if tp else (100.0 if ta else 0.0)), 1) if has_tp else None),
+    }
+    return out, tot
+
+
 def _build_daily_target_report(asof=None, force=False):
     daily, meta = _dtr_fetch_daily(force=force)
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
@@ -29053,21 +29097,25 @@ def _build_daily_target_report(asof=None, force=False):
         except Exception:
             pass
     yest_dt = today_dt - timedelta(days=1)
-    dbef_dt = today_dt - timedelta(days=2)
     y_iso = yest_dt.strftime("%Y-%m-%d")
-    d_iso = dbef_dt.strftime("%Y-%m-%d")
     y_rows, y_tot = _dtr_day_block(y_iso, daily)
-    d_rows, d_tot = _dtr_day_block(d_iso, daily)
+    tn_start_iso = _DTR_START
+    tn_end_iso = min(y_iso, _DTR_END)
+    tn_rows, tn_tot = _dtr_range_block(tn_start_iso, tn_end_iso, daily)
+    tn_start_dt = datetime.strptime(tn_start_iso, "%Y-%m-%d")
+    tn_end_dt = datetime.strptime(tn_end_iso, "%Y-%m-%d") if tn_end_iso >= tn_start_iso else None
+    tn_label = (tn_start_dt.strftime("%d-%b") + " to " + tn_end_dt.strftime("%d-%b")) if tn_end_dt else "No data yet"
     rows = []
     for b in _DTR_ROWS:
-        rows.append({"channel": b, "yesterday": y_rows[b], "day_before": d_rows[b]})
+        rows.append({"channel": b, "yesterday": y_rows[b], "till_now": tn_rows[b]})
     return {
         "rows": rows,
-        "totals": {"yesterday": y_tot, "day_before": d_tot},
+        "totals": {"yesterday": y_tot, "till_now": tn_tot},
         "asof": today_dt.strftime("%Y-%m-%d"),
         "asof_label": today_dt.strftime("%d-%b-%Y"),
         "yesterday_iso": y_iso, "yesterday_label": yest_dt.strftime("%d-%b"),
-        "day_before_iso": d_iso, "day_before_label": dbef_dt.strftime("%d-%b"),
+        "till_now_start_iso": tn_start_iso, "till_now_end_iso": tn_end_iso,
+        "till_now_label": tn_label,
         "website_per_day": _DTR_WEBSITE_PER_DAY,
         "purchase_per_day": _DTR_PURCHASE_PER_DAY,
         "window": [_DTR_START, _DTR_END],
@@ -29121,7 +29169,7 @@ def api_daily_target_report_export_xlsx():
         ws.merge_cells(start_row=2, start_column=2, end_row=2, end_column=5)
         ws.cell(row=2, column=2, value="Yesterday - " + rep["yesterday_label"])
         ws.merge_cells(start_row=2, start_column=6, end_row=2, end_column=9)
-        ws.cell(row=2, column=6, value="Day Before - " + rep["day_before_label"])
+        ws.cell(row=2, column=6, value="Till Now - " + rep["till_now_label"])
         sub = ["Projected", "Actual", "Short", "Achievement %"]
         for k, h in enumerate(sub + sub):
             ws.cell(row=3, column=2 + k, value=h)
@@ -29159,12 +29207,12 @@ def api_daily_target_report_export_xlsx():
             cell = ws.cell(row=r_idx, column=1, value=r["channel"])
             cell.font = Font(bold=True); cell.border = border
             _put(r_idx, 2, r["yesterday"])
-            _put(r_idx, 6, r["day_before"])
+            _put(r_idx, 6, r["till_now"])
             r_idx += 1
         cell = ws.cell(row=r_idx, column=1, value="TOTAL")
         cell.font = Font(bold=True); cell.fill = total_fill; cell.border = border
         _put(r_idx, 2, rep["totals"]["yesterday"], bold=True, fill=total_fill)
-        _put(r_idx, 6, rep["totals"]["day_before"], bold=True, fill=total_fill)
+        _put(r_idx, 6, rep["totals"]["till_now"], bold=True, fill=total_fill)
 
         widths = [22, 14, 14, 14, 15, 14, 14, 14, 15]
         for i, w in enumerate(widths, start=1):
