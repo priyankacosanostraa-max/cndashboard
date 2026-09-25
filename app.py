@@ -7785,6 +7785,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m10" onclick="showTab('target')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg></span><span>Target</span></button>
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
+  <button class="menu-item" id="m38" onclick="showTab('wipreceive')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM4 8l2-4h12l2 4"/><path d="M12 11v5M9.5 13.5 12 16l2.5-2.5"/></svg></span><span>WIP Receive</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
@@ -9385,6 +9386,35 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
+  <div id="vWipReceive" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">WIP Receive</div>
+        <div class="ops-sub">Date-wise SKUs received from production, with image and received quantity. Shows everything from 20 Sep 2026 by default; change the dates to look at earlier or later days.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadWipReceive(true)">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportWipReceive()">Export CSV</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="wiprFrom" onchange="renderWipReceive()"></div>
+      <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="wiprTo" onchange="renderWipReceive()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
+      <div class="fc"><label class="fl">Quick Range</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="wiprResetRange()">From 20 Sep</button>
+          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px;background:#eceff4;color:#111" onclick="wiprAllDates()">All Dates</button>
+        </div>
+      </div>
+    </div>
+    <div id="wiprInfo" class="small-note" style="margin:0 2px 10px"></div>
+    <div id="wiprSummary" class="ops-kpis"></div>
+    <div id="wiprContent" class="ops-table-wrap"></div>
+    <div class="ops-note">Received Qty is the total for that SKU on that date across all orders in the WIP-Recv sheet. Click any date box above to see only that day.</div>
+  </div>
+
+
   <div id="vOpportunity" class="ops-page" style="display:none">
     <div class="ops-head">
       <div>
@@ -10625,6 +10655,7 @@ function cnxRerenderCurrentTabForCn(){
     if(currentTab==='home')return cnxQueueHomeRender(false);
     if(currentTab==='discount')return loadDiscount();
     if(currentTab==='production')return loadProduction();
+    if(currentTab==='wipreceive')return renderWipReceive();
     if(currentTab==='rakhi')return renderRakhi();
     if(currentTab==='oos')return renderOOS();
     if(currentTab==='repeatplanner')return renderRepeatPlanner();
@@ -10971,6 +11002,7 @@ const MENU_TAB_META = {
   m10: {name:"Target",           desc:"Channel targets, actuals, shortages and forecast."},
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
+  m38: {name:"WIP Receive",      desc:"Date-wise SKUs received from production with image, received quantity and date filter."},
   m14: {name:"Profit",           desc:"SKU revenue, cost, margin and profit."},
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
@@ -19467,6 +19499,80 @@ function exportStockSales(){
   _dlCsv(['SKU','SKU Name','Image Link','Inv Stock','Inv WIP','Sold (Individual)','Sold (In CMB)','Total Sold'],rows.map(x=>[x.r.sku,exportSkuName(x.r.sku,x.r.skuName),x.r.image,Math.round(x.r.stock),Math.round(x.r.wip),Math.round(x.ind),Math.round(x.cmb),Math.round(x.total)]),mode==='HIGH_NO_WIP'?'high_sale_no_wip':'low_sale_high_stock');
 }
 
+/* ── WIP Receive: date-wise SKUs received (WIP-Recv sheet) ── */
+const WIPR_DEFAULT_FROM='2026-09-20';
+let _wiprRows=[],_wiprLoaded=false,_wiprInit=false,_wiprMinDate='',_wiprMaxDate='',_wiprToday='';
+function _wiprFmt(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso||'—';
+  const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]||m[2];
+  return Number(m[3])+'-'+mon+'-'+m[1];
+}
+function _wiprSetRange(from,to){
+  const f=document.getElementById('wiprFrom'),t=document.getElementById('wiprTo');
+  if(f)f.value=from||'';if(t)t.value=to||'';
+}
+function _wiprDefaultTo(){
+  let to=_wiprToday||_wiprMaxDate||WIPR_DEFAULT_FROM;
+  if(_wiprMaxDate&&_wiprMaxDate>to)to=_wiprMaxDate;
+  return to<WIPR_DEFAULT_FROM?WIPR_DEFAULT_FROM:to;
+}
+function wiprResetRange(){_wiprSetRange(WIPR_DEFAULT_FROM,_wiprDefaultTo());renderWipReceive();}
+function wiprAllDates(){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());renderWipReceive();}
+function wiprPickDate(iso){_wiprSetRange(iso,iso);renderWipReceive();}
+function loadWipReceive(force){
+  const host=document.getElementById('wiprContent');
+  if(host&&!_wiprLoaded)host.innerHTML='<div class="ops-empty">Loading WIP received data…</div>';
+  return fetch('/api/wip-receive?fresh='+(force?'1':'0')+'&_='+Date.now(),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
+    .then(d=>{
+      if(d.error)throw new Error(d.error);
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprLoaded=true;_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      if(!_wiprInit){_wiprInit=true;_wiprSetRange(WIPR_DEFAULT_FROM,_wiprDefaultTo());}
+      const info=document.getElementById('wiprInfo');
+      if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
+      renderWipReceive();
+    })
+    .catch(e=>{if(host)host.innerHTML='<div class="ops-empty">Failed: '+escHtml(e.message||e)+'</div>';});
+}
+function _wiprFiltered(){
+  const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
+  const q=String(document.getElementById('wiprSearch')?.value||'').trim().toLowerCase();
+  if(from&&to&&from>to)return null;
+  return _wiprRows.filter(r=>{
+    if(from&&r.date<from)return false;if(to&&r.date>to)return false;
+    if(!cnxSkuMatchesGlobalCn(r.sku))return false;
+    if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
+    return true;
+  }).sort((a,b)=>b.date.localeCompare(a.date)||(Number(b.qty)||0)-(Number(a.qty)||0)||a.sku.localeCompare(b.sku));
+}
+function renderWipReceive(){
+  const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary');if(!host)return;
+  if(!_wiprLoaded)return;
+  const rows=_wiprFiltered();
+  const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
+  if(rows===null){if(sum)sum.innerHTML='';host.innerHTML='<div class="ops-empty">From Date is after To Date. Please correct the dates.</div>';return;}
+  const byDate=new Map();let total=0;const skus=new Set();
+  rows.forEach(r=>{const q=Number(r.qty)||0;total+=q;skus.add(r.sku);const d=byDate.get(r.date)||{qty:0,skus:new Set()};d.qty+=q;d.skus.add(r.sku);byDate.set(r.date,d);});
+  const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
+  const rangeText=from&&to?(from===to?_wiprFmt(from):_wiprFmt(from)+' to '+_wiprFmt(to)):'All dates';
+  let kpi=_opsKpi('Total Received Qty',n(total),rangeText)+_opsKpi('SKUs Received',n(skus.size),'Unique SKUs')+_opsKpi('Receipt Days',n(byDate.size),'Dates with receipts');
+  const dates=Array.from(byDate.keys()).sort((a,b)=>b.localeCompare(a));
+  if(dates.length>1){
+    dates.slice(0,31).forEach(d=>{const x=byDate.get(d);kpi+=`<div class="ops-kpi" style="cursor:pointer" title="Show only this date" onclick="wiprPickDate('${d}')"><div class="ops-kpi-label">${escHtml(_wiprFmt(d))}</div><div class="ops-kpi-value">${n(x.qty)}</div><div class="ops-kpi-sub">${n(x.skus.size)} SKUs received</div></div>`;});
+  }
+  if(sum)sum.innerHTML=kpi;
+  const body=rows.map(r=>{
+    const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};
+    return `<tr><td data-sort-value="${r.date}">${escHtml(_wiprFmt(r.date))}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,String(it.sku_name||'')))}</button></td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num"><b>${n(r.qty)}</b></td></tr>`;
+  }).join('');
+  host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr><th>Date</th><th>SKU</th><th>Image</th><th>Received Qty</th></tr></thead><tbody>${body||'<tr><td colspan="4" class="ops-empty">No WIP receipts found for the selected dates.</td></tr>'}</tbody></table>`;
+}
+function exportWipReceive(){
+  const rows=_wiprFiltered();if(!rows||!rows.length){alert('No WIP receive rows to export');return;}
+  _dlCsv(['Date','SKU','SKU Name','Image Link','Received Qty'],rows.map(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};return[r.date,r.sku,exportSkuName(r.sku,String(it.sku_name||'')),String(it.image_url||''),Number(r.qty)||0];}),'wip_receive');
+}
+window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;
+
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
 window.loadSmartOps=loadSmartOps;window.renderStockSales=renderStockSales;window.exportStockSales=exportStockSales;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
@@ -23193,6 +23299,7 @@ showTab = function(t){
     target: {id: 'vTarget', btn: 'm10'},
     discount: {id: 'vDiscount', btn: 'm12'},
     production: {id: 'vProduction', btn: 'm13'},
+    wipreceive: {id: 'vWipReceive', btn: 'm38'},
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
@@ -23251,6 +23358,7 @@ showTab = function(t){
       target: 'TARGET',
       discount: 'DISCOUNTS',
       production: 'PRODUCTION',
+      wipreceive: 'WIP RECEIVE',
       profit: 'PROFIT',
       atrisk: 'CUSTOMER RISK',
       taxon: 'CATEGORIES',
@@ -23292,6 +23400,7 @@ showTab = function(t){
   if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); loadDRGMarketplace(false); loadDTR(false); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
+  if (t === 'wipreceive') setTimeout(()=>{ try{ loadWipReceive(false); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
@@ -24222,6 +24331,7 @@ const bulkRenderCombo_d        = _debounce(()=>bulkRenderCombo(), 220);
 const renderRepeatPlanner_d    = _debounce(()=>renderRepeatPlanner(), 220);
 const renderComboRisk_d        = _debounce(()=>renderComboRisk(), 220);
 const renderStockSales_d       = _debounce(()=>renderStockSales(), 220);
+const renderWipReceive_d       = _debounce(()=>renderWipReceive(), 220);
 const renderInventoryAgeing_d  = _debounce(()=>renderInventoryAgeing(), 220);
 const renderOpportunityScore_d = _debounce(()=>renderOpportunityScore(), 220);
 const loadSalesAnomalies_d     = _debounce(()=>loadSalesAnomalies(false), 260);
@@ -24230,7 +24340,7 @@ const renderConcentrationRisk_d= _debounce(()=>renderConcentrationRisk(), 220);
 const renderDemandPatterns_d   = _debounce(()=>renderDemandPatterns(), 220);
 const renderOosLostSales_d     = _debounce(()=>renderOosLostSales(), 220);
 Object.assign(window,{renderStockStatus_d,renderPayments_d,bulkRenderCombo_d,
-  renderRepeatPlanner_d,renderComboRisk_d,renderStockSales_d,
+  renderRepeatPlanner_d,renderComboRisk_d,renderStockSales_d,renderWipReceive_d,
   renderInventoryAgeing_d,renderOpportunityScore_d,loadSalesAnomalies_d,
   renderSalesAnomalies_d,renderConcentrationRisk_d,renderDemandPatterns_d,
   renderOosLostSales_d});
@@ -27883,6 +27993,91 @@ def api_operations_inventory():
         return jsonify({"rows": rows, "meta": meta})
     except Exception as e:
         return jsonify({"error": f"Operations inventory load failed: {e}"}), 500
+
+
+# ════════════════════════════════════════════════════════════════
+#  📥 WIP RECEIVE — date-wise SKUs received (WIP-Recv sheet)
+#  Sheet columns: A=Date, B=Order No., C=SKU No., D=SUM of Qty.
+# ════════════════════════════════════════════════════════════════
+WIP_RECV_URL = os.environ.get("WIP_RECV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1048577529&single=true&output=csv")
+_WIPRECV_CACHE = {"rows": None, "ts": 0.0}
+_WIPRECV_TTL = 60
+
+
+def _load_wip_receive(force=False):
+    """Read the WIP-Recv sheet and total Qty per (date, SKU)."""
+    now_ts = time.time()
+    if (not force) and _WIPRECV_CACHE["rows"] is not None and (now_ts - _WIPRECV_CACHE["ts"]) < _WIPRECV_TTL:
+        return _WIPRECV_CACHE["rows"]
+
+    df = _fetch_csv_fresh(WIP_RECV_URL)
+    cols = [str(c).strip() for c in df.columns]
+    df.columns = cols
+
+    def pick(cands, pos):
+        c = find_col(cols, *cands)
+        if c is None and len(cols) > pos:
+            c = cols[pos]
+        return c
+
+    c_date = pick(("Date", "Receiving Date", "Received Date"), 0)
+    c_order = pick(("Order No.", "Order No", "Order Number"), 1)
+    c_sku = pick(("SKU No.", "SKU No", "SKU"), 2)
+    c_qty = pick(("SUM of Qty.", "SUM of Qty", "Received Qty", "Qty", "Quantity"), 3)
+    if not (c_date and c_sku and c_qty):
+        raise ValueError(f"WIP-Recv sheet columns not recognised: {cols}")
+
+    orders_col = df[c_order] if c_order in df.columns else [""] * len(df)
+    agg = {}
+    for d_raw, o_raw, s_raw, q_raw in zip(df[c_date], orders_col, df[c_sku], df[c_qty]):
+        dt = parse_date_any(d_raw)
+        sku = str(s_raw).strip().upper()
+        if dt is None or not sku or sku in ("NAN", "NONE", "NULL"):
+            continue
+        qty = to_num(q_raw)
+        if qty == 0:
+            continue
+        iso = dt.strftime("%Y-%m-%d")
+        e = agg.setdefault((iso, sku), {"date": iso, "sku": sku, "qty": 0.0, "orders": []})
+        e["qty"] += qty
+        o = str(o_raw).strip()
+        if o and o.lower() not in ("nan", "none") and o not in e["orders"]:
+            e["orders"].append(o)
+
+    rows = []
+    for e in agg.values():
+        q = e["qty"]
+        e["qty"] = int(q) if float(q).is_integer() else round(q, 2)
+        rows.append(e)
+    rows.sort(key=lambda x: (x["date"], x["sku"]))
+    _WIPRECV_CACHE["rows"] = rows
+    _WIPRECV_CACHE["ts"] = now_ts
+    return rows
+
+
+@app.route("/api/wip-receive")
+def api_wip_receive():
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+    try:
+        rows = _load_wip_receive(force=fresh)
+        warn = ""
+    except Exception as e:
+        # Serve the last good copy if the sheet is briefly unreachable.
+        rows = _WIPRECV_CACHE.get("rows")
+        if rows is None:
+            return jsonify({"error": f"WIP receive sheet load failed: {e}"}), 500
+        warn = f"Showing last loaded data — refresh failed: {e}"
+    dates = [r["date"] for r in rows]
+    return jsonify({
+        "rows": rows,
+        "today": now_ist().strftime("%Y-%m-%d"),
+        "min_date": min(dates) if dates else "",
+        "max_date": max(dates) if dates else "",
+        "warning": warn,
+    })
+
 
 
 @app.route("/api/ops-support")
