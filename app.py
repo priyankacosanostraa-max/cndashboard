@@ -9392,7 +9392,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">WIP Receive</div>
-        <div class="ops-sub">Date-wise SKUs received from production. Column headings show the last 7 days by default (or your date range). Click any date heading to see every SKU received on that date with photo and qty.</div>
+        <div class="ops-sub">Date-wise SKUs received from production. Column headings show the last 7 days by default (or the selected month / date range). Click any date heading to see every SKU received on that date with photo and qty.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadWipReceive(true)">Refresh</button>
@@ -9404,19 +9404,14 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="wiprTo" onchange="wiprRangeChanged()"></div>
       <div class="fc"><label class="fl">Type</label><select class="fs" id="wiprType" onchange="renderWipReceive()"><option value="">All Types</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
-      <div class="fc"><label class="fl">Quick Range</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="wiprLast7Range()">Last 7 Days</button>
-          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="wiprResetRange()">From 20 Sep</button>
-          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px;background:#eceff4;color:#111" onclick="wiprAllDates()">All Dates</button>
-        </div>
-      </div>
+      <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
+      <div class="fc"><label class="fl">Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option><option value="custom">Custom Range</option></select></div>
     </div>
     <div id="wiprInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Type is the order type of the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Date range, Type and SKU search all filter the table, the date-heading totals and the Grand Total. Click a date heading to see only that date (SKU, photo, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type and SKU search all filter the table, the date-heading totals and the Grand Total. Click a date heading to see only that date (SKU, photo, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19526,7 +19521,7 @@ let _wiprRows=[],_wiprLoaded=false,_wiprInit=false,_wiprMinDate='',_wiprMaxDate=
 function _wiprFmt(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso||'—';
   const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]||m[2];
-  return Number(m[3])+'-'+mon+'-'+m[1];
+  return Number(m[3])+'-'+mon;
 }
 let _wiprPick='';
 function _wiprSetRange(from,to){
@@ -19544,7 +19539,31 @@ function _wiprDiffDays(a,b){
   if(!pa||!pb)return 0;
   return Math.round((Date.UTC(+pb[1],+pb[2]-1,+pb[3])-Date.UTC(+pa[1],+pa[2]-1,+pa[3]))/86400000);
 }
-function wiprRangeChanged(){_wiprPick='';renderWipReceive();}
+function wiprRangeChanged(){_wiprPick='';const ms=document.getElementById('wiprMonth');if(ms)ms.value='custom';renderWipReceive();}
+const _WIPR_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _wiprFillMonths(){
+  const sel=document.getElementById('wiprMonth');if(!sel)return;
+  const cur=sel.value;
+  const ms=Array.from(new Set(_wiprRows.map(r=>String(r.date||'').slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))).sort().reverse();
+  const multiYear=new Set(ms.map(m=>m.slice(0,4))).size>1;
+  sel.innerHTML='<option value="last7">Last 7 Days</option>'+ms.map(m=>`<option value="${m}">${_WIPR_MON[Number(m.slice(5))-1]}${multiYear?' '+m.slice(0,4):''}</option>`).join('')+'<option value="all">All Dates</option><option value="custom">Custom Range</option>';
+  sel.value=Array.from(sel.options).some(o=>o.value===cur)?cur:'last7';
+}
+function wiprMonthChanged(){
+  const v=document.getElementById('wiprMonth')?.value||'last7';
+  if(v==='custom'){renderWipReceive();return;}
+  if(v==='last7'){const e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(e,-6),e);}
+  else if(v==='all'){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+  else{const y=+v.slice(0,4),m=+v.slice(5);const last=new Date(Date.UTC(y,m,0)).getUTCDate();_wiprSetRange(v+'-01',v+'-'+String(last).padStart(2,'0'));}
+  renderWipReceive();
+}
+let _wiprChannels=[];
+function _wiprFillChannels(){
+  const sel=document.getElementById('wiprChannel');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Channels</option>'+_wiprChannels.map(t=>`<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  if(cur&&_wiprChannels.includes(cur))sel.value=cur;
+}
 function wiprResetRange(){_wiprSetRange(WIPR_DEFAULT_FROM,_wiprDefaultTo());renderWipReceive();}
 function wiprAllDates(){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());renderWipReceive();}
 function wiprPickDate(iso){_wiprPick=iso||'';renderWipReceive();}
@@ -19556,8 +19575,8 @@ function loadWipReceive(force){
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error)throw new Error(d.error);
-      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprLoaded=true;_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
-      if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);}
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);const _ms=document.getElementById('wiprMonth');if(_ms)_ms.value='last7';}
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
       renderWipReceive();
@@ -19567,9 +19586,11 @@ function loadWipReceive(force){
 function _wiprBase(){
   const ty=String(document.getElementById('wiprType')?.value||'').trim().toLowerCase();
   const q=String(document.getElementById('wiprSearch')?.value||'').trim().toLowerCase();
+  const ch=String(document.getElementById('wiprChannel')?.value||'').trim().toLowerCase();
   return _wiprRows.filter(r=>{
     if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
+    if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
     return true;
   });
@@ -19629,7 +19650,7 @@ function renderWipReceive(){
     const rows=shown.slice().sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));
     let body='';
     rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr><td>${skuBtn(r.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num"><b>${n(r.qty)}</b></td></tr>`;});
-    const foot=rows.length?`<tfoot><tr style="background:#eef3ea;font-weight:900"><td colspan="2">Grand Total</td><td class="ops-num"><b>${n(total)}</b></td></tr></tfoot>`:'';
+    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="2" style="position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0">Grand Total</td><td class="ops-num" style="position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0"><b>${n(total)}</b></td></tr></tfoot>`:'';
     host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr><th>SKU</th><th>Photo</th><th>Qty</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
     return;
   }
@@ -19643,14 +19664,15 @@ function renderWipReceive(){
     const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
     body+=`<tr><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td>`+cols.map(d=>x.byDate[d]?`<td class="ops-num"><b>${n(x.byDate[d])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td class="ops-num"><b>${n(x.total)}</b></td></tr>`;
   });
-  const foot=mat.length?`<tfoot><tr style="background:#eef3ea;font-weight:900"><td colspan="2">Grand Total</td>`+cols.map(d=>`<td class="ops-num"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td class="ops-num"><b>${n(total)}</b></td></tr></tfoot>`:'';
+  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="2" style="position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0">Grand Total</td>`+cols.map(d=>`<td class="ops-num" style="position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td class="ops-num" style="position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0"><b>${n(total)}</b></td></tr></tfoot>`:'';
   host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function exportWipReceive(){
   const list=_wiprInRange();
   if(list===null){alert('From Date is after To Date. Please correct the dates.');return;}
   const ty=document.getElementById('wiprType')?.value||'';
-  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'');
+  const chv=document.getElementById('wiprChannel')?.value||'';
+  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'')+(chv?'_'+chv.replace(/[^A-Za-z0-9]+/g,'_'):'');
   const info=sku=>{const it=_masterSkuMap[_opsSkuKey(sku)]||{};return[exportSkuName(sku,String(it.sku_name||'')),String(it.image_url||'')];};
   if(_wiprPick){
     const rows=list.filter(r=>r.date===_wiprPick).sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));
@@ -19666,9 +19688,9 @@ function exportWipReceive(){
   const dayTot={};let total=0;list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);total+=Number(r.qty)||0;});
   const out=mat.map(x=>[x.sku,...info(x.sku),...cols.map(d=>x.byDate[d]||0),x.total]);
   out.push(['Grand Total','','',...cols.map(d=>dayTot[d]||0),total]);
-  _dlCsv(['SKU','SKU Name','Image Link',...cols,'Total'],out,'wip_receive'+tag);
+  _dlCsv(['SKU','SKU Name','Image Link',...cols.map(_wiprFmt),'Total'],out,'wip_receive'+tag);
 }
-window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;
+window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprMonthChanged=wiprMonthChanged;window.wiprClearPick=wiprClearPick;
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
@@ -28178,20 +28200,29 @@ def api_wip_receive():
     except Exception:
         prod_rows = list(_PROD_CACHE.get("rows") or [])
     type_by_order_sku, type_by_order = {}, {}
+    chan_by_order_sku, chan_by_order = {}, {}
     for pr in prod_rows:
         ty = str(pr.get("order_type") or "").strip()
+        ch = str(pr.get("channel") or "").strip()
         on = _wipr_norm_order(pr.get("order_no"))
-        if not ty or not on:
+        if not on:
             continue
-        type_by_order_sku.setdefault((on, str(pr.get("sku") or "").strip().upper()), ty)
-        type_by_order.setdefault(on, ty)
+        sk = str(pr.get("sku") or "").strip().upper()
+        if ty:
+            type_by_order_sku.setdefault((on, sk), ty)
+            type_by_order.setdefault(on, ty)
+        if ch:
+            chan_by_order_sku.setdefault((on, sk), ch)
+            chan_by_order.setdefault(on, ch)
     types = sorted({str(pr.get("order_type") or "").strip() for pr in prod_rows if str(pr.get("order_type") or "").strip()})
+    channels = sorted({str(pr.get("channel") or "").strip() for pr in prod_rows if str(pr.get("channel") or "").strip()})
 
     merged = {}
     for r in rows:
         ty = type_by_order_sku.get((r["order"], r["sku"])) or type_by_order.get(r["order"]) or ""
-        k = (r["date"], r["sku"], ty)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "qty": 0.0, "orders": []})
+        ch = chan_by_order_sku.get((r["order"], r["sku"])) or chan_by_order.get(r["order"]) or ""
+        k = (r["date"], r["sku"], ty, ch)
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "qty": 0.0, "orders": []})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
@@ -28205,6 +28236,7 @@ def api_wip_receive():
     return jsonify({
         "rows": rows,
         "types": types,
+        "channels": channels,
         "today": now_ist().strftime("%Y-%m-%d"),
         "min_date": min(dates) if dates else "",
         "max_date": max(dates) if dates else "",
