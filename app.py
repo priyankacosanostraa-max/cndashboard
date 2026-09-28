@@ -1,3 +1,11 @@
+# Cosa Nostraa — V24.35 (WIP RECEIVE · CHANNEL / ORDER-REC-BAL QTY · DELIVERY WEEK FILTER)
+# - WIP Receive table me Inv Stock ke baad naye columns: Channel, Order Qty, Rec Qty, Bal Qty
+#   (Production/PPC-WIP sheet se, order + SKU wise). Delivery Date last column hi hai.
+# - Naya "Delivery Week" filter: mahina 5 parts (1-7, 8-14, 15-21, 22-28, 29-end). Week choose
+#   karne par receipt range "All Dates" ho jaati hai aur us hafte ki delivery wale sab rows dikhte hain.
+# - Table compact kiya: columns paas-paas, nowrap, koi overlap nahi (side scroll agar zarurat ho).
+# - CSV export me bhi naye columns. Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.34 (WIP RECEIVE · CLEAN COLUMNS)
 # - WIP Receive tab columns ab exactly: Order No. (individual), Order Date (individual), SKU, Image,
 #   Inv Stock, receiving dates, aur last column Delivery Date. Order Qty aur row-wise Total column hata diye.
@@ -7209,6 +7217,13 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page .anom-receipt{font-size:9px;color:#64748b;margin-top:4px}
 
 
+/* ── WIP Receive: compact, no-overlap table ── */
+.ops-page table.ops-table.wipr-table{width:max-content !important;min-width:0 !important;table-layout:auto !important}
+.ops-page table.ops-table.wipr-table th,
+.ops-page table.ops-table.wipr-table td{padding-left:9px !important;padding-right:9px !important;white-space:nowrap !important;overflow-wrap:normal !important;word-break:normal !important;hyphens:none !important}
+.ops-page table.ops-table.wipr-table td.wipr-ch{white-space:normal !important;min-width:96px;max-width:150px}
+.ops-page table.ops-table.wipr-table .sku-link{white-space:nowrap !important;overflow-wrap:normal !important;word-break:normal !important}
+
 /* ── GLOBAL TABLE READABILITY ─────────────────────────────────────────────
    Keep every dashboard data table centred, vertically aligned and wrapped.
    This also overrides older inline right/left alignment so values remain
@@ -9426,6 +9441,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Order No.</label><input class="fi" id="wiprOrderNo" placeholder="Type order no…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
       <div class="fc"><label class="fl">Delivery Date</label><select class="fs" id="wiprDelivery" onchange="renderWipReceive()"><option value="">All Delivery Dates</option></select></div>
+      <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wiprWeek" onchange="wiprWeekChanged()"><option value="">All Weeks</option></select></div>
       <div class="fc"><label class="fl">Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option><option value="custom">Custom Range</option></select></div>
       <div class="fc op-paste">
         <label class="fl">Paste multiple SKUs (any separator — comma, space, or new line)</label>
@@ -9441,7 +9457,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), then the receiving-date columns, and Delivery Date as the last column. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19603,6 +19619,37 @@ function _wiprFillDelivery(){
   sel.innerHTML='<option value="">All Delivery Dates</option>'+_wiprDeliveryDates.map(t=>`<option value="${escHtml(t)}">${escHtml(_wiprFmt(t))}${escHtml(' '+t.slice(0,4))}</option>`).join('');
   if(cur&&_wiprDeliveryDates.includes(cur))sel.value=cur;
 }
+/* Delivery Week: har mahina 5 parts — 1-7, 8-14, 15-21, 22-28, 29-end */
+const _WIPR_ORD=['1st','2nd','3rd','4th','5th'];
+function _wiprWeekOf(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';
+  const d=+m[3];return m[1]+'-'+m[2]+'|'+(d<=7?1:d<=14?2:d<=21?3:d<=28?4:5);
+}
+function _wiprFillWeeks(){
+  const sel=document.getElementById('wiprWeek');if(!sel)return;
+  const cur=sel.value;
+  const months=Array.from(new Set(_wiprDeliveryDates.map(x=>String(x).slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))).sort();
+  let html='<option value="">All Weeks</option>';
+  months.forEach(ym=>{
+    const y=+ym.slice(0,4),mo=+ym.slice(5),last=new Date(Date.UTC(y,mo,0)).getUTCDate(),mn=_WIPR_MON[mo-1];
+    html+=`<optgroup label="${mn} ${y}">`;
+    for(let w=1;w<=5;w++){
+      const a=(w-1)*7+1,b=w===5?last:w*7;
+      if(a>last)break;
+      html+=`<option value="${ym}|${w}">${_WIPR_ORD[w-1]} week ${mn} (${a}${b>a?'–'+b:''} ${mn})</option>`;
+    }
+    html+='</optgroup>';
+  });
+  sel.innerHTML=html;
+  if(cur&&sel.querySelector(`option[value="${cur}"]`))sel.value=cur;
+}
+/* Week choose karte hi receipt-date range "All Dates" ho jaati hai taaki us hafte ki delivery wale saare rows dikhen */
+function wiprWeekChanged(){
+  const v=document.getElementById('wiprWeek')?.value||'';
+  if(v){const ms=document.getElementById('wiprMonth');if(ms)ms.value='all';_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+  renderWipReceive();
+}
+window.wiprWeekChanged=wiprWeekChanged;
 let _wiprChannels=[];
 function _wiprFillChannels(){
   const sel=document.getElementById('wiprChannel');if(!sel)return;
@@ -19621,7 +19668,7 @@ function loadWipReceive(force){
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error)throw new Error(d.error);
-      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprDeliveryDates=Array.isArray(d.delivery_dates)?d.delivery_dates:[];_wiprFillDelivery();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprDeliveryDates=Array.isArray(d.delivery_dates)?d.delivery_dates:[];_wiprFillDelivery();_wiprFillWeeks();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
       if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);const _ms=document.getElementById('wiprMonth');if(_ms)_ms.value='last7';}
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
@@ -19667,6 +19714,7 @@ function _wiprBase(){
   const q=String(document.getElementById('wiprSearch')?.value||'').trim().toLowerCase();
   const ch=String(document.getElementById('wiprChannel')?.value||'').trim().toLowerCase();
   const dv=String(document.getElementById('wiprDelivery')?.value||'').trim();
+  const wk=String(document.getElementById('wiprWeek')?.value||'').trim();
   const oq=String(document.getElementById('wiprOrderNo')?.value||'').trim().toLowerCase();
   const cm=String(_wiprToday||_wiprMaxDate||'').slice(0,7);
   return _wiprRows.filter(r=>{
@@ -19675,6 +19723,7 @@ function _wiprBase(){
     if(!_wiprPasteMatch(r.sku))return false;
     if(!((Number(r.balance)||0)>0||(cm&&String(r.date||'').startsWith(cm))))return false; /* balance > 0 only, but whole current month shown */
     if(dv&&String(r.delivery||'')!==dv)return false;
+    if(wk&&_wiprWeekOf(r.delivery)!==wk)return false;
     if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
     if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
@@ -19691,7 +19740,7 @@ function _wiprMergeDateSku(list){
   const m=new Map();
   list.forEach(r=>{
     const k=r.date+'|'+_wiprOrdKey(r);
-    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance)};
+    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance)};
     x.qty+=Number(r.qty)||0;
     if(!x.od&&r.order_date)x.od=r.order_date;
     if(!x.dl&&r.delivery)x.dl=r.delivery;
@@ -19728,7 +19777,7 @@ function _wiprSkuMatrix(list){
   const m=new Map();
   list.forEach(r=>{
     const k=_wiprOrdKey(r);
-    const x=m.get(k)||{order:r.order||'',sku:r.sku,byDate:{},total:0,od:r.od||'',dl:r.dl||'',oq:r.oq||0};
+    const x=m.get(k)||{order:r.order||'',sku:r.sku,byDate:{},total:0,od:r.od||'',dl:r.dl||'',oq:r.oq||0,rq:r.rq||0,ch:r.ch||'',bal:(r.bal===undefined?null:r.bal)};
     x.byDate[r.date]=(x.byDate[r.date]||0)+(Number(r.qty)||0);x.total+=Number(r.qty)||0;
     if(!x.od&&r.od)x.od=r.od;if(!x.dl&&r.dl)x.dl=r.dl;
     m.set(k,x);
@@ -19756,15 +19805,15 @@ function renderWipReceive(){
   const skuBtn=sku=>`<button class="sku-link" onclick="openSkuDetails('${String(sku).replace(/'/g,"\\'")}')">${escHtml(sku)}</button>`;
   const stick='position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0';
   const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
-  const lead=(x,it)=>`<td style="font-weight:800">${escHtml(x.order||'—')}</td><td>${fD(x.od)}</td><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num">${n(_wiprInv(x.sku))}</td>`;
-  const leadHead=`<th>Order No.</th><th>Order Date</th><th>SKU</th><th>Photo</th><th class="ops-num">Inv Stock</th>`;
+  const lead=(x,it)=>`<td style="font-weight:800">${escHtml(x.order||'—')}</td><td>${fD(x.od)}</td><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num">${n(_wiprInv(x.sku))}</td><td class="wipr-ch">${escHtml(x.ch||'—')}</td><td class="ops-num">${x.oq?n(x.oq):'—'}</td><td class="ops-num">${n(x.rq)}</td><td class="ops-num"><b>${(x.bal===null||x.bal===undefined)?'—':n(x.bal)}</b></td>`;
+  const leadHead=`<th>Order No.</th><th>Order Date</th><th>SKU</th><th>Photo</th><th class="ops-num">Inv Stock</th><th>Channel</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th>`;
   /* ── Single date view ── */
   if(_wiprPick){
     const rows=shown.slice().sort(_wiprCmpRow);
     let body='';
     rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr>${lead(r,it)}<td class="ops-num"><b>${n(r.qty)}</b></td><td>${fD(r.dl)}</td></tr>`;});
-    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
-    host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr>${leadHead}<th>Qty</th><th>Delivery Date</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
+    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="9" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
+    host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${leadHead}<th>Qty</th><th>Delivery Date</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
     return;
   }
   /* ── Matrix view: order · date · sku · photo · inv stock · receiving dates · total · delivery date ── */
@@ -19777,11 +19826,11 @@ function renderWipReceive(){
     const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
     body+=`<tr>${lead(x,it)}`+cols.map(d=>x.byDate[d]?`<td class="ops-num"><b>${n(x.byDate[d])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td>${fD(x.dl)}</td></tr>`;
   });
-  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
-  host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
+  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="9" style="${stick}">Grand Total</td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
+  host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function resetWipReceiveFilters(){
-  ['wiprType','wiprChannel','wiprDelivery'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['wiprType','wiprChannel','wiprDelivery','wiprWeek'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['wiprSearch','wiprOrderNo','wiprPasteSkus'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   _wiprPasteTokens=null;
   const info=document.getElementById('wiprPasteInfo');if(info)info.textContent='';
@@ -19798,24 +19847,25 @@ function exportWipReceive(){
   const ty=document.getElementById('wiprType')?.value||'';
   const chv=document.getElementById('wiprChannel')?.value||'';
   const dvv=document.getElementById('wiprDelivery')?.value||'';
-  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'')+(chv?'_'+chv.replace(/[^A-Za-z0-9]+/g,'_'):'')+(dvv?'_delivery_'+dvv:'');
+  const wkv=document.getElementById('wiprWeek')?.value||'';
+  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'')+(chv?'_'+chv.replace(/[^A-Za-z0-9]+/g,'_'):'')+(dvv?'_delivery_'+dvv:'')+(wkv?'_week_'+wkv.replace('|','_w'):'');
   const info=sku=>{const it=_masterSkuMap[_opsSkuKey(sku)]||{};return[exportSkuName(sku,String(it.sku_name||'')),String(it.image_url||'')];};
   const fD=v=>v?_wiprFmtFull(v):'';
   if(_wiprPick){
     const rows=list.filter(r=>r.date===_wiprPick).sort(_wiprCmpRow);
     if(!rows.length){alert('No WIP receive rows to export');return;}
     const total=rows.reduce((s2,r)=>s2+(Number(r.qty)||0),0);
-    const out=rows.map(r=>[r.order||'',fD(r.od),r.sku,...info(r.sku),_wiprInv(r.sku),Number(r.qty)||0,fD(r.dl)]);
-    out.push(['Grand Total','','','','','',total,'']);
-    _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Received Qty (' + _wiprPick + ')','Delivery Date'],out,'wip_receive'+tag+'_'+_wiprPick);
+    const out=rows.map(r=>[r.order||'',fD(r.od),r.sku,...info(r.sku),_wiprInv(r.sku),r.ch||'',r.oq||0,r.rq||0,(r.bal===null||r.bal===undefined)?'':r.bal,Number(r.qty)||0,fD(r.dl)]);
+    out.push(['Grand Total','','','','','','','','','',total,'']);
+    _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Channel','Order Qty','Rec Qty','Bal Qty','Received Qty (' + _wiprPick + ')','Delivery Date'],out,'wip_receive'+tag+'_'+_wiprPick);
     return;
   }
   if(!list.length){alert('No WIP receive rows to export');return;}
   const cols=_wiprDateCols(list),mat=_wiprSkuMatrix(list);
   const dayTot={};let total=0;list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);total+=Number(r.qty)||0;});
-  const out=mat.map(x=>[x.order||'',fD(x.od),x.sku,...info(x.sku),_wiprInv(x.sku),...cols.map(d=>x.byDate[d]||0),fD(x.dl)]);
-  out.push(['Grand Total','','','','','',...cols.map(d=>dayTot[d]||0),'']);
-  _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
+  const out=mat.map(x=>[x.order||'',fD(x.od),x.sku,...info(x.sku),_wiprInv(x.sku),x.ch||'',x.oq||0,x.rq||0,(x.bal===null||x.bal===undefined)?'':x.bal,...cols.map(d=>x.byDate[d]||0),fD(x.dl)]);
+  out.push(['Grand Total','','','','','','','','','',...cols.map(d=>dayTot[d]||0),'']);
+  _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Channel','Order Qty','Rec Qty','Bal Qty',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
 }
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprMonthChanged=wiprMonthChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
@@ -28361,11 +28411,13 @@ def api_wip_receive():
     odt_by_order_sku, odt_by_order = {}, {}
     oq_by_order_sku = {}
     bal_by_order_sku = {}
+    rq_by_order_sku = {}
     for pr in prod_rows:
         _on3 = _wipr_norm_order(pr.get("order_no"))
         if _on3:
             _k3 = (_on3, str(pr.get("sku") or "").strip().upper())
             bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + float(pr.get("bal_qty") or 0)
+            rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
         _on2 = _wipr_norm_order(pr.get("order_no"))
         if _on2:
             _k2 = (_on2, str(pr.get("sku") or "").strip().upper())
@@ -28403,7 +28455,7 @@ def api_wip_receive():
         od = odt_by_order_sku.get((r["order"], r["sku"])) or odt_by_order.get(r["order"]) or ""
         k = (r["date"], r["sku"], ty, ch, dl, od, r["order"], _balv)
         _oqv = oq_by_order_sku.get((r["order"], r["sku"]), 0.0)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": []})
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": []})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
