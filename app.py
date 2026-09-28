@@ -9417,6 +9417,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Type</label><select class="fs" id="wiprType" onchange="renderWipReceive()"><option value="">All Types</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
+      <div class="fc"><label class="fl">Delivery Date</label><select class="fs" id="wiprDelivery" onchange="renderWipReceive()"><option value="">All Delivery Dates</option></select></div>
       <div class="fc"><label class="fl">Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option><option value="custom">Custom Range</option></select></div>
       <div class="fc op-paste">
         <label class="fl">Paste multiple SKUs (any separator — comma, space, or new line)</label>
@@ -9432,7 +9433,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type and SKU search all filter the table, the date-heading totals and the Grand Total. Inv Stock is the current warehouse stock of the SKU (no grand total shown for it). Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Inv Stock is the current warehouse stock of the SKU (no grand total shown for it). Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19587,6 +19588,13 @@ function wiprMonthChanged(){
   else{const y=+v.slice(0,4),m=+v.slice(5);const last=new Date(Date.UTC(y,m,0)).getUTCDate();_wiprSetRange(v+'-01',v+'-'+String(last).padStart(2,'0'));}
   renderWipReceive();
 }
+let _wiprDeliveryDates=[];
+function _wiprFillDelivery(){
+  const sel=document.getElementById('wiprDelivery');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Delivery Dates</option>'+_wiprDeliveryDates.map(t=>`<option value="${escHtml(t)}">${escHtml(_wiprFmt(t))}${escHtml(' '+t.slice(0,4))}</option>`).join('');
+  if(cur&&_wiprDeliveryDates.includes(cur))sel.value=cur;
+}
 let _wiprChannels=[];
 function _wiprFillChannels(){
   const sel=document.getElementById('wiprChannel');if(!sel)return;
@@ -19605,7 +19613,7 @@ function loadWipReceive(force){
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error)throw new Error(d.error);
-      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprDeliveryDates=Array.isArray(d.delivery_dates)?d.delivery_dates:[];_wiprFillDelivery();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
       if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);const _ms=document.getElementById('wiprMonth');if(_ms)_ms.value='last7';}
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
@@ -19650,10 +19658,12 @@ function _wiprBase(){
   const ty=String(document.getElementById('wiprType')?.value||'').trim().toLowerCase();
   const q=String(document.getElementById('wiprSearch')?.value||'').trim().toLowerCase();
   const ch=String(document.getElementById('wiprChannel')?.value||'').trim().toLowerCase();
+  const dv=String(document.getElementById('wiprDelivery')?.value||'').trim();
   return _wiprRows.filter(r=>{
     if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(!_wiprPasteMatch(r.sku))return false;
+    if(dv&&String(r.delivery||'')!==dv)return false;
     if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
     return true;
@@ -19736,7 +19746,8 @@ function exportWipReceive(){
   if(list===null){alert('From Date is after To Date. Please correct the dates.');return;}
   const ty=document.getElementById('wiprType')?.value||'';
   const chv=document.getElementById('wiprChannel')?.value||'';
-  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'')+(chv?'_'+chv.replace(/[^A-Za-z0-9]+/g,'_'):'');
+  const dvv=document.getElementById('wiprDelivery')?.value||'';
+  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'')+(chv?'_'+chv.replace(/[^A-Za-z0-9]+/g,'_'):'')+(dvv?'_delivery_'+dvv:'');
   const info=sku=>{const it=_masterSkuMap[_opsSkuKey(sku)]||{};return[exportSkuName(sku,String(it.sku_name||'')),String(it.image_url||'')];};
   if(_wiprPick){
     const rows=list.filter(r=>r.date===_wiprPick).sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));
@@ -28290,7 +28301,13 @@ def api_wip_receive():
         prod_rows = list(_PROD_CACHE.get("rows") or [])
     type_by_order_sku, type_by_order = {}, {}
     chan_by_order_sku, chan_by_order = {}, {}
+    dlv_by_order_sku, dlv_by_order = {}, {}
     for pr in prod_rows:
+        _dl = str(pr.get("delivery_iso") or "").strip()
+        _on0 = _wipr_norm_order(pr.get("order_no"))
+        if _on0 and _dl:
+            dlv_by_order_sku.setdefault((_on0, str(pr.get("sku") or "").strip().upper()), _dl)
+            dlv_by_order.setdefault(_on0, _dl)
         ty = str(pr.get("order_type") or "").strip()
         ch = str(pr.get("channel") or "").strip()
         on = _wipr_norm_order(pr.get("order_no"))
@@ -28310,8 +28327,9 @@ def api_wip_receive():
     for r in rows:
         ty = type_by_order_sku.get((r["order"], r["sku"])) or type_by_order.get(r["order"]) or ""
         ch = chan_by_order_sku.get((r["order"], r["sku"])) or chan_by_order.get(r["order"]) or ""
-        k = (r["date"], r["sku"], ty, ch)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "qty": 0.0, "orders": []})
+        dl = dlv_by_order_sku.get((r["order"], r["sku"])) or dlv_by_order.get(r["order"]) or ""
+        k = (r["date"], r["sku"], ty, ch, dl)
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "qty": 0.0, "orders": []})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
@@ -28326,6 +28344,7 @@ def api_wip_receive():
         "rows": rows,
         "types": types,
         "channels": channels,
+        "delivery_dates": sorted({r["delivery"] for r in rows if r.get("delivery")}, reverse=True),
         "today": now_ist().strftime("%Y-%m-%d"),
         "min_date": min(dates) if dates else "",
         "max_date": max(dates) if dates else "",
