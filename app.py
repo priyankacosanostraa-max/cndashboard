@@ -9355,6 +9355,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-section-head"><div class="ops-section-title">Stock Age</div></div>
       <div class="ops-filters">
         <div class="fc"><label class="fl">Not Sold For</label><select class="fs" id="iaBucket" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="0-15">0–15 Days</option><option value="15-30">15–30 Days</option><option value="30-45">30–45 Days</option><option value="45-60">45–60 Days</option><option value="60-90">60–90 Days</option><option value="90+">90+ Days</option><option value="never">Never Sold</option></select></div>
+        <div class="fc"><label class="fl">Launch Date</label><select class="fs" id="iaLaunch" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="0-30">0–30 Days</option><option value="30-60">30–60 Days</option><option value="60-90">60–90 Days</option><option value="90+">90+ Days</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="iaGroup" onchange="renderInventoryAgeing()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
         <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="iaTaxon" onchange="renderInventoryAgeing()"><option value="All">All Categories</option></select></div>
         <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="iaSearch" placeholder="Search SKU…" oninput="renderInventoryAgeing_d()"></div>
@@ -9362,7 +9363,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
       <div id="iaSummary" class="ops-kpis"></div>
       <div id="iaContent" class="ops-table-wrap"></div>
-      <div class="ops-note">Launch Date is shown when available; otherwise the first date the product sold is shown (marked “First Sold Date”). Final Sold = Individual + In CMB. Stock Ageing = days since the product last sold, counting sales inside CMBs. “Never Sold” products have no sale on record.</div>
+      <div class="ops-note">Launch Date = the first date the product sold (earliest Order Date or Dispatch Date, marked “First Sold Date”); if the product has never sold, its actual Launch Date is shown. The Launch Date filter counts days from that date to today. Final Sold = Individual + In CMB. Days Not Sold = days since the product last sold, counting sales inside CMBs. “Never Sold” products have no sale on record.</div>
     </div>
 
     <div class="ops-divider"></div>
@@ -9375,6 +9376,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">High Sale = Total Sold At Least</label><input class="fi" id="hsHighSale" type="number" min="0" value="10" oninput="renderStockSales_d()"></div>
         <div class="fc"><label class="fl">Low Sale = Total Sold Up To</label><input class="fi" id="hsLowSale" type="number" min="0" value="2" oninput="renderStockSales_d()"></div>
         <div class="fc"><label class="fl">High Stock = Stock At Least</label><input class="fi" id="hsHighStock" type="number" min="0" value="50" oninput="renderStockSales_d()"></div>
+        <div class="fc"><label class="fl">Launch Date</label><select class="fs" id="hsLaunch" onchange="renderStockSales()"><option value="All">All</option><option value="0-30">0–30 Days</option><option value="30-60">30–60 Days</option><option value="60-90">60–90 Days</option><option value="90+">90+ Days</option></select></div>
         <div class="fc"><label class="fl">Product Group</label><select class="fs" id="hsGroup" onchange="renderStockSales()"><option value="All">All</option><option value="Rakhi">Rakhi</option><option value="Others">Others</option></select></div>
         <div class="fc"><label class="fl">Category (select one or more)</label><select class="fs" id="hsTaxon" onchange="renderStockSales()"><option value="All">All Categories</option></select></div>
         <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="hsSearch" placeholder="Search SKU…" oninput="renderStockSales_d()"></div>
@@ -9390,7 +9392,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">WIP Receive</div>
-        <div class="ops-sub">Date-wise SKUs received from production, with image and received quantity. Shows everything from 20 Sep 2026 by default; change the dates to look at earlier or later days.</div>
+        <div class="ops-sub">Date-wise SKUs received from production. Column headings show the last 7 days by default (or your date range). Click any date heading to see every SKU received on that date with photo and qty.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadWipReceive(true)">Refresh</button>
@@ -9398,11 +9400,13 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="ops-filters">
-      <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="wiprFrom" onchange="renderWipReceive()"></div>
-      <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="wiprTo" onchange="renderWipReceive()"></div>
+      <div class="fc"><label class="fl">From Date</label><input class="fi" type="date" id="wiprFrom" onchange="wiprRangeChanged()"></div>
+      <div class="fc"><label class="fl">To Date</label><input class="fi" type="date" id="wiprTo" onchange="wiprRangeChanged()"></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="wiprType" onchange="renderWipReceive()"><option value="">All Types</option></select></div>
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Quick Range</label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="wiprLast7Range()">Last 7 Days</button>
           <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px" onclick="wiprResetRange()">From 20 Sep</button>
           <button class="go-btn" style="width:auto;padding:8px 13px;letter-spacing:1px;background:#eceff4;color:#111" onclick="wiprAllDates()">All Dates</button>
         </div>
@@ -9410,8 +9414,9 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div id="wiprInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="wiprSummary" class="ops-kpis"></div>
+    <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Received Qty is the total for that SKU on that date across all orders in the WIP-Recv sheet. Click any date box above to see only that day.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Type is the order type of the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Date range, Type and SKU search all filter the table, the date-heading totals and the Grand Total. Click a date heading to see only that date (SKU, photo, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19414,17 +19419,22 @@ function loadSmartOps(fresh){
 }
 
 /* ── Stock Age: how many days since the SKU last sold ── */
+function _iaLaunchBucket(days){if(days===null||days===undefined)return'';if(days<=30)return'0-30';if(days<=60)return'30-60';if(days<=90)return'60-90';return'90+';}
 function _iaSoldBucket(days){if(days===null)return'never';if(days<=15)return'0-15';if(days<=30)return'15-30';if(days<=45)return'30-45';if(days<=60)return'45-60';if(days<=90)return'60-90';return'90+';}
 function _iaSaleDates(it){
   const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
   let first='',last='';
-  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(!d||d>end)continue;if(!first||d<first)first=d;if(!last||d>last)last=d;}};
+  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(!d||d>end)continue;if(!last||d>last)last=d;
+    /* First Sold Date = earliest of Order Date and Dispatch Date */
+    [_bizIso(e&&e.order_date),_bizIso(e&&e.date),_bizIso(e&&e.dispatch_date),_bizIso(e&&e.orderDate)].forEach(x=>{if(x&&x<=end&&(!first||x<first))first=x;});}};
   addEntries((it&&it.sales_entries)||[]);
   const key=String(it&&it.sku||'').trim().toUpperCase();
   const seen=new Set();
   (cnxComboParentIndex().get(key)||[]).forEach(parent=>{const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);addEntries((parent&&parent.sales_entries)||[]);});
   const fallback=_bizIso(it&&it.last_dispatch_date);
   if(fallback&&fallback<=end&&(!last||fallback>last))last=fallback;
+  const fbFirst=_bizIso(it&&it.first_dispatch_date);
+  if(fbFirst&&fbFirst<=end&&(!first||fbFirst<first))first=fbFirst;
   return{first,last};
 }
 function _buildInventoryAgeRows(){
@@ -19435,7 +19445,7 @@ function _buildInventoryAgeRows(){
     const launch=_bizIso(it.launch_date);
     const daysSinceSale=dates.last?_opsDateDays(dates.last):null;
     const ind=Number(sp.individual.sold)||0,cmb=Number(sp.inCmb.sold)||0;
-    return{sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock:Math.max(0,_opsNum(it.inv_stock)),wip:Math.max(0,_opsNum(it.inv_wip)),launchDate:launch||dates.first||'',launchIsFirstSold:!launch&&!!dates.first,sp,indSold:ind,cmbSold:cmb,finalSold:ind+cmb,lastSale:dates.last,daysSinceSale,bucket:_iaSoldBucket(daysSinceSale)};
+    return{sku,skuName:String(it.sku_name||''),image:String(it.image_url||''),group:_opsGroup(it),taxon:String(it.taxon||'General'),stock:Math.max(0,_opsNum(it.inv_stock)),wip:Math.max(0,_opsNum(it.inv_wip)),launchDate:dates.first||launch||'',launchIsFirstSold:!!dates.first,launchBucket:_iaLaunchBucket(_opsDateDays(dates.first||launch||'')),sp,indSold:ind,cmbSold:cmb,finalSold:ind+cmb,lastSale:dates.last,daysSinceSale,bucket:_iaSoldBucket(daysSinceSale)};
   }).filter(Boolean);
   _opsFillTaxon('iaTaxon',_inventoryAgeRows,r=>r.taxon);
   _opsFillTaxon('hsTaxon',_inventoryAgeRows,r=>r.taxon);
@@ -19443,8 +19453,8 @@ function _buildInventoryAgeRows(){
 }
 function _inventoryAgeFiltered(){
   if(!_inventoryAgeRows.length)_buildInventoryAgeRows();
-  const bk=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('iaTaxon');const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';
-  return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(bk==='All'||r.bucket===bk)&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(stockOnly!=='yes'||r.stock>0)).sort((x,y)=>{
+  const bk=document.getElementById('iaBucket')?.value||'All';const g=document.getElementById('iaGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('iaTaxon');const q=String(document.getElementById('iaSearch')?.value||'').trim().toLowerCase();const stockOnly=document.getElementById('iaStockOnly')?.value||'yes';const lb=document.getElementById('iaLaunch')?.value||'All';
+  return _inventoryAgeRows.filter(r=>cnxSkuMatchesGlobalCn(r.sku)&&(bk==='All'||r.bucket===bk)&&(lb==='All'||r.launchBucket===lb)&&(g==='All'||r.group===g)&&cnxCategoryMatches(txSel,r.taxon)&&(!q||`${r.sku} ${r.skuName}`.toLowerCase().includes(q))&&(stockOnly!=='yes'||r.stock>0)).sort((x,y)=>{
     if(x.daysSinceSale===null&&y.daysSinceSale===null)return y.stock-x.stock;
     if(x.daysSinceSale===null)return 1;
     if(y.daysSinceSale===null)return -1;
@@ -19456,10 +19466,10 @@ function renderInventoryAgeing(){
   const rows=_inventoryAgeFiltered();const sum=document.getElementById('iaSummary');const host=document.getElementById('iaContent');if(!host)return;
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   if(sum)sum.innerHTML=_opsKpi('Products',n(rows.length),'Matching the selected filters')+_opsKpi('Inv Stock',n(rows.reduce((s,r)=>s+r.stock,0)),'Units')+_opsKpi('Inv WIP',n(rows.reduce((s,r)=>s+r.wip,0)),'Units');
-  const body=rows.map(r=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${_opsPhoto(r.image)}</td><td>${r.launchDate?escHtml(r.launchDate)+(r.launchIsFirstSold?'<div style="font-size:9px;color:#64748b">First Sold Date</div>':''):'—'}</td><td class="ops-num">${n(r.indSold)}</td><td class="ops-num">${n(r.cmbSold)}</td><td class="ops-num"><b>${n(r.finalSold)}</b></td><td class="ops-num">${n(r.stock)}</td><td class="ops-num">${n(r.wip)}</td><td class="ops-num">${r.daysSinceSale===null?'Never Sold':n(r.daysSinceSale)}</td><td>${escHtml(r.lastSale||'Never Sold')}</td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Launch Date</th><th data-keep-heading>Total Sold (Individual)</th><th data-keep-heading>Total Sold (In CMB)</th><th data-keep-heading>Final Sold</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Stock Ageing (Days Not Sold)</th><th data-keep-heading>Last Sold Date</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map(r=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td>${_opsPhoto(r.image)}</td><td>${r.launchDate?escHtml(r.launchDate)+(r.launchIsFirstSold?'<div style="font-size:9px;color:#64748b">First Sold Date</div>':'<div style="font-size:9px;color:#64748b">Launch Date</div>'):'—'}</td><td class="ops-num">${n(r.indSold)}</td><td class="ops-num">${n(r.cmbSold)}</td><td class="ops-num"><b>${n(r.finalSold)}</b></td><td class="ops-num">${n(r.stock)}</td><td class="ops-num">${n(r.wip)}</td><td class="ops-num">${r.daysSinceSale===null?'Never Sold':n(r.daysSinceSale)}</td><td>${escHtml(r.lastSale||'Never Sold')}</td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Launch Date</th><th data-keep-heading>Total Sold (Individual)</th><th data-keep-heading>Total Sold (In CMB)</th><th data-keep-heading>Final Sold</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Days Not Sold</th><th data-keep-heading>Last Sold Date</th></tr></thead><tbody>${body||'<tr><td colspan="10" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
 }
-function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Image Link','Launch Date','Launch Date Source','Total Sold (Individual)','Total Sold (In CMB)','Final Sold','Inv Stock','Inv WIP','Stock Ageing (Days Not Sold)','Last Sold Date'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.image,r.launchDate,r.launchDate?(r.launchIsFirstSold?'First Sold Date':'Launch Date'):'',Math.round(r.indSold),Math.round(r.cmbSold),Math.round(r.finalSold),Math.round(r.stock),Math.round(r.wip),r.daysSinceSale===null?'Never Sold':r.daysSinceSale,r.lastSale||'Never Sold']),'stock_age');}
+function exportInventoryAgeing(){const rows=_inventoryAgeFiltered();if(!rows.length){alert('No stock-age rows to export');return;}_dlCsv(['SKU','SKU Name','Image Link','Launch Date','Launch Date Source','Total Sold (Individual)','Total Sold (In CMB)','Final Sold','Inv Stock','Inv WIP','Days Not Sold','Last Sold Date'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.image,r.launchDate,r.launchDate?(r.launchIsFirstSold?'First Sold Date':'Launch Date'):'',Math.round(r.indSold),Math.round(r.cmbSold),Math.round(r.finalSold),Math.round(r.stock),Math.round(r.wip),r.daysSinceSale===null?'Never Sold':r.daysSinceSale,r.lastSale||'Never Sold']),'stock_age');}
 
 /* ── Sales vs Stock: High Sale + No WIP  /  Low Sale + High Stock ── */
 function _stockSalesQty(r,period){
@@ -19477,6 +19487,8 @@ function _stockSalesFiltered(){
   const g=document.getElementById('hsGroup')?.value||'All';const txSel=cnxSelectedCategoryValues('hsTaxon');const q=String(document.getElementById('hsSearch')?.value||'').trim().toLowerCase();
   const out=[];
   _inventoryAgeRows.forEach(r=>{
+    const lbSel=document.getElementById('hsLaunch')?.value||'All';
+    if(lbSel!=='All'&&r.launchBucket!==lbSel)return;
     if(!cnxSkuMatchesGlobalCn(r.sku)||(g!=='All'&&r.group!==g)||!cnxCategoryMatches(txSel,r.taxon)||(q&&!`${r.sku} ${r.skuName}`.toLowerCase().includes(q)))return;
     const s=_stockSalesQty(r,period);
     const ok=mode==='HIGH_NO_WIP'?(s.total>=hiSale&&s.total>0&&r.wip<=0):(s.total<=loSale&&r.stock>=hiStock&&r.stock>0);
@@ -19490,35 +19502,53 @@ function renderStockSales(){
   const rows=_stockSalesFiltered();const sum=document.getElementById('hsSummary');const host=document.getElementById('hsContent');if(!host)return;
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   if(sum)sum.innerHTML=_opsKpi('Products',n(rows.length),'Matching the selected filters')+_opsKpi('Inv Stock',n(rows.reduce((s,x)=>s+x.r.stock,0)),'Units')+_opsKpi('Inv WIP',n(rows.reduce((s,x)=>s+x.r.wip,0)),'Units')+_opsKpi('Total Sold',n(rows.reduce((s,x)=>s+x.total,0)),'Selected period');
-  const body=rows.map(x=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(x.r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(x.r.sku,x.r.skuName))}</button></td><td>${_opsPhoto(x.r.image)}</td><td class="ops-num">${n(x.r.stock)}</td><td class="ops-num">${n(x.r.wip)}</td><td class="ops-num">${n(x.ind)}</td><td class="ops-num">${n(x.cmb)}</td><td class="ops-num"><b>${n(x.total)}</b></td></tr>`).join('');
-  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Sold (Individual)</th><th data-keep-heading>Sold (In CMB)</th><th data-keep-heading>Total Sold</th></tr></thead><tbody>${body||'<tr><td colspan="7" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
+  const body=rows.map(x=>`<tr><td><button class="sku-link" onclick="openSkuDetails('${String(x.r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(x.r.sku,x.r.skuName))}</button></td><td>${_opsPhoto(x.r.image)}</td><td>${x.r.launchDate?escHtml(x.r.launchDate)+'<div style="font-size:9px;color:#64748b">'+(x.r.launchIsFirstSold?'First Sold Date':'Launch Date')+'</div>':'—'}</td><td class="ops-num">${n(x.r.stock)}</td><td class="ops-num">${n(x.r.wip)}</td><td class="ops-num">${n(x.ind)}</td><td class="ops-num">${n(x.cmb)}</td><td class="ops-num"><b>${n(x.total)}</b></td></tr>`).join('');
+  host.innerHTML=`<table class="ops-table"><thead><tr><th data-keep-heading>SKU</th><th data-keep-heading>Image</th><th data-keep-heading>Launch Date</th><th data-keep-heading>Inv Stock</th><th data-keep-heading>Inv WIP</th><th data-keep-heading>Sold (Individual)</th><th data-keep-heading>Sold (In CMB)</th><th data-keep-heading>Total Sold</th></tr></thead><tbody>${body||'<tr><td colspan="8" class="ops-empty">No products match the selected filters.</td></tr>'}</tbody></table>`;
 }
 function exportStockSales(){
   const rows=_stockSalesFiltered();if(!rows.length){alert('No rows to export');return;}
   const mode=document.getElementById('hsMode')?.value||'HIGH_NO_WIP';
-  _dlCsv(['SKU','SKU Name','Image Link','Inv Stock','Inv WIP','Sold (Individual)','Sold (In CMB)','Total Sold'],rows.map(x=>[x.r.sku,exportSkuName(x.r.sku,x.r.skuName),x.r.image,Math.round(x.r.stock),Math.round(x.r.wip),Math.round(x.ind),Math.round(x.cmb),Math.round(x.total)]),mode==='HIGH_NO_WIP'?'high_sale_no_wip':'low_sale_high_stock');
+  _dlCsv(['SKU','SKU Name','Image Link','Launch Date','Launch Date Source','Inv Stock','Inv WIP','Sold (Individual)','Sold (In CMB)','Total Sold'],rows.map(x=>[x.r.sku,exportSkuName(x.r.sku,x.r.skuName),x.r.image,x.r.launchDate,x.r.launchDate?(x.r.launchIsFirstSold?'First Sold Date':'Launch Date'):'',Math.round(x.r.stock),Math.round(x.r.wip),Math.round(x.ind),Math.round(x.cmb),Math.round(x.total)]),mode==='HIGH_NO_WIP'?'high_sale_no_wip':'low_sale_high_stock');
 }
 
 /* ── WIP Receive: date-wise SKUs received (WIP-Recv sheet) ── */
 const WIPR_DEFAULT_FROM='2026-09-20';
+let _wiprTypes=[];
+function _wiprFillTypes(){
+  const sel=document.getElementById('wiprType');if(!sel)return;
+  const cur=sel.value;
+  sel.innerHTML='<option value="">All Types</option>'+_wiprTypes.map(t=>`<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  if(cur&&_wiprTypes.includes(cur))sel.value=cur;
+}
+function _wiprShift(iso,n){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]+n));return d.toISOString().slice(0,10);}
+function wiprLast7Range(){const to=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(to,-6),to);renderWipReceive();}
 let _wiprRows=[],_wiprLoaded=false,_wiprInit=false,_wiprMinDate='',_wiprMaxDate='',_wiprToday='';
 function _wiprFmt(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso||'—';
   const mon=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][Number(m[2])-1]||m[2];
   return Number(m[3])+'-'+mon+'-'+m[1];
 }
+let _wiprPick='';
 function _wiprSetRange(from,to){
   const f=document.getElementById('wiprFrom'),t=document.getElementById('wiprTo');
   if(f)f.value=from||'';if(t)t.value=to||'';
+  _wiprPick='';
 }
 function _wiprDefaultTo(){
   let to=_wiprToday||_wiprMaxDate||WIPR_DEFAULT_FROM;
   if(_wiprMaxDate&&_wiprMaxDate>to)to=_wiprMaxDate;
   return to<WIPR_DEFAULT_FROM?WIPR_DEFAULT_FROM:to;
 }
+function _wiprDiffDays(a,b){
+  const pa=String(a||'').match(/^(\d{4})-(\d{2})-(\d{2})$/),pb=String(b||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!pa||!pb)return 0;
+  return Math.round((Date.UTC(+pb[1],+pb[2]-1,+pb[3])-Date.UTC(+pa[1],+pa[2]-1,+pa[3]))/86400000);
+}
+function wiprRangeChanged(){_wiprPick='';renderWipReceive();}
 function wiprResetRange(){_wiprSetRange(WIPR_DEFAULT_FROM,_wiprDefaultTo());renderWipReceive();}
 function wiprAllDates(){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());renderWipReceive();}
-function wiprPickDate(iso){_wiprSetRange(iso,iso);renderWipReceive();}
+function wiprPickDate(iso){_wiprPick=iso||'';renderWipReceive();}
+function wiprClearPick(){_wiprPick='';renderWipReceive();}
 function loadWipReceive(force){
   const host=document.getElementById('wiprContent');
   if(host&&!_wiprLoaded)host.innerHTML='<div class="ops-empty">Loading WIP received data…</div>';
@@ -19526,52 +19556,119 @@ function loadWipReceive(force){
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error)throw new Error(d.error);
-      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprLoaded=true;_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
-      if(!_wiprInit){_wiprInit=true;_wiprSetRange(WIPR_DEFAULT_FROM,_wiprDefaultTo());}
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprLoaded=true;_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);}
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
       renderWipReceive();
     })
     .catch(e=>{if(host)host.innerHTML='<div class="ops-empty">Failed: '+escHtml(e.message||e)+'</div>';});
 }
-function _wiprFiltered(){
-  const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
+function _wiprBase(){
+  const ty=String(document.getElementById('wiprType')?.value||'').trim().toLowerCase();
   const q=String(document.getElementById('wiprSearch')?.value||'').trim().toLowerCase();
-  if(from&&to&&from>to)return null;
   return _wiprRows.filter(r=>{
-    if(from&&r.date<from)return false;if(to&&r.date>to)return false;
+    if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
     return true;
-  }).sort((a,b)=>b.date.localeCompare(a.date)||(Number(b.qty)||0)-(Number(a.qty)||0)||a.sku.localeCompare(b.sku));
+  });
+}
+function _wiprMergeDateSku(list){
+  const m=new Map();
+  list.forEach(r=>{const k=r.date+'|'+r.sku;const x=m.get(k)||{date:r.date,sku:r.sku,qty:0};x.qty+=Number(r.qty)||0;m.set(k,x);});
+  return Array.from(m.values());
+}
+function _wiprInRange(){
+  const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
+  if(from&&to&&from>to)return null;
+  return _wiprMergeDateSku(_wiprBase().filter(r=>(!from||r.date>=from)&&(!to||r.date<=to)));
+}
+/* Rows the table/export currently shows (one date if a heading is clicked, else the whole range) */
+function _wiprFiltered(){
+  const list=_wiprInRange();if(list===null)return null;
+  const rows=_wiprPick?list.filter(r=>r.date===_wiprPick):list;
+  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.qty-a.qty||a.sku.localeCompare(b.sku));
+}
+/* Date columns: every calendar day when the range is <=14 days (so last 7 days always shows 7 headings),
+   otherwise only the dates that actually have receipts. Oldest -> newest. */
+function _wiprDateCols(list){
+  const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
+  const have=Array.from(new Set(list.map(r=>r.date))).sort();
+  if(from&&to&&_wiprDiffDays(from,to)<=13){
+    const out=[];for(let i=0;i<=_wiprDiffDays(from,to);i++)out.push(_wiprShift(from,i));return out;
+  }
+  return have;
+}
+function _wiprSkuMatrix(list){
+  const m=new Map();
+  list.forEach(r=>{const x=m.get(r.sku)||{sku:r.sku,byDate:{},total:0};x.byDate[r.date]=(x.byDate[r.date]||0)+(Number(r.qty)||0);x.total+=Number(r.qty)||0;m.set(r.sku,x);});
+  return Array.from(m.values()).sort((a,b)=>b.total-a.total||a.sku.localeCompare(b.sku));
 }
 function renderWipReceive(){
-  const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary');if(!host)return;
+  const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary'),bar=document.getElementById('wiprPickBar');if(!host)return;
   if(!_wiprLoaded)return;
-  const rows=_wiprFiltered();
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
-  if(rows===null){if(sum)sum.innerHTML='';host.innerHTML='<div class="ops-empty">From Date is after To Date. Please correct the dates.</div>';return;}
-  const byDate=new Map();let total=0;const skus=new Set();
-  rows.forEach(r=>{const q=Number(r.qty)||0;total+=q;skus.add(r.sku);const d=byDate.get(r.date)||{qty:0,skus:new Set()};d.qty+=q;d.skus.add(r.sku);byDate.set(r.date,d);});
   const from=document.getElementById('wiprFrom')?.value||'',to=document.getElementById('wiprTo')?.value||'';
-  const rangeText=from&&to?(from===to?_wiprFmt(from):_wiprFmt(from)+' to '+_wiprFmt(to)):'All dates';
-  let kpi=_opsKpi('Total Received Qty',n(total),rangeText)+_opsKpi('SKUs Received',n(skus.size),'Unique SKUs')+_opsKpi('Receipt Days',n(byDate.size),'Dates with receipts');
-  const dates=Array.from(byDate.keys()).sort((a,b)=>b.localeCompare(a));
-  if(dates.length>1){
-    dates.slice(0,31).forEach(d=>{const x=byDate.get(d);kpi+=`<div class="ops-kpi" style="cursor:pointer" title="Show only this date" onclick="wiprPickDate('${d}')"><div class="ops-kpi-label">${escHtml(_wiprFmt(d))}</div><div class="ops-kpi-value">${n(x.qty)}</div><div class="ops-kpi-sub">${n(x.skus.size)} SKUs received</div></div>`;});
+  const list=_wiprInRange();
+  if(list===null){if(sum)sum.innerHTML='';if(bar)bar.innerHTML='';host.innerHTML='<div class="ops-empty">From Date is after To Date. Please correct the dates.</div>';return;}
+  const shown=_wiprPick?list.filter(r=>r.date===_wiprPick):list;
+  let total=0;const skus=new Set(),days=new Set();
+  shown.forEach(r=>{total+=Number(r.qty)||0;skus.add(r.sku);days.add(r.date);});
+  const rangeText=_wiprPick?_wiprFmt(_wiprPick):(from&&to?(from===to?_wiprFmt(from):_wiprFmt(from)+' to '+_wiprFmt(to)):'All dates');
+  if(sum)sum.innerHTML=_opsKpi('Total Received Qty',n(total),rangeText)+_opsKpi('SKUs Received',n(skus.size),'Unique SKUs')+_opsKpi('Receipt Days',n(days.size),'Dates with receipts');
+  if(bar){
+    bar.innerHTML=_wiprPick
+      ?`<span class="small-note" style="font-weight:800">Showing only <b>${escHtml(_wiprFmt(_wiprPick))}</b> (range filter: ${escHtml(from&&to?_wiprFmt(from)+' to '+_wiprFmt(to):'All dates')})</span> <button class="go-btn" style="width:auto;padding:6px 12px;letter-spacing:1px;margin-left:8px" onclick="wiprClearPick()">← All dates</button>`
+      :`<span class="small-note">Tip: click any date heading to see every SKU received on that date.</span>`;
   }
-  if(sum)sum.innerHTML=kpi;
-  const body=rows.map(r=>{
-    const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};
-    return `<tr><td data-sort-value="${r.date}">${escHtml(_wiprFmt(r.date))}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,String(it.sku_name||'')))}</button></td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num"><b>${n(r.qty)}</b></td></tr>`;
-  }).join('');
-  host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr><th>Date</th><th>SKU</th><th>Image</th><th>Received Qty</th></tr></thead><tbody>${body||'<tr><td colspan="4" class="ops-empty">No WIP receipts found for the selected dates.</td></tr>'}</tbody></table>`;
+  const emptyMsg='<tr><td colspan="99" class="ops-empty">No WIP receipts found for the selected filters.</td></tr>';
+  const skuBtn=sku=>`<button class="sku-link" onclick="openSkuDetails('${String(sku).replace(/'/g,"\\'")}')">${escHtml(sku)}</button>`;
+  /* ── Single date view: SKU · Photo · Qty · Grand Total ── */
+  if(_wiprPick){
+    const rows=shown.slice().sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));
+    let body='';
+    rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr><td>${skuBtn(r.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num"><b>${n(r.qty)}</b></td></tr>`;});
+    const foot=rows.length?`<tfoot><tr style="background:#eef3ea;font-weight:900"><td colspan="2">Grand Total</td><td class="ops-num"><b>${n(total)}</b></td></tr></tfoot>`:'';
+    host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr><th>SKU</th><th>Photo</th><th>Qty</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
+    return;
+  }
+  /* ── Matrix view: date headings (last 7 days / date range) ── */
+  const cols=_wiprDateCols(list);
+  const mat=_wiprSkuMatrix(list);
+  const dayTot={};list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);});
+  let head=`<th>SKU</th><th>Photo</th>`+cols.map(d=>`<th class="ops-num" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received on ${escHtml(_wiprFmt(d))}" onclick="wiprPickDate('${d}')">${escHtml(_wiprFmt(d))}</th>`).join('')+`<th class="ops-num">Total</th>`;
+  let body='';
+  mat.forEach(x=>{
+    const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
+    body+=`<tr><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td>`+cols.map(d=>x.byDate[d]?`<td class="ops-num"><b>${n(x.byDate[d])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td class="ops-num"><b>${n(x.total)}</b></td></tr>`;
+  });
+  const foot=mat.length?`<tfoot><tr style="background:#eef3ea;font-weight:900"><td colspan="2">Grand Total</td>`+cols.map(d=>`<td class="ops-num"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td class="ops-num"><b>${n(total)}</b></td></tr></tfoot>`:'';
+  host.innerHTML=`<table class="ops-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function exportWipReceive(){
-  const rows=_wiprFiltered();if(!rows||!rows.length){alert('No WIP receive rows to export');return;}
-  _dlCsv(['Date','SKU','SKU Name','Image Link','Received Qty'],rows.map(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};return[r.date,r.sku,exportSkuName(r.sku,String(it.sku_name||'')),String(it.image_url||''),Number(r.qty)||0];}),'wip_receive');
+  const list=_wiprInRange();
+  if(list===null){alert('From Date is after To Date. Please correct the dates.');return;}
+  const ty=document.getElementById('wiprType')?.value||'';
+  const tag=(ty?'_'+ty.replace(/[^A-Za-z0-9]+/g,'_'):'');
+  const info=sku=>{const it=_masterSkuMap[_opsSkuKey(sku)]||{};return[exportSkuName(sku,String(it.sku_name||'')),String(it.image_url||'')];};
+  if(_wiprPick){
+    const rows=list.filter(r=>r.date===_wiprPick).sort((a,b)=>b.qty-a.qty||a.sku.localeCompare(b.sku));
+    if(!rows.length){alert('No WIP receive rows to export');return;}
+    const total=rows.reduce((s2,r)=>s2+(Number(r.qty)||0),0);
+    const out=rows.map(r=>[r.date,r.sku,...info(r.sku),Number(r.qty)||0]);
+    out.push(['Grand Total','','','',total]);
+    _dlCsv(['Date','SKU','SKU Name','Image Link','Received Qty'],out,'wip_receive'+tag+'_'+_wiprPick);
+    return;
+  }
+  if(!list.length){alert('No WIP receive rows to export');return;}
+  const cols=_wiprDateCols(list),mat=_wiprSkuMatrix(list);
+  const dayTot={};let total=0;list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);total+=Number(r.qty)||0;});
+  const out=mat.map(x=>[x.sku,...info(x.sku),...cols.map(d=>x.byDate[d]||0),x.total]);
+  out.push(['Grand Total','','',...cols.map(d=>dayTot[d]||0),total]);
+  _dlCsv(['SKU','SKU Name','Image Link',...cols,'Total'],out,'wip_receive'+tag);
 }
-window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;
+window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
@@ -28004,6 +28101,15 @@ _WIPRECV_CACHE = {"rows": None, "ts": 0.0}
 _WIPRECV_TTL = 60
 
 
+def _wipr_norm_order(v):
+    o = str(v if v is not None else "").strip().upper()
+    if o in ("NAN", "NONE", "NULL"):
+        return ""
+    if re.fullmatch(r"\d+\.0+", o):
+        o = o.split(".")[0]
+    return o
+
+
 def _load_wip_receive(force=False):
     """Read the WIP-Recv sheet and total Qty per (date, SKU)."""
     now_ts = time.time()
@@ -28038,18 +28144,13 @@ def _load_wip_receive(force=False):
         if qty == 0:
             continue
         iso = dt.strftime("%Y-%m-%d")
-        e = agg.setdefault((iso, sku), {"date": iso, "sku": sku, "qty": 0.0, "orders": []})
+        o = _wipr_norm_order(o_raw)
+        # Kept per order so the Type filter (order type from the Production sheet) can be applied exactly.
+        e = agg.setdefault((iso, sku, o), {"date": iso, "sku": sku, "order": o, "qty": 0.0})
         e["qty"] += qty
-        o = str(o_raw).strip()
-        if o and o.lower() not in ("nan", "none") and o not in e["orders"]:
-            e["orders"].append(o)
 
-    rows = []
-    for e in agg.values():
-        q = e["qty"]
-        e["qty"] = int(q) if float(q).is_integer() else round(q, 2)
-        rows.append(e)
-    rows.sort(key=lambda x: (x["date"], x["sku"]))
+    rows = list(agg.values())
+    rows.sort(key=lambda x: (x["date"], x["sku"], x["order"]))
     _WIPRECV_CACHE["rows"] = rows
     _WIPRECV_CACHE["ts"] = now_ts
     return rows
@@ -28069,9 +28170,41 @@ def api_wip_receive():
         if rows is None:
             return jsonify({"error": f"WIP receive sheet load failed: {e}"}), 500
         warn = f"Showing last loaded data — refresh failed: {e}"
+    # Order Type comes from the Production (PPC-WIP) sheet, matched on Order No. (+ SKU).
+    prod_rows = []
+    try:
+        _build_production()
+        prod_rows = list(_PROD_CACHE.get("rows") or [])
+    except Exception:
+        prod_rows = list(_PROD_CACHE.get("rows") or [])
+    type_by_order_sku, type_by_order = {}, {}
+    for pr in prod_rows:
+        ty = str(pr.get("order_type") or "").strip()
+        on = _wipr_norm_order(pr.get("order_no"))
+        if not ty or not on:
+            continue
+        type_by_order_sku.setdefault((on, str(pr.get("sku") or "").strip().upper()), ty)
+        type_by_order.setdefault(on, ty)
+    types = sorted({str(pr.get("order_type") or "").strip() for pr in prod_rows if str(pr.get("order_type") or "").strip()})
+
+    merged = {}
+    for r in rows:
+        ty = type_by_order_sku.get((r["order"], r["sku"])) or type_by_order.get(r["order"]) or ""
+        k = (r["date"], r["sku"], ty)
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "qty": 0.0, "orders": []})
+        m["qty"] += r["qty"]
+        if r["order"] and r["order"] not in m["orders"]:
+            m["orders"].append(r["order"])
+    rows = []
+    for m in merged.values():
+        q = m["qty"]
+        m["qty"] = int(q) if float(q).is_integer() else round(q, 2)
+        rows.append(m)
+    rows.sort(key=lambda x: (x["date"], x["sku"], x["type"]))
     dates = [r["date"] for r in rows]
     return jsonify({
         "rows": rows,
+        "types": types,
         "today": now_ist().strftime("%Y-%m-%d"),
         "min_date": min(dates) if dates else "",
         "max_date": max(dates) if dates else "",
