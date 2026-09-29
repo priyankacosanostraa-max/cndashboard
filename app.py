@@ -28470,11 +28470,23 @@ def api_wip_receive():
         warn = f"Showing last loaded data — refresh failed: {e}"
     # Order Type comes from the Production (PPC-WIP) sheet, matched on Order No. (+ SKU).
     prod_rows = []
+    _prod_err = ""
     try:
-        _build_production()
+        # Only the Production cache is needed here (not the 1,000 display rows), so use a
+        # no-match filter: the cache gets filled/refreshed exactly the same, but the heavy
+        # per-row enrichment is skipped. This makes the WIP Receive load much faster.
+        _build_production(order_query="\x00no-match\x00", row_limit=0)
         prod_rows = list(_PROD_CACHE.get("rows") or [])
-    except Exception:
+    except Exception as _pe:
+        _prod_err = str(_pe)
+        try:
+            app.logger.warning("WIP receive: Production sheet load failed: %s", _pe)
+        except Exception:
+            pass
         prod_rows = list(_PROD_CACHE.get("rows") or [])
+    if not prod_rows:
+        _pw = "Production sheet could not be loaded, so Type / Channel / Balance are blank. Click Refresh in a few seconds." + ((" (" + _prod_err[:120] + ")") if _prod_err else "")
+        warn = (warn + " · " + _pw) if warn else _pw
     type_by_order_sku, type_by_order = {}, {}
     chan_by_order_sku, chan_by_order = {}, {}
     dlv_by_order_sku, dlv_by_order = {}, {}
