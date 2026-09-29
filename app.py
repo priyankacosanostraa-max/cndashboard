@@ -2,6 +2,9 @@
 # - Exhibition sales (Customer Name ya Type me "Exhibition") ab "Others" me nahi jaate.
 #   Ye Daily Target Report me TOTAL ke UPAR alag "Exhibition (No Target)" row me dikhte hain:
 #   Projected = NA, Short / Achievement % blank.
+# - "Others" ab sirf niche di gayi unique customer list (_DTR_OTHERS_CUSTOMERS) ka hai; ek naam
+#   kitni bhi baar aaye, list me sirf ek baar hai. (PSL Retail = Pernia row me hi jaata hai.)
+#   Naya customer Others me lana ho to bas us list me naam add kar do.
 # - TOTAL row ke Actual me Exhibition shamil hai (Yesterday aur Till Now dono me). Projected
 #   total me Exhibition ka koi target nahi judta. CSV + Excel export me bhi yehi order hai.
 # ============================================================
@@ -9688,7 +9691,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Target Report</div>
-      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = other marketplace sales (Type = Marketplace/SOR, e.g. FNP, Fern, Mirraw) not already named above. Exhibition sales are shown in a separate row above TOTAL (no target, but counted in TOTAL actual); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
+      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion, AZA Fashions and Mirraw marketplace sales (each customer counted once). Exhibition sales are shown in a separate row above TOTAL (no target, but counted in TOTAL actual); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -29609,6 +29612,11 @@ _DTR_ROWS = ["Website", "Purchase", "Myntra", "Amazon", "Nykaa", "Flipkart",
              "Tata Cliq", "AJIO", "Blinkit", "Instamart", "Pernia", "Others", "Exhibition"]
 _DTR_SHEET_COLS = ("Myntra", "Amazon", "Nykaa", "Flipkart", "Tata Cliq",
                    "AJIO", "Blinkit", "Instamart", "Pernia", "Others")
+# Unique "Others" marketplace customers (compact lowercase keys, matched as substring in Customer Name).
+# Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion And Retail, AZA Fashions, Mirraw Online Services.
+# (PSL RETAIL PRIVATE LIMITED = Pernia, is already its own row.)
+_DTR_OTHERS_CUSTOMERS = ("fernsnpetals", "sindhusiddhartha", "adityabirlafashion",
+                         "azafashions", "mirraw")
 _DTR_EXHIBITION = "Exhibition"   # own row above TOTAL, no target (Projected NA), actual counted in TOTAL
 _DTR_WEBSITE_PER_DAY = 150000      # 1.5 lakh / day
 _DTR_PURCHASE_PER_DAY = 200000     # 2 lakh / day
@@ -29671,7 +29679,8 @@ def _dtr_bucket(customer, typ):
     if "pernia" in t or "pslretail" in t: return "Pernia"
     # Others = other marketplace-type sales (Marketplace/SOR) whose customer
     # isn't one of the named marketplaces above — e.g. FNP, Fern, Mirraw.
-    if _is_marketplace_type(t_raw):
+    # Only the unique customers listed in _DTR_OTHERS_CUSTOMERS count as Others.
+    if _is_marketplace_type(t_raw) and any(k in c for k in _DTR_OTHERS_CUSTOMERS):
         return "Others"
     return None
 
