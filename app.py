@@ -7269,7 +7269,7 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page table.ops-table.wipr-table th,
 .ops-page table.ops-table.wipr-table td{padding-left:9px !important;padding-right:9px !important;white-space:nowrap !important;overflow-wrap:normal !important;word-break:normal !important;hyphens:none !important}
 .ops-page table.ops-table.wipr-table td.wipr-ch{white-space:normal !important;min-width:96px;max-width:150px}
-.ops-page table.ops-table.wipr-table td.wipr-ty{white-space:nowrap !important;max-width:120px;font-weight:700}
+.ops-page table.ops-table.wipr-table td.wipr-ty{white-space:normal !important;min-width:90px;max-width:190px;font-weight:700}
 .ops-page table.ops-table.wipr-table .sku-link{white-space:nowrap !important;overflow-wrap:normal !important;word-break:normal !important}
 
 /* ── GLOBAL TABLE READABILITY ─────────────────────────────────────────────
@@ -9505,7 +9505,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default), Receiving Month (default Last 7 Days; it decides which receiving-date columns and received totals are shown, and setting an order date range switches it to All Dates so every receiving date of those orders shows), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with Receiving Month set to All Dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only order-SKUs whose Bal Qty (Production sheet, column K) is above 0 are listed - 0 or negative balances are hidden - and every such pending order-SKU is listed even if nothing has been received yet (its date cells show a dash), so the Bal Qty total matches the sheet (only the Cancelled by Production team option lists cancelled rows, which have balance 0); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default), Receiving Month (default Last 7 Days; it decides which receiving-date columns and received totals are shown, and setting an order date range switches it to All Dates so every receiving date of those orders shows), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with Receiving Month set to All Dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19806,7 +19806,7 @@ function _wiprBase(){
       if(of&&od<of)return false;
       if(ot&&od>ot)return false;
     }
-    if(dv!=='cancelled'&&!((Number(r.balance)||0)>0))return false; /* Bal Qty must be above 0 (0 / negative are hidden); only the Cancelled option is exempt */
+    /* Bal Qty 0 rows are shown too (negative balance is already counted as 0 by the server) */
     if(dv==='cancelled'){ /* Remark (PPC-WIP col O) = Cancelled by Production team */
       if(!r.cancelled)return false;
     }else if(dv){ /* Delayed / Upcoming: sirf balance > 0 aur delivery date wale SKUs */
@@ -19822,12 +19822,14 @@ function _wiprBase(){
     return true;
   });
 }
-/* Short Type label for the table (full name stays in the hover tooltip and in CSV export) */
+/* Type label for the table: for "Customer Order ..." only the part after "Customer Order" (full name in the hover tooltip and in CSV export) */
 function _wiprShortType(t){
   const s=String(t||'').replace(/\s+/g,' ').trim();
   if(!s)return '';
-  if(/^customer\s*order\b/i.test(s))return 'CO';
-  return s.length>16?s.slice(0,15).trim()+'…':s;
+  /* "Customer Order - Gopalsons" -> "Gopalsons" (whatever is written after "Customer Order") */
+  const m=s.match(/^customer\s*order\b[\s\-\u2013\u2014:,.]*(.*)$/i);
+  if(m)return (m[1]||'').trim()||'Customer Order';
+  return s;
 }
 function _wiprFmtFull(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso||'';
@@ -28543,7 +28545,7 @@ def api_wip_receive():
         _on3 = _wipr_norm_order(pr.get("order_no"))
         if _on3:
             _k3 = (_on3, str(pr.get("sku") or "").strip().upper())
-            bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + float(pr.get("bal_qty") or 0)
+            bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + max(0.0, float(pr.get("bal_qty") or 0))   # negative (over-receipt) counts as 0
             rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
         _on2 = _wipr_norm_order(pr.get("order_no"))
         if _on2:
