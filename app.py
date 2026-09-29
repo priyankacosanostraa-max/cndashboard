@@ -1,3 +1,13 @@
+# Cosa Nostraa — V24.37 (TARGET TAB · DAILY TARGET REPORT FIX + FASTER LOADING)
+# - Daily Target Report "Till Now" ab AAJ TAK ka actual bhi include karta hai (pehle sirf kal
+#   tak ruk jaata tha, aaj ka din chhoot jaata tha). Label/date bhi is hisaab se update.
+# - Sub-heading text jo galat bol raha tha ("Yesterday and Day Before") theek kiya — ab
+#   "Yesterday" aur "Till Now" hi bolta hai, jo table me dikh raha hai.
+# - Daily Revenue Glimpse - Marketplace Sheet Sales: 6 marketplace sheets + cossa_orderdate +
+#   COSA(Blinkit) ab EK-EK karke nahi, PARALLEL me fetch hote hain (ThreadPoolExecutor). Ye
+#   Target tab ke load/refresh ko bahut fast karta hai — pehle 8 sheets sequentially fetch
+#   hoti thi. Row-level calculation logic bilkul same hai, sirf network fetch parallel hua hai.
+# ============================================================
 # Cosa Nostraa — V24.36 (WIP RECEIVE · GRAND TOTAL FOR ORDER/REC/BAL QTY)
 # - WIP Receive Grand Total row ab Inv Stock ke alawa har numeric column ka total dikhata hai:
 #   Order Qty, Rec Qty, Bal Qty (single-date aur matrix, dono view me) + existing Qty/date totals.
@@ -444,6 +454,7 @@ CF_ACCOUNT_ID = os.environ.get("CF_ACCOUNT_ID", "")
 CF_API_TOKEN  = os.environ.get("CF_API_TOKEN", "")
 
 import os, re, io, sys, time, glob, base64, pickle, shutil, threading, subprocess, difflib, uuid, json, hashlib, html
+import concurrent.futures as _cf
 import gzip as _gzip_mod
 import gc as _gc
 try:
@@ -9662,7 +9673,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Target Report</div>
-      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Day Before. Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet.</div>
+      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -29199,13 +29210,13 @@ def _fetch_drg_marketplace_source_rows(force=False):
     meta = {}
     named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit"}
 
-    for spec in specs:
+    def _run_one_spec(spec):
+        rows_local = []
         source_meta = {
             "sheet": spec["sheet"], "price_column": spec["price_letter"],
             "price_label": spec["price_label"], "rows_total": 0, "rows_used": 0,
             "date_column": "", "error": "",
         }
-        meta[spec["key"]] = source_meta
         try:
             groups = [spec["date_names"]]
             if spec.get("platform_names"):
@@ -29292,21 +29303,116 @@ def _fetch_drg_marketplace_source_rows(force=False):
                 if allowed_buckets and bucket not in allowed_buckets:
                     continue
 
-                out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(row_qty), "bucket": bucket})
+                rows_local.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(row_qty), "bucket": bucket})
                 source_meta["rows_used"] += 1
         except Exception as e:
             source_meta["error"] = str(e)[:240]
+        return spec["key"], rows_local, source_meta
+
+    def _run_orderdate():
+        rows_local = []
+        err = ""
+        try:
+            rows_local = _fetch_drg_source_rows(force=force)
+        except Exception as e:
+            err = str(e)[:240]
+        return rows_local, err
+
+    def _run_blinkit():
+        rows_local = []
+        b_meta = {
+            "sheet": "cossa", "price_column": "H", "price_label": "Selling Price",
+            "rows_total": 0, "rows_used": 0, "date_column": "", "customer_column": "",
+            "error": "",
+        }
+        try:
+            blinkit_frame = _fetch_csv_fresh(
+                COSA_URL,
+                select_groups=[
+                    ("Dispatch Date", "Date"),
+                    ("Selling Price", "selling price", "SP"),
+                    ("Customer Name", "Customer", "Client", "Party"),
+                    ("Final Qty", "final quantity", "final_qty"),
+                ],
+                select_positions=[0, 6, 7, 9],
+            )
+            blinkit_frame.columns = [str(c).strip() for c in blinkit_frame.columns]
+            b_meta["rows_total"] = len(blinkit_frame)
+
+            b_date = _drg_source_position_col(blinkit_frame, 0)
+            if not b_date or b_date not in blinkit_frame.columns:
+                b_date = find_col(blinkit_frame.columns, "Dispatch Date", "Date")
+            b_price = _drg_source_position_col(blinkit_frame, 7)
+            if not b_price or b_price not in blinkit_frame.columns:
+                b_price = find_col(blinkit_frame.columns, "Selling Price", "selling price", "SP", "Unit Price")
+            b_customer = _drg_source_position_col(blinkit_frame, 9)
+            if not b_customer or b_customer not in blinkit_frame.columns:
+                b_customer = find_col(blinkit_frame.columns, "Customer Name", "Customer", "Client", "Party")
+
+            b_qty = find_col(blinkit_frame.columns, "Final Qty", "final quantity", "final_qty") or _drg_source_position_col(blinkit_frame, 6)
+            b_meta["date_column"] = str(b_date or "")
+            b_meta["price_header"] = str(b_price or "")
+            b_meta["customer_column"] = str(b_customer or "")
+            if not b_date:
+                raise ValueError("COSA Dispatch Date column A not found")
+            if not b_price:
+                raise ValueError("COSA Selling Price column H not found")
+            if not b_customer:
+                raise ValueError("COSA Customer Name column J not found")
+
+            for row in _df_chunks(blinkit_frame):
+                customer = clean(row.get(b_customer, ""))
+                if "blinkit" not in customer.casefold():
+                    continue
+                dt = parse_date_any(row.get(b_date, ""))
+                if dt is None:
+                    continue
+                rev = to_num(row.get(b_price, 0))
+                if rev == 0:
+                    continue
+                b_row_qty = to_num(row.get(b_qty, 0)) if b_qty else 0.0
+                if not (-100000 <= b_row_qty <= 100000):
+                    b_row_qty = 0.0
+                rows_local.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty), "bucket": "Blinkit"})
+                b_meta["rows_used"] += 1
+        except Exception as e:
+            b_meta["error"] = str(e)[:240]
+        return rows_local, b_meta
+
+    # All six marketplace-sheet fetches + the cossa_orderdate (Amazon) fetch +
+    # the Blinkit (COSA) fetch are independent network calls, so they run in
+    # parallel instead of one-after-another. This is the main reason the
+    # Target tab used to take a long time to load / refresh.
+    spec_results = {}
+    orderdate_rows, orderdate_error = [], ""
+    blinkit_rows, blinkit_meta = [], {}
+    with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(_run_one_spec, spec): spec["key"] for spec in specs}
+        futs[ex.submit(_run_orderdate)] = "__orderdate__"
+        futs[ex.submit(_run_blinkit)] = "__blinkit__"
+        for fut in _cf.as_completed(futs):
+            tag = futs[fut]
+            if tag == "__orderdate__":
+                orderdate_rows, orderdate_error = fut.result()
+            elif tag == "__blinkit__":
+                blinkit_rows, blinkit_meta = fut.result()
+            else:
+                key, rows_local, source_meta = fut.result()
+                spec_results[key] = (rows_local, source_meta)
+
+    # Merge back in the original spec order so meta/output order stays stable.
+    for spec in specs:
+        rows_local, source_meta = spec_results.get(spec["key"], ([], {
+            "sheet": spec["sheet"], "price_column": spec["price_letter"],
+            "price_label": spec["price_label"], "rows_total": 0, "rows_used": 0,
+            "date_column": "", "error": "worker did not return",
+        }))
+        meta[spec["key"]] = source_meta
+        out.extend(rows_local)
 
     # Amazon for this Target-tab table comes ONLY from consolidated
     # cossa_orderdate, using A=Order Date and H=Selling Price. This is already
     # the merged Amazon family, so old Amazon-FBA labels are not required.
-    orderdate_rows = []
-    orderdate_error = ""
-    try:
-        orderdate_rows = _fetch_drg_source_rows(force=force)
-    except Exception as e:
-        orderdate_error = str(e)[:240]
-
     amazon_extra_meta = {
         "sheet": "cossa_orderdate", "price_column": "H",
         "price_label": "Selling Price", "rows_total": len(orderdate_rows),
@@ -29328,64 +29434,8 @@ def _fetch_drg_marketplace_source_rows(force=False):
     # cossa_orderdate. The approved mapping is exact: A = Dispatch Date,
     # H = Selling Price, J = Customer Name; any Customer Name containing
     # "blinkit" (case-insensitive) belongs to the Blinkit bucket.
-    blinkit_meta = {
-        "sheet": "cossa", "price_column": "H", "price_label": "Selling Price",
-        "rows_total": 0, "rows_used": 0, "date_column": "", "customer_column": "",
-        "error": "",
-    }
     meta["Blinkit"] = blinkit_meta
-    try:
-        blinkit_frame = _fetch_csv_fresh(
-            COSA_URL,
-            select_groups=[
-                ("Dispatch Date", "Date"),
-                ("Selling Price", "selling price", "SP"),
-                ("Customer Name", "Customer", "Client", "Party"),
-                ("Final Qty", "final quantity", "final_qty"),
-            ],
-            select_positions=[0, 6, 7, 9],
-        )
-        blinkit_frame.columns = [str(c).strip() for c in blinkit_frame.columns]
-        blinkit_meta["rows_total"] = len(blinkit_frame)
-
-        b_date = _drg_source_position_col(blinkit_frame, 0)
-        if not b_date or b_date not in blinkit_frame.columns:
-            b_date = find_col(blinkit_frame.columns, "Dispatch Date", "Date")
-        b_price = _drg_source_position_col(blinkit_frame, 7)
-        if not b_price or b_price not in blinkit_frame.columns:
-            b_price = find_col(blinkit_frame.columns, "Selling Price", "selling price", "SP", "Unit Price")
-        b_customer = _drg_source_position_col(blinkit_frame, 9)
-        if not b_customer or b_customer not in blinkit_frame.columns:
-            b_customer = find_col(blinkit_frame.columns, "Customer Name", "Customer", "Client", "Party")
-
-        b_qty = find_col(blinkit_frame.columns, "Final Qty", "final quantity", "final_qty") or _drg_source_position_col(blinkit_frame, 6)
-        blinkit_meta["date_column"] = str(b_date or "")
-        blinkit_meta["price_header"] = str(b_price or "")
-        blinkit_meta["customer_column"] = str(b_customer or "")
-        if not b_date:
-            raise ValueError("COSA Dispatch Date column A not found")
-        if not b_price:
-            raise ValueError("COSA Selling Price column H not found")
-        if not b_customer:
-            raise ValueError("COSA Customer Name column J not found")
-
-        for row in _df_chunks(blinkit_frame):
-            customer = clean(row.get(b_customer, ""))
-            if "blinkit" not in customer.casefold():
-                continue
-            dt = parse_date_any(row.get(b_date, ""))
-            if dt is None:
-                continue
-            rev = to_num(row.get(b_price, 0))
-            if rev == 0:
-                continue
-            b_row_qty = to_num(row.get(b_qty, 0)) if b_qty else 0.0
-            if not (-100000 <= b_row_qty <= 100000):
-                b_row_qty = 0.0
-            out.append({"date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty), "bucket": "Blinkit"})
-            blinkit_meta["rows_used"] += 1
-    except Exception as e:
-        blinkit_meta["error"] = str(e)[:240]
+    out.extend(blinkit_rows)
 
     # Channels not represented by dedicated source sheets keep the old
     # cossa_orderdate revenue logic exactly as before. Blinkit rows are skipped
@@ -29530,7 +29580,8 @@ def api_daily_revenue_glimpse_marketplace():
 
 # ══════════════════════════════════════════════════════════════════════
 # DAILY TARGET REPORT (Target tab) — V24.30
-# Channel-wise daily Projected vs Actual for Yesterday and Day Before.
+# Channel-wise daily Projected vs Actual for Yesterday and Till Now (cumulative
+# 19-Sep through today, so Actual keeps updating through the current day).
 #   • Actual  : cosa_orderdate (COSA_ORDERDATE_URL) only — A=Order Date,
 #               I=Net Revenue, J=Customer Name, K=Type. Channel bucket is
 #               derived from Customer Name first, then Type.
@@ -29749,9 +29800,15 @@ def _build_daily_target_report(asof=None, force=False):
             pass
     yest_dt = today_dt - timedelta(days=1)
     y_iso = yest_dt.strftime("%Y-%m-%d")
+    today_iso = today_dt.strftime("%Y-%m-%d")
     y_rows, y_tot = _dtr_day_block(y_iso, daily)
     tn_start_iso = _DTR_START
-    tn_end_iso = min(y_iso, _DTR_END)
+    # "Till Now" = actual booked so far, THROUGH TODAY (not stuck at yesterday).
+    # Today's Actual is whatever has come in on cosa_orderdate up to this
+    # refresh; Today's Projected still counts fully for the day (same as every
+    # other day in the window) so Achievement % reads correctly once the day
+    # is complete, and simply shows partial-day progress while it's still on.
+    tn_end_iso = min(today_iso, _DTR_END)
     tn_rows, tn_tot = _dtr_range_block(tn_start_iso, tn_end_iso, daily)
     tn_start_dt = datetime.strptime(tn_start_iso, "%Y-%m-%d")
     tn_end_dt = datetime.strptime(tn_end_iso, "%Y-%m-%d") if tn_end_iso >= tn_start_iso else None
