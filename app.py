@@ -1,3 +1,17 @@
+# Cosa Nostraa — V24.39 (DAILY TARGET REPORT · EXHIBITION SEPARATE ROW, NO TARGET)
+# - Exhibition sales (Customer Name ya Type me "Exhibition") ab "Others" me nahi jaate.
+#   Ye Daily Target Report me TOTAL ke neeche alag "Exhibition (No Target)" row me dikhte hain:
+#   Projected = NA, Short / Achievement % blank. TOTAL row me Exhibition shamil nahi hai
+#   (TOTAL sirf target wale channels ka hai). CSV + Excel export me bhi ye row aati hai.
+# ============================================================
+# Cosa Nostraa — V24.38 (DAILY TARGET REPORT · "OTHERS" = ONLY OTHER MARKETPLACES)
+# - "Others" row ab sirf un OTHER marketplace sales (Type = Marketplace/SOR, jaise
+#   FNP, Fern, Mirraw...) ko count karta hai jo Website/Purchase/Myntra/Amazon/Nykaa/
+#   Flipkart/Tata Cliq/AJIO/Blinkit/Instamart/Pernia me pehle se naamed nahi hain.
+# - Non-marketplace sales (Exhibition, Bulk, Customer/Customise Order, blank Type,
+#   etc.) ab is poori Daily Target Report table se hi bahar hain — na Others me, na
+#   kahi aur; is se TOTAL row bhi ab sirf real marketplace channels ka sum hai.
+# ============================================================
 # Cosa Nostraa — V24.37 (TARGET TAB · DAILY TARGET REPORT FIX + FASTER LOADING)
 # - Daily Target Report "Till Now" ab AAJ TAK ka actual bhi include karta hai (pehle sirf kal
 #   tak ruk jaata tha, aaj ka din chhoot jaata tha). Label/date bhi is hisaab se update.
@@ -9673,7 +9687,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Target Report</div>
-      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet.</div>
+      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = other marketplace sales (Type = Marketplace/SOR, e.g. FNP, Fern, Mirraw) not already named above. Exhibition sales are shown separately below TOTAL (no target, not included in TOTAL); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -15774,6 +15788,9 @@ function renderDTRTable(){
   const t = d.totals || {};
   const totalRow = '<tr style="background:#eef7ea;font-weight:900"><td>TOTAL</td>'
     + _dtrCells(t.yesterday, true) + _dtrCells(t.till_now, true) + '</tr>';
+  const ex = d.exhibition;
+  const exRow = ex ? '<tr style="background:#fff8e6;border-top:2px solid #d9c48a"><td style="font-weight:700;font-style:italic">' + escHtml(ex.channel) + '</td>'
+    + _dtrCells(ex.yesterday, false) + _dtrCells(ex.till_now, false) + '</tr>' : '';
   host.innerHTML = '<p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">'
     + 'As of: ' + escHtml(d.asof_label||'') + ' &nbsp;•&nbsp; Yesterday: ' + escHtml(d.yesterday_label||'')
     + ' &nbsp;•&nbsp; Till Now: ' + escHtml(d.till_now_label||'')
@@ -15783,7 +15800,7 @@ function renderDTRTable(){
     + '<th colspan="4" style="text-align:center">Till Now · ' + escHtml(d.till_now_label||'') + '</th></tr>'
     + '<tr><th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th>'
     + '<th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th></tr>'
-    + '</thead><tbody>' + rowsHtml + totalRow + '</tbody></table>';
+    + '</thead><tbody>' + rowsHtml + totalRow + exRow + '</tbody></table>';
 }
 function _dtrCsvBlock(b){
   return [
@@ -15801,6 +15818,7 @@ function exportDTR(){
   const head2 = ['Channel'].concat(sub, sub);
   const rows = d.rows.map(r => [r.channel].concat(_dtrCsvBlock(r.yesterday), _dtrCsvBlock(r.till_now)));
   rows.push(['TOTAL'].concat(_dtrCsvBlock(d.totals.yesterday), _dtrCsvBlock(d.totals.till_now)));
+  if (d.exhibition) rows.push([d.exhibition.channel].concat(_dtrCsvBlock(d.exhibition.yesterday), _dtrCsvBlock(d.exhibition.till_now)));
   const csv = [head1, head2].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -29594,6 +29612,7 @@ _DTR_ROWS = ["Website", "Purchase", "Myntra", "Amazon", "Nykaa", "Flipkart",
              "Tata Cliq", "AJIO", "Blinkit", "Instamart", "Pernia", "Others"]
 _DTR_SHEET_COLS = ("Myntra", "Amazon", "Nykaa", "Flipkart", "Tata Cliq",
                    "AJIO", "Blinkit", "Instamart", "Pernia", "Others")
+_DTR_EXHIBITION = "Exhibition"   # separate row, no target (not part of _DTR_ROWS / TOTAL)
 _DTR_WEBSITE_PER_DAY = 150000      # 1.5 lakh / day
 _DTR_PURCHASE_PER_DAY = 200000     # 2 lakh / day
 _DTR_START = "2026-09-19"
@@ -29624,12 +29643,21 @@ def _dtr_compact(v):
 def _dtr_bucket(customer, typ):
     """Customer Name + Type -> Daily Target Report row.
     Customer Name marketplace keywords win (same as the rest of the app);
-    then Type decides Website / Purchase / quick-commerce; everything else
-    (Exhibition, Bulk, Marketplace/SOR, FNP, Fern, Mirraw ...) is Others."""
+    then Type decides Website / Purchase / quick-commerce. Anything left over
+    is put in "Others" ONLY when it is itself a marketplace sale (Type =
+    Marketplace/SOR) from a marketplace not already named above (e.g. FNP,
+    Fern, Mirraw). Non-marketplace sales (Exhibition, Bulk, Customer/Customise
+    Order, blank Type, etc.) are not marketplace channels and are excluded
+    from this table entirely — they return None and are dropped, not lumped
+    into Others."""
+    c = _dtr_compact(customer)
+    t_raw = str(typ or "")
+    t = _dtr_compact(typ)
+    # Exhibition sales: no target, shown as a separate row (never in Others).
+    if "exhibition" in c or "exhibition" in t:
+        return _DTR_EXHIBITION
     if _is_amazon_fba_value(customer, typ):
         return "Amazon"
-    c = _dtr_compact(customer)
-    t = _dtr_compact(typ)
     if "myntra" in c:    return "Myntra"
     if "nykaa" in c:     return "Nykaa"
     if "ajio" in c:      return "AJIO"
@@ -29644,7 +29672,11 @@ def _dtr_bucket(customer, typ):
     if "blinkit" in t:   return "Blinkit"
     if "instamart" in t or "swiggy" in t: return "Instamart"
     if "pernia" in t or "pslretail" in t: return "Pernia"
-    return "Others"
+    # Others = other marketplace-type sales (Marketplace/SOR) whose customer
+    # isn't one of the named marketplaces above — e.g. FNP, Fern, Mirraw.
+    if _is_marketplace_type(t_raw):
+        return "Others"
+    return None
 
 
 def _dtr_fetch_daily(force=False):
@@ -29691,6 +29723,10 @@ def _dtr_fetch_daily(force=False):
         if sp == 0:
             continue
         b = _dtr_bucket(c_raw, t_raw)
+        if b is None:
+            # Not a marketplace sale (Exhibition, Bulk, Customer/Customise
+            # Order, blank Type, ...) — excluded from this table entirely.
+            continue
         slot = daily.setdefault(dt.strftime("%Y-%m-%d"), {})
         slot[b] = slot.get(b, 0.0) + sp
         used += 1
@@ -29816,8 +29852,20 @@ def _build_daily_target_report(asof=None, force=False):
     rows = []
     for b in _DTR_ROWS:
         rows.append({"channel": b, "yesterday": y_rows[b], "till_now": tn_rows[b]})
+    # Exhibition: separate row, actual only (no target -> Projected NA, no Short / Ach).
+    ex_y = float(daily.get(y_iso, {}).get(_DTR_EXHIBITION, 0.0))
+    ex_tn = 0.0
+    if tn_end_dt:
+        cur = tn_start_dt
+        while cur <= tn_end_dt:
+            ex_tn += float(daily.get(cur.strftime("%Y-%m-%d"), {}).get(_DTR_EXHIBITION, 0.0))
+            cur += timedelta(days=1)
+    _ex_blk = lambda a: {"projected": None, "actual": a, "short": None, "ach": None}
+    exhibition = {"channel": "Exhibition (No Target)",
+                  "yesterday": _ex_blk(ex_y), "till_now": _ex_blk(ex_tn)}
     return {
         "rows": rows,
+        "exhibition": exhibition,
         "totals": {"yesterday": y_tot, "till_now": tn_tot},
         "asof": today_dt.strftime("%Y-%m-%d"),
         "asof_label": today_dt.strftime("%d-%b-%Y"),
@@ -29921,6 +29969,13 @@ def api_daily_target_report_export_xlsx():
         cell.font = Font(bold=True); cell.fill = total_fill; cell.border = border
         _put(r_idx, 2, rep["totals"]["yesterday"], bold=True, fill=total_fill)
         _put(r_idx, 6, rep["totals"]["till_now"], bold=True, fill=total_fill)
+        ex = rep.get("exhibition")
+        if ex:
+            r_idx += 1
+            cell = ws.cell(row=r_idx, column=1, value=ex["channel"])
+            cell.font = Font(bold=True, italic=True); cell.border = border
+            _put(r_idx, 2, ex["yesterday"])
+            _put(r_idx, 6, ex["till_now"])
 
         widths = [22, 14, 14, 14, 15, 14, 14, 14, 15]
         for i, w in enumerate(widths, start=1):
