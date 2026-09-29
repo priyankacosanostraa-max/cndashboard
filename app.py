@@ -9473,7 +9473,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">WIP Receive</div>
-        <div class="ops-sub">Date-wise SKUs received from production. Column headings show the last 7 receiving days by default (or the selected Receiving Month). Set an Order From / To Date to see on which dates the SKUs ordered in that range were received. Click any date heading to see every SKU received on that date with photo and qty.</div>
+        <div class="ops-sub">Date-wise SKUs received from production. Column headings show every date of the present month (1 to 30/31) by default. Set an Order From / To Date to see on which dates the SKUs ordered in that range were received. Click any date heading to see every SKU received on that date with photo and qty.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWipReceiveFilters()">Reset Filters</button>
@@ -9490,7 +9490,6 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
       <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wiprDelivery" onchange="wiprDeliveryChanged()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option><option value="cancelled">Cancelled by Production team</option></select></div>
       <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wiprWeek" onchange="wiprWeekChanged()"><option value="">All Weeks</option></select></div>
-      <div class="fc"><label class="fl">Receiving Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option></select></div>
       <div class="fc op-paste">
         <label class="fl">Paste multiple SKUs (any separator — comma, space, or new line)</label>
         <textarea class="fi" id="wiprPasteSkus" rows="3" placeholder="e.g.&#10;BT-0057&#10;BH-0001, BA-0001&#10;BH-0003" style="resize:vertical;font-family:monospace"></textarea>
@@ -9505,7 +9504,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default), Receiving Month (default Last 7 Days; it decides which receiving-date columns and received totals are shown, and setting an order date range switches it to All Dates so every receiving date of those orders shows), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with Receiving Month set to All Dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default; the receiving-date columns show the present month 1 to 30/31 by default and switch to All Dates when an order date range is set), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with all receiving dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19619,7 +19618,7 @@ function _wiprFillTypes(){
   if(cur&&_wiprTypes.includes(cur))sel.value=cur;
 }
 function _wiprShift(iso,n){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return '';const d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]+n));return d.toISOString().slice(0,10);}
-function wiprLast7Range(){const to=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(to,-6),to);renderWipReceive();}
+function wiprLast7Range(){_wiprSetMonthRange();renderWipReceive();}
 let _wiprRows=[],_wiprLoaded=false,_wiprInit=false,_wiprMinDate='',_wiprMaxDate='',_wiprToday='';
 function _wiprFmt(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!m)return iso||'—';
@@ -19628,11 +19627,21 @@ function _wiprFmt(iso){
 }
 let _wiprPick='';
 /* Receiving-date range (driven by the Receiving Month select). From / To Date inputs are ORDER dates and stay blank by default. */
-let _wiprRF='',_wiprRT='',_wiprOrdAuto=false;
+let _wiprRF='',_wiprRT='',_wiprOrdAuto=false,_wiprMonthMode=true;
 function _wiprSetRange(from,to){
   _wiprRF=from||'';_wiprRT=to||'';
+  _wiprMonthMode=false;
   _wiprPick='';
 }
+/* Default receiving range = present month (1 se 30/31). Har din / mahina badalne par khud update hota hai */
+function _wiprSetMonthRange(){
+  const t=_wiprTodayIST()||_wiprToday||_wiprMaxDate;
+  const y=+String(t).slice(0,4),m=+String(t).slice(5,7);
+  const last=new Date(Date.UTC(y,m,0)).getUTCDate(),ym=String(t).slice(0,7);
+  _wiprSetRange(ym+'-01',ym+'-'+String(last).padStart(2,'0'));
+  _wiprMonthMode=true;
+}
+function _wiprSyncMonth(){if(_wiprMonthMode&&_wiprLoaded){const pk=_wiprPick;_wiprSetMonthRange();_wiprPick=pk;}} /* date-heading pick ko reset nahi karta */
 function _wiprDefaultTo(){
   let to=_wiprToday||_wiprMaxDate||WIPR_DEFAULT_FROM;
   if(_wiprMaxDate&&_wiprMaxDate>to)to=_wiprMaxDate;
@@ -19647,33 +19656,14 @@ function _wiprDiffDays(a,b){
 function wiprRangeChanged(){
   _wiprPick='';
   const of=document.getElementById('wiprFrom')?.value||'',ot=document.getElementById('wiprTo')?.value||'';
-  const ms=document.getElementById('wiprMonth');
   if(of||ot){
-    if(!_wiprOrdAuto){_wiprOrdAuto=true;if(ms)ms.value='all';_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+    if(!_wiprOrdAuto){_wiprOrdAuto=true;_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
   }else if(_wiprOrdAuto){
-    _wiprOrdAuto=false;if(ms)ms.value='last7';
-    const e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(e,-6),e);
+    _wiprOrdAuto=false;_wiprSetMonthRange();
   }
   renderWipReceive();
 }
 const _WIPR_MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function _wiprFillMonths(){
-  const sel=document.getElementById('wiprMonth');if(!sel)return;
-  const cur=sel.value;
-  const ms=Array.from(new Set(_wiprRows.map(r=>String(r.date||'').slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))).sort().reverse();
-  const multiYear=new Set(ms.map(m=>m.slice(0,4))).size>1;
-  sel.innerHTML='<option value="last7">Last 7 Days</option>'+ms.map(m=>`<option value="${m}">${_WIPR_MON[Number(m.slice(5))-1]}${multiYear?' '+m.slice(0,4):''}</option>`).join('')+'<option value="all">All Dates</option>';
-  sel.value=Array.from(sel.options).some(o=>o.value===cur)?cur:'last7';
-}
-function wiprMonthChanged(){
-  const v=document.getElementById('wiprMonth')?.value||'last7';
-  _wiprOrdAuto=false; /* manual Receiving Month choice always wins */
-  if(v==='custom'){renderWipReceive();return;}
-  if(v==='last7'){const e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(e,-6),e);}
-  else if(v==='all'){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
-  else{const y=+v.slice(0,4),m=+v.slice(5);const last=new Date(Date.UTC(y,m,0)).getUTCDate();_wiprSetRange(v+'-01',v+'-'+String(last).padStart(2,'0'));}
-  renderWipReceive();
-}
 let _wiprDeliveryDates=[];
 function _wiprFillDelivery(){ /* Delivery Type: static options (All / Delayed / Upcoming) — nothing to fill */ }
 /* Aaj ki date (IST) — har din khud badalti hai, page purana khula ho tab bhi */
@@ -19717,13 +19707,13 @@ function _wiprFillWeeks(){
 /* Delivery Type = Cancelled: show every cancelled SKU, so the receiving range becomes All Dates (same as picking a Delivery Week) */
 function wiprDeliveryChanged(){
   const v=document.getElementById('wiprDelivery')?.value||'';
-  if(v==='cancelled'){const ms=document.getElementById('wiprMonth');if(ms)ms.value='all';_wiprOrdAuto=false;_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+  if(v==='cancelled'){_wiprOrdAuto=false;_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
   renderWipReceive();
 }
 window.wiprDeliveryChanged=wiprDeliveryChanged;
 function wiprWeekChanged(){
   const v=document.getElementById('wiprWeek')?.value||'';
-  if(v){const ms=document.getElementById('wiprMonth');if(ms)ms.value='all';_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+  if(v){_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
   renderWipReceive();
 }
 window.wiprWeekChanged=wiprWeekChanged;
@@ -19745,8 +19735,8 @@ function loadWipReceive(force){
     .then(r=>r.ok?r.json():Promise.reject(new Error('HTTP '+r.status)))
     .then(d=>{
       if(d.error)throw new Error(d.error);
-      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprDeliveryDates=Array.isArray(d.delivery_dates)?d.delivery_dates:[];_wiprFillDelivery();_wiprFillWeeks();_wiprLoaded=true;_wiprFillMonths();_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
-      if(!_wiprInit){_wiprInit=true;const _e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();_wiprSetRange(_wiprShift(_e,-6),_e);const _ms=document.getElementById('wiprMonth');if(_ms)_ms.value='last7';}
+      _wiprRows=Array.isArray(d.rows)?d.rows:[];_wiprTypes=Array.isArray(d.types)?d.types:[];_wiprFillTypes();_wiprChannels=Array.isArray(d.channels)?d.channels:[];_wiprFillChannels();_wiprDeliveryDates=Array.isArray(d.delivery_dates)?d.delivery_dates:[];_wiprFillDelivery();_wiprFillWeeks();_wiprLoaded=true;_wiprMinDate=d.min_date||'';_wiprMaxDate=d.max_date||'';_wiprToday=d.today||'';
+      if(!_wiprInit){_wiprInit=true;_wiprSetMonthRange();}
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.filter(r=>!r.norecv).length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
       renderWipReceive();
@@ -19850,6 +19840,7 @@ function _wiprMergeDateSku(list){
   return Array.from(m.values());
 }
 function _wiprInRange(){
+  _wiprSyncMonth();
   const of=document.getElementById('wiprFrom')?.value||'',ot=document.getElementById('wiprTo')?.value||'';
   if(of&&ot&&of>ot)return null; /* order From Date after To Date */
   const from=_wiprRF,to=_wiprRT; /* receiving-date range */
@@ -19864,12 +19855,12 @@ function _wiprFiltered(){
   const rows=_wiprPick?list.filter(r=>r.date===_wiprPick):list;
   return rows.sort(_wiprCmpRow);
 }
-/* Date columns: every calendar day when the range is <=14 days (so last 7 days always shows 7 headings),
+/* Date columns: every calendar day in the default present-month view (1 to 30/31) or when the range is <=14 days,
    otherwise only the dates that actually have receipts. Oldest -> newest. */
 function _wiprDateCols(list){
   const from=_wiprRF,to=_wiprRT;
   const have=Array.from(new Set(list.map(r=>r.date).filter(Boolean))).sort();
-  if(from&&to&&_wiprDiffDays(from,to)<=13){
+  if(from&&to&&(_wiprMonthMode||_wiprDiffDays(from,to)<=13)){
     const out=[];for(let i=0;i<=_wiprDiffDays(from,to);i++)out.push(_wiprShift(from,i));return out;
   }
   return have;
@@ -19889,6 +19880,7 @@ function _wiprSkuMatrix(list){
 function renderWipReceive(){
   const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary'),bar=document.getElementById('wiprPickBar');if(!host)return;
   if(!_wiprLoaded)return;
+  _wiprSyncMonth();
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   const from=_wiprRF,to=_wiprRT; /* receiving-date range */
   const list=_wiprInRange();
@@ -19941,9 +19933,7 @@ function resetWipReceiveFilters(){
   _wiprPick='';
   ['wiprFrom','wiprTo'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';}); /* order dates blank by default */
   _wiprOrdAuto=false;
-  const e=_wiprToday||_wiprMaxDate||_wiprDefaultTo();
-  _wiprSetRange(_wiprShift(e,-6),e);
-  const ms=document.getElementById('wiprMonth');if(ms)ms.value='last7';
+  _wiprSetMonthRange();
   renderWipReceive();
 }
 window.resetWipReceiveFilters=resetWipReceiveFilters;
@@ -19973,7 +19963,7 @@ function exportWipReceive(){
   out.push(['Grand Total','','','','','','','','','','',...cols.map(d=>dayTot[d]||0),'']);
   _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
 }
-window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprMonthChanged=wiprMonthChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
+window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
