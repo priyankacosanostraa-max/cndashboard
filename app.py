@@ -1,10 +1,21 @@
+# Cosa Nostraa — V24.40 (WIP RECEIVE · DELIVERY TYPE FILTER · COLOURED LAST-7-DAY HEADINGS)
+# - WIP Receive: "Delivery Date" dropdown ki jagah "Delivery Type" filter — All / Delayed / Upcoming.
+#   Delayed = delivery date AAJ se pehle ki (balance qty > 0 wale SKUs hi); Upcoming = delivery date
+#   aaj ya aaj ke baad ki (balance > 0 hi). Balance 0 ya minus wale SKUs is filter me kabhi nahi aate.
+#   "Aaj" har din ke hisaab se badalta hai (IST current date).
+# - Delivery Week dropdown me ab sirf wahi weeks aate hain jinme kam se kam ek SKU ki balance qty > 0 hai.
+# - Matrix table me last 7 days (aaj se 6 din pehle tak) ke receiving-date headings alag-alag colour me.
+# - Baaki kuch change nahi kiya.
+# ============================================================
 # Cosa Nostraa — V24.39 (DAILY TARGET REPORT · EXHIBITION SEPARATE ROW, NO TARGET, COUNTED IN TOTAL)
 # - Exhibition sales (Customer Name ya Type me "Exhibition") ab "Others" me nahi jaate.
 #   Ye Daily Target Report me TOTAL ke UPAR alag "Exhibition (No Target)" row me dikhte hain:
 #   Projected = NA, Short / Achievement % blank.
-# - "Others" ab sirf niche di gayi unique customer list (_DTR_OTHERS_CUSTOMERS) ka hai; ek naam
-#   kitni bhi baar aaye, list me sirf ek baar hai. (PSL Retail = Pernia row me hi jaata hai.)
-#   Naya customer Others me lana ho to bas us list me naam add kar do.
+# - "Others" = jo bhi Marketplace/SOR sale upar ke named channels (Myntra, Amazon, Nykaa,
+#   Flipkart, Tata Cliq, AJIO, Blinkit, Instamart, Pernia/PSL) me nahi aati wo AUTOMATIC Others
+#   me tag hoti hai — jaise Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion, AZA
+#   Fashions, Mirraw, aur aage koi bhi naya marketplace customer. Ek customer ek hi baar count
+#   hota hai (koi double counting nahi). PSL Retail = Pernia row me hi jaata hai.
 # - TOTAL row ke Actual me Exhibition shamil hai (Yesterday aur Till Now dono me). Projected
 #   total me Exhibition ka koi target nahi judta. CSV + Excel export me bhi yehi order hai.
 # ============================================================
@@ -9476,7 +9487,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Order No.</label><input class="fi" id="wiprOrderNo" placeholder="Type order no…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
-      <div class="fc"><label class="fl">Delivery Date</label><select class="fs" id="wiprDelivery" onchange="renderWipReceive()"><option value="">All Delivery Dates</option></select></div>
+      <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wiprDelivery" onchange="renderWipReceive()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option></select></div>
       <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wiprWeek" onchange="wiprWeekChanged()"><option value="">All Weeks</option></select></div>
       <div class="fc"><label class="fl">Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option><option value="custom">Custom Range</option></select></div>
       <div class="fc op-paste">
@@ -9493,7 +9504,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -9691,7 +9702,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Target Report</div>
-      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion, AZA Fashions and Mirraw marketplace sales (each customer counted once). Exhibition sales are shown in a separate row above TOTAL (no target, but counted in TOTAL actual); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
+      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = every other marketplace sale (Type = Marketplace/SOR, e.g. Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion, AZA Fashions, Mirraw or any new marketplace) not already named above. Exhibition sales are shown in a separate row above TOTAL (no target, but counted in TOTAL actual); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -19649,11 +19660,15 @@ function wiprMonthChanged(){
   renderWipReceive();
 }
 let _wiprDeliveryDates=[];
-function _wiprFillDelivery(){
-  const sel=document.getElementById('wiprDelivery');if(!sel)return;
-  const cur=sel.value;
-  sel.innerHTML='<option value="">All Delivery Dates</option>'+_wiprDeliveryDates.map(t=>`<option value="${escHtml(t)}">${escHtml(_wiprFmt(t))}${escHtml(' '+t.slice(0,4))}</option>`).join('');
-  if(cur&&_wiprDeliveryDates.includes(cur))sel.value=cur;
+function _wiprFillDelivery(){ /* Delivery Type: static options (All / Delayed / Upcoming) — nothing to fill */ }
+/* Aaj ki date (IST) — har din khud badalti hai, page purana khula ho tab bhi */
+function _wiprTodayIST(){return new Date(Date.now()+330*60000).toISOString().slice(0,10);}
+/* Last 7 days (aaj + pichhle 6 din) ke heading colours: [background, text] */
+const _WIPR_DAY_COLORS=[['#ffd6d6','#8a1c1c'],['#ffe3c2','#8a4b00'],['#fff3b0','#7a5f00'],['#d4f2c7','#1f6b1f'],['#c6ecf5','#0b5c73'],['#d9d6ff','#3b2f9e'],['#f8d0ec','#8a1c6b']];
+function _wiprDayColor(iso){
+  const t=_wiprTodayIST();const diff=_wiprDiffDays(iso,t);
+  if(diff<0||diff>6)return null;
+  return _WIPR_DAY_COLORS[diff];
 }
 /* Delivery Week: har mahina 5 parts — 1-7, 8-14, 15-21, 22-28, 29-end */
 const _WIPR_ORD=['1st','2nd','3rd','4th','5th'];
@@ -19664,17 +19679,21 @@ function _wiprWeekOf(iso){
 function _wiprFillWeeks(){
   const sel=document.getElementById('wiprWeek');if(!sel)return;
   const cur=sel.value;
-  const months=Array.from(new Set(_wiprDeliveryDates.map(x=>String(x).slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))).sort();
+  /* Sirf wahi weeks jinme kam se kam ek SKU ki balance qty > 0 hai (0 / minus balance wale weeks nahi aate) */
+  const wkSet=new Set();
+  _wiprRows.forEach(r=>{if((Number(r.balance)||0)>0&&r.delivery){const k=_wiprWeekOf(r.delivery);if(k)wkSet.add(k);}});
+  const months=Array.from(new Set(Array.from(wkSet).map(k=>k.split('|')[0]))).sort();
   let html='<option value="">All Weeks</option>';
   months.forEach(ym=>{
     const y=+ym.slice(0,4),mo=+ym.slice(5),last=new Date(Date.UTC(y,mo,0)).getUTCDate(),mn=_WIPR_MON[mo-1];
-    html+=`<optgroup label="${mn} ${y}">`;
+    let inner='';
     for(let w=1;w<=5;w++){
       const a=(w-1)*7+1,b=w===5?last:w*7;
       if(a>last)break;
-      html+=`<option value="${ym}|${w}">${_WIPR_ORD[w-1]} week ${mn} (${a}${b>a?'–'+b:''} ${mn})</option>`;
+      if(!wkSet.has(ym+'|'+w))continue;
+      inner+=`<option value="${ym}|${w}">${_WIPR_ORD[w-1]} week ${mn} (${a}${b>a?'–'+b:''} ${mn})</option>`;
     }
-    html+='</optgroup>';
+    if(inner)html+=`<optgroup label="${mn} ${y}">`+inner+'</optgroup>';
   });
   sel.innerHTML=html;
   if(cur&&sel.querySelector(`option[value="${cur}"]`))sel.value=cur;
@@ -19758,8 +19777,13 @@ function _wiprBase(){
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(!_wiprPasteMatch(r.sku))return false;
     if(!((Number(r.balance)||0)>0||(cm&&String(r.date||'').startsWith(cm))))return false; /* balance > 0 only, but whole current month shown */
-    if(dv&&String(r.delivery||'')!==dv)return false;
-    if(wk&&_wiprWeekOf(r.delivery)!==wk)return false;
+    if(dv){ /* Delayed / Upcoming: sirf balance > 0 aur delivery date wale SKUs */
+      if(!((Number(r.balance)||0)>0)||!r.delivery)return false;
+      const td=_wiprTodayIST();
+      if(dv==='delayed'&&!(String(r.delivery)<td))return false;
+      if(dv==='upcoming'&&!(String(r.delivery)>=td))return false;
+    }
+    if(wk&&(!((Number(r.balance)||0)>0)||_wiprWeekOf(r.delivery)!==wk))return false;
     if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
     if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
@@ -19858,7 +19882,7 @@ function renderWipReceive(){
   const mat=_wiprSkuMatrix(list);
   const dayTot={};list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);});
   let oqT=0,rqT=0,balT=0;mat.forEach(x=>{oqT+=Number(x.oq)||0;rqT+=Number(x.rq)||0;balT+=(x.bal===null||x.bal===undefined)?0:Number(x.bal)||0;});
-  const head=leadHead+cols.map(d=>`<th class="ops-num" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received on ${escHtml(_wiprFmt(d))}" onclick="wiprPickDate('${d}')">${escHtml(_wiprFmt(d))}</th>`).join('')+`<th>Delivery Date</th>`;
+  const head=leadHead+cols.map(d=>{const _c=_wiprDayColor(d);const _cs=_c?`background:${_c[0]} !important;color:${_c[1]} !important;`:'';return `<th class="ops-num" style="${_cs}cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received on ${escHtml(_wiprFmt(d))}" onclick="wiprPickDate('${d}')">${escHtml(_wiprFmt(d))}</th>`;}).join('')+`<th>Delivery Date</th>`;
   let body='';
   mat.forEach(x=>{
     const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
@@ -29612,11 +29636,6 @@ _DTR_ROWS = ["Website", "Purchase", "Myntra", "Amazon", "Nykaa", "Flipkart",
              "Tata Cliq", "AJIO", "Blinkit", "Instamart", "Pernia", "Others", "Exhibition"]
 _DTR_SHEET_COLS = ("Myntra", "Amazon", "Nykaa", "Flipkart", "Tata Cliq",
                    "AJIO", "Blinkit", "Instamart", "Pernia", "Others")
-# Unique "Others" marketplace customers (compact lowercase keys, matched as substring in Customer Name).
-# Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion And Retail, AZA Fashions, Mirraw Online Services.
-# (PSL RETAIL PRIVATE LIMITED = Pernia, is already its own row.)
-_DTR_OTHERS_CUSTOMERS = ("fernsnpetals", "sindhusiddhartha", "adityabirlafashion",
-                         "azafashions", "mirraw")
 _DTR_EXHIBITION = "Exhibition"   # own row above TOTAL, no target (Projected NA), actual counted in TOTAL
 _DTR_WEBSITE_PER_DAY = 150000      # 1.5 lakh / day
 _DTR_PURCHASE_PER_DAY = 200000     # 2 lakh / day
@@ -29679,8 +29698,8 @@ def _dtr_bucket(customer, typ):
     if "pernia" in t or "pslretail" in t: return "Pernia"
     # Others = other marketplace-type sales (Marketplace/SOR) whose customer
     # isn't one of the named marketplaces above — e.g. FNP, Fern, Mirraw.
-    # Only the unique customers listed in _DTR_OTHERS_CUSTOMERS count as Others.
-    if _is_marketplace_type(t_raw) and any(k in c for k in _DTR_OTHERS_CUSTOMERS):
+    # Any other marketplace sale (Type = Marketplace/SOR) not named above -> Others.
+    if _is_marketplace_type(t_raw):
         return "Others"
     return None
 
