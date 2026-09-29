@@ -9488,7 +9488,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Order No.</label><input class="fi" id="wiprOrderNo" placeholder="Type order no…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
-      <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wiprDelivery" onchange="renderWipReceive()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option></select></div>
+      <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wiprDelivery" onchange="wiprDeliveryChanged()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option><option value="cancelled">Cancelled by Production team</option></select></div>
       <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wiprWeek" onchange="wiprWeekChanged()"><option value="">All Weeks</option></select></div>
       <div class="fc"><label class="fl">Receiving Month</label><select class="fs" id="wiprMonth" onchange="wiprMonthChanged()"><option value="last7">Last 7 Days</option><option value="all">All Dates</option></select></div>
       <div class="fc op-paste">
@@ -9505,7 +9505,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default), Receiving Month (default Last 7 Days; setting an order date range switches it to All Dates so every receiving date of those orders shows), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown (when an order date range is set, every order of that range is listed, even fully received ones); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default), Receiving Month (default Last 7 Days; setting an order date range switches it to All Dates so every receiving date of those orders shows), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with Receiving Month set to All Dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown (when an order date range is set, every order of that range is listed, even fully received ones); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19714,6 +19714,13 @@ function _wiprFillWeeks(){
   if(cur&&sel.querySelector(`option[value="${cur}"]`))sel.value=cur;
 }
 /* Week choose karte hi receipt-date range "All Dates" ho jaati hai taaki us hafte ki delivery wale saare rows dikhen */
+/* Delivery Type = Cancelled: show every cancelled SKU, so the receiving range becomes All Dates (same as picking a Delivery Week) */
+function wiprDeliveryChanged(){
+  const v=document.getElementById('wiprDelivery')?.value||'';
+  if(v==='cancelled'){const ms=document.getElementById('wiprMonth');if(ms)ms.value='all';_wiprOrdAuto=false;_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
+  renderWipReceive();
+}
+window.wiprDeliveryChanged=wiprDeliveryChanged;
 function wiprWeekChanged(){
   const v=document.getElementById('wiprWeek')?.value||'';
   if(v){const ms=document.getElementById('wiprMonth');if(ms)ms.value='all';_wiprSetRange(_wiprMinDate||WIPR_DEFAULT_FROM,_wiprMaxDate||_wiprDefaultTo());}
@@ -19798,8 +19805,10 @@ function _wiprBase(){
       if(!od)return false;
       if(of&&od<of)return false;
       if(ot&&od>ot)return false;
-    }else if(!((Number(r.balance)||0)>0||(cm&&String(r.date||'').startsWith(cm))))return false; /* balance > 0 only, but whole current month shown */
-    if(dv){ /* Delayed / Upcoming: sirf balance > 0 aur delivery date wale SKUs */
+    }else if(dv!=='cancelled'&&!((Number(r.balance)||0)>0||(cm&&String(r.date||'').startsWith(cm))))return false; /* balance > 0 only, but whole current month shown (cancelled rows have balance 0, so they skip this) */
+    if(dv==='cancelled'){ /* Remark (PPC-WIP col O) = Cancelled by Production team */
+      if(!r.cancelled)return false;
+    }else if(dv){ /* Delayed / Upcoming: sirf balance > 0 aur delivery date wale SKUs */
       if(!((Number(r.balance)||0)>0)||!r.delivery)return false;
       const td=_wiprTodayIST();
       if(dv==='delayed'&&!(String(r.delivery)<td))return false;
@@ -27874,6 +27883,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             raise ValueError("Production sheet column K (Balance Qty) is missing")
         C_DELV = _at(11)  # L  Delivery Date
         C_RECV = _at(12)  # M  Receiving Date
+        C_REMK = find_col(cols, "Remark", "Remarks") or _at(14)   # O  Remark
         rows_all = []
         _seen_rows = set()
         for _, r in df.iterrows():
@@ -27906,6 +27916,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "delivery_iso":  dv.strftime("%Y-%m-%d") if dv else "",
                 "receiving_date": rv.strftime("%d-%b-%Y") if rv else "",
                 "receiving_iso": rv.strftime("%Y-%m-%d") if rv else "",
+                "remark":    str(clean(r.get(C_REMK, "")) if C_REMK else "").strip(),
             }
             # Exact-duplicate row (same date+order no+sku+everything) — skip repeats
             dedup_key = tuple(row[k] for k in (
@@ -28432,6 +28443,12 @@ def _wipr_norm_order(v):
     return o
 
 
+def _wipr_is_cancelled(v):
+    """PPC-WIP Remark (col O) = 'Cancelled by Production team'."""
+    t = re.sub(r"\s+", " ", str(v if v is not None else "").strip().lower())
+    return bool(re.search(r"cancel\w*\s+by\s+production", t))
+
+
 def _load_wip_receive(force=False):
     """Read the WIP-Recv sheet and total Qty per (date, SKU)."""
     now_ts = time.time()
@@ -28513,6 +28530,7 @@ def api_wip_receive():
         warn = (warn + " · " + _pw) if warn else _pw
     type_by_order_sku, type_by_order = {}, {}
     chan_by_order_sku, chan_by_order = {}, {}
+    cancel_by_order_sku = set()
     dlv_by_order_sku, dlv_by_order = {}, {}
     odt_by_order_sku, odt_by_order = {}, {}
     oq_by_order_sku = {}
@@ -28543,6 +28561,8 @@ def api_wip_receive():
         if not on:
             continue
         sk = str(pr.get("sku") or "").strip().upper()
+        if _wipr_is_cancelled(pr.get("remark")):
+            cancel_by_order_sku.add((on, sk))
         if ty:
             type_by_order_sku.setdefault((on, sk), ty)
             type_by_order.setdefault(on, ty)
@@ -28561,7 +28581,7 @@ def api_wip_receive():
         od = odt_by_order_sku.get((r["order"], r["sku"])) or odt_by_order.get(r["order"]) or ""
         k = (r["date"], r["sku"], ty, ch, dl, od, r["order"], _balv)
         _oqv = oq_by_order_sku.get((r["order"], r["sku"]), 0.0)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": []})
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku)})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
