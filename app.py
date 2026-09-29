@@ -19831,7 +19831,7 @@ function _wiprMergeDateSku(list){
   const m=new Map();
   list.forEach(r=>{
     const k=r.date+'|'+_wiprOrdKey(r);
-    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance)};
+    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance)};
     x.qty+=Number(r.qty)||0;
     if(!x.od&&r.order_date)x.od=r.order_date;
     if(!x.dl&&r.delivery)x.dl=r.delivery;
@@ -19870,7 +19870,7 @@ function _wiprSkuMatrix(list){
   const m=new Map();
   list.forEach(r=>{
     const k=_wiprOrdKey(r);
-    const x=m.get(k)||{order:r.order||'',sku:r.sku,byDate:{},total:0,od:r.od||'',dl:r.dl||'',oq:r.oq||0,rq:r.rq||0,ch:r.ch||'',ty:r.ty||'',bal:(r.bal===undefined?null:r.bal)};
+    const x=m.get(k)||{order:r.order||'',sku:r.sku,byDate:{},total:0,od:r.od||'',dl:r.dl||'',oq:r.oq||0,rq:r.rq||0,ch:r.ch||'',ty:r.ty||'',sr:r.sr||'',bal:(r.bal===undefined?null:r.bal)};
     if(r.date){x.byDate[r.date]=(x.byDate[r.date]||0)+(Number(r.qty)||0);x.total+=Number(r.qty)||0;}
     if(!x.od&&r.od)x.od=r.od;if(!x.dl&&r.dl)x.dl=r.dl;
     m.set(k,x);
@@ -19899,15 +19899,15 @@ function renderWipReceive(){
   const skuBtn=sku=>`<button class="sku-link" onclick="openSkuDetails('${String(sku).replace(/'/g,"\\'")}')">${escHtml(sku)}</button>`;
   const stick='position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0';
   const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
-  const lead=(x,it)=>`<td style="font-weight:800">${escHtml(x.order||'—')}</td><td>${fD(x.od)}</td><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num">${n(_wiprInv(x.sku))}</td><td class="wipr-ch">${escHtml(x.ch||'—')}</td><td class="wipr-ty" title="${escHtml(x.ty||'')}">${escHtml(_wiprShortType(x.ty)||'—')}</td><td class="ops-num">${x.oq?n(x.oq):'—'}</td><td class="ops-num">${n(x.rq)}</td><td class="ops-num"><b>${(x.bal===null||x.bal===undefined)?'—':n(x.bal)}</b></td>`;
-  const leadHead=`<th>Order No.</th><th>Order Date</th><th>SKU</th><th>Photo</th><th class="ops-num">Inv Stock</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th>`;
+  const lead=(x,it)=>`<td style="font-weight:800">${escHtml(x.order||'—')}</td><td>${fD(x.od)}</td><td>${skuBtn(x.sku)}</td><td style="font-weight:800">${escHtml(x.sr||'—')}</td><td>${_opsPhoto(it.image_url)}</td><td class="ops-num">${n(_wiprInv(x.sku))}</td><td class="wipr-ch">${escHtml(x.ch||'—')}</td><td class="wipr-ty" title="${escHtml(x.ty||'')}">${escHtml(_wiprShortType(x.ty)||'—')}</td><td class="ops-num">${x.oq?n(x.oq):'—'}</td><td class="ops-num">${n(x.rq)}</td><td class="ops-num"><b>${(x.bal===null||x.bal===undefined)?'—':n(x.bal)}</b></td>`;
+  const leadHead=`<th>Order No.</th><th>Order Date</th><th>SKU</th><th>Sr. No.</th><th>Photo</th><th class="ops-num">Inv Stock</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th>`;
   /* ── Single date view ── */
   if(_wiprPick){
     const rows=shown.slice().sort(_wiprCmpRow);
     let body='';
     let oqT=0,rqT=0,balT=0;
     rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr>${lead(r,it)}<td class="ops-num"><b>${n(r.qty)}</b></td><td>${fD(r.dl)}</td></tr>`;oqT+=Number(r.oq)||0;rqT+=Number(r.rq)||0;balT+=(r.bal===null||r.bal===undefined)?0:Number(r.bal)||0;});
-    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td><td style="${stick}"></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
+    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="6" style="${stick}">Grand Total</td><td style="${stick}"></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
     host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${leadHead}<th>Qty</th><th>Delivery Date</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
     return;
   }
@@ -19922,7 +19922,7 @@ function renderWipReceive(){
     const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
     body+=`<tr>${lead(x,it)}`+cols.map(d=>x.byDate[d]?`<td class="ops-num"><b>${n(x.byDate[d])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td>${fD(x.dl)}</td></tr>`;
   });
-  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td><td style="${stick}"></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
+  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="6" style="${stick}">Grand Total</td><td style="${stick}"></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
   host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function resetWipReceiveFilters(){
@@ -19951,17 +19951,17 @@ function exportWipReceive(){
     const rows=list.filter(r=>r.date===_wiprPick).sort(_wiprCmpRow);
     if(!rows.length){alert('No WIP receive rows to export');return;}
     const total=rows.reduce((s2,r)=>s2+(Number(r.qty)||0),0);
-    const out=rows.map(r=>[r.order||'',fD(r.od),r.sku,...info(r.sku),_wiprInv(r.sku),r.ch||'',r.ty||'',r.oq||0,r.rq||0,(r.bal===null||r.bal===undefined)?'':r.bal,Number(r.qty)||0,fD(r.dl)]);
-    out.push(['Grand Total','','','','','','','','','','',total,'']);
-    _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty','Received Qty (' + _wiprPick + ')','Delivery Date'],out,'wip_receive'+tag+'_'+_wiprPick);
+    const out=rows.map(r=>[r.order||'',fD(r.od),r.sku,r.sr||'',...info(r.sku),_wiprInv(r.sku),r.ch||'',r.ty||'',r.oq||0,r.rq||0,(r.bal===null||r.bal===undefined)?'':r.bal,Number(r.qty)||0,fD(r.dl)]);
+    out.push(['Grand Total','','','','','','','','','','','',total,'']);
+    _dlCsv(['Order No.','Order Date','SKU','Sr. No.','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty','Received Qty (' + _wiprPick + ')','Delivery Date'],out,'wip_receive'+tag+'_'+_wiprPick);
     return;
   }
   if(!list.length){alert('No WIP receive rows to export');return;}
   const cols=_wiprDateCols(list),mat=_wiprSkuMatrix(list);
   const dayTot={};let total=0;list.forEach(r=>{if(!r.date)return;dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);total+=Number(r.qty)||0;});
-  const out=mat.map(x=>[x.order||'',fD(x.od),x.sku,...info(x.sku),_wiprInv(x.sku),x.ch||'',x.ty||'',x.oq||0,x.rq||0,(x.bal===null||x.bal===undefined)?'':x.bal,...cols.map(d=>x.byDate[d]||0),fD(x.dl)]);
-  out.push(['Grand Total','','','','','','','','','','',...cols.map(d=>dayTot[d]||0),'']);
-  _dlCsv(['Order No.','Order Date','SKU','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
+  const out=mat.map(x=>[x.order||'',fD(x.od),x.sku,x.sr||'',...info(x.sku),_wiprInv(x.sku),x.ch||'',x.ty||'',x.oq||0,x.rq||0,(x.bal===null||x.bal===undefined)?'':x.bal,...cols.map(d=>x.byDate[d]||0),fD(x.dl)]);
+  out.push(['Grand Total','','','','','','','','','','','',...cols.map(d=>dayTot[d]||0),'']);
+  _dlCsv(['Order No.','Order Date','SKU','Sr. No.','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
 }
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
@@ -28531,10 +28531,18 @@ def api_wip_receive():
     oq_by_order_sku = {}
     bal_by_order_sku = {}
     rq_by_order_sku = {}
+    sr_by_order_sku = {}   # (order, sku) -> Sr. No. (PPC-WIP col C), shown next to the SKU
     for pr in prod_rows:
         _on3 = _wipr_norm_order(pr.get("order_no"))
         if _on3:
             _k3 = (_on3, str(pr.get("sku") or "").strip().upper())
+            _sr_txt = str(pr.get("sr_no") or "").strip()
+            if re.fullmatch(r"\d+\.0+", _sr_txt):
+                _sr_txt = _sr_txt.split(".")[0]
+            if _sr_txt and _sr_txt.lower() not in ("nan", "none", "null"):
+                _sr_list = sr_by_order_sku.setdefault(_k3, [])
+                if _sr_txt not in _sr_list:
+                    _sr_list.append(_sr_txt)
             bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + max(0.0, float(pr.get("bal_qty") or 0))   # negative (over-receipt) counts as 0
             rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
         _on2 = _wipr_norm_order(pr.get("order_no"))
@@ -28576,7 +28584,7 @@ def api_wip_receive():
         od = odt_by_order_sku.get((r["order"], r["sku"])) or odt_by_order.get(r["order"]) or ""
         k = (r["date"], r["sku"], ty, ch, dl, od, r["order"], _balv)
         _oqv = oq_by_order_sku.get((r["order"], r["sku"]), 0.0)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku)})
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku), "sr_no": ", ".join(sr_by_order_sku.get((r["order"], r["sku"]), []))})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
@@ -28606,6 +28614,7 @@ def api_wip_receive():
             "balance": _wipr_num(_pbal),
             "qty": 0, "orders": [_pon] if _pon else [],
             "cancelled": ((_pon, _psk) in cancel_by_order_sku),
+            "sr_no": ", ".join(sr_by_order_sku.get((_pon, _psk), [])),
             "norecv": True,
         })
     return jsonify({
