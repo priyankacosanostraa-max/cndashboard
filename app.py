@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.36 (WIP RECEIVE · GRAND TOTAL FOR ORDER/REC/BAL QTY)
+# - WIP Receive Grand Total row ab Inv Stock ke alawa har numeric column ka total dikhata hai:
+#   Order Qty, Rec Qty, Bal Qty (single-date aur matrix, dono view me) + existing Qty/date totals.
+# - Ye totals hamesha currently lage hue filters (month/date range, channel, type, delivery date,
+#   delivery week, SKU search/paste, order no.) ke hisaab se hi calculate hote hain, kyunki
+#   ye already-filtered rows/matrix par hi sum ho rahe hain. Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.35 (WIP RECEIVE · CHANNEL / ORDER-REC-BAL QTY · DELIVERY WEEK FILTER)
 # - WIP Receive table me Inv Stock ke baad naye columns: Channel, Order Qty, Rec Qty, Bal Qty
 #   (Production/PPC-WIP sheet se, order + SKU wise). Delivery Date last column hi hai.
@@ -9457,7 +9464,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Month / date range, Channel, Type, Delivery Date (order date + 10/12/20 days by order type) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Only SKUs whose order balance is above 0 are listed, except receipts of the current month which are all shown; Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -19811,8 +19818,9 @@ function renderWipReceive(){
   if(_wiprPick){
     const rows=shown.slice().sort(_wiprCmpRow);
     let body='';
-    rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr>${lead(r,it)}<td class="ops-num"><b>${n(r.qty)}</b></td><td>${fD(r.dl)}</td></tr>`;});
-    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="9" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
+    let oqT=0,rqT=0,balT=0;
+    rows.forEach(r=>{const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};body+=`<tr>${lead(r,it)}<td class="ops-num"><b>${n(r.qty)}</b></td><td>${fD(r.dl)}</td></tr>`;oqT+=Number(r.oq)||0;rqT+=Number(r.rq)||0;balT+=(r.bal===null||r.bal===undefined)?0:Number(r.bal)||0;});
+    const foot=rows.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(total)}</b></td><td style="${stick}"></td></tr></tfoot>`:'';
     host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${leadHead}<th>Qty</th><th>Delivery Date</th></tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
     return;
   }
@@ -19820,13 +19828,14 @@ function renderWipReceive(){
   const cols=_wiprDateCols(list);
   const mat=_wiprSkuMatrix(list);
   const dayTot={};list.forEach(r=>{dayTot[r.date]=(dayTot[r.date]||0)+(Number(r.qty)||0);});
+  let oqT=0,rqT=0,balT=0;mat.forEach(x=>{oqT+=Number(x.oq)||0;rqT+=Number(x.rq)||0;balT+=(x.bal===null||x.bal===undefined)?0:Number(x.bal)||0;});
   const head=leadHead+cols.map(d=>`<th class="ops-num" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received on ${escHtml(_wiprFmt(d))}" onclick="wiprPickDate('${d}')">${escHtml(_wiprFmt(d))}</th>`).join('')+`<th>Delivery Date</th>`;
   let body='';
   mat.forEach(x=>{
     const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};
     body+=`<tr>${lead(x,it)}`+cols.map(d=>x.byDate[d]?`<td class="ops-num"><b>${n(x.byDate[d])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td>${fD(x.dl)}</td></tr>`;
   });
-  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="9" style="${stick}">Grand Total</td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
+  const foot=mat.length?`<tfoot><tr style="font-weight:900"><td colspan="5" style="${stick}">Grand Total</td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+cols.map(d=>`<td class="ops-num" style="${stick}"><b>${n(dayTot[d]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`:'';
   host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function resetWipReceiveFilters(){
