@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.45 (QTY TARGET = REVENUE TARGET / CHANNEL ASP)
+# - Target_26-27 (Oct-26..Mar-27) Qty Target ab auto: SP Target ÷ channel ka Sep-2026 Average Selling Price
+#   (cossa_orderdate "Selling Price" col, qty-weighted). Jis channel ki Sep me sale nahi -> Type-group /
+#   Exhibition->Store/Website / overall ASP se andaza. /api/target me "qty_asp_basis" me har channel ka ASP + source.
+# ============================================================
 # Cosa Nostraa — V24.44 (TAJ TRADE AND TRANSPORT: SOR -> PURCHASE)
 # - Taj Trade and Transport SOR channel se hata diya (ab 10 SOR vendors). Iska revenue Purchase (B2B) me
 #   count hota hai (Customer Name se, sheet Type kuch bhi ho) — Target tab, Daily Target Report, Overview/SKU filters.
@@ -9582,7 +9587,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-divider"></div>
 
     <div class="ops-section">
-      <div class="ops-section-head"><div class="ops-section-title">Sales vs Stock</div></div>
+      <div class="ops-section-head"><div class="ops-section-title">Sales vs Stock</div><button class="go-btn" style="width:auto;padding:9px 13px;letter-spacing:1px;background:#2f6f3e" onclick="exportStockSales()">Export CSV</button></div>
       <div class="ops-filters">
         <div class="fc"><label class="fl">Show</label><select class="fs" id="hsMode" onchange="renderStockSales()"><option value="HIGH_NO_WIP">High Sale, No WIP</option><option value="LOW_HIGH_STOCK">Low Sale, High Stock</option></select></div>
         <div class="fc"><label class="fl">Sales Period</label><select class="fs" id="hsPeriod" onchange="renderStockSales()"><option value="7">Last 7 Days</option><option value="15">Last 15 Days</option><option value="30" selected>Last 30 Days</option><option value="all">All Time</option></select></div>
@@ -28707,6 +28712,9 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
         "months": sorted(months_set, reverse=True),
         "stakeholders": sorted(stakes_set),
         "channels": sorted(channels_set),
+        # Qty Target basis (Target_26-27 months): channel-wise Sep-2026 ASP + kahan se aaya (own/group/proxy/overall)
+        "qty_asp_basis": ({k: {"asp": round(v["asp"], 2), "source": v["src"], "sep_qty": round(v["qty"])}
+                           for k, v in _t26_asp_info().items()} if is_t26_month else {}),
     }
 
 @app.route("/api/target")
@@ -30628,6 +30636,82 @@ _T26_MARKETPLACE_TYPES = {"marketplace", "sor", "sis", "ecom", "ecommerce", "reg
 # owner given yet -> the Type name is shown; change here when an owner is decided.
 _T26_STAKEHOLDER_BY_TYPE = {"SOR": "Sakshi", "ECom": "Mahesh", "Website": "Kiran"}
 
+# ── QTY TARGET (Target_26-27) ───────────────────────────────────────────────────────────────
+# Qty Target = Revenue (SP) Target ÷ channel ka Average Selling Price.
+# ASP = SEP-2026 ka, cossa_orderdate ke "Selling Price" column (H) se, qty-weighted:
+#       sum(selling_price * qty) / sum(qty)   (sirf qty > 0 aur selling price > 0 wali rows).
+# Channel-wise alag ASP (Target ki wahi row-labels jo Net Revenue actual me use hoti hain).
+# Jis channel ki Sep-2026 me koi sale nahi hui uska ASP andaza:
+#   1) uske Type-group ka Sep ASP (ECom channels -> ECom, SOR vendors -> SOR),
+#   2) Exhibition -> Store, phir Website (retail jaisa selling price),
+#   3) warna poore business ka Sep ASP.
+_T26_ASP_MONTH = "2026-09"
+_T26_TYPE_BY_LABEL = {_t26_label(_t, _ch): _t for _t, _ch, _v in _TARGET_26_27}
+_T26_ASP_CACHE = {"stamp": None, "info": {}}
+
+def _t26_group_of(label):
+    t = str(_T26_TYPE_BY_LABEL.get(label, "") or "").casefold()
+    return t if t in ("ecom", "sor", "sis") else ("label:" + label)
+
+def _t26_asp_info(rows=None):
+    """{row label: {"asp": float, "src": "own"|"group"|"proxy:<label>"|"overall"|"none", "qty": Sep sold qty}}
+    Sep-2026 cossa_orderdate se; rows fetch hone tak cache."""
+    if rows is None:
+        try:
+            rows = _drg_rows_swr()
+        except Exception:
+            rows = []
+    rows = rows or []
+    stamp = (id(rows), len(rows))
+    if _T26_ASP_CACHE["stamp"] == stamp:
+        return _T26_ASP_CACHE["info"]
+    own, grp, tot = {}, {}, [0.0, 0.0]
+    for e in rows:
+        d = e.get("date")
+        if not d or d == "N/A" or d[:7] != _T26_ASP_MONTH:
+            continue
+        try:
+            q = float(e.get("qty") or 0); sp = float(e.get("sp") or 0)
+        except Exception:
+            continue
+        if q <= 0 or sp <= 0:
+            continue
+        lab = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
+        for acc, key in ((own, lab), (grp, _t26_group_of(lab))):
+            a = acc.setdefault(key, [0.0, 0.0]); a[0] += sp * q; a[1] += q
+        tot[0] += sp * q; tot[1] += q
+    def _asp(a): return (a[0] / a[1]) if a and a[1] > 0 else 0.0
+    overall = _asp(tot)
+    exh = _t26_label("Exhibition", "B2C")
+    info = {}
+    for lab in list(dict.fromkeys(_T26_ROW_ORDER)):
+        a_own = _asp(own.get(lab))
+        if a_own > 0:
+            info[lab] = {"asp": a_own, "src": "own", "qty": own[lab][1]}; continue
+        a_grp = _asp(grp.get(_t26_group_of(lab)))
+        if a_grp > 0 and _t26_group_of(lab) in ("ecom", "sor", "sis"):
+            info[lab] = {"asp": a_grp, "src": "group", "qty": 0.0}; continue
+        if lab == exh:
+            for pl in ("Store", _T26_LABEL_WEBSITE):
+                a_pl = _asp(own.get(pl))
+                if a_pl > 0:
+                    info[lab] = {"asp": a_pl, "src": "proxy:" + pl, "qty": 0.0}; break
+            if lab in info: continue
+        if overall > 0:
+            info[lab] = {"asp": overall, "src": "overall", "qty": 0.0}
+        else:
+            info[lab] = {"asp": 0.0, "src": "none", "qty": 0.0}
+    _T26_ASP_CACHE["stamp"] = stamp; _T26_ASP_CACHE["info"] = info
+    return info
+
+def _t26_qty_from_sp(label, sp_target):
+    """Qty target = revenue target / Sep-2026 channel ASP (whole units)."""
+    try:
+        a = (_t26_asp_info().get(label) or {}).get("asp") or 0.0
+    except Exception:
+        a = 0.0
+    return float(round(float(sp_target or 0) / a)) if a > 0 else 0.0
+
 def _apply_target_26_27_rows(rows):
     """Oct-2026..Mar-2027 rows of the Target sheet are replaced by the updated Target_26-27 plan."""
     months = set(_TARGET_26_27_MONTHS)
@@ -30635,11 +30719,12 @@ def _apply_target_26_27_rows(rows):
     for i, mk in enumerate(_TARGET_26_27_MONTHS):
         label = datetime(int(mk[:4]), int(mk[5:7]), 1).strftime("%b %Y")
         for t, ch, vals in _TARGET_26_27:
+            _lab = _t26_label(t, ch)
             kept.append({
                 "month": mk, "month_label": label,
                 "stakeholder": _T26_STAKEHOLDER_BY_TYPE.get(t, t),
-                "channel": _t26_label(t, ch),
-                "qty_target": 0.0, "sp_target": float(vals[i] or 0),
+                "channel": _lab,
+                "qty_target": _t26_qty_from_sp(_lab, float(vals[i] or 0)), "sp_target": float(vals[i] or 0),
             })
     return kept
 
@@ -30685,7 +30770,7 @@ def _t26_targets_for_month(month_key, old_targets):
         for t, ch, vals in _TARGET_26_27:
             lab = _t26_label(t, ch)
             sp, qt = out.get(lab, (0.0, 0.0))
-            out[lab] = (sp + float(vals[i] or 0), qt)
+            out[lab] = (sp + float(vals[i] or 0), qt + _t26_qty_from_sp(lab, float(vals[i] or 0)))
         return out
     for t in old_targets or []:
         if t.get("month") != month_key:
