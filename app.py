@@ -1261,7 +1261,27 @@ def _is_purchase_vendor(customer):
     return bool(c) and any(k in c for k in _PURCHASE_VENDOR_KEYS)
 _SOR_KEYS_BY_LABEL = dict(_SOR_CHANNEL_KEYS)
 _ECOM_SUB_PRESET = [k[0] for k in _ECOM_CHANNEL_KEYS]
-_SOR_SUB_PRESET = [k[0] for k in _SOR_CHANNEL_KEYS]
+# PSL Retail = Target me EK hi row ("SOR - PSL Retail", Online + Offline dono add — _SOR_CHANNEL_KEYS / _t26_bucket
+# customer-name se hi match karte hain, unme koi change nahi). Lekin SOR sub-channel FILTERS me
+# PSL RETAIL PRIVATE LIMITED Online aur Offline alag-alag options hain.
+_PSL_SUB_LABEL = "PSL Retail"
+_PSL_SUB_ONLINE = "PSL Retail Online"
+_PSL_SUB_OFFLINE = "PSL Retail Offline"
+def _psl_sub_label(customer):
+    """PSL RETAIL PRIVATE LIMITED Online / Offline -> alag sub-channel label (filters ke liye).
+    Customer naam me na Online na Offline ho to plain 'PSL Retail' hi rehta hai (guess nahi)."""
+    compact = re.sub(r"[^a-z0-9]", "", str(customer or "").casefold())
+    if "offline" in compact:
+        return _PSL_SUB_OFFLINE
+    if "online" in compact:
+        return _PSL_SUB_ONLINE
+    return _PSL_SUB_LABEL
+_SOR_SUB_PRESET = []
+for _k in _SOR_CHANNEL_KEYS:
+    if _k[0] == _PSL_SUB_LABEL:
+        _SOR_SUB_PRESET += [_PSL_SUB_ONLINE, _PSL_SUB_OFFLINE]
+    else:
+        _SOR_SUB_PRESET.append(_k[0])
 _OTHER_ECOM_LABEL = "Other ECom"
 
 def _match_channel_keys(customer, table):
@@ -1353,7 +1373,8 @@ def calc_sub_channel(customer, channel, typ):
         named = _match_channel_keys(customer, _ECOM_CHANNEL_KEYS)   # Join Commerce / Qcom etc.
         return named or _OTHER_ECOM_LABEL
     if channel == "SOR":
-        return _match_channel_keys(customer, _SOR_CHANNEL_KEYS) or "SOR"
+        _lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS) or "SOR"
+        return _psl_sub_label(customer) if _lab == _PSL_SUB_LABEL else _lab
     return channel  # D2C/B2B/Exhibition/Bulk: sub-channel = channel hi
 
 def find_col(cols, *cands):
@@ -11456,7 +11477,7 @@ const _SD_SOR_MARKETPLACES = [
 ];
 // SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
 const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Join Commerce','Qcom','Other ECom'];
-const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
+const _SD_SOR_OPTIONS  = ['PSL Retail Online','PSL Retail Offline','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
@@ -19748,17 +19769,20 @@ function _iaSoldBucket(days){if(days===null)return'never';if(days<=15)return'0-1
 function _iaSaleDates(it){
   const end=_bizIso(todayISO)||_bizIso(_opsSupport.today)||new Date().toISOString().slice(0,10);
   let first='',last='';
-  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;const d=_bizEntryDate(e);if(!d||d>end)continue;if(!last||d>last)last=d;
-    /* First Sold Date = earliest of Order Date and Dispatch Date */
+  /* Only rows with a real positive sold qty count as a sale. Last Sold Date follows the
+     DISPATCH date (same clock as the 7/15/30-day sold windows); Order Date is used only
+     when a row has no dispatch date. First Sold Date stays the earliest Order/Dispatch date. */
+  const addEntries=entries=>{for(const e of (entries||[])){if(_opsNum(e&&e.qty)<=0)continue;
+    const dd=_bizIso(e&&e.date)||_bizIso(e&&e.dispatch_date)||_bizIso(e&&e.order_date)||_bizIso(e&&e.orderDate);
+    if(!dd||dd>end)continue;if(!last||dd>last)last=dd;
     [_bizIso(e&&e.order_date),_bizIso(e&&e.date),_bizIso(e&&e.dispatch_date),_bizIso(e&&e.orderDate)].forEach(x=>{if(x&&x<=end&&(!first||x<first))first=x;});}};
   addEntries((it&&it.sales_entries)||[]);
   const key=String(it&&it.sku||'').trim().toUpperCase();
   const seen=new Set();
   (cnxComboParentIndex().get(key)||[]).forEach(parent=>{const pk=String(parent&&parent.sku||'').trim().toUpperCase();if(!pk||seen.has(pk))return;seen.add(pk);addEntries((parent&&parent.sales_entries)||[]);});
-  const fallback=_bizIso(it&&it.last_dispatch_date);
-  if(fallback&&fallback<=end&&(!last||fallback>last))last=fallback;
-  const fbFirst=_bizIso(it&&it.first_dispatch_date);
-  if(fbFirst&&fbFirst<=end&&(!first||fbFirst<first))first=fbFirst;
+  /* NOTE: item.last_dispatch_date / first_dispatch_date are NOT used as a fallback any more —
+     the server computes them from every row including zero-qty / fully-returned rows, which
+     made returned orders look like recent sales. */
   return{first,last};
 }
 function _buildInventoryAgeRows(){
