@@ -61,7 +61,8 @@
 # Cosa Nostraa — V24.33 (WIP RECEIVE PASTE SKUs + INV STOCK · PRODUCTION DELIVERY RULE)
 # - WIP Receive tab: Repeat Orders jaisa "Paste multiple SKUs" box (Show Pasted SKUs / Clear Pasted)
 #   + har SKU ke saath Inv Stock column (table aur CSV me). Inv Stock ka Grand Total nahi dikhta.
-# - Production tab: Delivery Date ab Order Date se calculate hoti hai —
+# - Delivery Date: pehle sheet ke column L ki date (agar likhi ho), warna neeche wala calculation.
+# - Production tab: Delivery Date (jab sheet me na ho) Order Date se calculate hoti hai —
 #   Order Type "New Ordering" = Order Date + 15 din, baaki sab = Order Date + 12 din;
 #   jis row me stone (PPC-WIP col S) likha ho usme +7 din extra.
 # - WIP Receive tab: purani table ke neeche "Month wise" table (apne alag filters + KPIs).
@@ -28042,9 +28043,11 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             rv = parse_date_any(r.get(C_RECV, "")) if C_RECV else None
             _otype_txt = _marketplace_display_text(r.get(C_TYPE, "")) if C_TYPE else ""
             _bal_val = to_num(r.get(C_BQTY, 0)) if C_BQTY else 0.0
-            if dt and _production_has_balance(_bal_val):
-                # Delivery Date = Order Date + lead days (Order Type based),
-                # sirf un rows ki jinki Balance Qty (col K) 0 nahi hai.
+            if dv:
+                pass   # sheet ke column L (Delivery Date) me date likhi hai -> wahi use hogi
+            elif dt and _production_has_balance(_bal_val):
+                # Sheet me delivery date nahi hai -> Order Date + lead days (Order Type based,
+                # stone ho to +7), sirf un rows ki jinki Balance Qty (col K) 0 nahi hai.
                 _stone_txt = str(clean(r.get(C_STONE, "")) if C_STONE else "").strip()
                 dv = dt + timedelta(days=_production_delivery_days(_otype_txt, order_no, _stone_txt))
             else:
