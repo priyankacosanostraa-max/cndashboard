@@ -5,6 +5,11 @@
 # - Ek vendor ke saare naam-variants (jaise AZA Fashions Pvt Ltd / Aza Fashions Private Limited / Aza Fashions
 #   Pvt. Ltd.) ek hi channel me merge hote hain — Target tab me har vendor ki sirf ek row, koi double count nahi.
 # - ECom me IGP hata ke "Join Commerce" (Join Commerce Pvt. Ltd.) — IGP wale target numbers isi row me.
+# - PERFORMANCE (Target tab month/filter change): Oct-2026+ months ke liye ab heavy get_data() aur poore
+#   sales_entries ka loop nahi chalta; actuals ek hi pass me sab months ke liye cache hote hain; customer->row
+#   matching memoised; cossa_orderdate CSV ek hi thread fetch karta hai (4 tables ek saath load hone par
+#   4 download nahi) aur cache purana hone par purana data turant dikhata hai, refresh background me.
+#   Frontend: jaldi-jaldi filter badalne par purani request cancel, table blank nahi hoti.
 # - Ek hi list (_SOR_CHANNEL_KEYS) se Target tab, Sales/SKU filters aur sub-channel sab chalte hain.
 # ============================================================
 # Cosa Nostraa — V24.41 (TARGET TAB · Target_26-27 IN TABLE 1 + ECOM / SOR SPLIT · MARKETPLACE FILTER REMOVED)
@@ -15453,17 +15458,24 @@ window.renderHome = renderHome;
 /* ── TARGET vs ACTUAL (admin) ── */
 let _tgtData = null;
 let _tgtFilled = false;
+let _tgtAbort = null;
 function loadTarget(){
   const host = document.getElementById('tgtContent');
   if (!host) return;
-  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading target data…</div>';
+  // Pichli request chal rahi ho to cancel karo (month/filter jaldi-jaldi badalne par queue na bane).
+  if (_tgtAbort){ try{ _tgtAbort.abort(); }catch(e){} }
+  _tgtAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  // Purani table screen pe rehne do (halka dim) — poora "Loading…" se replace karne se page jump/lag karta tha.
+  if (_tgtData) host.style.opacity = '0.45';
+  else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading target data…</div>';
   const mf = document.getElementById('tgtMonth')?.value || '';
   const sf = document.getElementById('tgtStake')?.value || '';
   const chf = document.getElementById('tgtChannel')?.value || '';
   fetch('/api/target?month=' + encodeURIComponent(mf) + '&stake=' + encodeURIComponent(sf) + '&channel=' + encodeURIComponent(chf),
-        {headers:{'ngrok-skip-browser-warning':'true'}})
+        {headers:{'ngrok-skip-browser-warning':'true'}, signal: _tgtAbort ? _tgtAbort.signal : undefined})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      host.style.opacity = '';
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       _tgtData = d;
       // dropdown ek baar fill karo (filtered call par options na badlein)
@@ -15492,7 +15504,11 @@ function loadTarget(){
       }
       renderTargetTable();
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => {
+      if (err && err.name === 'AbortError') return;   // newer request ne isse replace kar diya
+      host.style.opacity = '';
+      host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>';
+    });
 }
 function renderTargetTable(){
   const host = document.getElementById('tgtContent');
@@ -28397,14 +28413,88 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
     }
 
 
+_TGT_ACT_CACHE = {"stamp": None, "act": None}
+_TGT_ACT_LOCK = threading.Lock()
+
+def _target_legacy_actuals():
+    """{(month, type/channel key): {rev, qty}} for pre Target_26-27 months. Cached until the main
+    data cache refreshes (CACHE['ts'])."""
+    data = get_data()
+    stamp = CACHE.get("ts")
+    if _TGT_ACT_CACHE["act"] is not None and _TGT_ACT_CACHE["stamp"] == stamp:
+        return _TGT_ACT_CACHE["act"]
+    with _TGT_ACT_LOCK:
+        if _TGT_ACT_CACHE["act"] is not None and _TGT_ACT_CACHE["stamp"] == stamp:
+            return _TGT_ACT_CACHE["act"]
+        comp = data[0]
+        act = {}
+        for it in comp:
+            _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
+            for e in _target_entries:
+                d = e.get("date")
+                if not d or d == "N/A":
+                    continue
+                mk = d[:7]
+                typ = _marketplace_display_text(e.get("type") or "").strip().lower()
+                sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
+                cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
+                entry_keys = {typ}
+                if _is_marketplace_type(typ):
+                    entry_keys.add("marketplace")     # legacy Marketplace bucket = ECom + SOR
+                amazon_family = (
+                    sub == "amazon" or cust == "amazon"
+                    or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))
+                )
+                if amazon_family:
+                    # Target tab treats Amazon + legacy Amazon FBA as one Amazon bucket.
+                    # Amazon also belongs to Mahesh's Marketplace/SOR actual, even if a
+                    # source row happens to arrive with Ecom/other type text.
+                    entry_keys.add("amazon")
+                    entry_keys.add("marketplace")
+                if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
+                    entry_keys.add("tata" if sub == "tata cliq" else sub)
+                for entry_key in entry_keys:
+                    if not entry_key:
+                        continue
+                    k = (mk, entry_key)
+                    slot = act.setdefault(k, {"rev": 0.0, "qty": 0.0})
+                    slot["rev"] += float(e.get("rev") or 0)
+                    slot["qty"] += float(e.get("qty") or 0)
+        _TGT_ACT_CACHE["act"] = act
+        _TGT_ACT_CACHE["stamp"] = stamp
+        return act
+
+_T26_ACT_CACHE = {"stamp": None, "by_month": {}}
+
+def _t26_actuals_by_month(rows):
+    """{month: {row label: {rev, qty}}} for all Target_26-27 months in ONE pass; reused for every
+    month switch / filter change until cossa_orderdate rows are re-fetched."""
+    stamp = (id(rows), len(rows))
+    if _T26_ACT_CACHE["stamp"] == stamp:
+        return _T26_ACT_CACHE["by_month"]
+    months = set(_TARGET_26_27_MONTHS)
+    by = {}
+    for e in rows:
+        d = e.get("date")
+        if not d or d == "N/A":
+            continue
+        mk = d[:7]
+        if mk not in months:
+            continue
+        b = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
+        slot = by.setdefault(mk, {}).setdefault(b, {"rev": 0.0, "qty": 0.0})
+        slot["rev"] += float(e.get("rev") or 0)
+        slot["qty"] += float(e.get("qty") or 0)
+    _T26_ACT_CACHE["by_month"] = by
+    _T26_ACT_CACHE["stamp"] = stamp
+    return by
+
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     """Target vs Actual + Achievement Forecast + Stakeholder Leaderboard.
     Default: present month. Stake Holder ↔ COSA Customer, Channel ↔ COSA Type."""
     if _is_amazon_fba_value(channel_filter):
         channel_filter = "Amazon"
     targets = _fetch_target_rows()
-    data = get_data()
-    comp = data[0]
     today = now_ist()
     cur_month = today.strftime("%Y-%m")
 
@@ -28436,54 +28526,16 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # Target ka "Channel Type" (Marketplace, Website, Purchase…) = COSA ka "Type".
     # Target tab canonical rule: Amazon and all legacy Amazon-FBA spellings are
     # one Amazon family and also contribute to Marketplace/SOR actuals.
-    act = {}
-    for it in comp:
-        _target_entries = it.get("orderdate_sales_entries") or it.get("sales_entries", [])
-        for e in _target_entries:
-            d = e.get("date")
-            if not d or d == "N/A":
-                continue
-            mk = d[:7]
-            typ = _marketplace_display_text(e.get("type") or "").strip().lower()
-            sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
-            cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
-            entry_keys = {typ}
-            if _is_marketplace_type(typ):
-                entry_keys.add("marketplace")     # legacy Marketplace bucket = ECom + SOR
-            amazon_family = (
-                sub == "amazon" or cust == "amazon"
-                or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))
-            )
-            if amazon_family:
-                # Target tab treats Amazon + legacy Amazon FBA as one Amazon bucket.
-                # Amazon also belongs to Mahesh's Marketplace/SOR actual, even if a
-                # source row happens to arrive with Ecom/other type text.
-                entry_keys.add("amazon")
-                entry_keys.add("marketplace")
-            if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
-                entry_keys.add("tata" if sub == "tata cliq" else sub)
-            for entry_key in entry_keys:
-                if not entry_key:
-                    continue
-                k = (mk, entry_key)
-                slot = act.setdefault(k, {"rev": 0.0, "qty": 0.0})
-                slot["rev"] += float(e.get("rev") or 0)
-                slot["qty"] += float(e.get("qty") or 0)
+    # PERFORMANCE: Target_26-27 months (Oct-2026+) ka actual sirf cossa_orderdate se aata hai, isliye
+    # heavy get_data() + poore sales_entries ka loop sirf purane months (<= Sep-2026) ke liye chalta hai,
+    # aur wo bhi data refresh hone tak ek hi baar (cache) — month/filter badalne pe dobara nahi.
+    is_t26_month = month_filter in _TARGET_26_27_MONTHS
+    act = {} if is_t26_month else _target_legacy_actuals()
 
     # Target_26-27 months: actual = cossa_orderdate NET REVENUE. Website/Purchase/Store/Bulk/Exhibition
     # come from the Type column; ECom and SOR channels come from the Customer Name (same rule as
     # Daily Revenue Glimpse).
-    is_t26_month = month_filter in _TARGET_26_27_MONTHS
-    act26 = {}
-    if is_t26_month:
-        for e in _fetch_drg_source_rows():
-            d = e.get("date")
-            if not d or d == "N/A" or d[:7] != month_filter:
-                continue
-            b = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
-            slot = act26.setdefault(b, {"rev": 0.0, "qty": 0.0})
-            slot["rev"] += float(e.get("rev") or 0)
-            slot["qty"] += float(e.get("qty") or 0)
+    act26 = _t26_actuals_by_month(_drg_rows_swr()).get(month_filter, {}) if is_t26_month else {}
 
     rows = []
     lb = {}   # stakeholder -> aggregated
@@ -29405,7 +29457,41 @@ def api_festival_sales_export_xlsx():
 
 _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 
+_DRG_FETCH_LOCK = threading.Lock()
+_DRG_BG = {"running": False}
+
 def _fetch_drg_source_rows(force=False):
+    """Lock wrapper: Target tab pe 4 tables ek saath load hote hain (Target, Glimpse, Marketplace,
+    Daily Target) — pehle cache expire hone par sab alag-alag poori cossa_orderdate CSV download karte
+    the. Ab ek hi thread fetch karta hai, baaki uska result reuse karte hain."""
+    t0 = time.time()
+    if (not force and _DRG_SRC_CACHE["rows"] is not None
+            and t0 - _DRG_SRC_CACHE["ts"] < 600):
+        return _DRG_SRC_CACHE["rows"]
+    with _DRG_FETCH_LOCK:
+        if _DRG_SRC_CACHE["rows"] is not None and _DRG_SRC_CACHE["ts"] >= t0:
+            return _DRG_SRC_CACHE["rows"]      # doosre thread ne abhi hi refresh kar diya
+        return _fetch_drg_source_rows_impl(force=force)
+
+def _drg_rows_swr():
+    """Target tab ke liye: cache purana ho tab bhi turant serve karo aur refresh background me chalao,
+    taaki har 10 min me month/filter change pe page atke nahi. Pehli baar (cache khaali) blocking fetch."""
+    cached = _DRG_SRC_CACHE["rows"]
+    if cached is None:
+        return _fetch_drg_source_rows()
+    if time.time() - _DRG_SRC_CACHE["ts"] >= 600 and not _DRG_BG["running"]:
+        _DRG_BG["running"] = True
+        def _bg():
+            try:
+                _fetch_drg_source_rows(force=True)
+            except Exception:
+                pass
+            finally:
+                _DRG_BG["running"] = False
+        threading.Thread(target=_bg, daemon=True).start()
+    return cached
+
+def _fetch_drg_source_rows_impl(force=False):
     """Daily Revenue Glimpse ke normalized Net Revenue rows.
 
     Most channels come from cossa_orderdate. In the Target tab, Amazon is read
@@ -30474,8 +30560,16 @@ def _apply_target_26_27_rows(rows):
             })
     return kept
 
+from functools import lru_cache
+
 def _t26_bucket(customer, typ):
-    """Net-revenue row label for one cossa_orderdate row (see rules above)."""
+    """Net-revenue row label for one cossa_orderdate row (see rules above).
+    PERFORMANCE: distinct (customer, type) pairs are few, lakhs of rows repeat them, so the
+    regex/key scan runs once per pair (memoised) instead of once per row."""
+    return _t26_bucket_cached(str(customer or ""), str(typ or ""))
+
+@lru_cache(maxsize=100000)
+def _t26_bucket_cached(customer, typ):
     t_key = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
     if t_key in _T26_TYPE_BUCKETS:                     # Website / Purchase / Store / Bulk / Exhibition -> Type column
         return _T26_TYPE_BUCKETS[t_key]
