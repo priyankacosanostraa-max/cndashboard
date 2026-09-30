@@ -1,3 +1,14 @@
+# Cosa Nostraa — V24.41 (TARGET TAB · Target_26-27 IN TABLE 1 + ECOM / SOR SPLIT · MARKETPLACE FILTER REMOVED)
+# - Target tab, table 1 (Target vs Actual / Stakeholder Leaderboard): Oct-2026..Mar-2027 ab updated
+#   Target_26-27 (ECom / SOR / Website / Purchase / Store / Bulk / Exhibition) se chalta hai. Actual = cossa_orderdate
+#   NET REVENUE: Website/Purchase/Store/Bulk/Exhibition -> Type column se; ECom aur SOR channels -> Customer Name se.
+#   SOR ka stakeholder = Sakshi (ECom = Mahesh, Website = Kiran — same as Sept plan; baaki ka stakeholder = Type name).
+# - Table 2 (Daily Revenue Glimpse) ka Target_26-27 pehle se same tha; ab wahi net-revenue rule table 1 me bhi.
+# - Sheet Type "Marketplace"/"SOR" wale sab rows ab ECom type me aate hain; sirf named SOR customers
+#   (PSL, Aza, Prakash Sons, Madhuram, Jaypore, Kalki, KORA, Arved, Taj Khazan, Mohanlal Sons) SOR type me.
+# - Poore dashboard me "Marketplace" filter hata diya: uski jagah alag ECom aur alag SOR filter
+#   (Matrix, Repeat/ROP aur SKU Details). Type filter me bhi ab Marketplace ki jagah ECom / SOR dikhte hain.
+# ============================================================
 # Cosa Nostraa — V24.40 (WIP RECEIVE · DELIVERY TYPE FILTER · COLOURED LAST-7-DAY HEADINGS)
 # - WIP Receive: "Delivery Date" dropdown ki jagah "Delivery Type" filter — All / Delayed / Upcoming.
 #   Delayed = delivery date AAJ se pehle ki (balance qty > 0 wale SKUs hi); Upcoming = delivery date
@@ -1140,7 +1151,7 @@ def _is_marketplace_type(v):
     if not s:
         return False
     compact = re.sub(r"[^a-z0-9]", "", s.casefold())
-    return compact == "marketplace" or bool(_SOR_TOKEN_RE.search(s))
+    return compact in ("marketplace", "ecom", "ecommerce", "sis") or bool(_SOR_TOKEN_RE.search(s))
 
 def _marketplace_display_text(v, default=""):
     """Normalize Marketplace text and collapse legacy FBA labels into Amazon."""
@@ -1185,6 +1196,36 @@ def norm_cust(v):  return _canon(v, _CUST_CANON,  "Unknown", title=False)
 _ECOM_TOKENS = ("myntra", "nykaa", "ajio", "tata", "fnp", "fern",
                 "mirraw", "amazon", "flipkart")
 
+# ECom / SOR channel names (updated Target_26-27). Customer Name se pehchane jaate hain:
+# keys <= 4 letters whole-word match, lambi keys compact text me kahin bhi.
+_ECOM_CHANNEL_KEYS = (
+    ("Amazon", ("amazon",)), ("Flipkart", ("flipkart",)), ("Myntra", ("myntra",)), ("Nykaa", ("nykaa",)),
+    ("Tata CLiQ", ("tata", "tatacliq")), ("AJIO", ("ajio",)), ("IGP", ("igp",)),
+    ("Qcom", ("blinkit", "instamart", "zepto", "swiggy", "bigbasket", "qcom", "quickcommerce")),
+)
+_SOR_CHANNEL_KEYS = (
+    ("PSL", ("psl",)), ("Aza", ("aza",)), ("Prakash Sons", ("prakashsons", "prakashson")),
+    ("Madhuram (The Hub)", ("madhuram", "thehub")), ("Jaypore", ("jaypore",)), ("Kalki", ("kalki",)),
+    ("KORA", ("kora",)), ("Arved", ("arved",)), ("Taj Khazan", ("tajkhazan", "tajkhazana", "khazan")),
+    ("Mohanlal Sons", ("mohanlal",)),
+)
+_ECOM_SUB_PRESET = [k[0] for k in _ECOM_CHANNEL_KEYS]
+_SOR_SUB_PRESET = [k[0] for k in _SOR_CHANNEL_KEYS]
+_OTHER_ECOM_LABEL = "Other ECom"
+
+def _match_channel_keys(customer, table):
+    """Customer Name -> channel label from _ECOM_CHANNEL_KEYS / _SOR_CHANNEL_KEYS ('' if none)."""
+    text = str(customer or "").casefold()
+    if not text:
+        return ""
+    compact = re.sub(r"[^a-z0-9]", "", text)
+    words = set(re.findall(r"[a-z0-9]+", text))
+    for label, keys in table:
+        for k in keys:
+            if (k in words) if len(k) <= 4 else (k in compact):
+                return label
+    return ""
+
 def _compact_channel_text(*values):
     """Case/punctuation-insensitive channel marker used for Amazon FBA.
 
@@ -1208,7 +1249,11 @@ def _is_amazon_fba_value(*values):
 def _merge_amazon_identity(customer, typ):
     """Expose all legacy FBA-source identities as the single Amazon channel."""
     if _is_amazon_fba_value(customer, typ):
-        return "Amazon", "Marketplace"
+        return "Amazon", "ECom"
+    # Sheet Type Marketplace / SOR / ECom -> customer name se: named SOR customers = SOR,
+    # baaki sab marketplaces = ECom.
+    if _is_marketplace_type(typ):
+        return customer, ("SOR" if _match_channel_keys(customer, _SOR_CHANNEL_KEYS) else "ECom")
     return customer, typ
 
 def calc_channel(customer, typ):
@@ -1218,7 +1263,8 @@ def calc_channel(customer, typ):
         return "Ecom"
     if any(tok in c for tok in _ECOM_TOKENS):
         return "Ecom"
-    if _is_marketplace_type(t): return "Marketplace"
+    if t in ("sor", "sis"): return "SOR"
+    if _is_marketplace_type(t): return "Ecom"
     if t == "website":    return "D2C"
     if t == "online":     return "D2C"
     if t == "purchase":   return "B2B"
@@ -1241,8 +1287,11 @@ def calc_sub_channel(customer, channel, typ):
         for tok, label in _MARKETPLACE_MAP:
             if tok in c:
                 return label
-        return "Other Marketplace"
-    return channel  # D2C/Marketplace/B2B/Exhibition/Bulk: sub-channel = channel hi
+        named = _match_channel_keys(customer, _ECOM_CHANNEL_KEYS)   # IGP / Qcom etc.
+        return named or _OTHER_ECOM_LABEL
+    if channel == "SOR":
+        return _match_channel_keys(customer, _SOR_CHANNEL_KEYS) or "SOR"
+    return channel  # D2C/B2B/Exhibition/Bulk: sub-channel = channel hi
 
 def find_col(cols, *cands):
     norm = {re.sub(r"[^a-z0-9]","", str(c).lower()): c for c in cols}
@@ -1383,7 +1432,7 @@ def _compute_alerts_and_channel(item, today):
         chan_rev[ch] = chan_rev.get(ch, 0.0) + float(e.get("rev") or 0)
         chan_qty[ch] = chan_qty.get(ch, 0.0) + float(e.get("qty") or 0)
         if ch == "Ecom":
-            sch = e.get("sub_channel") or "Other Marketplace"
+            sch = e.get("sub_channel") or _OTHER_ECOM_LABEL
             sub_rev[sch] = sub_rev.get(sch, 0.0) + float(e.get("rev") or 0)
     best_channel = ""
     best_channel_rev = 0.0
@@ -3230,6 +3279,8 @@ def _refresh_data():
     custs, types_, fyears = set(), set(), set()
     channels_ = set()
     sub_channels_ = set()
+    ecom_subs_ = set()
+    sor_subs_ = set()
     _TYPE_CANON.clear(); _TAXON_CANON.clear(); _CUST_CANON.clear()
 
     # Unified Grand Totals logic: Everything aggregates line-by-line
@@ -3362,6 +3413,8 @@ def _refresh_data():
 
         custs.add(cust); types_.add(typ); channels_.add(channel)
         sub_channels_.add(sub_channel)
+        if channel == "Ecom": ecom_subs_.add(sub_channel)
+        elif channel == "SOR": sor_subs_.add(sub_channel)
         if fy != "N/A": fyears.add(fy)
 
         # Return amount = return qty × us transaction ki selling price (COSA F × H)
@@ -3566,6 +3619,8 @@ def _refresh_data():
                 fy = fy_bounds(dt_od)[0]
             channel = calc_channel(cust, typ)
             sub_channel = calc_sub_channel(cust, channel, typ)
+            if channel == "Ecom": ecom_subs_.add(sub_channel)
+            elif channel == "SOR": sor_subs_.add(sub_channel)
             if _is_amazon_fba_value(cust, typ, sub_channel):
                 channels_.add(channel)
                 sub_channels_.add("Amazon")
@@ -4253,6 +4308,8 @@ def _refresh_data():
     # channels list (Type filter ke saath Channel filter ke liye)
     CACHE["channels"] = sorted([c for c in channels_ if c])
     CACHE["sub_channels"] = sorted([c for c in sub_channels_ if c])
+    CACHE["ecom_sub_channels"] = list(_ECOM_SUB_PRESET) + sorted(c for c in ecom_subs_ if c and c not in _ECOM_SUB_PRESET)
+    CACHE["sor_sub_channels"] = list(_SOR_SUB_PRESET) + sorted(c for c in sor_subs_ if c and c not in _SOR_SUB_PRESET and c != "SOR")
     CACHE["website_payment_summary"] = website_payment_summary
     CACHE["website_returns_payment_summary"] = website_returns_payment_summary
     CACHE["website_return_payment_mode_lookup"] = website_return_payment_mode_lookup
@@ -7943,8 +8000,10 @@ select.lg-in option{background:#fff;color:#1a1610}
           <datalist id="custList"></datalist></div>
         <div class="fc"><label class="fl">Sheet Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
-        <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
-          <div id="fSubChanChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">ECom (tick one or more)</label>
+          <div id="fEcomChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">SOR (tick one or more)</label>
+          <div id="fSorChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="fTaxon" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">Rel / Non-Rel (CN Name)</label>
@@ -8047,8 +8106,10 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Channel (tick one or more)</label>
           <div id="rChanChecks" class="type-checks"></div></div>
-        <div class="fc"><label class="fl">Sub-Channel / Marketplace (tick one or more)</label>
-          <div id="rSubChanChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">ECom (tick one or more)</label>
+          <div id="rEcomChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">SOR (tick one or more)</label>
+          <div id="rSorChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
         <div class="fc"><label class="fl">Rel / Non-Rel (CN Name)</label>
@@ -8336,12 +8397,14 @@ select.lg-in option{background:#fff;color:#1a1610}
             <div class="fc"><label class="fl">To</label><input class="fi" type="date" id="sdD2" onchange="renderSdAll()"></div>
             <div class="fc"><label class="fl">Type (tick one or more)</label>
               <div id="sdTypeChecks" class="type-checks"></div></div>
-            <div class="fc"><label class="fl">Marketplace</label>
-              <div id="sdMarketplaceChecks" class="type-checks"></div></div>
+            <div class="fc"><label class="fl">ECom</label>
+              <div id="sdEcomChecks" class="type-checks"></div></div>
+            <div class="fc"><label class="fl">SOR</label>
+              <div id="sdSorChecks" class="type-checks"></div></div>
           </div>
           <button class="go-btn" style="width:auto;padding:9px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetSdFilters()">Reset Filters</button>
         </div>
-        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, sales/return trend charts, net-revenue contribution, channel &amp; marketplace charts, KPIs and the transaction table below. Marketplace options are matched from COSA Customer Name where Type is Marketplace.</div>
+        <div class="small-note" style="margin-top:8px">Applies to all filtered SKU values, the product snapshot, sales/return trend charts, net-revenue contribution, channel &amp; marketplace charts, KPIs and the transaction table below. ECom and SOR options are matched from the COSA Customer Name.</div>
       </div>
 
       <div class="sd-head">
@@ -10253,11 +10316,11 @@ function isMarketplaceTypeValue(value){
   const raw=String(value??'').trim();
   if(!raw)return false;
   const compact=raw.toLowerCase().replace(/[^a-z0-9]/g,'');
-  return compact==='marketplace'||/(^|[^a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?=$|[^a-z0-9])/i.test(raw);
+  return compact==='marketplace'||compact==='ecom'||compact==='ecommerce'||compact==='sis'||/(^|[^a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?=$|[^a-z0-9])/i.test(raw);
 }
+// SOR is now a real Type/Channel of its own (ECom / SOR are shown separately) -> no more SOR => "Marketplace" relabel.
 function marketplaceDisplayText(value){
-  const raw=String(value??'');
-  return raw.replace(/(^|[^a-z0-9])s\s*\.?\s*o\s*\.?\s*r\s*\.?(?=$|[^a-z0-9])/gi,(m,prefix)=>prefix+'Marketplace');
+  return String(value??'');
 }
 window.isMarketplaceTypeValue=isMarketplaceTypeValue;
 window.marketplaceDisplayText=marketplaceDisplayText;
@@ -10399,6 +10462,11 @@ function cnxParentScopeSet(raw){
   if (Array.isArray(raw)) return new Set(raw.map(v => String(v || '').trim().toUpperCase()).filter(Boolean));
   return null;
 }
+function _cnxEcomSorChannel(e, typ){
+  const ch = String(e && e.channel || '').trim();
+  if (ch === 'SOR' || ch === 'Ecom') return ch;
+  return (typ === 'sor' || typ === 'sis') ? 'SOR' : 'Ecom';
+}
 function cnxBusinessChannelOfEntry(e){
   const typ = String(e && e.type || '').trim().toLowerCase();
   const cust = String(e && e.cust || '').trim().toLowerCase();
@@ -10406,7 +10474,7 @@ function cnxBusinessChannelOfEntry(e){
   if (typ === 'purchase') return 'B2B';
   if (typ === 'bulk') return 'Bulk';
   if (typ === 'exhibition') return 'Exhibition';
-  if (isMarketplaceTypeValue(typ)) return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'Marketplace';
+  if (isMarketplaceTypeValue(typ)) return _cnxEcomSorChannel(e, typ);
   return String(e && e.channel || '').trim();
 }
 function cnxSaleEntryDate(e, ctx){
@@ -10617,7 +10685,7 @@ function cnxCurrentSaleContext(){
     return {types,channels:getSelectedChannels('rChan'),subChannels:getSelectedSubChannels('rSubChan'),customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''};
   }
   if (currentTab === 'matrix') return {types:getSelectedTypes('fType'),channels:getSelectedChannels('fChan'),subChannels:getSelectedSubChannels('fSubChan'),customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:(document.getElementById('fFY')?.value||'All FYs')==='All FYs'?'':(document.getElementById('fFY')?.value||''),d1:document.getElementById('fD1')?.value||'',d2:document.getElementById('fD2')?.value||'',businessChannel:true};
-  if (currentTab === 'skudetails') return {types:Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value),marketplaces:Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value),d1:document.getElementById('sdD1')?.value||'',d2:document.getElementById('sdD2')?.value||''};
+  if (currentTab === 'skudetails') return {types:Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value),marketplaces:Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>c.value),d1:document.getElementById('sdD1')?.value||'',d2:document.getElementById('sdD2')?.value||''};
   if (currentTab === 'rakhi') {
     const rt=document.getElementById('rkhTypeFilter')?.value||'All';
     return {sourceField:'rakhi_sales_entries',types:rt&&rt!=='All'?[rt]:[],fy:'FY 2026-27'};
@@ -10821,21 +10889,30 @@ function renderChannelChecks(){
 }
 
 let allSubChannels = [];
+let allEcomSubChannels = [];
+let allSorSubChannels = [];
+// The old single "Sub-Channel / Marketplace" filter is now two separate filters: ECom and SOR.
+// Ticks from both are combined into one sub-channel list (ECom and SOR names never overlap).
 function getSelectedSubChannels(id){
-  const containerId = id === 'fSubChan' ? 'fSubChanChecks' : id === 'rSubChan' ? 'rSubChanChecks' : id;
-  const box = document.getElementById(containerId);
-  if (!box) return [];
-  return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
+  const groups = id === 'fSubChan' ? ['fEcomChecks','fSorChecks'] : id === 'rSubChan' ? ['rEcomChecks','rSorChecks'] : [id];
+  const out = [];
+  groups.forEach(gid => {
+    const box = document.getElementById(gid);
+    if (!box) return;
+    box.querySelectorAll('input[type=checkbox]:checked').forEach(c => out.push(c.value));
+  });
+  return out;
 }
 function renderSubChannelChecks(){
-  ['fSubChanChecks','rSubChanChecks'].forEach(cid => {
+  [['fEcomChecks','ecom','applyF()'],['fSorChecks','sor','applyF()'],
+   ['rEcomChecks','ecom','applyRO()'],['rSorChecks','sor','applyRO()']].forEach(([cid, kind, onChange]) => {
     const box = document.getElementById(cid);
     if (!box) return;
-    const onChange = cid === 'fSubChanChecks' ? 'applyF()' : 'applyRO()';
-    box.innerHTML = (allSubChannels || []).map(t => {
+    const list = kind === 'ecom' ? allEcomSubChannels : allSorSubChannels;
+    box.innerHTML = (list || []).map(t => {
       const safe = String(t).replace(/"/g, '&quot;');
-      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${t}</span></label>`;
-    }).join('') || '<span class="small-note">No sub-channels</span>';
+      return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="${onChange}"><span>${escHtml(t)}</span></label>`;
+    }).join('') || '<span class="small-note">No options</span>';
   });
 }
 
@@ -11305,22 +11382,25 @@ const _SD_SOR_MARKETPLACES = [
   {key:'Ajio',       token:'ajio'},
   {key:'Tata',       token:'tata'},
 ];
+// SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
+const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','IGP','Qcom','Other ECom'];
+const _SD_SOR_OPTIONS  = ['PSL','Aza','Prakash Sons','Madhuram (The Hub)','Jaypore','Kalki','KORA','Arved','Taj Khazan','Mohanlal Sons'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
-  const sub = String(entry?.sub_channel || '').trim().toLowerCase();
+  const subRaw = String(entry?.sub_channel || '').trim();
+  const sub = subRaw.toLowerCase();
   const cust = String(entry?.cust || '').trim().toLowerCase();
   if (_isAmazonFbaText(cust,typ,sub,channel)) return 'Amazon';
-  if (!isMarketplaceTypeValue(typ) && channel !== 'ecom') return '';
-  const compact=cust.replace(/[^a-z0-9]/g,'');
-  for (const m of _SD_SOR_MARKETPLACES){
-    if (m.compact ? compact.includes(m.token) : cust.includes(m.token)) return m.key;
-  }
-  return 'Other Marketplace';
+  if (channel === 'sor') return _SD_SOR_OPTIONS.includes(subRaw) ? subRaw : '';
+  if (channel !== 'ecom') return '';
+  if (sub === 'ajio') return 'Ajio';
+  if (sub === 'tata cliq' || sub === 'tata') return 'Tata';
+  return _SD_ECOM_OPTIONS.includes(subRaw) ? subRaw : 'Other ECom';
 }
 const _SD_PRODUCT_DISCOUNT_MARKETPLACES = new Set(['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata']);
 function _sdPickedMarketplaces(){
-  return Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||'').trim()).filter(Boolean);
+  return Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>String(c.value||'').trim()).filter(Boolean);
 }
 function _sdBucketProductDiscount(bucket, mrp){
   if(!bucket)return null;
@@ -11415,7 +11495,7 @@ function _sdLaunchDateDisplay(item, ents){
   if (!_sdIsRakhiItem(item)) return item?.launch_date || '—';
   const channels = _sdRakhiChannelsFromEntries(ents);
   const selectedTypes = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>String(c.value||''));
-  const selectedMps = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>String(c.value||''));
+  const selectedMps = Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>String(c.value||''));
   if (selectedTypes.includes('Website')) channels.add('Website');
   selectedMps.forEach(mp => channels.add(mp));
   if (!channels.size && selectedTypes.some(isMarketplaceTypeValue)) ['Myntra','Nykaa','Amazon','Flipkart','Ajio'].forEach(ch=>channels.add(ch));
@@ -11430,7 +11510,7 @@ let _sdRevenueShareCache = {masterRef:null, signature:'', total:0, map:new Map()
 function _sdRevenueFilterSignature(){
   const d1=document.getElementById('sdD1')?.value||'', d2=document.getElementById('sdD2')?.value||'';
   const types=Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value).sort();
-  const mps=Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value).sort();
+  const mps=Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>c.value).sort();
   const cn=(typeof cnxGlobalCnQuery==='function'?cnxGlobalCnQuery():'');
   return JSON.stringify([d1,d2,types,mps,cn]);
 }
@@ -11646,7 +11726,7 @@ function _customerRepeatStatsForSkus(rawSkus, options={}){
 
 function _sdWebsiteRepeatStats(item, rawSkus){
   const types=Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value);
-  const marketplaces=Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c=>c.value);
+  const marketplaces=Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>c.value);
   const targetSkus = Array.isArray(rawSkus) && rawSkus.length ? rawSkus : [item?.sku];
   return _customerRepeatStatsForSkus(targetSkus,{
     d1:document.getElementById('sdD1')?.value||'',
@@ -11892,11 +11972,10 @@ function renderSkuDetails(sku){
       return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="renderSdAll()"><span>${escHtml(t)}</span></label>`;
     }).join('') : '<span class="small-note">No types</span>';
   }
-  const mc = document.getElementById('sdMarketplaceChecks');
-  if (mc) {
-    const marketplaceOptions = _SD_SOR_MARKETPLACES.map(m => m.key).concat(['Other Marketplace']);
-    mc.innerHTML = marketplaceOptions.map(m => `<label class="type-opt"><input type="checkbox" value="${m}" onchange="renderSdAll()"><span>${m}</span></label>`).join('');
-  }
+  [['sdEcomChecks', _SD_ECOM_OPTIONS], ['sdSorChecks', _SD_SOR_OPTIONS]].forEach(([cid, opts]) => {
+    const mc = document.getElementById(cid);
+    if (mc) mc.innerHTML = opts.map(m => `<label class="type-opt"><input type="checkbox" value="${m}" onchange="renderSdAll()"><span>${m}</span></label>`).join('');
+  });
 
   renderSdTable();
 }
@@ -12008,7 +12087,7 @@ function _sdFilterEntries(rows){
   const d1 = document.getElementById('sdD1')?.value || '';
   const d2 = document.getElementById('sdD2')?.value || '';
   const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
-  const marketplacesPicked = Array.from(document.querySelectorAll('#sdMarketplaceChecks input:checked')).map(c => c.value);
+  const marketplacesPicked = Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c => c.value);
   let ents = Array.isArray(rows) ? rows : [];
   if (typesPicked.length) ents = ents.filter(e => typesPicked.includes(e.type || 'Regular'));
   if (marketplacesPicked.length) ents = ents.filter(e => marketplacesPicked.includes(_sdSorMarketplace(e)));
@@ -12041,7 +12120,7 @@ function resetSdFilters(){
   const d1 = document.getElementById('sdD1'); if (d1) d1.value = '';
   const d2 = document.getElementById('sdD2'); if (d2) d2.value = '';
   document.querySelectorAll('#sdTypeChecks input:checked').forEach(c => c.checked = false);
-  document.querySelectorAll('#sdMarketplaceChecks input:checked').forEach(c => c.checked = false);
+  document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked').forEach(c => c.checked = false);
   renderSdAll();
 }
 window.renderSdAll = renderSdAll; window.resetSdFilters = resetSdFilters;
@@ -12237,7 +12316,7 @@ function renderSdChannel(){
   const bySub = {};
   ents.forEach(e => {
     if ((e.channel || '') !== 'Ecom') return;
-    const sc = e.sub_channel || 'Other Marketplace';
+    const sc = e.sub_channel || 'Other ECom';
     if (!bySub[sc]) bySub[sc] = {qty:0, rev:0, orders:0};
     bySub[sc].qty += parseFloat(e.qty) || 0;
     bySub[sc].rev += parseFloat(e.rev) || 0;
@@ -12593,6 +12672,8 @@ function loadData(force){
       allTypes = d.types || [];
       allChannels = d.channels || [];
       allSubChannels = d.sub_channels || [];
+      allEcomSubChannels = d.ecom_sub_channels || [];
+      allSorSubChannels = d.sor_sub_channels || [];
       allPlatings = d.platings || [];
       allSkus = d.skus || [];
       allFYs = d.fys || [];
@@ -12879,7 +12960,7 @@ function applyF(){
     if (typ === 'bulk') return 'Bulk';
     if (typ === 'exhibition') return 'Exhibition';
     if (isMarketplaceTypeValue(typ)) {
-      return ['myntra','nykaa','ajio','tata','flipkart','amazon'].some(x => cust.includes(x)) ? 'Ecom' : 'Marketplace';
+      return _cnxEcomSorChannel(e, typ);
     }
     return String(e?.channel || '').trim();
   };
@@ -13484,7 +13565,7 @@ function resetFilters(){
   const _fpi = document.getElementById('fPasteInfo'); if (_fpi) { _fpi.textContent = 'Paste SKUs above — results update automatically.'; _fpi.style.color = ''; }
   ['fStatus','fFY','fPlat','fLaunch','fCnTag','fRelClass'].forEach(id => { const el=document.getElementById(id); if (el) el.value = (id === 'fFY') ? 'All FYs' : 'All'; });
   cnxResetCategorySelection('fTaxon');
-  document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fSubChanChecks input:checked, #fMonthYearChecks input:checked').forEach(c => c.checked = false);
+  document.querySelectorAll('#fTypeChecks input:checked, #fChanChecks input:checked, #fEcomChecks input:checked, #fSorChecks input:checked, #fMonthYearChecks input:checked').forEach(c => c.checked = false);
   updateMatrixMonthInfo();
   _matrixMonthMode=false; _matrixLatestMonthKey=''; _matrixOneYearStart=''; _matrixOneYearEnd='';
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
@@ -20245,7 +20326,7 @@ function _anomChannelChoices(){
     for(const e of (it.sales_entries||[])){
       const ch=String(e?.channel||'').trim(), sub=String(e?.sub_channel||'').trim();
       if(ch && !channels.has(_anomNorm(ch))) channels.set(_anomNorm(ch),ch);
-      if(_anomNorm(ch)==='ecom' && sub && _anomNorm(sub)!=='ecom' && !marketplaces.has(_anomNorm(sub))) marketplaces.set(_anomNorm(sub),sub);
+      if((_anomNorm(ch)==='ecom'||_anomNorm(ch)==='sor') && sub && _anomNorm(sub)!=='ecom' && _anomNorm(sub)!=='sor' && !marketplaces.has(_anomNorm(sub))) marketplaces.set(_anomNorm(sub),(_anomNorm(ch)==='sor'?'SOR — ':'Ecom — ')+sub);
     }
   }
   const preferred=['d2c','ecom','b2b','marketplace','sor','bulk','exhibition'];
@@ -20254,7 +20335,7 @@ function _anomChannelChoices(){
     if(ai>=0||bi>=0){if(ai<0)return 1;if(bi<0)return -1;if(ai!==bi)return ai-bi;}
     return a[1].localeCompare(b[1]);
   }).map(([norm,label])=>({value:'C|'+norm,label:_anomNorm(label)==='d2c'?'D2C / Website':label}));
-  const mpRows=Array.from(marketplaces.entries()).sort((a,b)=>a[1].localeCompare(b[1])).map(([norm,label])=>({value:'S|'+norm,label:'Ecom — '+label}));
+  const mpRows=Array.from(marketplaces.entries()).sort((a,b)=>a[1].localeCompare(b[1])).map(([norm,label])=>({value:'S|'+norm,label:label}));
   _anomChannelOptions=chRows.concat(mpRows); _anomChannelMasterRef=master;
   return _anomChannelOptions;
 }
@@ -22342,7 +22423,7 @@ function _fillInsightsChannelFilter(){
       if(key && !seen.has(key))seen.set(key,v);
     });
   }));
-  const preferred=['Website','Purchase','Bulk','Exhibition','Ecom','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Other Marketplace'];
+  const preferred=['Website','Purchase','Bulk','Exhibition','Ecom','Myntra','Nykaa','Ajio','Tata','Flipkart','Amazon','Other ECom','Other Marketplace'];
   const rank=new Map(preferred.map((v,i)=>[v.toLocaleLowerCase('en-US'),i]));
   const values=Array.from(seen.values()).sort((a,b)=>{
     const ak=a.toLocaleLowerCase('en-US'),bk=b.toLocaleLowerCase('en-US');
@@ -25407,6 +25488,8 @@ def _build_role_gz(role, force=False):
         "types":         ty,
         "channels":      CACHE.get("channels", []),
         "sub_channels":  CACHE.get("sub_channels", []),
+        "ecom_sub_channels": CACHE.get("ecom_sub_channels", list(_ECOM_SUB_PRESET)),
+        "sor_sub_channels":  CACHE.get("sor_sub_channels", list(_SOR_SUB_PRESET)),
         "customers":     cu,
         "platings":      pl,
         "skus":          sk,
@@ -27918,6 +28001,7 @@ def _fetch_target_rows():
                     "qty_target": qt, "sp_target": st})
     out = _apply_website_sp_target_override(out)
     out = _apply_september_target_override(out)
+    out = _apply_target_26_27_rows(out)
     merged = []
     amazon_positions = {}
     for row in out:
@@ -28341,6 +28425,8 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
             sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
             cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
             entry_keys = {typ}
+            if _is_marketplace_type(typ):
+                entry_keys.add("marketplace")     # legacy Marketplace bucket = ECom + SOR
             amazon_family = (
                 sub == "amazon" or cust == "amazon"
                 or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))
@@ -28361,6 +28447,21 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
                 slot["rev"] += float(e.get("rev") or 0)
                 slot["qty"] += float(e.get("qty") or 0)
 
+    # Target_26-27 months: actual = cossa_orderdate NET REVENUE. Website/Purchase/Store/Bulk/Exhibition
+    # come from the Type column; ECom and SOR channels come from the Customer Name (same rule as
+    # Daily Revenue Glimpse).
+    is_t26_month = month_filter in _TARGET_26_27_MONTHS
+    act26 = {}
+    if is_t26_month:
+        for e in _fetch_drg_source_rows():
+            d = e.get("date")
+            if not d or d == "N/A" or d[:7] != month_filter:
+                continue
+            b = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
+            slot = act26.setdefault(b, {"rev": 0.0, "qty": 0.0})
+            slot["rev"] += float(e.get("rev") or 0)
+            slot["qty"] += float(e.get("qty") or 0)
+
     rows = []
     lb = {}   # stakeholder -> aggregated
     for t in targets:
@@ -28371,7 +28472,10 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
             continue
         if channel_filter and (t.get("channel") or "").strip().lower() != channel_filter.strip().lower():
             continue
-        a = act.get((mk, t["channel"].strip().lower()), {"rev": 0.0, "qty": 0.0})
+        if is_t26_month:
+            a = act26.get(t["channel"], {"rev": 0.0, "qty": 0.0})
+        else:
+            a = act.get((mk, t["channel"].strip().lower()), {"rev": 0.0, "qty": 0.0})
         actual_rev = a["rev"]; actual_qty = a["qty"]
         sp_short  = t["sp_target"] - actual_rev
         qty_short = t["qty_target"] - actual_qty
@@ -28415,7 +28519,7 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # Leaderboard finalize + rank (by % achieved)
     leaderboard = []
     for L in lb.values():
-        if L["stakeholder"].strip().lower() == "mahesh":
+        if L["stakeholder"].strip().lower() == "mahesh" and not is_t26_month:
             # Mahesh's leaderboard row: show Channel as just "Marketplace" and
             # source his Achieved/Achievement/Projected from the COSA sheet's
             # Type = Marketplace net revenue (act bucket), not the sum across
@@ -29345,6 +29449,8 @@ def _fetch_drg_source_rows(force=False):
             # Keep Customer Name so the marketplace-source variant can identify
             # Amazon FBA and exclude Blinkit from its cossa_orderdate fallback.
             "customer": cust,
+            "raw_customer": str(clean(raw_cust_value, "")),
+            "raw_type": str(clean(raw_type_value, "")),
             "legacy_amazon_source": bool(legacy_amazon_source),
             "target_amazon_merged": bool(target_amazon_merged),
         })
@@ -29388,6 +29494,7 @@ def _fetch_drg_source_rows(force=False):
             out.append({
                 "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty),
                 "channel": "", "sub_channel": "", "type": "Blinkit", "customer": customer,
+                "raw_customer": customer, "raw_type": "Blinkit",
             })
     except Exception:
         pass
@@ -30244,6 +30351,141 @@ def api_daily_target_report_export_xlsx():
         return jsonify({"error": f"daily target report excel export failed: {e}"}), 500
 
 
+# ════════════════════════════════════════════════════════════════
+#  🎯 Target_26-27 (Oct-2026 .. Mar-2027) — sirf Daily Revenue Glimpse (NET REVENUE) table ke liye.
+#  Daily Target Report (projection) aur Marketplace-sheet table is se alag hain, unme kuch change nahi.
+#
+#  Actual revenue kis row me jayega (cossa_orderdate):
+#    • Type column  = Website / Purchase / Store / Bulk / Exhibition  -> wahi row (type se)
+#    • Customer Name = ECom channel (Amazon, Flipkart, Myntra, Nykaa, Tata, AJIO, IGP, Qcom)
+#                      ya SOR channel (PSL, Aza, Prakash Sons, Madhuram, Jaypore, Kalki, KORA,
+#                      Arved, Taj Khazan, Mohanlal Sons) -> customer name se
+#    • Cossa sheet me abhi ECom/SOR ka Type "Marketplace" hai — koi dikkat nahi, kyunki in dono ko
+#      Customer Name se pehchana jata hai (Type baad me SOR/ECom kar do to bhi same chalega).
+#    • "SIS" (typo) ko SOR hi maana jata hai.
+#    • Jo kisi row me fit na ho wo "Others (Unmapped)" me jata hai (total hamesha actual se match kare).
+# ════════════════════════════════════════════════════════════════
+_TARGET_26_27_MONTHS = ("2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03")
+_TARGET_26_27 = (
+    ('Purchase', 'B2B', (5500000, 6500000, 5000000, 6000000, 3600000, 4500000)),
+    ('Exhibition', 'B2C', (0, 0, 2500000, 0, 0, 0)),
+    ('ECom', 'Amazon', (1200000, 1200000, 1500000, 3000000, 3000000, 2000000)),
+    ('ECom', 'Flipkart', (500000, 500000, 400000, 400000, 300000, 100000)),
+    ('ECom', 'Myntra', (1000000, 1000000, 1100000, 1500000, 1500000, 800000)),
+    ('ECom', 'Nykaa', (400000, 500000, 400000, 300000, 300000, 300000)),
+    ('ECom', 'Tata', (100000, 100000, 100000, 100000, 100000, 100000)),
+    ('ECom', 'AJIO', (200000, 200000, 200000, 100000, 100000, 100000)),
+    ('ECom', 'IGP', (600000, 600000, 400000, 300000, 200000, 200000)),
+    ('ECom', 'Qcom', (500000, 500000, 400000, 300000, 200000, 200000)),
+    ('ECom', 'Other ECom', (0, 0, 0, 0, 0, 0)),   # FNP / Fern / Mirraw / any other marketplace — no target, actual counted under ECom
+    ('Website', 'D2C', (14000000, 13500000, 12000000, 11000000, 11000000, 4200000)),
+    ('Store', 'Store', (4000000, 4000000, 3500000, 4000000, 4000000, 4000000)),
+    ('Bulk', 'Bulk', (4500000, 4500000, 3500000, 3500000, 3500000, 2300000)),
+    ('SOR', 'PSL', (500000, 500000, 300000, 300000, 200000, 200000)),
+    ('SOR', 'Aza', (100000, 100000, 100000, 80000, 50000, 50000)),
+    ('SOR', 'Prakash Sons', (80000, 100000, 80000, 50000, 50000, 30000)),
+    ('SOR', 'Madhuram (The Hub)', (0, 0, 0, 0, 0, 0)),
+    ('SOR', 'Jaypore', (50000, 100000, 100000, 100000, 100000, 50000)),
+    ('SOR', 'Kalki', (800000, 800000, 800000, 700000, 700000, 700000)),
+    ('SOR', 'KORA', (600000, 600000, 500000, 500000, 500000, 500000)),
+    ('SOR', 'Arved', (200000, 200000, 100000, 100000, 100000, 100000)),
+    ('SOR', 'Taj -Khazan', (100000, 300000, 400000, 400000, 200000, 200000)),
+    ('SOR', 'Mohanlal Sons', (400000, 500000, 500000, 400000, 400000, 300000)),
+)
+
+_T26_LABEL_WEBSITE = "Website (DTC)"
+_T26_LABEL_OTHERS  = "Others (Unmapped)"
+
+def _t26_label(typ, channel):
+    typ = str(typ or "").strip()
+    channel = str(channel or "").strip()
+    tl = typ.casefold()
+    if tl == "website":  return _T26_LABEL_WEBSITE
+    if tl in ("purchase", "exhibition", "store", "bulk"): return typ.title()
+    if tl in ("sor", "sis"): return "SOR - " + channel      # "SIS" = typo of SOR
+    return channel                                          # ECom channels keep their plain name
+
+# (row label, [match keys]).  Keys of <=4 letters must match a whole word; longer keys match anywhere.
+_T26_CUSTOMER_KEYS = []
+for _t, _ch, _v in _TARGET_26_27:
+    if _t == "ECom":
+        _k = {"Amazon": ("amazon",), "Flipkart": ("flipkart",), "Myntra": ("myntra",), "Nykaa": ("nykaa",),
+              "Tata": ("tata", "tatacliq"), "AJIO": ("ajio",), "IGP": ("igp",),
+              "Qcom": ("blinkit", "instamart", "zepto", "swiggy", "bigbasket", "qcom", "quickcommerce"),
+              "Other ECom": ("fnp", "fern", "ferns", "mirraw")}.get(_ch, (_ch.lower(),))
+    elif _t == "SOR":
+        _k = {"PSL": ("psl",), "Aza": ("aza",), "Prakash Sons": ("prakashsons", "prakashson"),
+              "Madhuram (The Hub)": ("madhuram", "thehub"), "Jaypore": ("jaypore",), "Kalki": ("kalki",),
+              "KORA": ("kora",), "Arved": ("arved",), "Taj -Khazan": ("tajkhazan", "tajkhazana", "khazan"),
+              "Mohanlal Sons": ("mohanlal",)}.get(_ch, (re.sub(r"[^a-z0-9]", "", _ch.lower()),))
+    else:
+        continue
+    _T26_CUSTOMER_KEYS.append((_t26_label(_t, _ch), _k))
+
+_T26_ROW_ORDER = [_t26_label(_t, _ch) for _t, _ch, _v in _TARGET_26_27]
+_T26_TYPE_BUCKETS = {"website": _T26_LABEL_WEBSITE, "online": _T26_LABEL_WEBSITE, "d2c": _T26_LABEL_WEBSITE,
+                     "purchase": "Purchase", "exhibition": "Exhibition", "store": "Store", "bulk": "Bulk"}
+_T26_MARKETPLACE_TYPES = {"marketplace", "sor", "sis", "ecom", "ecommerce", "regular", "other", "unknown", ""}
+
+# Stakeholder per Type for Target vs Actual (table 1). SOR = Sakshi (told by user); ECom = Mahesh and
+# Website = Kiran (same owners as the Sept-2026 plan). Purchase / Exhibition / Store / Bulk have no
+# owner given yet -> the Type name is shown; change here when an owner is decided.
+_T26_STAKEHOLDER_BY_TYPE = {"SOR": "Sakshi", "ECom": "Mahesh", "Website": "Kiran"}
+
+def _apply_target_26_27_rows(rows):
+    """Oct-2026..Mar-2027 rows of the Target sheet are replaced by the updated Target_26-27 plan."""
+    months = set(_TARGET_26_27_MONTHS)
+    kept = [r for r in rows if r.get("month") not in months]
+    for i, mk in enumerate(_TARGET_26_27_MONTHS):
+        label = datetime(int(mk[:4]), int(mk[5:7]), 1).strftime("%b %Y")
+        for t, ch, vals in _TARGET_26_27:
+            kept.append({
+                "month": mk, "month_label": label,
+                "stakeholder": _T26_STAKEHOLDER_BY_TYPE.get(t, t),
+                "channel": _t26_label(t, ch),
+                "qty_target": 0.0, "sp_target": float(vals[i] or 0),
+            })
+    return kept
+
+def _t26_bucket(customer, typ):
+    """Net-revenue row label for one cossa_orderdate row (see rules above)."""
+    t_key = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
+    if t_key in _T26_TYPE_BUCKETS:                     # Website / Purchase / Store / Bulk / Exhibition -> Type column
+        return _T26_TYPE_BUCKETS[t_key]
+    if _is_amazon_fba_value(customer, typ):
+        return "Amazon"
+    text = str(customer or "").casefold()
+    compact = re.sub(r"[^a-z0-9]", "", text)
+    words = set(re.findall(r"[a-z0-9]+", text))
+    for label, keys in _T26_CUSTOMER_KEYS:             # ECom / SOR channel -> Customer Name column
+        for k in keys:
+            if (k in words) if len(k) <= 4 else (k in compact):
+                return label
+    if _is_marketplace_type(typ):          # Type = Marketplace / SOR / ECom / SIS but no named channel -> Other ECom
+        return "Other ECom"
+    return _T26_LABEL_OTHERS
+
+def _t26_targets_for_month(month_key, old_targets):
+    """{row label: (sp_target, qty_target)} for month_key.
+    Oct-2026..Mar-2027 come from Target_26-27; for any other month the existing Target-sheet rows are
+    mapped into the same rows (unknown channels -> Others), so the table never goes blank."""
+    out = {}
+    if month_key in _TARGET_26_27_MONTHS:
+        i = _TARGET_26_27_MONTHS.index(month_key)
+        for t, ch, vals in _TARGET_26_27:
+            lab = _t26_label(t, ch)
+            sp, qt = out.get(lab, (0.0, 0.0))
+            out[lab] = (sp + float(vals[i] or 0), qt)
+        return out
+    for t in old_targets or []:
+        if t.get("month") != month_key:
+            continue
+        ch = t.get("channel") or ""
+        lab = _t26_bucket(ch, ch)
+        sp, qt = out.get(lab, (0.0, 0.0))
+        out[lab] = (sp + float(t.get("sp_target") or 0), qt + float(t.get("qty_target") or 0))
+    return out
+
 def _build_daily_revenue_glimpse(force=False):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
     Before / Yesterday / This Month Target / Achievement %. In the Target tab,
@@ -30272,20 +30514,19 @@ def _build_daily_revenue_glimpse(force=False):
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
     today_iso    = today_dt.strftime("%Y-%m-%d")
 
+    _row_order = list(_T26_ROW_ORDER) + [_T26_LABEL_OTHERS]
     buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0,
                    "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0,
                    "yesterday_qty": 0.0, "mtd_qty": 0.0}
-               for b in _DRG_ROWS_ORDER}
+               for b in _row_order}
 
     for e in src_rows:
         d = e.get("date")
         if not d or d == "N/A":
             continue
         rev = float(e.get("rev") or 0)
-        b = e.get("bucket") or _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
-        if _is_amazon_fba_value(b):
-            b = "Amazon"
-        slot = buckets[b]
+        b = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
+        slot = buckets.get(b) or buckets[_T26_LABEL_OTHERS]
         qty = float(e.get("qty") or 0)
         if fy_start_iso <= d <= today_iso:
             slot["ytd"] += rev
@@ -30304,32 +30545,25 @@ def _build_daily_revenue_glimpse(force=False):
             slot["mtd_qty"] += qty
 
     # MTD Target: current month ke Target sheet rows ko bucket ke hisaab se jodo
-    tgt = {b: 0.0 for b in _DRG_ROWS_ORDER}
-    tgt_qty = {b: 0.0 for b in _DRG_ROWS_ORDER}   # Target sheet "Qty Target" (same bucket mapping as SP target)
-    for t in targets:
-        if t["month"] != cur_month:
-            continue
-        ch = (t.get("channel") or "").strip().lower()
-        matched = None
-        for b, aliases in _DRG_TARGET_ALIASES.items():
-            if ch in aliases:
-                matched = b
-                break
-        tgt[matched if matched else _DRG_OTHER_BUCKET] += (t.get("sp_target") or 0.0)
-        tgt_qty[matched if matched else _DRG_OTHER_BUCKET] += (t.get("qty_target") or 0.0)
+    _mt = _t26_targets_for_month(cur_month, targets)
+    tgt = {b: float((_mt.get(b) or (0.0, 0.0))[0]) for b in _row_order}
+    tgt_qty = {b: float((_mt.get(b) or (0.0, 0.0))[1]) for b in _row_order}
 
     rows = []
     tot = {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0, "mtd_target": 0.0,
            "ytd_qty": 0.0, "last_month_qty": 0.0, "day_before_qty": 0.0, "yesterday_qty": 0.0,
            "mtd_qty": 0.0, "mtd_qty_target": 0.0}
-    for b in _DRG_ROWS_ORDER:
+    for b in _row_order:
         slot = buckets[b]
         mtd_target = tgt.get(b, 0.0)
         mtd_qty_target = tgt_qty.get(b, 0.0)
+        if b == _T26_LABEL_OTHERS and not (mtd_target or mtd_qty_target or slot["ytd"] or slot["ytd_qty"]
+                                           or slot["mtd"] or slot["last_month"]):
+            continue   # nothing unmapped -> do not show an empty Others row
         ach_qty = round((slot["mtd_qty"] / mtd_qty_target * 100), 1) if mtd_qty_target else 0.0
         ach = round((slot["mtd"] / mtd_target * 100), 1) if mtd_target else 0.0
         rows.append({
-            "channel": _DRG_LABELS.get(b, b),
+            "channel": b,
             "ytd": slot["ytd"],
             "last_month": slot["last_month"], "day_before": slot["day_before"],
             "yesterday": slot["yesterday"], "mtd": slot["mtd"],
