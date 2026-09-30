@@ -10,6 +10,10 @@
 #   matching memoised; cossa_orderdate CSV ek hi thread fetch karta hai (4 tables ek saath load hone par
 #   4 download nahi) aur cache purana hone par purana data turant dikhata hai, refresh background me.
 #   Frontend: jaldi-jaldi filter badalne par purani request cancel, table blank nahi hoti.
+# - SOR vendors ki pehchaan CUSTOMER NAME se hoti hai, sheet ka Type (Purchase/Bulk/Regular/blank) kuch bhi ho
+#   (N M Fashion Designs, Mohanlal Sons, Taj Trade...). Ye customers Purchase revenue, Purchase target,
+#   B2B channel ya Daily Target "Purchase" row me count nahi hote — sirf apni SOR row me. Sirf Website/Online/
+#   Store (consumer sales) is rule se bahar hain.
 # - Ek hi list (_SOR_CHANNEL_KEYS) se Target tab, Sales/SKU filters aur sub-channel sab chalte hain.
 # ============================================================
 # Cosa Nostraa — V24.41 (TARGET TAB · Target_26-27 IN TABLE 1 + ECOM / SOR SPLIT · MARKETPLACE FILTER REMOVED)
@@ -1274,6 +1278,10 @@ def _is_amazon_fba_value(*values):
         or "fulfilledbyamazon" in compact
     )
 
+def _is_consumer_type(v):
+    """Website / Online / Store = end-consumer sales: customer naam kisi vendor jaisa ho tab bhi SOR nahi."""
+    return re.sub(r"[^a-z0-9]", "", str(v or "").casefold()) in ("website", "online", "d2c", "store")
+
 def _merge_amazon_identity(customer, typ):
     """Expose all legacy FBA-source identities as the single Amazon channel."""
     if _is_amazon_fba_value(customer, typ):
@@ -1282,6 +1290,11 @@ def _merge_amazon_identity(customer, typ):
     # baaki sab marketplaces = ECom.
     if _is_marketplace_type(typ):
         return customer, ("SOR" if _match_channel_keys(customer, _SOR_CHANNEL_KEYS) else "ECom")
+    # SOR vendors (N M Fashion, Mohanlal Sons, Taj Trade...) sheet me Type = Purchase / Bulk / Regular /
+    # blank kuch bhi ho sakte hain. Customer Name in 11 vendors me se ho to Type SOR maana jaata hai
+    # (sirf Website/Online/Store consumer sales chhod ke) — Purchase revenue / target me count nahi hota.
+    if not _is_consumer_type(typ) and _match_channel_keys(customer, _SOR_CHANNEL_KEYS):
+        return customer, "SOR"
     return customer, typ
 
 def calc_channel(customer, typ):
@@ -30152,6 +30165,10 @@ def _dtr_bucket(customer, typ):
     if "blinkit" in c:   return "Blinkit"
     if "instamart" in c or "swiggy" in c: return "Instamart"
     if "pernia" in c or "pslretail" in c: return "Pernia"
+    # SOR vendor (Customer Name se; Type Purchase/Bulk/kuch bhi ho) = marketplace-type sale -> Others,
+    # Purchase me nahi. Website/Online/Store consumer sales is rule se bahar.
+    if not _is_consumer_type(typ) and _match_channel_keys(customer, _SOR_CHANNEL_KEYS):
+        return "Others"
     if t in ("website", "online"): return "Website"
     if t == "purchase":  return "Purchase"
     if "blinkit" in t:   return "Blinkit"
@@ -30570,6 +30587,10 @@ def _t26_bucket(customer, typ):
 
 @lru_cache(maxsize=100000)
 def _t26_bucket_cached(customer, typ):
+    if not _is_consumer_type(typ):      # Customer = SOR vendor -> SOR row (Type Purchase/Bulk/kuch bhi ho)
+        _sor_lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS)
+        if _sor_lab:
+            return "SOR - " + _sor_lab
     t_key = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
     if t_key in _T26_TYPE_BUCKETS:                     # Website / Purchase / Store / Bulk / Exhibition -> Type column
         return _T26_TYPE_BUCKETS[t_key]
