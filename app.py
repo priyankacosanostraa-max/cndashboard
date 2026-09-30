@@ -1,5 +1,14 @@
+# Cosa Nostraa — V24.44 (TAJ TRADE AND TRANSPORT: SOR -> PURCHASE)
+# - Taj Trade and Transport SOR channel se hata diya (ab 10 SOR vendors). Iska revenue Purchase (B2B) me
+#   count hota hai (Customer Name se, sheet Type kuch bhi ho) — Target tab, Daily Target Report, Overview/SKU filters.
+# - Target_26-27 Purchase (B2B) target me Taj ka target add: +1L, +3L, +4L, +4L, +2L, +2L (Oct..Mar).
+# ============================================================
+# Cosa Nostraa — V24.43 (SOR: JAYPORE -> ADITYA BIRLA FASHION AND RETAIL LTD)
+# - SOR channel "Jaypore" har jagah (Target tab, SKU Details/Overview SOR filter, sub-channel, customer matching)
+#   ab "Aditya Birla Fashion" hai (Customer Name me "Aditya Birla" / ABFRL). Target numbers wahi rahe.
+# ============================================================
 # Cosa Nostraa — V24.42 (SOR CHANNELS CORRECTED + ECOM: IGP -> JOIN COMMERCE · 11 VENDORS · ONE ROW PER VENDOR IN TARGET TAB)
-# - SOR channels ab sirf ye 11 vendors: PSL Retail, Aza Fashions, Jaypore, Mirraw, N M Fashion Designs,
+# - SOR channels ab sirf ye 11 vendors: PSL Retail, Aza Fashions, Aditya Birla Fashion (pehle Jaypore), Mirraw, N M Fashion Designs,
 #   Mohanlal Sons, Kalki Fashion, Parkash Sons, Madhuram Apparels, SV Fashions, Taj Trade and Transport.
 #   Purane KORA / Arved / Taj Khazan SOR channel se hata diye. Mirraw ab ECom/Other ECom nahi, SOR me.
 # - Ek vendor ke saare naam-variants (jaise AZA Fashions Pvt Ltd / Aza Fashions Private Limited / Aza Fashions
@@ -23,7 +32,7 @@
 #   SOR ka stakeholder = Sakshi (ECom = Mahesh, Website = Kiran — same as Sept plan; baaki ka stakeholder = Type name).
 # - Table 2 (Daily Revenue Glimpse) ka Target_26-27 pehle se same tha; ab wahi net-revenue rule table 1 me bhi.
 # - Sheet Type "Marketplace"/"SOR" wale sab rows ab ECom type me aate hain; sirf named SOR customers
-#   (PSL Retail, Aza, Jaypore, Mirraw, N M Fashion, Mohanlal Sons, Kalki, Parkash Sons, Madhuram, SV Fashions, Taj Trade) SOR type me.
+#   (PSL Retail, Aza, Aditya Birla Fashion, Mirraw, N M Fashion, Mohanlal Sons, Kalki, Parkash Sons, Madhuram, SV Fashions, Taj Trade) SOR type me.
 # - Poore dashboard me "Marketplace" filter hata diya: uski jagah alag ECom aur alag SOR filter
 #   (Matrix, Repeat/ROP aur SKU Details). Type filter me bhi ab Marketplace ki jagah ECom / SOR dikhte hain.
 # ============================================================
@@ -1223,14 +1232,14 @@ _ECOM_CHANNEL_KEYS = (
 )
 # V24.42: SOR channels = ye 11 vendors (Customer Name ke variants ek hi channel me merge hote hain,
 # isliye ek vendor kitni bhi baar/spelling me aaye, count sirf ek hi row me hota hai).
-#   AZA Fashions Pvt Ltd (saare spellings) · Jaypore E-Commerce Pvt Ltd · PSL Retail Pvt Ltd ·
+#   AZA Fashions Pvt Ltd (saare spellings) · Aditya Birla Fashion And Retail Ltd (pehle Jaypore) · PSL Retail Pvt Ltd ·
 #   Mirraw Online Services · N M Fashion Designs · Mohanlal Sons · Kalki Fashion Pvt Ltd ·
 #   Parkash Sons · Madhuram Apparels · S. V. Fashions · Taj Trade and Transport Co. Ltd
 # Keys <= 4 letters whole-word match, lambi keys compact text (sirf a-z0-9) me kahin bhi.
 _SOR_CHANNEL_KEYS = (
     ("PSL Retail", ("psl", "pslretail")),
     ("Aza Fashions", ("aza", "azafashion")),
-    ("Jaypore", ("jaypore",)),
+    ("Aditya Birla Fashion", ("adityabirla", "abfrl")),
     ("Mirraw", ("mirraw",)),
     ("N M Fashion Designs", ("nmfashion",)),
     ("Mohanlal Sons", ("mohanlal",)),
@@ -1238,8 +1247,13 @@ _SOR_CHANNEL_KEYS = (
     ("Parkash Sons", ("parkashsons", "parkashson", "prakashsons", "prakashson")),
     ("Madhuram Apparels", ("madhuram",)),
     ("SV Fashions", ("svfashion",)),
-    ("Taj Trade and Transport", ("tajtrade",)),
 )
+# V24.44: Taj Trade and Transport ab SOR nahi — Purchase (B2B) vendor hai. Customer Name se pehchan,
+# sheet Type kuch bhi ho (Website/Online/Store consumer sales ko chhod ke) Type = Purchase maana jaata hai.
+_PURCHASE_VENDOR_KEYS = ("tajtrade",)
+def _is_purchase_vendor(customer):
+    c = re.sub(r"[^a-z0-9]", "", str(customer or "").casefold())
+    return bool(c) and any(k in c for k in _PURCHASE_VENDOR_KEYS)
 _SOR_KEYS_BY_LABEL = dict(_SOR_CHANNEL_KEYS)
 _ECOM_SUB_PRESET = [k[0] for k in _ECOM_CHANNEL_KEYS]
 _SOR_SUB_PRESET = [k[0] for k in _SOR_CHANNEL_KEYS]
@@ -1286,6 +1300,9 @@ def _merge_amazon_identity(customer, typ):
     """Expose all legacy FBA-source identities as the single Amazon channel."""
     if _is_amazon_fba_value(customer, typ):
         return "Amazon", "ECom"
+    # Taj Trade and Transport = Purchase vendor (SOR nahi), Type kuch bhi ho.
+    if not _is_consumer_type(typ) and _is_purchase_vendor(customer):
+        return customer, "Purchase"
     # Sheet Type Marketplace / SOR / ECom -> customer name se: named SOR customers = SOR,
     # baaki sab marketplaces = ECom.
     if _is_marketplace_type(typ):
@@ -11434,7 +11451,7 @@ const _SD_SOR_MARKETPLACES = [
 ];
 // SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
 const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Join Commerce','Qcom','Other ECom'];
-const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Jaypore','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions','Taj Trade and Transport'];
+const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
@@ -30212,6 +30229,8 @@ def _dtr_bucket(customer, typ):
     if "blinkit" in c:   return "Blinkit"
     if "instamart" in c or "swiggy" in c: return "Instamart"
     if "pernia" in c or "pslretail" in c: return "Pernia"
+    if not _is_consumer_type(typ) and _is_purchase_vendor(customer):
+        return "Purchase"       # Taj Trade and Transport = Purchase vendor
     # SOR vendor (Customer Name se; Type Purchase/Bulk/kuch bhi ho) = marketplace-type sale -> Others,
     # Purchase me nahi. Website/Online/Store consumer sales is rule se bahar.
     if not _is_consumer_type(typ) and _match_channel_keys(customer, _SOR_CHANNEL_KEYS):
@@ -30531,7 +30550,7 @@ def api_daily_target_report_export_xlsx():
 #  Actual revenue kis row me jayega (cossa_orderdate):
 #    • Type column  = Website / Purchase / Store / Bulk / Exhibition  -> wahi row (type se)
 #    • Customer Name = ECom channel (Amazon, Flipkart, Myntra, Nykaa, Tata, AJIO, Join Commerce, Qcom)
-#                      ya SOR channel (PSL Retail, Aza Fashions, Jaypore, Mirraw, N M Fashion Designs,
+#                      ya SOR channel (PSL Retail, Aza Fashions, Aditya Birla Fashion, Mirraw, N M Fashion Designs,
 #                      Mohanlal Sons, Kalki Fashion, Parkash Sons, Madhuram Apparels, SV Fashions,
 #                      Taj Trade and Transport) -> customer name se
 #    • Cossa sheet me abhi ECom/SOR ka Type "Marketplace" hai — koi dikkat nahi, kyunki in dono ko
@@ -30541,7 +30560,8 @@ def api_daily_target_report_export_xlsx():
 # ════════════════════════════════════════════════════════════════
 _TARGET_26_27_MONTHS = ("2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03")
 _TARGET_26_27 = (
-    ('Purchase', 'B2B', (5500000, 6500000, 5000000, 6000000, 3600000, 4500000)),
+    # B2B = Purchase Type + Taj Trade and Transport (Taj ka target: 100000, 300000, 400000, 400000, 200000, 200000 add kiya)
+    ('Purchase', 'B2B', (5600000, 6800000, 5400000, 6400000, 3800000, 4700000)),
     ('Exhibition', 'B2C', (0, 0, 2500000, 0, 0, 0)),
     ('ECom', 'Amazon', (1200000, 1200000, 1500000, 3000000, 3000000, 2000000)),
     ('ECom', 'Flipkart', (500000, 500000, 400000, 400000, 300000, 100000)),
@@ -30559,15 +30579,14 @@ _TARGET_26_27 = (
     # target milte hi yahan bhar do.
     ('SOR', 'PSL Retail', (500000, 500000, 300000, 300000, 200000, 200000)),
     ('SOR', 'Aza Fashions', (100000, 100000, 100000, 80000, 50000, 50000)),
-    ('SOR', 'Jaypore', (50000, 100000, 100000, 100000, 100000, 50000)),
+    ('SOR', 'Aditya Birla Fashion', (50000, 100000, 100000, 100000, 100000, 50000)),
     ('SOR', 'Mirraw', (0, 0, 0, 0, 0, 0)),
-    ('SOR', 'N M Fashion Designs', (0, 0, 0, 0, 0, 0)),
+    ('SOR', 'N M Fashion Designs', (600000, 600000, 500000, 500000, 500000, 500000)),
     ('SOR', 'Mohanlal Sons', (400000, 500000, 500000, 400000, 400000, 300000)),
     ('SOR', 'Kalki Fashion', (800000, 800000, 800000, 700000, 700000, 700000)),
     ('SOR', 'Parkash Sons', (80000, 100000, 80000, 50000, 50000, 30000)),
     ('SOR', 'Madhuram Apparels', (0, 0, 0, 0, 0, 0)),
-    ('SOR', 'SV Fashions', (0, 0, 0, 0, 0, 0)),
-    ('SOR', 'Taj Trade and Transport', (0, 0, 0, 0, 0, 0)),
+    ('SOR', 'SV Fashions', (200000, 200000, 100000, 100000, 100000, 100000)),
     # Hata diye gaye (ab SOR channel nahi): KORA (600000, 600000, 500000, 500000, 500000, 500000),
     # Arved (200000, 200000, 100000, 100000, 100000, 100000),
     # Taj -Khazan (100000, 300000, 400000, 400000, 200000, 200000)
@@ -30634,6 +30653,8 @@ def _t26_bucket(customer, typ):
 
 @lru_cache(maxsize=100000)
 def _t26_bucket_cached(customer, typ):
+    if not _is_consumer_type(typ) and _is_purchase_vendor(customer):   # Taj Trade -> Purchase row
+        return "Purchase"
     if not _is_consumer_type(typ):      # Customer = SOR vendor -> SOR row (Type Purchase/Bulk/kuch bhi ho)
         _sor_lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS)
         if _sor_lab:
