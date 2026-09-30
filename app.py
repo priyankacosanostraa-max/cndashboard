@@ -8013,6 +8013,13 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vMatrix" style="display:none">
     <div class="matrix-page-title">Overall Details</div>
 
+    <div class="kpis" id="ovKpis" style="padding:6px 0 4px">
+      <div class="kpi" id="ovKpiRevBox"><div class="kpi-t">Net Revenue</div><div class="kpi-v" id="ovKpiRev" style="color:#d4af5a">₹0</div></div>
+      <div class="kpi"><div class="kpi-t">Sold Qty (Final Qty)</div><div class="kpi-v" id="ovKpiQty" style="color:#d4af5a">0</div></div>
+      <div class="kpi"><div class="kpi-t">SKUs Shown</div><div class="kpi-v" id="ovKpiSkus" style="color:#2ecc71">0</div></div>
+      <div class="kpi" id="ovKpiAspBox"><div class="kpi-t" title="Net Revenue ÷ Sold Qty">Net Rev / Unit</div><div class="kpi-v" id="ovKpiAsp" style="color:#2ecc71">₹0</div></div>
+    </div>
+
     <div class="filter-box">
       <div class="fg">
         <div class="fc"><label class="fl">Search (SKU / CN Name / Category)</label>
@@ -8107,6 +8114,8 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="kpis">
       <div class="kpi"><div class="kpi-t">SKUs shown</div><div class="kpi-v" id="rCount" style="color:#d4af5a">0</div></div>
       <div class="kpi"><div class="kpi-t">Total Sold Qty</div><div class="kpi-v" id="rQty" style="color:#d4af5a">0</div></div>
+      <div class="kpi" id="rRevBox"><div class="kpi-t">Net Revenue</div><div class="kpi-v" id="rRev" style="color:#d4af5a">₹0</div></div>
+      <div class="kpi" id="rAspBox"><div class="kpi-t" title="Net Revenue ÷ Sold Qty">Net Rev / Unit</div><div class="kpi-v" id="rRevPerUnit" style="color:#2ecc71">₹0</div></div>
       <div class="kpi"><div class="kpi-t">Inv WIP</div><div class="kpi-v" id="rWip" style="color:#e67e22">0</div></div>
       <div class="kpi"><div class="kpi-t">7D Sale Qty</div><div class="kpi-v" id="rQty7d" style="color:#2ecc71">0</div></div>
       <div class="kpi"><div class="kpi-t">15D Sale Qty</div><div class="kpi-v" id="rQty15d" style="color:#2ecc71">0</div></div>
@@ -10541,7 +10550,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
   const d2 = String(ctx.d2 || '').trim();
   const hasFilter = !!(types.length || channels.length || subChannels.length || marketplaces.length || customer || fy || d1 || d2 || sourceField !== 'sales_entries');
   if (!hasFilter) {
-    return {q7:Number(item.qty_7d)||0,q15:Number(item.qty_15d)||0,q30:Number(item.qty_1m)||0,sold:Number(item.final_qty)||0};
+    return {q7:Number(item.qty_7d)||0,q15:Number(item.qty_15d)||0,q30:Number(item.qty_1m)||0,sold:Number(item.final_qty)||0,rev:Number(item.total_net_revenue)||0};
   }
   const marketplaceOf = e => {
     try { if (typeof _sdSorMarketplace === 'function') return String(_sdSorMarketplace(e) || ''); } catch (_e) {}
@@ -10566,7 +10575,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
     const d=cnxSaleEntryDate(e,ctx),q=Number(e && e.qty)||0;
     return sum + (d && d >= since ? q : 0);
   },0);
-  return {q7:win(D7),q15:win(D15),q30:win(D30),sold:kept.reduce((sum,e)=>sum+(Number(e&&e.qty)||0),0)};
+  return {q7:win(D7),q15:win(D15),q30:win(D30),sold:kept.reduce((sum,e)=>sum+(Number(e&&e.qty)||0),0),rev:kept.reduce((sum,e)=>sum+(Number(e&&e.rev)||0),0)};
 }
 /* Arithmetic mean of valid COSA Selling Price cells under the same active
    sales filters as Sold Qty. This is deliberately row-based (not revenue/qty),
@@ -13008,7 +13017,7 @@ function applyF(){
   const chanOk = e => chanSel.length === 0 || chanSel.includes(overallChannelKey(e));
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
-  let ky=0, km=0, kf=0, kpf=0, kt=0;
+  let ky=0, km=0, kf=0, kpf=0, kt=0, kQty=0;
   const cards = [];
   const revenueShareMap = new Map();
   const CAP = 120;
@@ -13096,6 +13105,7 @@ function applyF(){
     ky += yRev; km += mRev; kf += fRev; kpf += pfRev;
     const itemFilteredRevenue = anyEntryFilter ? feRev : (parseFloat(item.total_net_revenue) || 0);
     kt += itemFilteredRevenue;
+    kQty += Number(feQty) || 0; // Overview KPI: same Final Qty basis as Repeat Orders (sum of filtered sales entries)
     revenueShareMap.set(_skuRevenueKey(item.sku), itemFilteredRevenue);
 
     if (drill) {
@@ -13447,6 +13457,25 @@ function applyF(){
   } else {
     setTxt('kY', ky); setTxt('kM', km); setTxt('kF', kf); setTxt('kPF', kpf); setTxt('kT', kt);
   }
+
+  // ── Overview KPI strip (Net Revenue · Sold Qty · SKUs Shown · Net Rev / Unit) ──
+  // Har filter par refresh hota hai. Koi bhi filter (pasted SKUs aur CN filter
+  // sahit) lagne par filtered sales-entries ka sum; koi filter nahi to Repeat Orders
+  // ki tarah grand totals. Export / table logic ko touch nahi kiya.
+  try {
+    const kpiNoFilter = noFilter && !hasPastedSkus && !cnQ;
+    const kpiRev = kpiNoFilter ? (Number(periodKpis.total || grandNetRevenue) || 0) : kt;
+    const kpiQty = kpiNoFilter ? (Number(grandFinalQty) || 0) : kQty;
+    const kpiSkus = matrixEligibleItems.size;
+    const kpiAsp = kpiQty > 0 ? kpiRev / kpiQty : 0;
+    const setK = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    setK('ovKpiRev', fmt(kpiRev));
+    setK('ovKpiQty', Math.round(kpiQty).toLocaleString('en-IN'));
+    setK('ovKpiSkus', kpiSkus.toLocaleString('en-IN'));
+    setK('ovKpiAsp', fmt(kpiAsp));
+    // Financial figures employee role ko nahi dikhte (baaki Overview jaisa hi).
+    ['ovKpiRevBox','ovKpiAspBox'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = empF ? 'none' : ''; });
+  } catch (e) { console.error('Overview KPI error', e); }
 }
 
 function _matrixExportMeta(){
@@ -13752,6 +13781,7 @@ function applyRO(){
       if (key === 'final_qty') return Number(sv.sold)||0;
       return Number(key==='qty_7d'?sv.q7:key==='qty_15d'?sv.q15:sv.q30)||0;
     }
+    if (key === '_rev') return Number(cnxSaleTotalsForItem(it, roSaleCtx).rev)||0;
     // default: raw field
     const v = it[key];
     return (v === undefined || v === null || v === '') ? 0 : Number(v);
@@ -13788,9 +13818,10 @@ function applyRO(){
   }, 0);
 
   // 7D/15D/30D KPIs use exactly the same active sales context as rows/sort.
-  let wip7d = 0, wip15d = 0, wip30d = 0;
+  let wip7d = 0, wip15d = 0, wip30d = 0, revSum = 0;
   filtered.forEach(item => {
     const sv = cnxSaleTotalsForItem(item, roSaleCtx);
+    revSum += Number(sv.rev)||0;
     wip7d += Number(sv.q7)||0;
     wip15d += Number(sv.q15)||0;
     wip30d += Number(sv.q30)||0;
@@ -13805,6 +13836,14 @@ function applyRO(){
   const qty30El = document.getElementById('rQty30d');
   if (countEl) countEl.textContent = filtered.length;
   if (qtyEl) qtyEl.textContent = Math.round(qtySum).toLocaleString('en-IN');
+  // Net Revenue KPIs — same filters as Total Sold Qty (no filter = grand total).
+  {
+    const kRev = roNoFilter ? (Number(periodKpis.total || grandNetRevenue) || 0) : revSum;
+    const rEl = document.getElementById('rRev'), uEl = document.getElementById('rRevPerUnit');
+    if (rEl) rEl.textContent = fmt(kRev);
+    if (uEl) uEl.textContent = fmt(qtySum > 0 ? kRev / qtySum : 0);
+    ['rRevBox','rAspBox'].forEach(id => { const b = document.getElementById(id); if (b) b.style.display = LOGIN_ROLE === 'employee' ? 'none' : ''; });
+  }
   if (fcEl) fcEl.textContent = filtered.length ? Math.round(filtered.reduce((s,i) => s + (i.forecast_30d || 0), 0) / filtered.length) : 0;
   if (wipEl) wipEl.textContent = Math.round(wipSum).toLocaleString('en-IN');
   if (qty7El)  qty7El.textContent  = Math.round(wip7d).toLocaleString('en-IN');
@@ -13852,6 +13891,7 @@ function applyRO(){
       <th>In CMBs Sold</th>
       ${empTx ? '' : '<th>Avg Selling Price</th>'}
       ${empTx ? '' : '<th>Discount %</th>'}
+      ${empTx ? '' : '<th>Net Revenue</th>'}
       <th>Inv Stock</th>
       <th>${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv (WIP)'}</th>
       <th style="min-width:160px">Remark</th>
@@ -13888,13 +13928,14 @@ function applyRO(){
         <td class="muted">0</td>
         ${empTx ? '' : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`}
         ${empTx ? '' : `<td>${tDisc}%</td>`}
+        ${empTx ? '' : `<td class="gold"><b>${fmt(parseFloat(t.rev)||0)}</b></td>`}
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
         <td><input type="text" class="ro-remark" value="${(roRemarks[t.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)"></td>
         <td class="gold"><b>${Math.round(tq)}</b></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
-      ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
+      ? `<tr><td colspan="15" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
       : '');
     updateExportHint();
     return;
@@ -13912,6 +13953,7 @@ function applyRO(){
     <th>In CMBs Sold</th>
     ${LOGIN_ROLE==='employee' ? '' : `<th title="Arithmetic average of valid COSA Selling Price rows under active filters">Avg Selling Price</th>`}
     ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_fDiscPct',this)" title="Overall average discount % vs MRP — updates with Date/Channel/Type filters">Discount %</th>`}
+    ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_rev',this)" title="Net Revenue under active filters">Net Revenue</th>`}
     <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
     <th class="sort-arrow" onclick="sortRO('inv_wip',this)">${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv WIP'}</th>
     <th class="sort-arrow" onclick="sortRO('blocked_qty',this)" title="Blocked Qty (column U)">Blocked Qty</th>
@@ -13971,6 +14013,7 @@ function applyRO(){
       <td class="gold">${Math.round(cmbSold)}</td>
       ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,roSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
+      ${LOGIN_ROLE==='employee' ? '' : `<td class="gold"><b>${fmt(saleVals.rev)}</b></td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
       <td class="${(item.blocked_qty||0) > 0 ? 'red' : 'muted'}">${item.blocked_qty || 0}</td>
@@ -13981,7 +14024,7 @@ function applyRO(){
       <td class="gold"><b>${Math.round((parseFloat(qty)||0) + (parseFloat(cmbSold)||0))}</b></td>
     </tr>`;
   }).join('') + (filtered.length > RO_CAP
-    ? `<tr><td colspan="16" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
+    ? `<tr><td colspan="17" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
     : '');
 
   const allBox = document.getElementById('roSelectAll');
@@ -14078,9 +14121,9 @@ function applyColFilters(){
     const sv = cnxSaleTotalsForItem(it, cfSaleCtx);
     a.sold += Number(sv.sold)||0; a.q7 += Number(sv.q7)||0;
     a.q15 += Number(sv.q15)||0; a.q30 += Number(sv.q30)||0;
-    a.wip += Number(wipOfCF(it))||0; a.fc += Number(it.forecast_30d)||0;
+    a.wip += Number(wipOfCF(it))||0; a.fc += Number(it.forecast_30d)||0; a.rev += Number(sv.rev)||0;
     return a;
-  }, {sold:0,q7:0,q15:0,q30:0,wip:0,fc:0});
+  }, {sold:0,q7:0,q15:0,q30:0,wip:0,fc:0,rev:0});
   const cfKpis = {
     rCount: colFiltered.length, rQty: Math.round(cfTotals.sold),
     rWip: Math.round(cfTotals.wip), rQty7d: Math.round(cfTotals.q7),
@@ -14088,6 +14131,9 @@ function applyColFilters(){
     rFc: colFiltered.length ? Math.round(cfTotals.fc / colFiltered.length) : 0
   };
   Object.entries(cfKpis).forEach(([id,val])=>{ const el=document.getElementById(id); if(el) el.textContent=Number(val).toLocaleString('en-IN'); });
+  { const rEl=document.getElementById('rRev'), uEl=document.getElementById('rRevPerUnit');
+    if (rEl) rEl.textContent = fmt(cfTotals.rev);
+    if (uEl) uEl.textContent = fmt(cfTotals.sold > 0 ? cfTotals.rev / cfTotals.sold : 0); }
 
   const cfRevenueShareMap = new Map(); let cfRevenueShareTotal = 0;
   colFiltered.forEach(it => { const rv=Number(it._fRev ?? it.total_net_revenue ?? 0)||0; cfRevenueShareMap.set(_skuRevenueKey(it.sku),rv); cfRevenueShareTotal+=rv; });
@@ -14149,6 +14195,7 @@ function applyColFilters(){
       <td class="gold">${Math.round(cmbSold)}</td>
       ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,cfSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
+      ${LOGIN_ROLE==='employee' ? '' : `<td class="gold"><b>${fmt(sv.rev)}</b></td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
       <td><span class="forecast-pill">${item.forecast_60d || 0}</span></td>
@@ -14156,7 +14203,7 @@ function applyColFilters(){
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
     </tr>`;
   }).join('') + (colFiltered.length > RO_CAP
-    ? `<tr><td colspan="13" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
+    ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
     : '');
 }
 
