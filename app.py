@@ -62,8 +62,9 @@
 # - WIP Receive tab: Repeat Orders jaisa "Paste multiple SKUs" box (Show Pasted SKUs / Clear Pasted)
 #   + har SKU ke saath Inv Stock column (table aur CSV me). Inv Stock ka Grand Total nahi dikhta.
 # - Production tab: Delivery Date ab Order Date se calculate hoti hai —
-#   Order Type "Customer..." / "Custom..." (customise/customize) = Order Date + 10 din,
-#   Order Type "New Ordering" = Order Date + 20 din, baaki sab = Order Date + 12 din.
+#   Order Type "New Ordering" = Order Date + 15 din, baaki sab = Order Date + 12 din;
+#   jis row me stone (PPC-WIP col S) likha ho usme +7 din extra.
+# - WIP Receive tab: purani table ke neeche "Month wise" table (apne alag filters + KPIs).
 #   Delivery Date sirf un SKU rows par jinki Balance Qty (col K) 0 nahi hai; balance 0 par blank.
 # - Production tab me naya "Delivery Date" dropdown filter (existing from/to filters as-is).
 # - Baaki kuch change nahi kiya.
@@ -9504,6 +9505,29 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div id="wiprSummary" class="ops-kpis"></div>
     <div id="wiprPickBar" style="margin:0 2px 10px"></div>
     <div id="wiprContent" class="ops-table-wrap"></div>
+    <div id="wipMonthSection" style="margin-top:28px">
+      <div class="ops-head">
+        <div>
+          <div class="ops-title">WIP Receive — Month wise</div>
+          <div class="ops-sub">Every month found in the WIP-Recv sheet is a column heading. Click a month to see all SKUs received in that month with Order No., Order Date, Sr. No., Type, Channel and Delivery Date. These filters work only for this table.</div>
+        </div>
+        <div class="ops-actions">
+          <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipMonthReset()">Reset Filters</button>
+          <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="wipMonthExport()">Export CSV</button>
+        </div>
+      </div>
+      <div class="ops-filters">
+        <div class="fc"><label class="fl">Order No.</label><input class="fi" id="wmOrderNo" placeholder="Type order no…" oninput="wipMonthRender_d()"></div>
+        <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wmSku" placeholder="Search SKU…" oninput="wipMonthRender_d()"></div>
+        <div class="fc"><label class="fl">Order From Date</label><input class="fi" type="date" id="wmFrom" onchange="wipMonthRender()"></div>
+        <div class="fc"><label class="fl">Order To Date</label><input class="fi" type="date" id="wmTo" onchange="wipMonthRender()"></div>
+        <div class="fc"><label class="fl">Channel</label><select class="fs" id="wmChannel" onchange="wipMonthRender()"><option value="">All Channels</option></select></div>
+        <div class="fc"><label class="fl">Type</label><select class="fs" id="wmType" onchange="wipMonthRender()"><option value="">All Types</option></select></div>
+      </div>
+      <div id="wmSummary" class="ops-kpis"></div>
+      <div id="wmPickBar" style="margin:0 2px 10px"></div>
+      <div id="wmContent" class="ops-table-wrap"></div>
+    </div>
     <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default; the receiving-date columns show the present month 1 to 30/31 by default and switch to All Dates when an order date range is set), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with all receiving dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
@@ -19880,6 +19904,7 @@ function _wiprSkuMatrix(list){
 function renderWipReceive(){
   const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary'),bar=document.getElementById('wiprPickBar');if(!host)return;
   if(!_wiprLoaded)return;
+  try{wipMonthRender();}catch(_e){console.error('WIP month table',_e);}
   _wiprSyncMonth();
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   const from=_wiprRF,to=_wiprRT; /* receiving-date range */
@@ -19963,6 +19988,132 @@ function exportWipReceive(){
   out.push(['Grand Total','','','','','','','','','','','',...cols.map(d=>dayTot[d]||0),'']);
   _dlCsv(['Order No.','Order Date','SKU','Sr. No.','SKU Name','Image Link','Inv Stock','Channel','Type','Order Qty','Rec Qty','Bal Qty',...cols.map(_wiprFmt),'Delivery Date'],out,'wip_receive'+tag);
 }
+
+/* ── WIP Receive: Month-wise table (own filters, independent of the date-wise table above) ── */
+let _wmPick='';
+let _wmTimer=null;
+function wipMonthRender_d(){clearTimeout(_wmTimer);_wmTimer=setTimeout(wipMonthRender,220);}
+function _wmMonthKey(iso){return String(iso||'').slice(0,7);}
+function _wmMonthLabel(k){const m=String(k||'').match(/^(\d{4})-(\d{2})$/);return m?_WIPR_MON[Number(m[2])-1]+'-'+m[1]:String(k||'');}
+function _wmShortDay(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);return m?m[3]+'-'+_WIPR_MON[Number(m[2])-1]:String(iso||'');}
+function _wmFillSelect(id,arr,allLabel){
+  const sel=document.getElementById(id);if(!sel)return;
+  const list=(arr||[]).filter(Boolean);
+  const sig=list.join('\u0001');
+  if(sel.dataset.sig===sig)return;
+  const cur=sel.value;
+  sel.innerHTML=`<option value="">${allLabel}</option>`+list.map(t=>`<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+  sel.dataset.sig=sig;
+  if(cur&&list.includes(cur))sel.value=cur;
+}
+function _wmBase(){
+  const oq=String(document.getElementById('wmOrderNo')?.value||'').trim().toLowerCase();
+  const q=String(document.getElementById('wmSku')?.value||'').trim().toLowerCase();
+  const ch=String(document.getElementById('wmChannel')?.value||'').trim().toLowerCase();
+  const ty=String(document.getElementById('wmType')?.value||'').trim().toLowerCase();
+  const of=document.getElementById('wmFrom')?.value||'',ot=document.getElementById('wmTo')?.value||'';
+  return _wiprRows.filter(r=>{
+    if(!cnxSkuMatchesGlobalCn(r.sku))return false;
+    if(of||ot){const od=String(r.order_date||'');if(!od)return false;if(of&&od<of)return false;if(ot&&od>ot)return false;}
+    if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
+    if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
+    if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
+    if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
+    return true;
+  });
+}
+/* one row per (order no, SKU) — never clubbed across orders; receipts split by month and by date */
+function _wmMatrix(list){
+  const m=new Map();
+  list.forEach(r=>{
+    const k=(r.order||'')+'|'+r.sku;
+    const x=m.get(k)||{order:r.order||'',sku:r.sku,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance),byMonth:{},byDate:{},total:0};
+    if(r.date){const q=Number(r.qty)||0;const mk=_wmMonthKey(r.date);x.byMonth[mk]=(x.byMonth[mk]||0)+q;x.byDate[r.date]=(x.byDate[r.date]||0)+q;x.total+=q;}
+    if(!x.od&&r.order_date)x.od=r.order_date;
+    if(!x.dl&&r.delivery)x.dl=r.delivery;
+    if(!x.sr&&r.sr_no)x.sr=r.sr_no;
+    m.set(k,x);
+  });
+  return Array.from(m.values()).sort(_wiprCmpRow);
+}
+function _wmMonths(){
+  const set=new Set();
+  _wiprRows.forEach(r=>{if(r.date)set.add(_wmMonthKey(r.date));});
+  return Array.from(set).filter(Boolean).sort();
+}
+function _wmView(){
+  const months=_wmMonths();
+  if(_wmPick&&!months.includes(_wmPick))_wmPick='';
+  let rows=_wmMatrix(_wmBase());
+  if(_wmPick)rows=rows.filter(x=>(x.byMonth[_wmPick]||0)>0);
+  return {months,rows};
+}
+function wipMonthPick(k){_wmPick=k||'';wipMonthRender();}
+function wipMonthReset(){
+  ['wmOrderNo','wmSku','wmFrom','wmTo','wmChannel','wmType'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  _wmPick='';wipMonthRender();
+}
+function wipMonthRender(){
+  const host=document.getElementById('wmContent'),sum=document.getElementById('wmSummary'),bar=document.getElementById('wmPickBar');
+  if(!host||!_wiprLoaded)return;
+  _wmFillSelect('wmChannel',_wiprChannels,'All Channels');
+  _wmFillSelect('wmType',_wiprTypes,'All Types');
+  const of=document.getElementById('wmFrom')?.value||'',ot=document.getElementById('wmTo')?.value||'';
+  if(of&&ot&&of>ot){if(sum)sum.innerHTML='';if(bar)bar.innerHTML='';host.innerHTML='<div class="ops-empty">Order From Date is after Order To Date. Please correct the dates.</div>';return;}
+  const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
+  const {months,rows}=_wmView();
+  const recOf=x=>_wmPick?(x.byMonth[_wmPick]||0):x.total;
+  let recT=0,oqT=0,balT=0;
+  rows.forEach(x=>{recT+=recOf(x);oqT+=Number(x.oq)||0;balT+=(x.bal===null||x.bal===undefined)?0:Number(x.bal)||0;});
+  const scope=_wmPick?_wmMonthLabel(_wmPick):'All months';
+  if(sum)sum.innerHTML=_opsKpi('Total Receiving',n(recT),scope)+_opsKpi('Bal Qty',n(balT),'Order/SKU rows shown: '+rows.length.toLocaleString('en-IN'))+_opsKpi('Total Order Qty',n(oqT),'Order/SKU rows shown: '+rows.length.toLocaleString('en-IN'));
+  if(bar){
+    bar.innerHTML=_wmPick
+      ?`<span class="small-note" style="font-weight:800">Showing only <b>${escHtml(_wmMonthLabel(_wmPick))}</b></span> <button class="go-btn" style="width:auto;padding:6px 12px;letter-spacing:1px;margin-left:8px" onclick="wipMonthPick('')">← All months</button>`
+      :`<span class="small-note">Tip: click any month heading to see every SKU received in that month.</span>`;
+  }
+  const skuBtn=sku=>`<button class="sku-link" onclick="openSkuDetails('${String(sku).replace(/'/g,"\\'")}')">${escHtml(sku)}</button>`;
+  const stick='position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0';
+  const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
+  const lead=x=>{const it=_masterSkuMap[_opsSkuKey(x.sku)]||{};return `<td style="font-weight:800">${escHtml(x.order||'—')}</td><td style="font-weight:800">${escHtml(x.sr||'—')}</td><td>${skuBtn(x.sku)}</td><td>${_opsPhoto(it.image_url)}</td><td>${fD(x.od)}</td><td class="wipr-ch">${escHtml(x.ch||'—')}</td><td class="wipr-ty" title="${escHtml(x.ty||'')}">${escHtml(_wiprShortType(x.ty)||'—')}</td><td class="ops-num">${x.oq?n(x.oq):'—'}</td><td class="ops-num">${n(x.rq)}</td><td class="ops-num"><b>${(x.bal===null||x.bal===undefined)?'—':n(x.bal)}</b></td>`;};
+  const leadHead='<th>Order No.</th><th>Sr. No.</th><th>SKU</th><th>Photo</th><th>Order Date</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th>';
+  const emptyMsg='<tr><td colspan="99" class="ops-empty">No WIP receipts found for the selected filters.</td></tr>';
+  let head,body='',foot='';
+  if(_wmPick){
+    head=`<tr>${leadHead}<th class="ops-num">Received Qty (${escHtml(_wmMonthLabel(_wmPick))})</th><th>Receiving Date(s)</th><th>Delivery Date</th></tr>`;
+    rows.forEach(x=>{
+      const ds=Object.keys(x.byDate).filter(d=>_wmMonthKey(d)===_wmPick).sort().map(d=>`${_wmShortDay(d)} (${n(x.byDate[d])})`).join(', ');
+      body+=`<tr>${lead(x)}<td class="ops-num"><b>${n(x.byMonth[_wmPick]||0)}</b></td><td style="white-space:normal;min-width:120px">${escHtml(ds)}</td><td>${fD(x.dl)}</td></tr>`;
+    });
+    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(recT)}</b></td><td style="${stick}"></td><td style="${stick}"></td></tr></tfoot>`;
+  }else{
+    const mTot={};rows.forEach(x=>months.forEach(k=>{mTot[k]=(mTot[k]||0)+(x.byMonth[k]||0);}));
+    head=`<tr>${leadHead}`+months.map(k=>`<th class="ops-num" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received in ${escHtml(_wmMonthLabel(k))}" onclick="wipMonthPick('${k}')">${escHtml(_wmMonthLabel(k))}</th>`).join('')+'<th>Delivery Date</th></tr>';
+    rows.forEach(x=>{
+      body+=`<tr>${lead(x)}`+months.map(k=>x.byMonth[k]?`<td class="ops-num"><b>${n(x.byMonth[k])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td>${fD(x.dl)}</td></tr>`;
+    });
+    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+months.map(k=>`<td class="ops-num" style="${stick}"><b>${n(mTot[k]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`;
+  }
+  host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead>${head}</thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
+}
+function wipMonthExport(){
+  if(!_wiprLoaded){alert('Data is still loading');return;}
+  const {months,rows}=_wmView();
+  if(!rows.length){alert('No WIP receive rows to export');return;}
+  const info=sku=>{const it=_masterSkuMap[_opsSkuKey(sku)]||{};return[exportSkuName(sku,String(it.sku_name||'')),String(it.image_url||'')];};
+  const fD=v=>v?_wiprFmtFull(v):'';
+  const balV=x=>(x.bal===null||x.bal===undefined)?'':x.bal;
+  const base=['Order No.','Sr. No.','SKU','SKU Name','Image Link','Order Date','Channel','Type','Order Qty','Rec Qty','Bal Qty'];
+  const lead=x=>[x.order||'',x.sr||'',x.sku,...info(x.sku),fD(x.od),x.ch||'',x.ty||'',x.oq||0,x.rq||0,balV(x)];
+  if(_wmPick){
+    const out=rows.map(x=>[...lead(x),x.byMonth[_wmPick]||0,Object.keys(x.byDate).filter(d=>_wmMonthKey(d)===_wmPick).sort().map(d=>_wmShortDay(d)+' ('+x.byDate[d]+')').join(', '),fD(x.dl)]);
+    _dlCsv([...base,'Received Qty ('+_wmMonthLabel(_wmPick)+')','Receiving Date(s)','Delivery Date'],out,'wip_receive_month_'+_wmPick);
+    return;
+  }
+  const out=rows.map(x=>[...lead(x),...months.map(k=>x.byMonth[k]||0),fD(x.dl)]);
+  _dlCsv([...base,...months.map(_wmMonthLabel),'Delivery Date'],out,'wip_receive_month_wise');
+}
+window.wipMonthRender=wipMonthRender;window.wipMonthRender_d=wipMonthRender_d;window.wipMonthPick=wipMonthPick;window.wipMonthReset=wipMonthReset;window.wipMonthExport=wipMonthExport;
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
@@ -27794,20 +27945,20 @@ def _fetch_target_rows():
 # ════════════════════════════════════════════════════════════════
 _PROD_CACHE = {"rows": None, "ts": 0}
 
-def _production_delivery_days(order_type, order_no=""):
+def _production_delivery_days(order_type, order_no="", stone=""):
     """Delivery lead time (days after Order Date) decided by Order Type.
-    Customer / Customise / Customize order  -> 10 days
-    New Ordering                            -> 20 days
-    everything else                         -> 12 days
+    New Ordering                            -> 15 days
+    everything else (Customer etc.)         -> 12 days
+    Row has a stone (PPC-WIP column S)      -> +7 days on top
     """
     t = re.sub(r"\s+", " ", str(order_type or "").strip().lower())
     if not t:
         t = re.sub(r"\s+", " ", str(order_no or "").strip().lower())
-    if t.startswith("custom"):          # customer / customise / customize
-        return 10
-    if "new order" in t:                # new ordering
-        return 20
-    return 12
+    days = 15 if "new order" in t else 12
+    st = str(stone or "").strip().lower()
+    if st and st not in ("nan", "none", "null", "-", "--", "na", "n/a"):
+        days += 7
+    return days
 
 def _production_has_balance(value):
     """Column K has a pending/difference value whenever it is not zero.
@@ -27878,6 +28029,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         C_RECV = _at(12)  # M  Receiving Date
         C_REMK = find_col(cols, "Remark", "Remarks") or _at(14)   # O  Remark
         C_SRNO = _at(2)   # C  Sr. No.
+        C_STONE = find_col(cols, "stone") or _at(18)   # S  stone (blank = no stone)
         rows_all = []
         _seen_rows = set()
         for _, r in df.iterrows():
@@ -27893,7 +28045,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             if dt and _production_has_balance(_bal_val):
                 # Delivery Date = Order Date + lead days (Order Type based),
                 # sirf un rows ki jinki Balance Qty (col K) 0 nahi hai.
-                dv = dt + timedelta(days=_production_delivery_days(_otype_txt, order_no))
+                _stone_txt = str(clean(r.get(C_STONE, "")) if C_STONE else "").strip()
+                dv = dt + timedelta(days=_production_delivery_days(_otype_txt, order_no, _stone_txt))
             else:
                 dv = None   # balance 0 / completed row -> delivery date blank
             row = {
