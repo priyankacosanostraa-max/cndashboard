@@ -29628,6 +29628,7 @@ def _fetch_drg_source_rows_impl(force=False):
     C_TYPE = _at(10) or find_col(df.columns, "Type", "channel", "mode")
 
     out = []
+    _blinkit_fallback = []   # cossa_orderdate ke Blinkit rows — COSA fetch fail/khaali ho to inhe use karte hain
     for _, r in df.iterrows():
         dt = parse_date_any(r.get(C_DATE, "")) if C_DATE else None
         if dt is None:
@@ -29648,6 +29649,11 @@ def _fetch_drg_source_rows_impl(force=False):
         # Blinkit is sourced separately from the main COSA Net Revenue column I
         # below, so skip its cossa_orderdate copy here to prevent double count.
         if "blinkit" in str(cust or "").casefold():
+            _blinkit_fallback.append({
+                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(row_qty), "sp": float(selling_price),
+                "channel": "", "sub_channel": "", "type": "Blinkit", "customer": cust,
+                "raw_customer": str(clean(raw_cust_value, "")), "raw_type": "Blinkit",
+            })
             continue
         channel = calc_channel(cust, typ)
         sub_channel = calc_sub_channel(cust, channel, typ)
@@ -29680,6 +29686,7 @@ def _fetch_drg_source_rows_impl(force=False):
 
     # Blinkit for the NET-REVENUE table: COSA A=Dispatch Date,
     # I=Net Revenue, J=Customer Name. Customer matching is case-insensitive.
+    _b_rows = []
     try:
         bdf = _fetch_csv_fresh(
             COSA_URL,
@@ -29689,9 +29696,10 @@ def _fetch_drg_source_rows_impl(force=False):
                 ("Customer Name", "Customer", "Client", "Party"),
                 ("Final Qty", "final quantity", "final_qty"),
             ],
-            select_positions=[0, 6, 8, 9],
+            select_positions=[0, 6, 7, 8, 9],
         )
         bdf.columns = [str(c).strip() for c in bdf.columns]
+        b_sp = _drg_source_position_col(bdf, 7)    # H = Selling Price (Qcom ASP / qty target ke liye)
         b_date = _drg_source_position_col(bdf, 0) or find_col(bdf.columns, "Dispatch Date", "Date")
         b_rev = find_col(bdf.columns, "Net Revenue", "NetRevenue", "net rev", "Revenue") or _drg_source_position_col(bdf, 8)
         b_cust = find_col(bdf.columns, "Customer Name", "Customer", "Client", "Party") or _drg_source_position_col(bdf, 9)
@@ -29709,13 +29717,19 @@ def _fetch_drg_source_rows_impl(force=False):
                 b_row_qty = 0.0
             if rev == 0 and b_row_qty == 0:
                 continue
-            out.append({
-                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty),
+            _b_sp = to_num(row.get(b_sp, 0)) if b_sp else 0.0
+            _b_rows.append({
+                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty), "sp": float(_b_sp or 0),
                 "channel": "", "sub_channel": "", "type": "Blinkit", "customer": customer,
                 "raw_customer": customer, "raw_type": "Blinkit",
             })
+        out.extend(_b_rows)
     except Exception:
-        pass
+        _b_rows = []
+    # COSA se Blinkit na aaye (fetch fail / khaali) to Blinkit zero nahi dikhna chahiye —
+    # cossa_orderdate ke Blinkit rows (upar skip karke rakhe the) use karo.
+    if not _b_rows:
+        out.extend(_blinkit_fallback)
 
     _DRG_SRC_CACHE["rows"] = out
     _DRG_SRC_CACHE["ts"] = time.time()
@@ -30760,10 +30774,24 @@ def _t26_bucket(customer, typ):
     regex/key scan runs once per pair (memoised) instead of once per row."""
     return _t26_bucket_cached(str(customer or ""), str(typ or ""))
 
+_QCOM_CUSTOMER_KEYS = dict(_ECOM_CHANNEL_KEYS).get("Qcom", ())
+def _is_qcom_customer(customer):
+    """Customer Name me Blinkit / Instamart (ya baaki Qcom names) ho to True."""
+    text = str(customer or "").casefold()
+    if not text:
+        return False
+    compact = re.sub(r"[^a-z0-9]", "", text)
+    words = set(re.findall(r"[a-z0-9]+", text))
+    return any(((k in words) if len(k) <= 4 else (k in compact)) for k in _QCOM_CUSTOMER_KEYS)
+
 @lru_cache(maxsize=100000)
 def _t26_bucket_cached(customer, typ):
     if not _is_consumer_type(typ) and _is_purchase_vendor(customer):   # Taj Trade -> Purchase row
         return "Purchase"
+    # Qcom = Blinkit + Instamart (Customer Name se). Sheet Type Purchase/Bulk/Marketplace/kuch bhi ho,
+    # customer naam Qcom ka ho to Qcom row me hi jaayega (pehle Type column Purchase/Bulk ho to wahan chala jaata tha).
+    if not _is_consumer_type(typ) and _is_qcom_customer(customer):
+        return _t26_label("ECom", "Qcom")
     if not _is_consumer_type(typ):      # Customer = SOR vendor -> SOR row (Type Purchase/Bulk/kuch bhi ho)
         _sor_lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS)
         if _sor_lab:
