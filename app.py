@@ -1669,10 +1669,22 @@ def _normalize_inventory_image_url(value):
     return text if re.match(r'^https?://', text, re.I) else ""
 
 
+_INV_LIVE_BLOCK = {"until": 0.0}
+_INV_LIVE_RECHECK_SEC = 1800
+
+def _is_inv_live_url(url):
+    sid = (INV_LIVE_SPREADSHEET_ID or "").strip()
+    return bool(sid) and ("/spreadsheets/d/%s/" % sid) in str(url or "")
+
 def _fetch_inventory_fresh():
-    """Fetch latest All Product sheet, trying live native endpoints first."""
+    """Fetch latest All Product sheet, trying live native endpoints first.
+
+    Live Google Sheet private ho (401/403) to wo har fetch par 2 baar fail hoke time barbaad karti thi.
+    Ab ek baar 401/403 aate hi live URLs 30 min ke liye skip hote hain (seedha published CSV), phir dobara check."""
     last_err = None
     for url in _inventory_urls():
+        if _is_inv_live_url(url) and time.time() < _INV_LIVE_BLOCK["until"]:
+            continue
         try:
             frame = _fetch_csv_fresh(url)
             if frame is None or frame.empty:
@@ -1686,7 +1698,14 @@ def _fetch_inventory_fresh():
             return frame
         except Exception as exc:
             last_err = exc
-            print("Inventory source failed, trying fallback:", url[:110], str(exc)[:120])
+            _sc = getattr(getattr(exc, "response", None), "status_code", None)
+            if _is_inv_live_url(url) and _sc in (401, 403):
+                if time.time() >= _INV_LIVE_BLOCK["until"]:
+                    print("Live inventory sheet is not publicly readable (HTTP %s) — using the published CSV; "
+                          "live sheet will be re-checked in %d min." % (_sc, _INV_LIVE_RECHECK_SEC // 60))
+                _INV_LIVE_BLOCK["until"] = time.time() + _INV_LIVE_RECHECK_SEC
+            else:
+                print("Inventory source failed, trying fallback:", url[:110], str(exc)[:120])
     if last_err:
         raise last_err
     raise ValueError("No inventory source URL configured")
@@ -1758,6 +1777,11 @@ def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
             return frame
         except Exception as e:
             last_err = e
+            # 401 / 403 / 404 / 410 = sheet private ya link galat — retry se kuch nahi badlega,
+            # isliye turant fail karo (pehle 3 attempts + 2 sec sleep har baar lagte the).
+            _sc = getattr(getattr(e, "response", None), "status_code", None)
+            if _sc in (401, 403, 404, 410):
+                break
             if attempt < 2:
                 time.sleep(1)
     raise last_err
