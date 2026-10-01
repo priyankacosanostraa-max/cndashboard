@@ -1,3 +1,7 @@
+# Cosa Nostraa — V24.51 (SOR ONLINE/OFFLINE: Daily sales DATE MATCH = N COLUMN (Dispatch Date = Order Date), X nahi)
+# - Daily sales tab me dispatch/order date ab N column se li jati hai (cossa Dispatch Date + cossa_orderdate Order Date dono ke match ke liye).
+#   N me valid dates na milein tabhi header-name (Dispatch/Order Date) aur last me X fallback.
+# ============================================================
 # Cosa Nostraa — V24.50 (BALANCE QTY FILTER: =0 / <0 / <=0 me negative balance jaisa hai waisa hi dikhta hai, 0 nahi banta)
 # ============================================================
 # Cosa Nostraa — V24.49 (WIP RECEIVE: BALANCE QTY FILTER IN BOTH TABLES — ALL / >0 / =0 / <0 / <=0)
@@ -1333,7 +1337,7 @@ _SALE_MODE_VENDOR_HDRS = ("customer", "party", "vendor", "buyer", "channel", "pl
 
 def _build_sale_mode_index(df, dbg=None):
     """Daily sales -> SOR "Offline Sales" / "Online Order" index.
-    F (VAN) = 'Offline Sales' -> Offline Sales, baaki / blank -> Online Order.  Date = X column (Dispatch Date == Order Date).
+    F (VAN) = 'Offline Sales' -> Offline Sales, baaki / blank -> Online Order.  Date = N column (Dispatch Date == Order Date).
 
     V24.47: SOR vendor ki pehchaan Customer/Party/Channel type columns + Type text se (SOR_CHANNEL_KEYS) hoti hai — sirf
     Type = SOR/SIS par depend nahi (SOR vendors ka sheet Type Purchase/Bulk/Regular/Marketplace/blank bhi hota hai).
@@ -1351,9 +1355,10 @@ def _build_sale_mode_index(df, dbg=None):
     c_sku  = next((c for c in cols if nk(c) in ("skuno", "sku")), None) or at(7)   # H
     c_qty  = next((c for c in cols if nk(c) in ("qty", "quantity")), None) or at(8)  # I
     date_cands = []
-    if at(23): date_cands.append(at(23))                                     # X (Dispatch Date = Order Date)
+    if at(13): date_cands.append(at(13))                                     # V24.51: N column = Dispatch Date = Order Date (primary)
+    # fallback sirf tab jab N column me valid dates na hon
     date_cands += [c for c in cols if (nk(c).startswith("dispatchdate") or nk(c).startswith("orderdate")) and c not in date_cands]
-    if at(13) and at(13) not in date_cands: date_cands.append(at(13))        # N (screenshot me Dispatch Date)
+    if at(23) and at(23) not in date_cands: date_cands.append(at(23))        # X (last fallback)
     try:
         sample = pd.concat([df.head(300), df.tail(300)])
     except Exception:
