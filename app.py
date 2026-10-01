@@ -1,3 +1,19 @@
+# Cosa Nostraa — V24.53 (TARGET TAB · TABLE 1 ACTUAL = COSSA SHEET NET REVENUE (COL I) · QTY TARGET ASP = NET REVENUE)
+# - Target tab ki PEHLI table (Target vs Actual / Stakeholder Leaderboard) ka Achieved / Qty Achieved ab seedha "cossa" sheet se:
+#   A = Dispatch Date, G = Final Qty, I = NET REVENUE, J = Customer Name, K = Type. (Pehle cossa_orderdate / SKU-entries se aa raha tha
+#   aur Selling Price jaisa bada number dikha raha tha.) Selling Price (col H) ab is table me kahin use nahi hota.
+# - Channel / bucket rules wahi: Oct-26..Mar-27 -> Target_26-27 rows (_t26_bucket), purane months -> Type / Marketplace / Amazon / sub-channel buckets.
+# - Target_26-27 Qty Target ka ASP bhi ab Net Revenue / Qty (Sep-2026) — pehle Selling Price col H tha.
+# - Table 2 (Daily Revenue Glimpse) me ab "Month" filter (table 1 jaisa): purane months select karke dekh sakte ho. Default = current month.
+#   Past month select karne par: This Month / Target = wahi month, Last Month = usse pichla month, YTD = FY start se us month ke end tak,
+#   Yesterday / Day Before = us month ke aakhri 2 din. Export CSV / Excel bhi selected month ka. Daily Target Report aur baaki tabs untouched.
+# ============================================================
+# Cosa Nostraa — V24.52 (SOR ONLINE/OFFLINE DIAGNOSTICS + DUPLICATE-HEADER SAFETY)
+# - /api/debug me ab: daily_sales_fetch (sheet load hui ya nahi, rows, columns, gid), daily_sales_mode (kaun se columns use hue),
+#   daily_sales_mode_sample_keys, sale_mode_main / sale_mode_orderdate (matched / unmatched + vendor-wise) aur
+#   sale_mode_*_unmatched_samples (jo SOR rows match nahi hui: date / sku / qty / vendor). Isse PSL ke 0 aane ki wajah seedhi dikhegi.
+# - Daily sales ke duplicate / blank header names ab unique ho jate hain (pehle df[col] DataFrame ban kar index toot sakta tha).
+# ============================================================
 # Cosa Nostraa — V24.51 (SOR ONLINE/OFFLINE: Daily sales DATE MATCH = N COLUMN (Dispatch Date = Order Date), X nahi)
 # - Daily sales tab me dispatch/order date ab N column se li jati hai (cossa Dispatch Date + cossa_orderdate Order Date dono ke match ke liye).
 #   N me valid dates na milein tabhi header-name (Dispatch/Order Date) aur last me X fallback.
@@ -1346,7 +1362,16 @@ def _build_sale_mode_index(df, dbg=None):
     Website / Online / Store (consumer) rows kabhi nahi lete."""
     if df is None or len(df) == 0:
         return None
-    cols = [str(c).strip() for c in df.columns]
+    cols = []
+    _seen_cols = {}
+    for _c in df.columns:      # V24.52: duplicate / blank header names ko unique banao (warna df[c] DataFrame ban kar index toot jata tha)
+        _c = str(_c).strip() or "col"
+        if _c in _seen_cols:
+            _seen_cols[_c] += 1
+            _c = f"{_c}__{_seen_cols[_c]}"
+        else:
+            _seen_cols[_c] = 0
+        cols.append(_c)
     df.columns = cols
     def at(i): return cols[i] if len(cols) > i else None
     def nk(c): return re.sub(r"[^a-z0-9]", "", str(c).lower())
@@ -1426,6 +1451,7 @@ def _build_sale_mode_index(df, dbg=None):
             loose.setdefault(k1, []).append(rid)
             loose.setdefault(k2, []).append(rid)
     if dbg is not None:
+        dbg["daily_sales_mode_sample_keys"] = [str(k) for k in list(pools.keys())[:6]]
         dbg["daily_sales_mode"] = {"van": c_van, "type": c_type, "sku": c_sku, "qty": c_qty, "date": c_date,
                                    "vendor_cols": vend_cols,
                                    "sor_rows": n_t1, "sor_rows_with_vendor": n_vendor, "loose_rows": n_t2,
@@ -1443,6 +1469,7 @@ class _SaleModeMatcher:
         self.hit = 0
         self.miss = 0
         self.by_vendor = {}
+        self.unmatched_samples = []
     def _pick(self, cands, qty, need_qty=False):
         rows = self.idx["rows"]
         free = [i for i in cands if i not in self.used]
@@ -1486,6 +1513,11 @@ class _SaleModeMatcher:
                 return rows[pick][0]
         self.miss += 1
         self._count(vendor, False)
+        try:
+            if len(self.unmatched_samples) < 12:
+                self.unmatched_samples.append({"date": date_iso, "sku": str(raw_sku), "qty": qty, "vendor": vendor})
+        except Exception:
+            pass
         return ""
     def label(self, date_iso, raw_sku, qty, vendor=""):
         """V24.48: SOR row ka final label. Daily-sales match mila to wahi (F me 'offline' likha ho -> Offline Sales),
@@ -2854,6 +2886,14 @@ def _refresh_data():
             inv = f_inv.result()
             cosa = f_cosa.result()
             daily_sales_df, daily_sales_err = f_daily.result()
+        try:
+            dbg["daily_sales_fetch"] = {
+                "ok": daily_sales_df is not None, "error": daily_sales_err or "",
+                "rows": (0 if daily_sales_df is None else int(len(daily_sales_df))),
+                "columns": ([] if daily_sales_df is None else [str(c) for c in list(daily_sales_df.columns)[:30]]),
+                "url_gid": (DAILY_SALES_URL.split("gid=")[-1].split("&")[0] if "gid=" in DAILY_SALES_URL else "")}
+        except Exception:
+            pass
         _DF_REFS["inv"] = inv; _DF_REFS["cosa"] = cosa
         inv.columns   = [str(c).strip() for c in inv.columns]
         cosa.columns = [str(c).strip() for c in cosa.columns]
@@ -3766,6 +3806,7 @@ def _refresh_data():
 
     dbg["sale_mode_main"] = {"matched": sale_matcher_main.hit, "unmatched": sale_matcher_main.miss}
     dbg["sale_mode_main_by_vendor"] = sale_matcher_main.by_vendor
+    dbg["sale_mode_main_unmatched_samples"] = sale_matcher_main.unmatched_samples
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
     try:
         del cosa
@@ -4003,6 +4044,7 @@ def _refresh_data():
 
         dbg["sale_mode_orderdate"] = {"matched": sale_matcher_od.hit, "unmatched": sale_matcher_od.miss}
         dbg["sale_mode_orderdate_by_vendor"] = sale_matcher_od.by_vendor
+        dbg["sale_mode_orderdate_unmatched_samples"] = sale_matcher_od.unmatched_samples
         dbg["cossa_orderdate_all_skus"] = len(orderdate_sales_exact)
         dbg["cossa_orderdate_all_rows"] = sum(len(v.get("entries", [])) for v in orderdate_sales_exact.values())
         dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
@@ -10153,6 +10195,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDRGExcel()">Export Excel</button>
     </div>
   </div>
+  <div class="filter-box" style="margin:10px 0 12px;display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end">
+    <div class="fc"><label class="fl">Month</label>
+      <select class="fs" id="drgMonth" onchange="loadDRG()"></select></div>
+  </div>
   <div id="drgContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
 
   <div class="insights-head" style="margin-top:26px">
@@ -16144,21 +16190,42 @@ function _drgQtyCsvCells(r){
     r.mtd_qty_target ? drgFmtNum(r.mtd_qty_target) : 'NA', r.mtd_qty_target ? (r.mtd_qty_achievement||0) : ''];
 }
 let _drgData = null;
+let _drgAbort = null;
+function _drgFillMonths(d){
+  const sel = document.getElementById('drgMonth');
+  if (!sel || !Array.isArray(d.months) || !d.months.length) return;
+  const have = Array.from(sel.options).map(o => o.value).join('|');
+  const want = d.months.join('|');
+  if (have !== want){
+    sel.innerHTML = d.months.map(m => {
+      const lab = new Date(Number(m.slice(0,4)), Number(m.slice(5,7)) - 1, 1).toLocaleString('en-US', {month:'short', year:'numeric'});
+      return `<option value="${m}">${lab}${m === d.cur_month ? ' (current)' : ''}</option>`;
+    }).join('');
+  }
+  sel.value = d.month_selected || d.months[0];
+}
 function loadDRG(force=false){
   const host = document.getElementById('drgContent');
   if (!host) return;
+  if (_drgAbort){ try{ _drgAbort.abort(); }catch(e){} }
+  _drgAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   if (_drgData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
-  const url = '/api/daily_revenue_glimpse' + (force ? '?fresh=1' : '');
-  fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
+  const mf = document.getElementById('drgMonth')?.value || '';
+  const qs = [];
+  if (force) qs.push('fresh=1');
+  if (mf) qs.push('month=' + encodeURIComponent(mf));
+  const url = '/api/daily_revenue_glimpse' + (qs.length ? '?' + qs.join('&') : '');
+  fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}, signal: _drgAbort ? _drgAbort.signal : undefined})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
       host.style.opacity = '';
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       d.rows = _targetMergeAmazonRows(d.rows);
       _drgData = d;
+      _drgFillMonths(d);
       renderDRGTable();
     })
-    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { if (err && err.name === 'AbortError') return; host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
 function drgFmtNum(n){
   // Indian comma-grouping (matches [>=10000000]##,##,##,##0;[>=100000]##,##,##0;##,##0)
@@ -16212,6 +16279,7 @@ function renderDRGTable(){
       YTD: ${escHtml(d.fy_label||'')} &nbsp;•&nbsp; Last Month: ${escHtml(d.last_month_label||'')}
       &nbsp;•&nbsp; This Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; Day Before: ${escHtml(d.day_before_label||'')}
       &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
+      ${d.is_current_month === false ? '<br><span style="color:var(--cn-gold)">Past month view — YTD runs till month end; Day Before / Yesterday = last two days of ' + escHtml(d.month_label||'') + '.</span>' : ''}
     </p>
     <table class="ro" style="width:100%;min-width:1640px">
       <thead><tr>
@@ -16244,7 +16312,8 @@ function exportDRG(){
 function exportDRGExcel(){
   const d = _drgData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  window.location.href = '/api/daily_revenue_glimpse/export.xlsx';
+  const _mf = document.getElementById('drgMonth')?.value || '';
+  window.location.href = '/api/daily_revenue_glimpse/export.xlsx' + (_mf ? '?month=' + encodeURIComponent(_mf) : '');
 }
 window.loadDRG = loadDRG; window.exportDRG = exportDRG; window.exportDRGExcel = exportDRGExcel;
 
@@ -29038,6 +29107,134 @@ def _t26_actuals_by_month(rows):
     _T26_ACT_CACHE["stamp"] = stamp
     return by
 
+_TGT_COSSA_CACHE = {"rows": None, "ts": 0.0}
+_TGT_COSSA_LOCK = threading.Lock()
+_TGT_COSSA_TTL = 300
+
+def _cossa_target_rows(force=False):
+    """Target tab table 1 source: 'cossa' sheet (COSA_URL) — A = Dispatch Date, G = Final Qty,
+    I = NET REVENUE, J = Customer Name, K = Type. Selling Price (H) is NOT read.
+    Rows carry the same keys as the Daily-Revenue-Glimpse rows, so _t26_bucket / legacy buckets work unchanged."""
+    now_ts = time.time()
+    cached = _TGT_COSSA_CACHE["rows"]
+    if not force and cached is not None and now_ts - _TGT_COSSA_CACHE["ts"] < _TGT_COSSA_TTL:
+        return cached
+    with _TGT_COSSA_LOCK:
+        cached = _TGT_COSSA_CACHE["rows"]
+        if not force and cached is not None and time.time() - _TGT_COSSA_CACHE["ts"] < _TGT_COSSA_TTL:
+            return cached
+        df = _fetch_csv_fresh(
+            COSA_URL,
+            select_groups=[("Dispatch Date", "Date"),
+                           ("Final Qty", "final quantity", "final_qty"),
+                           ("Net Revenue", "NetRevenue", "net rev"),
+                           ("Customer Name", "Customer", "Client", "Party"),
+                           ("Type", "Channel", "Mode")],
+            select_positions=[0, 6, 8, 9, 10],
+        )
+        df.columns = [str(c).strip() for c in df.columns]
+        c_date = _drg_source_position_col(df, 0) or find_col(df.columns, "Dispatch Date", "Date")
+        c_qty = _drg_source_position_col(df, 6) or find_col(df.columns, "Final Qty", "final quantity", "final_qty")
+        c_rev = _drg_source_position_col(df, 8) or find_col(df.columns, "Net Revenue", "NetRevenue", "net rev")
+        c_cust = _drg_source_position_col(df, 9) or find_col(df.columns, "Customer Name", "Customer", "Client", "Party")
+        c_type = _drg_source_position_col(df, 10) or find_col(df.columns, "Type", "Channel", "Mode")
+        if not (c_date and c_rev):
+            raise ValueError("cossa sheet: Dispatch Date / Net Revenue column not found")
+        n = len(df)
+        blank = [None] * n
+        def _vals(c):
+            return df[c].tolist() if c in df.columns else blank
+        today_iso = now_ist().strftime("%Y-%m-%d")
+        date_memo, num_memo, id_memo = {}, {}, {}
+        out = []
+        for dv, qv, rv, cv, tv in zip(_vals(c_date), _vals(c_qty) if c_qty else blank, _vals(c_rev),
+                                      _vals(c_cust) if c_cust else blank, _vals(c_type) if c_type else blank):
+            dk = str(dv)
+            iso = date_memo.get(dk, 0)
+            if iso == 0:
+                dt0 = parse_date_any(dv)
+                iso = date_memo[dk] = (dt0.strftime("%Y-%m-%d") if dt0 is not None else None)
+            if iso is None or iso > today_iso:       # future-dated rows are plans, not sales
+                continue
+            rk = str(rv)
+            rev = num_memo.get(rk)
+            if rev is None:
+                rev = num_memo[rk] = to_num(rv)
+            qk = "q" + str(qv)
+            qty = num_memo.get(qk)
+            if qty is None:
+                qty = num_memo[qk] = to_num(qv) if c_qty else 0.0
+            if not (-100000 <= qty <= 100000):
+                qty = 0.0
+            if rev == 0 and qty == 0:
+                continue
+            ik = (str(cv), str(tv))
+            idn = id_memo.get(ik)
+            if idn is None:
+                cust = norm_cust(cv if c_cust else "Unknown")
+                typ = norm_type(tv if c_type else "Regular")
+                cust, typ = _merge_amazon_identity(cust, typ)
+                channel = calc_channel(cust, typ)
+                sub_channel = calc_sub_channel(cust, channel, typ)
+                idn = id_memo[ik] = (cust, typ, sub_channel, str(clean(cv, "")), str(clean(tv, "")))
+            cust, typ, sub_channel, raw_c, raw_t = idn
+            out.append({"date": iso, "rev": float(rev), "qty": float(qty), "customer": cust, "type": typ,
+                        "sub_channel": sub_channel, "raw_customer": raw_c, "raw_type": raw_t})
+        _TGT_COSSA_CACHE["rows"] = out
+        _TGT_COSSA_CACHE["ts"] = time.time()
+        return out
+
+def _cossa_target_rows_swr():
+    """Cache purana ho to bhi turant serve; refresh background me (month/filter change pe page na atke)."""
+    cached = _TGT_COSSA_CACHE["rows"]
+    if cached is None:
+        return _cossa_target_rows()
+    if time.time() - _TGT_COSSA_CACHE["ts"] >= _TGT_COSSA_TTL and not _TGT_COSSA_LOCK.locked():
+        def _bg():
+            try:
+                _cossa_target_rows(force=True)
+            except Exception:
+                pass
+        threading.Thread(target=_bg, daemon=True).start()
+    return cached
+
+_TGT_LEGACY_COSSA_CACHE = {"stamp": None, "act": None}
+
+def _target_legacy_actuals_cossa():
+    """{(month, type/channel key): {rev, qty}} for pre Target_26-27 months from the cossa sheet NET REVENUE
+    (same bucket keys as _target_legacy_actuals: type, 'marketplace' (ECom+SOR), 'amazon', sub-channels)."""
+    rows = _cossa_target_rows_swr()
+    stamp = (id(rows), len(rows))
+    if _TGT_LEGACY_COSSA_CACHE["stamp"] == stamp and _TGT_LEGACY_COSSA_CACHE["act"] is not None:
+        return _TGT_LEGACY_COSSA_CACHE["act"]
+    act = {}
+    for e in rows:
+        d = e.get("date")
+        if not d or d == "N/A":
+            continue
+        mk = d[:7]
+        typ = _marketplace_display_text(e.get("type") or "").strip().lower()
+        sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
+        cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
+        entry_keys = {typ}
+        if _is_marketplace_type(typ):
+            entry_keys.add("marketplace")
+        if (sub == "amazon" or cust == "amazon"
+                or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))):
+            entry_keys.add("amazon")
+            entry_keys.add("marketplace")
+        if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
+            entry_keys.add("tata" if sub == "tata cliq" else sub)
+        for entry_key in entry_keys:
+            if not entry_key:
+                continue
+            slot = act.setdefault((mk, entry_key), {"rev": 0.0, "qty": 0.0})
+            slot["rev"] += float(e.get("rev") or 0)
+            slot["qty"] += float(e.get("qty") or 0)
+    _TGT_LEGACY_COSSA_CACHE["act"] = act
+    _TGT_LEGACY_COSSA_CACHE["stamp"] = stamp
+    return act
+
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     """Target vs Actual + Achievement Forecast + Stakeholder Leaderboard.
     Default: present month. Stake Holder ↔ COSA Customer, Channel ↔ COSA Type."""
@@ -29079,12 +29276,22 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     # heavy get_data() + poore sales_entries ka loop sirf purane months (<= Sep-2026) ke liye chalta hai,
     # aur wo bhi data refresh hone tak ek hi baar (cache) — month/filter badalne pe dobara nahi.
     is_t26_month = month_filter in _TARGET_26_27_MONTHS
-    act = {} if is_t26_month else _target_legacy_actuals()
+    # V24.53: table 1 actual = cossa sheet NET REVENUE (col I). Agar cossa fetch fail ho to purana source fallback.
+    try:
+        _tgt_rows = _cossa_target_rows_swr()
+        act = {} if is_t26_month else _target_legacy_actuals_cossa()
+    except Exception as _cte:
+        try:
+            app.logger.warning("Target table: cossa sheet load failed, using previous source: %s", _cte)
+        except Exception:
+            pass
+        _tgt_rows = None
+        act = {} if is_t26_month else _target_legacy_actuals()
 
     # Target_26-27 months: actual = cossa_orderdate NET REVENUE. Website/Purchase/Store/Bulk/Exhibition
     # come from the Type column; ECom and SOR channels come from the Customer Name (same rule as
     # Daily Revenue Glimpse).
-    act26 = _t26_actuals_by_month(_drg_rows_swr()).get(month_filter, {}) if is_t26_month else {}
+    act26 = _t26_actuals_by_month(_tgt_rows if _tgt_rows is not None else _drg_rows_swr()).get(month_filter, {}) if is_t26_month else {}
 
     rows = []
     lb = {}   # stakeholder -> aggregated
@@ -31202,9 +31409,9 @@ _T26_MARKETPLACE_TYPES = {"marketplace", "sor", "sis", "ecom", "ecommerce", "reg
 _T26_STAKEHOLDER_BY_TYPE = {"SOR": "Sakshi", "ECom": "Mahesh", "Website": "Kiran"}
 
 # ── QTY TARGET (Target_26-27) ───────────────────────────────────────────────────────────────
-# Qty Target = Revenue (SP) Target ÷ channel ka Average Selling Price.
-# ASP = SEP-2026 ka, cossa_orderdate ke "Selling Price" column (H) se, qty-weighted:
-#       sum(selling_price * qty) / sum(qty)   (sirf qty > 0 aur selling price > 0 wali rows).
+# Qty Target = Revenue Target ÷ channel ka Average NET REVENUE per piece (V24.53: pehle Selling Price basis tha).
+# ASP = SEP-2026 ka, cossa_orderdate ke "Net Revenue" column (I) se, qty-weighted:
+#       sum(net_revenue) / sum(qty)   (sirf qty > 0 aur net revenue > 0 wali rows).
 # Channel-wise alag ASP (Target ki wahi row-labels jo Net Revenue actual me use hoti hain).
 # Jis channel ki Sep-2026 me koi sale nahi hui uska ASP andaza:
 #   1) uske Type-group ka Sep ASP (ECom channels -> ECom, SOR vendors -> SOR),
@@ -31220,7 +31427,7 @@ def _t26_group_of(label):
 
 def _t26_asp_info(rows=None):
     """{row label: {"asp": float, "src": "own"|"group"|"proxy:<label>"|"overall"|"none", "qty": Sep sold qty}}
-    Sep-2026 cossa_orderdate se; rows fetch hone tak cache."""
+    Sep-2026 cossa_orderdate se (Net Revenue ÷ Qty); rows fetch hone tak cache."""
     if rows is None:
         try:
             rows = _drg_rows_swr()
@@ -31236,15 +31443,15 @@ def _t26_asp_info(rows=None):
         if not d or d == "N/A" or d[:7] != _T26_ASP_MONTH:
             continue
         try:
-            q = float(e.get("qty") or 0); sp = float(e.get("sp") or 0)
+            q = float(e.get("qty") or 0); nr = float(e.get("rev") or 0)   # V24.53: Net Revenue (line total), not Selling Price
         except Exception:
             continue
-        if q <= 0 or sp <= 0:
+        if q <= 0 or nr <= 0:
             continue
         lab = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
         for acc, key in ((own, lab), (grp, _t26_group_of(lab))):
-            a = acc.setdefault(key, [0.0, 0.0]); a[0] += sp * q; a[1] += q
-        tot[0] += sp * q; tot[1] += q
+            a = acc.setdefault(key, [0.0, 0.0]); a[0] += nr; a[1] += q
+        tot[0] += nr; tot[1] += q
     def _asp(a): return (a[0] / a[1]) if a and a[1] > 0 else 0.0
     overall = _asp(tot)
     exh = _t26_label("Exhibition", "B2C")
@@ -31270,7 +31477,7 @@ def _t26_asp_info(rows=None):
     return info
 
 def _t26_qty_from_sp(label, sp_target):
-    """Qty target = revenue target / Sep-2026 channel ASP (whole units)."""
+    """Qty target = revenue target / Sep-2026 channel net-revenue-per-piece (whole units)."""
     try:
         a = (_t26_asp_info().get(label) or {}).get("asp") or 0.0
     except Exception:
@@ -31360,38 +31567,68 @@ def _t26_targets_for_month(month_key, old_targets):
         out[lab] = (sp + float(t.get("sp_target") or 0), qt + float(t.get("qty_target") or 0))
     return out
 
-_DRG_RESULT_CACHE = {"key": None, "rep": None}
+_DRG_RESULT_CACHE = {"key": None, "rep": None, "by_month": {}}
 
-def _build_daily_revenue_glimpse(force=False):
+def _build_daily_revenue_glimpse(force=False, month=""):
     """Cached wrapper: same source rows + same targets + same day => same table, so lakhs of rows
     ko har request par dobara loop nahi karte (rows refresh hote hi key badal jaati hai)."""
     src_rows = _fetch_drg_source_rows(force=force)
     targets = _fetch_target_rows()
     key = (id(src_rows), len(src_rows), id(targets), now_ist().strftime("%Y-%m-%d"))
-    if _DRG_RESULT_CACHE["key"] == key and _DRG_RESULT_CACHE["rep"] is not None:
-        return _DRG_RESULT_CACHE["rep"]
-    rep = _build_daily_revenue_glimpse_uncached(src_rows, targets)
-    _DRG_RESULT_CACHE["key"] = key
+    # Month filter: sirf valid PAST month alag se banta hai; blank / current / future month = current month.
+    _cur_m = now_ist().strftime("%Y-%m")
+    month = str(month or "").strip()
+    mk = month if (re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month) and month < _cur_m) else ""
+    if _DRG_RESULT_CACHE["key"] != key:
+        _DRG_RESULT_CACHE["key"] = key
+        _DRG_RESULT_CACHE["by_month"] = {}
+    hit = _DRG_RESULT_CACHE["by_month"].get(mk)
+    if hit is not None:
+        return hit
+    rep = _build_daily_revenue_glimpse_uncached(src_rows, targets, mk)
+    _DRG_RESULT_CACHE["by_month"][mk] = rep
     _DRG_RESULT_CACHE["rep"] = rep
     return rep
 
-def _build_daily_revenue_glimpse_uncached(src_rows, targets):
+def _drg_month_options(src_rows, real_month, selected):
+    """Month dropdown: current month + pichle months jinme cossa_orderdate data hai (latest 24), naye se purane."""
+    ms = {real_month, selected}
+    for e in src_rows:
+        d = e.get("date")
+        if d and d != "N/A" and len(d) >= 7:
+            m = d[:7]
+            if m <= real_month:
+                ms.add(m)
+    return sorted((m for m in ms if m <= real_month), reverse=True)[:24]
+
+def _build_daily_revenue_glimpse_uncached(src_rows, targets, month=""):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
     Before / Yesterday / This Month Target / Achievement %. In the Target tab,
     Amazon is one consolidated cossa_orderdate bucket (standard Amazon + former
     Amazon FBA); remaining channels keep their approved
     sources. Rows are sorted by YTD revenue descending."""
 
-    today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    real_today = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    real_month = real_today.strftime("%Y-%m")
+    # Month filter: past month select ho to "aaj" = us month ke end ka agla din maana jata hai
+    # (Yesterday / Day Before = month ke aakhri 2 din), upper_dt = us month ka last day.
+    if month and month < real_month:
+        _my, _mm = int(month[:4]), int(month[5:7])
+        upper_dt = (datetime(_my, _mm, 28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        today_dt = upper_dt + timedelta(days=1)
+    else:
+        month = real_month
+        upper_dt = real_today
+        today_dt = real_today
     yest_dt  = today_dt - timedelta(days=1)
     dbef_dt  = today_dt - timedelta(days=2)
-    cm_start = today_dt.replace(day=1)
-    cur_month = today_dt.strftime("%Y-%m")
+    cm_start = upper_dt.replace(day=1)
+    cur_month = month            # selected month (target / This Month isi ka)
 
     lm_end   = cm_start - timedelta(days=1)
     lm_start = lm_end.replace(day=1)
 
-    fy_label, fy_start_dt, _fy_end_dt = fy_bounds(today_dt.replace(tzinfo=TZ))
+    fy_label, fy_start_dt, _fy_end_dt = fy_bounds(upper_dt.replace(tzinfo=TZ))
     fy_start_iso = fy_start_dt.strftime("%Y-%m-%d")
 
     yest_iso     = yest_dt.strftime("%Y-%m-%d")
@@ -31399,7 +31636,7 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets):
     lm_start_iso = lm_start.strftime("%Y-%m-%d")
     lm_end_iso   = lm_end.strftime("%Y-%m-%d")
     cm_start_iso = cm_start.strftime("%Y-%m-%d")
-    today_iso    = today_dt.strftime("%Y-%m-%d")
+    today_iso    = upper_dt.strftime("%Y-%m-%d")   # upper bound of every window (current month: aaj, past month: month end)
 
     _row_order = list(_T26_ROW_ORDER) + [_T26_LABEL_OTHERS]
     buckets = {b: {"ytd": 0.0, "last_month": 0.0, "day_before": 0.0, "yesterday": 0.0, "mtd": 0.0,
@@ -31481,11 +31718,15 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets):
     return {
         "rows": rows, "totals": tot,
         "fy_label": fy_label,
-        "month_label": today_dt.strftime("%b %Y"),
+        "month_label": upper_dt.strftime("%b %Y"),
         "yesterday_label": yest_dt.strftime("%d-%b"),
         "day_before_label": dbef_dt.strftime("%d-%b"),
         "last_month_label": lm_start.strftime("%b %Y"),
-        "title_date": today_dt.strftime("%d - %b - %Y"),
+        "title_date": upper_dt.strftime("%d - %b - %Y"),
+        "month_selected": cur_month,
+        "cur_month": real_month,
+        "is_current_month": (cur_month == real_month),
+        "months": _drg_month_options(src_rows, real_month, cur_month),
     }
 
 @app.route("/api/daily_revenue_glimpse")
@@ -31494,7 +31735,7 @@ def api_daily_revenue_glimpse():
         return jsonify({"error": "login required"}), 401
     try:
         fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
-        rep = _build_daily_revenue_glimpse(force=fresh)
+        rep = _build_daily_revenue_glimpse(force=fresh, month=request.args.get("month", ""))
         return jsonify(rep)
     except Exception as e:
         return jsonify({"error": f"daily revenue glimpse build failed: {e}"}), 500
@@ -32936,11 +33177,11 @@ def api_daily_revenue_glimpse_export_xlsx():
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
 
-        rep = _build_daily_revenue_glimpse()
+        rep = _build_daily_revenue_glimpse(month=request.args.get("month", ""))
         rows = rep["rows"]
         tot  = rep["totals"]
         today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-        title_txt = today_dt.strftime("%d - %b - %Y")
+        title_txt = rep.get("title_date") or today_dt.strftime("%d - %b - %Y")
 
         headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
                    "Yesterday", "This Month Target", "Achievement %",
@@ -33040,7 +33281,8 @@ def api_daily_revenue_glimpse_export_xlsx():
         bio = io.BytesIO()
         wb.save(bio)
         bio.seek(0)
-        fname = f"daily_revenue_glimpse_{today_dt.strftime('%Y-%m-%d')}.xlsx"
+        fname = (f"daily_revenue_glimpse_{rep.get('month_selected')}.xlsx" if rep.get("is_current_month") is False
+                 else f"daily_revenue_glimpse_{today_dt.strftime('%Y-%m-%d')}.xlsx")
         resp = app.response_class(
             bio.read(),
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
