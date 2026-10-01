@@ -15562,6 +15562,17 @@ window.renderHome = renderHome;
 let _tgtData = null;
 let _tgtFilled = false;
 let _tgtAbort = null;
+/* Target tab har baar kholne par 4 heavy tables dobara fetch hoti thi (+ "Loading…" flash). Ab 2 min tak
+   agar chaaron tables load ho chuki hain to dobara fetch nahi hota (Refresh buttons force-reload karte hain).
+   Pehli baar: Target + Glimpse turant, baaki do thodi der baad — server par ek saath 4 bhaari request nahi. */
+let _tgtTabStamp = 0;
+function _tgtTabOpen(){
+  const allLoaded = _tgtData && _drgData && _drgMarketplaceData && _dtrData;
+  if (allLoaded && (Date.now() - _tgtTabStamp) < 120000) return;
+  _tgtTabStamp = Date.now();
+  loadTarget(); loadDRG();
+  setTimeout(()=>{ try{ loadDRGMarketplace(false); loadDTR(false); }catch(e){console.error(e);} }, 500);
+}
 function loadTarget(){
   const host = document.getElementById('tgtContent');
   if (!host) return;
@@ -15800,17 +15811,18 @@ let _drgData = null;
 function loadDRG(force=false){
   const host = document.getElementById('drgContent');
   if (!host) return;
-  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
+  if (_drgData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading…</div>';
   const url = '/api/daily_revenue_glimpse' + (force ? '?fresh=1' : '');
   fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      host.style.opacity = '';
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       d.rows = _targetMergeAmazonRows(d.rows);
       _drgData = d;
       renderDRGTable();
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
 function drgFmtNum(n){
   // Indian comma-grouping (matches [>=10000000]##,##,##,##0;[>=100000]##,##,##0;##,##0)
@@ -15906,17 +15918,18 @@ let _drgMarketplaceData = null;
 function loadDRGMarketplace(force=false){
   const host = document.getElementById('drgMarketplaceContent');
   if (!host) return;
-  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
+  if (_drgMarketplaceData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
   const url = '/api/daily_revenue_glimpse_marketplace' + (force ? '?fresh=1' : '');
   fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      host.style.opacity = '';
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       d.rows = _targetMergeAmazonRows(d.rows);
       _drgMarketplaceData = d;
       renderDRGMarketplaceTable();
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
 function renderDRGMarketplaceTable(){
   const host = document.getElementById('drgMarketplaceContent');
@@ -16009,7 +16022,7 @@ function _dtrAsOfParam(){
 function loadDTR(force=false){
   const host = document.getElementById('dtrContent');
   if (!host) return;
-  host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
+  if (_dtrData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
   const qs = [];
   const asof = _dtrAsOfParam();
   if (asof) qs.push('asof=' + encodeURIComponent(asof));
@@ -16017,13 +16030,14 @@ function loadDTR(force=false){
   fetch('/api/daily_target_report' + (qs.length ? '?' + qs.join('&') : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      host.style.opacity = '';
       if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
       _dtrData = d;
       const el = document.getElementById('dtrAsOf');
       if (el && !el.value) el.value = d.asof;
       renderDTRTable();
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
 }
 function _dtrPct(v){
   if (v === null || v === undefined) return '';
@@ -24167,7 +24181,7 @@ showTab = function(t){
   if (t === 'weboos') setTimeout(()=>{ try{ loadWebsiteOos(false); }catch(e){console.error(e);} }, 0);
   if (t === 'matrix')   setTimeout(()=>{ try{ renderSkuChecklist(); applyF(); }catch(e){console.error(e);} }, 0);
   if (t === 'insights') setTimeout(()=>{ try{ renderInsights(); }catch(e){console.error(e);} }, 0);
-  if (t === 'target')   setTimeout(()=>{ try{ loadTarget(); loadDRG(); loadDRGMarketplace(false); loadDTR(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'target')   setTimeout(()=>{ try{ _tgtTabOpen(); }catch(e){console.error(e);} }, 0);
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'wipreceive') setTimeout(()=>{ try{ loadWipReceive(false); }catch(e){console.error(e);} }, 0);
@@ -29569,6 +29583,32 @@ _DRG_SRC_CACHE = {"rows": None, "ts": 0}
 _DRG_FETCH_LOCK = threading.Lock()
 _DRG_BG = {"running": False}
 
+# cossa_orderdate poori CSV Target tab ke andar 2 jagah download hoti thi (Glimpse/Target rows + Daily Target).
+# Ab ek hi download 60 sec tak share hota hai (lock ke saath, taaki parallel requests ek hi fetch ka wait karein)
+# aur RAM bachane ke liye frame TTL ke baad apne aap chhod diya jaata hai.
+_COSSA_OD_SHARED = {"df": None, "ts": 0.0}
+_COSSA_OD_LOCK = threading.Lock()
+_COSSA_OD_SHARE_TTL = 60
+def _fetch_cossa_orderdate_shared(force=False):
+    with _COSSA_OD_LOCK:
+        df = _COSSA_OD_SHARED["df"]
+        age = time.time() - float(_COSSA_OD_SHARED["ts"] or 0)
+        if df is not None and age < (5 if force else _COSSA_OD_SHARE_TTL):
+            return df
+        df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+        _COSSA_OD_SHARED["df"] = df
+        _COSSA_OD_SHARED["ts"] = time.time()
+        def _drop():
+            try:
+                if time.time() - float(_COSSA_OD_SHARED["ts"] or 0) >= _COSSA_OD_SHARE_TTL:
+                    _COSSA_OD_SHARED["df"] = None
+            except Exception:
+                pass
+        _t = threading.Timer(_COSSA_OD_SHARE_TTL + 2, _drop)
+        _t.daemon = True
+        _t.start()
+        return df
+
 def _fetch_drg_source_rows(force=False):
     """Lock wrapper: Target tab pe 4 tables ek saath load hote hain (Target, Glimpse, Marketplace,
     Daily Target) — pehle cache expire hone par sab alag-alag poori cossa_orderdate CSV download karte
@@ -29611,7 +29651,7 @@ def _fetch_drg_source_rows_impl(force=False):
     if (not force and _DRG_SRC_CACHE["rows"] is not None
             and time.time() - _DRG_SRC_CACHE["ts"] < 600):
         return _DRG_SRC_CACHE["rows"]
-    df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+    df = _fetch_cossa_orderdate_shared(force=force)
     df.columns = [str(c).strip() for c in df.columns]
     cols = list(df.columns)
     def _at(i): return cols[i] if len(cols) > i else None
@@ -29629,41 +29669,96 @@ def _fetch_drg_source_rows_impl(force=False):
 
     out = []
     _blinkit_fallback = []   # cossa_orderdate ke Blinkit rows — COSA fetch fail/khaali ho to inhe use karte hain
-    for _, r in df.iterrows():
-        dt = parse_date_any(r.get(C_DATE, "")) if C_DATE else None
-        if dt is None:
+    # PERFORMANCE: df.iterrows() + har row pe regex/normalise ki jagah column lists par zip karte hain aur
+    # date / number / (customer,type) ka kaam har DISTINCT value par ek hi baar karte hain (lakhs rows me
+    # values bahut repeat hoti hain). Output pehle jaisa hi hai.
+    def _colvals(c):
+        if not c:
+            return None
+        try:
+            return df.iloc[:, cols.index(c)].tolist()
+        except Exception:
+            return None
+    _n = len(df)
+    _blank = [None] * _n
+    _v_date, _v_rev, _v_sp = _colvals(C_DATE), _colvals(C_REV), _colvals(C_SP)
+    _v_qty, _v_cust, _v_type = _colvals(C_QTY), _colvals(C_CUST), _colvals(C_TYPE)
+    _date_memo, _num_memo, _id_memo = {}, {}, {}
+    for _dv, _rv, _sv, _qv, _cv, _tv in zip(_v_date or _blank, _v_rev or _blank, _v_sp or _blank,
+                                              _v_qty or _blank, _v_cust or _blank, _v_type or _blank):
+        if not C_DATE:
             continue
-        rev = to_num(r.get(C_REV, 0)) if C_REV else 0.0
-        selling_price = to_num(r.get(C_SP, 0)) if C_SP else 0.0
+        _dk = str(_dv)
+        if _dk in _date_memo:
+            _iso = _date_memo[_dk]
+        else:
+            _dt0 = parse_date_any(_dv)
+            _iso = _dt0.strftime("%Y-%m-%d") if _dt0 is not None else None
+            _date_memo[_dk] = _iso
+        if _iso is None:
+            continue
+        if C_REV:
+            _k = str(_rv)
+            rev = _num_memo.get(_k)
+            if rev is None:
+                rev = _num_memo[_k] = to_num(_rv)
+        else:
+            rev = 0.0
+        if C_SP:
+            _k = str(_sv)
+            selling_price = _num_memo.get(_k)
+            if selling_price is None:
+                selling_price = _num_memo[_k] = to_num(_sv)
+        else:
+            selling_price = 0.0
         # Qty = cossa_orderdate Final Qty (same column the rest of the app uses).
-        row_qty = to_num(r.get(C_QTY, 0)) if C_QTY else 0.0
+        if C_QTY:
+            _k = str(_qv)
+            row_qty = _num_memo.get(_k)
+            if row_qty is None:
+                row_qty = _num_memo[_k] = to_num(_qv)
+        else:
+            row_qty = 0.0
         if not (-100000 <= row_qty <= 100000):
             row_qty = 0.0
-        raw_cust_value = r.get(C_CUST, "Unknown") if C_CUST else "Unknown"
-        raw_type_value = r.get(C_TYPE, "Regular") if C_TYPE else "Regular"
-        raw_amazon_fba = _is_amazon_fba_value(raw_cust_value, raw_type_value)
-        cust = norm_cust(raw_cust_value)
-        raw_typ = norm_type(raw_type_value)
-        legacy_amazon_source = bool(raw_amazon_fba or _is_amazon_fba_value(cust, raw_typ))
-        cust, typ = _merge_amazon_identity(cust, raw_typ)
+        raw_cust_value = _cv if C_CUST else "Unknown"
+        raw_type_value = _tv if C_TYPE else "Regular"
+        _ik = (str(raw_cust_value), str(raw_type_value))
+        _idn = _id_memo.get(_ik)
+        if _idn is None:
+            raw_amazon_fba = _is_amazon_fba_value(raw_cust_value, raw_type_value)
+            cust = norm_cust(raw_cust_value)
+            raw_typ = norm_type(raw_type_value)
+            legacy_amazon_source = bool(raw_amazon_fba or _is_amazon_fba_value(cust, raw_typ))
+            cust, typ = _merge_amazon_identity(cust, raw_typ)
+            _is_blk = "blinkit" in str(cust or "").casefold()
+            if _is_blk:
+                channel = sub_channel = ""
+                target_amazon_merged = False
+            else:
+                channel = calc_channel(cust, typ)
+                sub_channel = calc_sub_channel(cust, channel, typ)
+                # Target-tab rule: cossa_orderdate is already the consolidated Amazon
+                # family source. Do not drop rows merely because the source no longer
+                # preserves a separate "Amazon FBA" label; every Amazon row belongs to
+                # the single Amazon bucket here.
+                target_amazon_merged = (str(sub_channel or "").strip().casefold() == "amazon")
+            _idn = _id_memo[_ik] = (cust, typ, channel, sub_channel, bool(legacy_amazon_source),
+                                    bool(target_amazon_merged), _is_blk,
+                                    str(clean(raw_cust_value, "")), str(clean(raw_type_value, "")))
+        (cust, typ, channel, sub_channel, legacy_amazon_source, target_amazon_merged,
+         _is_blk, _raw_c, _raw_t) = _idn
         # Blinkit is sourced separately from the main COSA Net Revenue column I
         # below, so skip its cossa_orderdate copy here to prevent double count.
-        if "blinkit" in str(cust or "").casefold():
+        if _is_blk:
             _blinkit_fallback.append({
-                "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(row_qty), "sp": float(selling_price),
+                "date": _iso, "rev": float(rev), "qty": float(row_qty), "sp": float(selling_price),
                 "channel": "", "sub_channel": "", "type": "Blinkit", "customer": cust,
-                "raw_customer": str(clean(raw_cust_value, "")), "raw_type": "Blinkit",
+                "raw_customer": _raw_c, "raw_type": "Blinkit",
             })
             continue
-        channel = calc_channel(cust, typ)
-        sub_channel = calc_sub_channel(cust, channel, typ)
-        # Target-tab rule: cossa_orderdate is already the consolidated Amazon
-        # family source. Do not drop rows merely because the source no longer
-        # preserves a separate "Amazon FBA" label; every Amazon row belongs to
-        # the single Amazon bucket here.
-        target_amazon_merged = (str(sub_channel or "").strip().casefold() == "amazon")
         out.append({
-            "date": dt.strftime("%Y-%m-%d"),
+            "date": _iso,
             "rev": rev,
             "qty": float(row_qty),
             "sp": selling_price,
@@ -29673,10 +29768,10 @@ def _fetch_drg_source_rows_impl(force=False):
             # Keep Customer Name so the marketplace-source variant can identify
             # Amazon FBA and exclude Blinkit from its cossa_orderdate fallback.
             "customer": cust,
-            "raw_customer": str(clean(raw_cust_value, "")),
-            "raw_type": str(clean(raw_type_value, "")),
-            "legacy_amazon_source": bool(legacy_amazon_source),
-            "target_amazon_merged": bool(target_amazon_merged),
+            "raw_customer": _raw_c,
+            "raw_type": _raw_t,
+            "legacy_amazon_source": legacy_amazon_source,
+            "target_amazon_merged": target_amazon_merged,
         })
 
     # Amazon is intentionally NOT appended again from the combined
@@ -30299,7 +30394,7 @@ def _dtr_fetch_daily(force=False):
     if (not force and _DTR_CACHE["daily"] is not None
             and time.time() - _DTR_CACHE["ts"] < _DTR_TTL):
         return _DTR_CACHE["daily"], (_DTR_CACHE["meta"] or {})
-    df = _fetch_csv_fresh(COSA_ORDERDATE_URL)
+    df = _fetch_cossa_orderdate_shared(force=force)
     df.columns = [str(c).strip() for c in df.columns]
     cols = list(df.columns)
 
@@ -30833,14 +30928,27 @@ def _t26_targets_for_month(month_key, old_targets):
         out[lab] = (sp + float(t.get("sp_target") or 0), qt + float(t.get("qty_target") or 0))
     return out
 
+_DRG_RESULT_CACHE = {"key": None, "rep": None}
+
 def _build_daily_revenue_glimpse(force=False):
+    """Cached wrapper: same source rows + same targets + same day => same table, so lakhs of rows
+    ko har request par dobara loop nahi karte (rows refresh hote hi key badal jaati hai)."""
+    src_rows = _fetch_drg_source_rows(force=force)
+    targets = _fetch_target_rows()
+    key = (id(src_rows), len(src_rows), id(targets), now_ist().strftime("%Y-%m-%d"))
+    if _DRG_RESULT_CACHE["key"] == key and _DRG_RESULT_CACHE["rep"] is not None:
+        return _DRG_RESULT_CACHE["rep"]
+    rep = _build_daily_revenue_glimpse_uncached(src_rows, targets)
+    _DRG_RESULT_CACHE["key"] = key
+    _DRG_RESULT_CACHE["rep"] = rep
+    return rep
+
+def _build_daily_revenue_glimpse_uncached(src_rows, targets):
     """Daily Revenue Glimpse: channel-wise YTD / Last Month / This Month / Day
     Before / Yesterday / This Month Target / Achievement %. In the Target tab,
     Amazon is one consolidated cossa_orderdate bucket (standard Amazon + former
     Amazon FBA); remaining channels keep their approved
     sources. Rows are sorted by YTD revenue descending."""
-    src_rows = _fetch_drg_source_rows(force=force)
-    targets = _fetch_target_rows()
 
     today_dt = now_ist().replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     yest_dt  = today_dt - timedelta(days=1)
@@ -30870,6 +30978,11 @@ def _build_daily_revenue_glimpse(force=False):
     for e in src_rows:
         d = e.get("date")
         if not d or d == "N/A":
+            continue
+        # Sirf ye 5 windows (FY start se aaj tak / kal / parso / last month / is month) count hote hain —
+        # inke bahar ki row ko bucket / float conversion tak jaane hi nahi dete.
+        if not (d >= fy_start_iso and d <= today_iso) and d != yest_iso and d != dbef_iso \
+                and not (lm_start_iso <= d <= lm_end_iso):
             continue
         rev = float(e.get("rev") or 0)
         b = _t26_bucket(e.get("raw_customer") or e.get("customer"), e.get("raw_type") or e.get("type"))
