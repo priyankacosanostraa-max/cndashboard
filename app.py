@@ -1,3 +1,11 @@
+# Cosa Nostraa — V24.46 (SOR: ONLINE ORDER / OFFLINE SALES COLUMN FROM "Daily sales" TAB · PSL ONLINE/OFFLINE FILTERS REMOVED)
+# - Daily sales tab (F = VAN, G = Type, H = SKU, I = Qty, X = Dispatch/Order Date) se SOR rows ka mode nikalta hai:
+#   F = "Offline Sales" -> "Offline Sales", SOR ke liye F me kuch bhi aur (ya blank) -> "Online Order".
+# - Match: cossa (Dispatch Date) aur cossa_orderdate (Order Date) dono me date + SKU (+qty) se, ek Daily-sales row sirf ek
+#   hi baar consume hoti hai (koi double count nahi). Sirf label add hota hai — qty/revenue/rows me koi change nahi.
+# - Naya column "Online/Offline" dashboard ki transaction tables + sabhi exports (CSV/Excel/PDF) me.
+# - PSL Retail Online / PSL Retail Offline filters hata diye — ab sirf ek "PSL Retail" (PSL RETAIL PRIVATE LIMITED).
+# ============================================================
 # Cosa Nostraa — V24.45 (QTY TARGET = REVENUE TARGET / CHANNEL ASP)
 # - Target_26-27 (Oct-26..Mar-27) Qty Target ab auto: SP Target ÷ channel ka Sep-2026 Average Selling Price
 #   (cossa_orderdate "Selling Price" col, qty-weighted). Jis channel ki Sep me sale nahi -> Type-group /
@@ -597,6 +605,7 @@ INV_LIVE_SPREADSHEET_ID = os.environ.get("INV_LIVE_SPREADSHEET_ID", "1xCW5ZHlVcy
 INV_LIVE_GID = os.environ.get("INV_LIVE_GID", "721993413").strip()   # Final
 INV_URL   = os.environ.get("INV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv").strip()
 COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
+DAILY_SALES_URL = os.environ.get("DAILY_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1170700346&single=true&output=csv").strip()
 COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
 # Historical sales are stored beside this script by default. Railway/GitHub
 # deployments can override the location with HISTORICAL_SALES_XLSX. The two
@@ -1268,20 +1277,110 @@ _PSL_SUB_LABEL = "PSL Retail"
 _PSL_SUB_ONLINE = "PSL Retail Online"
 _PSL_SUB_OFFLINE = "PSL Retail Offline"
 def _psl_sub_label(customer):
-    """PSL RETAIL PRIVATE LIMITED Online / Offline -> alag sub-channel label (filters ke liye).
-    Customer naam me na Online na Offline ho to plain 'PSL Retail' hi rehta hai (guess nahi)."""
-    compact = re.sub(r"[^a-z0-9]", "", str(customer or "").casefold())
-    if "offline" in compact:
-        return _PSL_SUB_OFFLINE
-    if "online" in compact:
-        return _PSL_SUB_ONLINE
+    """V24.46: PSL RETAIL PRIVATE LIMITED ab SIRF ek sub-channel ('PSL Retail'). Online/Offline filters hata diye —
+    Online/Offline ab har transaction row ke 'Online/Offline' column me (Daily sales tab ke F column se) dikhta hai."""
     return _PSL_SUB_LABEL
-_SOR_SUB_PRESET = []
-for _k in _SOR_CHANNEL_KEYS:
-    if _k[0] == _PSL_SUB_LABEL:
-        _SOR_SUB_PRESET += [_PSL_SUB_ONLINE, _PSL_SUB_OFFLINE]
-    else:
-        _SOR_SUB_PRESET.append(_k[0])
+_SOR_SUB_PRESET = [_k[0] for _k in _SOR_CHANNEL_KEYS]
+
+# ── V24.46: Daily sales tab -> SOR "Offline Sales" / "Online Order" ─────────────────────────────
+_SALE_MODE_OFFLINE = "Offline Sales"
+_SALE_MODE_ONLINE = "Online Order"
+
+def _sale_mode_sku_key(sku):
+    return re.sub(r"[^A-Z0-9]", "", str(sku or "").upper())
+
+def _sale_mode_base_key(sku):
+    return "B:" + _sale_mode_sku_key(str(sku or "").strip().upper().split("_")[0])
+
+def _fetch_daily_sales_safe():
+    """Daily sales tab fetch — fail hone par dashboard na rukey (sirf Online/Offline column khaali rahega)."""
+    try:
+        return _fetch_csv_fresh(DAILY_SALES_URL), ""
+    except Exception as e:
+        return None, str(e)
+
+def _build_sale_mode_index(df, dbg=None):
+    """Daily sales (Type = SOR rows) ->  {(date, sku): [row ids]}.  F (VAN) = 'Offline Sales' -> Offline Sales,
+    SOR ke liye F me kuch bhi aur / blank -> Online Order.  Date = X column (Dispatch Date == Order Date)."""
+    if df is None or len(df) == 0:
+        return None
+    cols = [str(c).strip() for c in df.columns]
+    df.columns = cols
+    def at(i): return cols[i] if len(cols) > i else None
+    def nk(c): return re.sub(r"[^a-z0-9]", "", str(c).lower())
+    c_van  = next((c for c in cols if nk(c) == "van"), None) or at(5)       # F
+    c_type = next((c for c in cols if nk(c) == "type"), None) or at(6)      # G
+    c_sku  = next((c for c in cols if nk(c) in ("skuno", "sku")), None) or at(7)   # H
+    c_qty  = next((c for c in cols if nk(c) in ("qty", "quantity")), None) or at(8)  # I
+    date_cands = []
+    if at(23): date_cands.append(at(23))                                     # X (Dispatch Date = Order Date)
+    date_cands += [c for c in cols if (nk(c).startswith("dispatchdate") or nk(c).startswith("orderdate")) and c not in date_cands]
+    if at(13) and at(13) not in date_cands: date_cands.append(at(13))        # N (screenshot me Dispatch Date)
+    try:
+        sample = pd.concat([df.head(300), df.tail(300)])
+    except Exception:
+        sample = df
+    c_date = None
+    for c in date_cands:
+        vals = [v for v in sample[c].tolist() if clean(v)]
+        if vals and sum(1 for v in vals if parse_date_any(v) is not None) / len(vals) >= 0.5:
+            c_date = c
+            break
+    if not (c_van and c_type and c_sku and c_date):
+        if dbg is not None:
+            dbg["errors"].append(f"daily_sales: columns not resolved van={c_van} type={c_type} sku={c_sku} date={c_date}")
+        return None
+    rows, pools = [], {}
+    n_off = n_on = 0
+    for van, typ, sku, qty, dv in zip(df[c_van].tolist(), df[c_type].tolist(), df[c_sku].tolist(),
+                                      (df[c_qty].tolist() if c_qty else [0] * len(df)), df[c_date].tolist()):
+        if re.sub(r"[^a-z0-9]", "", str(typ or "").casefold()) not in ("sor", "sis"):
+            continue
+        dt = parse_date_any(dv)
+        sk = _sale_mode_sku_key(sku)
+        if dt is None or not sk:
+            continue
+        van_c = re.sub(r"[^a-z0-9]", "", str(van or "").casefold())
+        if van_c.startswith("offline"):
+            label = _SALE_MODE_OFFLINE; n_off += 1
+        else:
+            label = _SALE_MODE_ONLINE; n_on += 1
+        iso = dt.strftime("%Y-%m-%d")
+        rid = len(rows)
+        rows.append((label, to_num(qty)))
+        pools.setdefault((iso, sk), []).append(rid)
+        pools.setdefault((iso, _sale_mode_base_key(sku)), []).append(rid)
+    if dbg is not None:
+        dbg["daily_sales_mode"] = {"van": c_van, "type": c_type, "sku": c_sku, "qty": c_qty, "date": c_date,
+                                   "sor_rows": len(rows), "offline": n_off, "online": n_on}
+    return {"rows": rows, "pools": pools}
+
+class _SaleModeMatcher:
+    """Ek source (cossa ya cossa_orderdate) ke liye matcher. Har Daily-sales row ek hi baar consume hoti hai,
+    taaki ek hi sale do baar match/double na ho."""
+    def __init__(self, index):
+        self.idx = index
+        self.used = set()
+        self.hit = 0
+        self.miss = 0
+    def mode(self, date_iso, raw_sku, qty):
+        if not self.idx or not date_iso or date_iso == "N/A":
+            return ""
+        pools, rows = self.idx["pools"], self.idx["rows"]
+        for key in ((date_iso, _sale_mode_sku_key(raw_sku)), (date_iso, _sale_mode_base_key(raw_sku))):
+            cand = pools.get(key)
+            if not cand:
+                continue
+            free = [i for i in cand if i not in self.used]
+            if free:
+                pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9), free[0])
+                self.used.add(pick)
+            else:
+                pick = next((i for i in cand if abs(rows[i][1] - qty) < 1e-9), cand[0])
+            self.hit += 1
+            return rows[pick][0]
+        self.miss += 1
+        return ""
 _OTHER_ECOM_LABEL = "Other ECom"
 
 def _match_channel_keys(customer, table):
@@ -2628,17 +2727,20 @@ def get_data(force=False):
 def _refresh_data():
     global CACHE, _PRODUCT_IMAGE_URL_BY_SKU
     dbg = {"errors": []}
+    daily_sales_df, daily_sales_err = None, ""
     try:
         # Inventory and the main sales sheet are independent. Downloading them
         # in parallel removes one full network wait from every cold/manual sync
         # while keeping the exact same downstream calculations.
         from concurrent.futures import ThreadPoolExecutor
         _wstage("fetching", "Downloading inventory + sales sheets in parallel…")
-        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="cn-core-fetch") as ex:
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="cn-core-fetch") as ex:
             f_inv = ex.submit(_fetch_inventory_fresh)
             f_cosa = ex.submit(_fetch_csv_fresh, COSA_URL)
+            f_daily = ex.submit(_fetch_daily_sales_safe)
             inv = f_inv.result()
             cosa = f_cosa.result()
+            daily_sales_df, daily_sales_err = f_daily.result()
         _DF_REFS["inv"] = inv; _DF_REFS["cosa"] = cosa
         inv.columns   = [str(c).strip() for c in inv.columns]
         cosa.columns = [str(c).strip() for c in cosa.columns]
@@ -3414,6 +3516,17 @@ def _refresh_data():
     ly_label = ly_start.strftime("%b %Y")
     kpi_last_month = kpi_last_year_month = 0.0
 
+    # V24.46: Daily sales tab se SOR "Offline Sales / Online Order" index (sirf label — qty/revenue untouched)
+    sale_mode_idx = None
+    try:
+        if daily_sales_df is not None:
+            sale_mode_idx = _build_sale_mode_index(daily_sales_df, dbg)
+        elif daily_sales_err:
+            dbg["errors"].append(f"daily_sales: {daily_sales_err}")
+    except Exception as e:
+        dbg["errors"].append(f"daily_sales: {e}")
+    daily_sales_df = None
+    sale_matcher_main = _SaleModeMatcher(sale_mode_idx)
     _fuzzy_cache = {}
     # SPEED: prefix buckets — fuzzy sirf same-prefix SKUs par chale (10k -> ~50 candidates)
     _prefix_buckets = {}
@@ -3529,11 +3642,16 @@ def _refresh_data():
         entry = {"qty":qty,"rev":rev,"sp":sp,"sp_valid":sp_valid,"ret":ret,"ret_amt":float(ret*sp),
                  "date":_si(date_iso),"order_date":_si(order_date_iso),"cust":_si(cust),"type":_si(typ),
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
+        if channel == "SOR":
+            # Dispatch-date based sheet -> Daily sales ko Dispatch Date (X) se match
+            _sm = sale_matcher_main.mode(date_iso, raw_sku, qty)
+            if _sm: entry["sale_mode"] = _si(_sm)
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
         sales_exact[mapped_sku]["entries"].append(entry)
         sales_exact[mapped_sku]["total_rev"] += rev
 
+    dbg["sale_mode_main"] = {"matched": sale_matcher_main.hit, "unmatched": sale_matcher_main.miss}
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
     try:
         del cosa
@@ -3622,6 +3740,7 @@ def _refresh_data():
         }
 
         od_total = len(cosa_od)
+        sale_matcher_od = _SaleModeMatcher(sale_mode_idx)
         for od_i, r in enumerate(_df_chunks(cosa_od)):
             if (od_i % 3000) == 0:
                 _wstage("processing", "Indexing Rakhi orders by Order Date…", od_i, od_total)
@@ -3751,6 +3870,12 @@ def _refresh_data():
                 "cust": _si(cust), "type": _si(typ),
                 "channel": _si(channel), "sub_channel": _si(sub_channel),
             }
+            if channel == "SOR":
+                # Order-date based sheet -> Daily sales ko Order Date (X) se match
+                _sm_od = sale_matcher_od.mode(order_date_iso, raw_sku, qty)
+                if _sm_od:
+                    entry["sale_mode"] = _si(_sm_od)
+                    order_entry["sale_mode"] = _si(_sm_od)
             all_bucket = orderdate_sales_exact.setdefault(mapped_sku, {"entries": [], "total_rev": 0.0})
             all_bucket["entries"].append(order_entry)
             all_bucket["total_rev"] += rev
@@ -3762,6 +3887,7 @@ def _refresh_data():
                 bucket["entries"].append(entry)
                 bucket["total_rev"] += rev
 
+        dbg["sale_mode_orderdate"] = {"matched": sale_matcher_od.hit, "unmatched": sale_matcher_od.miss}
         dbg["cossa_orderdate_all_skus"] = len(orderdate_sales_exact)
         dbg["cossa_orderdate_all_rows"] = sum(len(v.get("entries", [])) for v in orderdate_sales_exact.values())
         dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
@@ -8615,6 +8741,7 @@ select.lg-in option{background:#fff;color:#1a1610}
             <th>Customer</th>
             <th>Type</th>
             <th>Channel</th>
+            <th>Online/Offline</th>
             <th>Individual Sold</th>
             <th class="rev-only">Avg Selling Price</th>
             <th class="rev-only">Discount %</th>
@@ -11501,7 +11628,8 @@ const _SD_SOR_MARKETPLACES = [
 ];
 // SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
 const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Join Commerce','Qcom','Other ECom'];
-const _SD_SOR_OPTIONS  = ['PSL Retail Online','PSL Retail Offline','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
+function saleModeText(e){ return String((e && e.sale_mode) || '').trim(); }
+const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
@@ -12189,13 +12317,14 @@ function renderSdTable(){
       <td>${safeText(e.cust)}</td>
       <td>${safeText(e.type)}</td>
       <td>${safeText(e.channel)}</td>
+      <td>${safeText(saleModeText(e) || '—')}</td>
       <td class="gold">${q}</td>
       <td class="rev-only">${cnxAvgSpText(sp)}</td>
       <td class="rev-only">${dPct===null?'—':dPct+'%'}</td>
       <td class="rev-only green">${fmt(rv)}</td>
     </tr>`;
     }).join('')
-    : '<tr><td colspan="8" class="tno-data" style="padding:30px">No transactions for the selected filters.</td></tr>';
+    : '<tr><td colspan="9" class="tno-data" style="padding:30px">No transactions for the selected filters.</td></tr>';
   }
 }
 
@@ -12500,7 +12629,7 @@ function exportSD(fmtType){
   const productDiscountContext = _sdMarketplaceProductDiscountContext(item);
   const exportSellThrough = _sdSellThroughStats(item, ents);
   const filteredArithmeticAsp=(()=>{const vals=ents.filter(e=>e&&e.sp_valid===true&&Number.isFinite(Number(e.sp))).map(e=>Number(e.sp));return vals.length?vals.reduce((s,n)=>s+n,0)/vals.length:null;})();
-  const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Individual Sold','In CMBs Sold','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Avg Selling Price','Discount %','Net Revenue']), 'Image Link'];
+  const headers = ['Dispatch Date','SKU','SKU Name','CN Name','CN Class','Stone Color','Product Dimensions','Customer','Type','Channel','Online/Offline','Individual Sold','In CMBs Sold','Filtered STR', 'MRP', ...(emp0 ? [] : ['Selling Price','Avg Selling Price','Discount %','Net Revenue']), 'Image Link'];
   const data = ents.map(e => {
     const q = parseFloat(e.qty) || 0;
     const sourceDisc = _sdProductDiscountForEntry(item,e,productDiscountContext);
@@ -12519,6 +12648,7 @@ function exportSD(fmtType){
       Customer: e.cust,
       Type: e.type,
       Channel: e.channel || '',
+      'Online/Offline': saleModeText(e),
       'Individual Sold': q,
       'In CMBs Sold': 0,
       'Filtered STR': exportSellThrough.rate.toFixed(1) + '%',
@@ -13453,7 +13583,7 @@ function applyF(){
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
             <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
-            <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
+            <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td>${safeText(saleModeText(t) || '—')}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td>
             <td class="gold"><b>${Math.round(Number(t.qty)||0)}</b></td></tr>`;
@@ -13488,7 +13618,7 @@ function applyF(){
             <div style="display:flex;gap:8px;flex-wrap:wrap">${exportBtns('transactions')}</div>
           </div>
           <table class="ro"><thead><tr>
-            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>`}
+            ${monthMode ? `<th>Month</th><th>SKU</th><th>CN Name</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Total Sold Qty</th><th>Last 1 Year Sold Qty</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>` : `<th>Dispatch Date</th><th>SKU</th><th>Customer</th><th>Type</th><th>Online/Offline</th><th>Individual Sold</th><th>In CMBs Sold</th><th>Avg Selling Price</th>${empF?'':'<th>Net Revenue</th>'}<th>Inv Stock</th><th>Inv (WIP)</th><th>Blocked Qty</th><th>Total Sold</th>`}
           </tr></thead><tbody>${rowsHtml}</tbody></table>
           ${monthMode ? `<div class="ops-note">Month-wise SKU totals for selected months. <b>Last 1 Year Sold Qty</b> = ${matrixMonthLabel(rollingYear.start.slice(0,7))} to ${matrixMonthLabel(rollingYear.end.slice(0,7))}, using the same active business filters.</div>` : ''}
           ${displayTxns.length > MATRIX_RENDER_CAP ? `<div class="ops-note">Showing latest ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} rows. Export includes all rows.</div>` : ''}</div>
@@ -13594,7 +13724,7 @@ function _matrixBuildPayload(kind){
       }
       const qty0 = parseFloat(t.qty) || 0;
       return {
-        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type,
+        date: t.date === 'N/A' ? '' : t.date, sku: t.sku, cn_name: iv.cn || '', customer: t.cust, type: t.type, sale_mode: saleModeText(t),
         qty: qty0, combo_qty: 0, avg_selling_price:t.avg_selling_price==null?null:Number(t.avg_selling_price), revenue: showRev ? _matrixRevenueExportValue(t.rev) : null,
         inv_stock: parseInt(iv.s) || 0, inv_wip: parseInt(iv.w) || 0, blocked_qty: parseInt(iv.b) || 0,
         image_url: iv.img || '', total_sold: qty0
@@ -13637,9 +13767,9 @@ function exportMatrixCSV(kind){
         return line;
       });
     }else{
-      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Individual Sold','In CMBs Sold','Avg Selling Price'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Total Sold']);
+      headers = ['Dispatch Date','SKU','CN Name','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','Avg Selling Price'].concat(showRev ? ['Net Revenue'] : []).concat(['Inv Stock','Inv (WIP)','Blocked Qty','Image Link','Total Sold']);
       csvRows = rows.map(r => {
-        const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.qty, r.combo_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2))];
+        const line = [r.date, r.sku, r.cn_name||'', r.customer, r.type, r.sale_mode||'', r.qty, r.combo_qty||0,r.avg_selling_price==null?'':Number(r.avg_selling_price.toFixed(2))];
         if (showRev) line.push(r.revenue);
         line.push(r.inv_stock, r.inv_wip, r.blocked_qty, r.image_url, r.total_sold||0);
         return line;
@@ -13954,6 +14084,7 @@ function applyRO(){
       <th>Customer</th>
       <th>Type</th>
       <th>Channel</th>
+      <th>Online/Offline</th>
       <th>Individual Sold</th>
       <th>In CMBs Sold</th>
       ${empTx ? '' : '<th>Avg Selling Price</th>'}
@@ -13991,6 +14122,7 @@ function applyRO(){
         <td>${safeText(t.cust)}</td>
         <td>${safeText(t.type)}</td>
         <td>${safeText(t.channel)}</td>
+        <td>${safeText(saleModeText(t) || '—')}</td>
         <td class="gold">${tq}</td>
         <td class="muted">0</td>
         ${empTx ? '' : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`}
@@ -14002,7 +14134,7 @@ function applyRO(){
         <td class="gold"><b>${Math.round(tq)}</b></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
-      ? `<tr><td colspan="15" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
+      ? `<tr><td colspan="16" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
       : '');
     updateExportHint();
     return;
@@ -14318,7 +14450,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -14343,6 +14475,7 @@ function exportRO(fmtType){
       'Pack Details': packMap[skuKey] || '',
       Customer: t.cust,
       Type: t.type,
+      'Online/Offline': saleModeText(t),
       'Individual Sold': parseFloat(t.qty) || 0,
       'In CMBs Sold': 0,
       'MRP': mrp0,
@@ -14369,7 +14502,7 @@ function exportRO(fmtType){
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
           'Product Dimensions':c.dimensions||dimMap[childKey]||'',
           'Pack Details':c.pack_details||packMap[childKey]||'',
-          Customer:t.cust, Type:t.type,
+          Customer:t.cust, Type:t.type, 'Online/Offline':saleModeText(t),
           'Individual Sold':0,
           'In CMBs Sold':(parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku),
           'MRP':parseFloat(c.mrp)||parseFloat(mrpMap[childKey])||0,
@@ -16412,6 +16545,7 @@ function _rkhBuildRows(){
         image_url: item.image_url || '',
         type: (e && e.type) || '',
         cust: (e && e.cust) || '',
+        sale_mode: (e && e.sale_mode) || '',
         rev: Number(e && e.rev) || 0,
         qty: Number(e && e.qty) || 0,
         ret: Number(e && e.ret) || 0,
@@ -16959,7 +17093,7 @@ function renderRakhi(){
     return;
   }
   const visibleRows = fRows.slice(0, 150);
-  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Individual Sold</th><th>In CMBs Sold</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
+  const head = `<tr><th>Order Date</th><th>Photo</th><th>SKU</th><th>Type</th><th>Customer</th><th>Online/Offline</th>${emp ? '' : '<th>Net Revenue</th>'}<th>Individual Sold</th><th>In CMBs Sold</th><th>Inv Stock</th><th>Inv WIP</th></tr>`;
   const body = visibleRows.map(r => {
     const hasImg = r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase() !== 'nan';
     const img = hasImg
@@ -16978,6 +17112,7 @@ function renderRakhi(){
       </div></td>
       <td>${escHtml(r.type || '—')}</td>
       <td>${escHtml(r.cust || '—')}</td>
+      <td>${escHtml(saleModeText(r) || '—')}</td>
       ${emp ? '' : `<td>${fmt(r.rev)}</td>`}
       <td>${Math.round(r.qty).toLocaleString('en-IN')}</td>
       <td>0</td>
@@ -16993,13 +17128,13 @@ function exportRakhi(){
   const rows = _rakhiFilteredRows || _rakhiRows || [];
   if (!rows.length){ alert('No Rakhi data to export.'); return; }
   const emp = LOGIN_ROLE === 'employee';
-  const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'CN Name', 'CN Class', 'Type', 'Customer', ...(emp ? [] : ['Net Revenue']), 'Individual Sold', 'In CMBs Sold', 'Inv Stock', 'Inv WIP', 'Image Link'];
+  const headers = ['Row Type', 'Order Date', 'SKU', 'SKU Name', 'CN Name', 'CN Class', 'Type', 'Customer', 'Online/Offline', ...(emp ? [] : ['Net Revenue']), 'Individual Sold', 'In CMBs Sold', 'Inv Stock', 'Inv WIP', 'Image Link'];
   const data = [];
   rows.forEach(r => {
     const parentItem=_masterSkuMap[String(r.sku||'').trim().toUpperCase()]||{};
     data.push([
       (r.combo_details && r.combo_details.length) ? 'Gift Set' : 'Product',
-      r.date, r.sku, exportSkuName(r.sku, r.sku_name), parentItem.cn_name||'', cnClassOf(parentItem), r.type || '', r.cust || '',
+      r.date, r.sku, exportSkuName(r.sku, r.sku_name), parentItem.cn_name||'', cnClassOf(parentItem), r.type || '', r.cust || '', saleModeText(r),
       ...(emp ? [] : [Math.round(r.rev)]),
       Math.round(r.qty), 0, parseInt(r.inv_stock) || 0, parseInt(r.inv_wip) || 0, r.image_url || ''
     ]);
@@ -17010,7 +17145,7 @@ function exportRakhi(){
       const childItem=_masterSkuMap[String(c.sku||'').trim().toUpperCase()]||c;
       const childDirect=cnxSaleTotalsForItem(childItem,rctx).sold;
       data.push([
-        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), c.cn_name||'', c.religion_class||'Unclassified', '', '',
+        'Stone Detail', '', c.sku, exportSkuName(c.sku, c.sku_name), c.cn_name||'', c.religion_class||'Unclassified', '', '', '',
         ...(emp ? [] : ['']),
         Math.round(childDirect), Math.round((Number(r.qty)||0) * cnxChildComponentQty(parentItem, c.sku)), parseInt(c.inv_stock) || 0, parseInt(c.inv_wip) || 0, c.image_url || ''
       ]);
@@ -32684,7 +32819,7 @@ def api_overall_export_xlsx():
                 headers = ["SKU", "Taxon"] + month_headers + ["Selected Months Sold Qty", "Last 3 Months Sold Qty", "Last 1 Year Sold Qty", "Avg Selling Price", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Used in CMBs", "Best Sold in This CMB", "Best CMB Image Link", "Total Sold"]
             else:
-                headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
+                headers = ["Dispatch Date", "SKU", "CN Name", "Customer", "Type", "Online/Offline", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
                           + ["Inv Stock", "Inv (WIP)", "Blocked Qty", "Image Link", "Total Sold"]
 
         ws.append(headers)
@@ -32712,7 +32847,7 @@ def api_overall_export_xlsx():
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or "",
                              ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), r.get("best_cmb_image_url", "") or "", r.get("total_sold", 0)]
                 else:
-                    line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
+                    line = [r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("sale_mode", "") or "", r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("image_url", "") or "", r.get("total_sold", 0)]
@@ -32850,7 +32985,7 @@ def api_overall_export_pdf():
                 headers = ["Photo", "SKU", "Taxon"] + month_headers + ["Selected Months Sold", "Last 3M Sold", "Last 1Y Sold", "Avg Selling Price", "CN Name"] \
                           + (["Net Revenue"] if show_rev else []) + ["Stock", "WIP", "Blocked", "Used in CMBs", "Best CMB", "Best CMB Image", "Total Sold"]
             else:
-                headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
+                headers = ["Photo", "Date", "SKU", "CN Name", "Customer", "Type", "Online/Offline", "Individual Sold", "In CMBs Sold", "Avg Selling Price"] + (["Net Revenue"] if show_rev else []) \
                           + ["Stock", "WIP", "Blocked", "Total Sold"]
 
         table_data = [headers]
@@ -32874,7 +33009,7 @@ def api_overall_export_pdf():
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0),
                              ", ".join(r.get("cmbs") or []), (str(r.get("best_cmb", "") or "") + ((" · " + str(r.get("best_cmb_name", ""))) if r.get("best_cmb_name") else "")), _link_flowable(r.get("best_cmb_image_url")), r.get("total_sold", 0)]
                 else:
-                    line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
+                    line = [img_cell, r.get("date", ""), r.get("sku", ""), r.get("cn_name", ""), r.get("customer", ""), _marketplace_display_text(r.get("type", "")), r.get("sale_mode", "") or "", r.get("qty", 0), r.get("combo_qty", 0), r.get("avg_selling_price", "") if r.get("avg_selling_price") is not None else ""]
                     if show_rev:
                         line.append(r.get("revenue", 0))
                     line += [r.get("inv_stock", 0), r.get("inv_wip", 0), r.get("blocked_qty", 0), r.get("total_sold", 0)]
