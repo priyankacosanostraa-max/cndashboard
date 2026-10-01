@@ -1,3 +1,16 @@
+# Cosa Nostraa — V24.47 (WIP RECEIVE MONTH-WISE: BAL QTY > 0 ONLY + DELIVERY TYPE / DELIVERY WEEK / PASTE SKUs · SOR ONLINE/OFFLINE MATCH FIX)
+# - WIP Receive > "Month wise" (2nd table): sirf Bal Qty > 0 wale rows (0 / negative / Production me match nahi = nahi aayenge).
+#   Naye filters (1st table jaisi same logic, is table ke apne alag): Delivery Type (Delayed / Upcoming / Cancelled),
+#   Delivery Week (sirf wahi weeks jinme balance > 0), Paste multiple SKUs (Show Pasted SKUs / Clear Pasted).
+# - SOR Online/Offline (Daily sales tab) FIX: pehle Daily-sales index sirf Type = SOR/SIS rows leta tha, jabki SOR vendor
+#   (Aza, N M Fashion, Mohanlal...) ki pehchaan CUSTOMER NAME se hoti hai aur sheet ka Type Purchase/Bulk/Regular/Marketplace/blank
+#   kuch bhi ho sakta hai -> Aza jaise rows ka mode match hi nahi hota tha (table me "—"). Ab:
+#     1) Daily-sales row ka vendor Customer/Party/Channel type columns + Type text se SOR_CHANNEL_KEYS se pehchana jata hai,
+#        aur (date + SKU + vendor) se pehle match hota hai; 2) Type = SOR/SIS rows pehle ki tarah; 3) baaki non-consumer rows
+#        sirf last-resort (date + SKU + SAME QTY) par. Website/Online/Store consumer rows kabhi SOR label nahi dete.
+#   /api/data debug me "sale_mode_main_by_vendor" / "sale_mode_orderdate_by_vendor" (matched/unmatched vendor-wise) aur
+#   "daily_sales_mode" me kaun se columns use hue — Debug me dekh sakte ho. Qty / revenue / rows me koi change nahi (sirf label).
+# ============================================================
 # Cosa Nostraa — V24.46 (SOR: ONLINE ORDER / OFFLINE SALES COLUMN FROM "Daily sales" TAB · PSL ONLINE/OFFLINE FILTERS REMOVED)
 # - Daily sales tab (F = VAN, G = Type, H = SKU, I = Qty, X = Dispatch/Order Date) se SOR rows ka mode nikalta hai:
 #   F = "Offline Sales" -> "Offline Sales", SOR ke liye F me kuch bhi aur (ya blank) -> "Online Order".
@@ -1299,9 +1312,17 @@ def _fetch_daily_sales_safe():
     except Exception as e:
         return None, str(e)
 
+_SALE_MODE_VENDOR_HDRS = ("customer", "party", "vendor", "buyer", "channel", "platform", "account", "consignee", "billto", "shipto")
+
 def _build_sale_mode_index(df, dbg=None):
-    """Daily sales (Type = SOR rows) ->  {(date, sku): [row ids]}.  F (VAN) = 'Offline Sales' -> Offline Sales,
-    SOR ke liye F me kuch bhi aur / blank -> Online Order.  Date = X column (Dispatch Date == Order Date)."""
+    """Daily sales -> SOR "Offline Sales" / "Online Order" index.
+    F (VAN) = 'Offline Sales' -> Offline Sales, baaki / blank -> Online Order.  Date = X column (Dispatch Date == Order Date).
+
+    V24.47: SOR vendor ki pehchaan Customer/Party/Channel type columns + Type text se (SOR_CHANNEL_KEYS) hoti hai — sirf
+    Type = SOR/SIS par depend nahi (SOR vendors ka sheet Type Purchase/Bulk/Regular/Marketplace/blank bhi hota hai).
+      tier-1 : Type SOR/SIS  ya  vendor pehchana gaya      -> pools  (+ vpools: date+sku+vendor)
+      tier-2 : baaki non-consumer rows (last resort)        -> loose  (matcher me qty bilkul same honi chahiye)
+    Website / Online / Store (consumer) rows kabhi nahi lete."""
     if df is None or len(df) == 0:
         return None
     cols = [str(c).strip() for c in df.columns]
@@ -1330,12 +1351,33 @@ def _build_sale_mode_index(df, dbg=None):
         if dbg is not None:
             dbg["errors"].append(f"daily_sales: columns not resolved van={c_van} type={c_type} sku={c_sku} date={c_date}")
         return None
-    rows, pools = [], {}
-    n_off = n_on = 0
-    for van, typ, sku, qty, dv in zip(df[c_van].tolist(), df[c_type].tolist(), df[c_sku].tolist(),
-                                      (df[c_qty].tolist() if c_qty else [0] * len(df)), df[c_date].tolist()):
-        if re.sub(r"[^a-z0-9]", "", str(typ or "").casefold()) not in ("sor", "sis"):
+    # Vendor / customer columns (header me customer, party, vendor, buyer, channel... ho to) — SOR vendor pehchanne ke liye
+    vend_cols = [c for c in cols if c not in (c_van, c_type, c_sku, c_qty, c_date)
+                 and any(h in nk(c) for h in _SALE_MODE_VENDOR_HDRS)]
+    vend_vals = [df[c].tolist() for c in vend_cols]
+    rows, pools, vpools, loose = [], {}, {}, {}
+    n_off = n_on = n_t1 = n_t2 = n_vendor = 0
+    van_l, typ_l, sku_l, dv_l = df[c_van].tolist(), df[c_type].tolist(), df[c_sku].tolist(), df[c_date].tolist()
+    qty_l = df[c_qty].tolist() if c_qty else [0] * len(df)
+    for i in range(len(df)):
+        van, typ, sku, qty, dv = van_l[i], typ_l[i], sku_l[i], qty_l[i], dv_l[i]
+        typ_c = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
+        vendor = ""
+        for vv in vend_vals:
+            t = clean(vv[i])
+            if t:
+                vendor = _match_channel_keys(t, _SOR_CHANNEL_KEYS)
+                if vendor:
+                    break
+        if not vendor and typ_c not in ("sor", "sis"):
+            vendor = _match_channel_keys(typ, _SOR_CHANNEL_KEYS)
+        is_sor_type = typ_c in ("sor", "sis")
+        if vendor or is_sor_type:
+            tier = 1
+        elif _is_consumer_type(typ):
             continue
+        else:
+            tier = 2
         dt = parse_date_any(dv)
         sk = _sale_mode_sku_key(sku)
         if dt is None or not sk:
@@ -1347,39 +1389,81 @@ def _build_sale_mode_index(df, dbg=None):
             label = _SALE_MODE_ONLINE; n_on += 1
         iso = dt.strftime("%Y-%m-%d")
         rid = len(rows)
-        rows.append((label, to_num(qty)))
-        pools.setdefault((iso, sk), []).append(rid)
-        pools.setdefault((iso, _sale_mode_base_key(sku)), []).append(rid)
+        rows.append((label, to_num(qty), vendor))
+        k1, k2 = (iso, sk), (iso, _sale_mode_base_key(sku))
+        if tier == 1:
+            n_t1 += 1
+            pools.setdefault(k1, []).append(rid)
+            pools.setdefault(k2, []).append(rid)
+            if vendor:
+                n_vendor += 1
+                vpools.setdefault(k1 + (vendor,), []).append(rid)
+                vpools.setdefault(k2 + (vendor,), []).append(rid)
+        else:
+            n_t2 += 1
+            loose.setdefault(k1, []).append(rid)
+            loose.setdefault(k2, []).append(rid)
     if dbg is not None:
         dbg["daily_sales_mode"] = {"van": c_van, "type": c_type, "sku": c_sku, "qty": c_qty, "date": c_date,
-                                   "sor_rows": len(rows), "offline": n_off, "online": n_on}
-    return {"rows": rows, "pools": pools}
+                                   "vendor_cols": vend_cols,
+                                   "sor_rows": n_t1, "sor_rows_with_vendor": n_vendor, "loose_rows": n_t2,
+                                   "offline": n_off, "online": n_on}
+    return {"rows": rows, "pools": pools, "vpools": vpools, "loose": loose}
 
 class _SaleModeMatcher:
     """Ek source (cossa ya cossa_orderdate) ke liye matcher. Har Daily-sales row ek hi baar consume hoti hai,
-    taaki ek hi sale do baar match/double na ho."""
+    taaki ek hi sale do baar match/double na ho.
+    V24.47: vendor (SOR channel label) pass karne par pehle (date + sku + vendor) match, phir tier-1 (date + sku),
+    aakhir me tier-2 loose rows (date + sku + SAME qty). Vendor-wise hit/miss counts debug ke liye."""
     def __init__(self, index):
         self.idx = index
         self.used = set()
         self.hit = 0
         self.miss = 0
-    def mode(self, date_iso, raw_sku, qty):
+        self.by_vendor = {}
+    def _pick(self, cands, qty, need_qty=False):
+        rows = self.idx["rows"]
+        free = [i for i in cands if i not in self.used]
+        if free:
+            pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9), None)
+            if pick is None:
+                if need_qty:
+                    return None
+                pick = free[0]
+            self.used.add(pick)
+            return pick
+        pick = next((i for i in cands if abs(rows[i][1] - qty) < 1e-9), None)
+        if pick is None:
+            if need_qty:
+                return None
+            pick = cands[0]
+        return pick
+    def _count(self, vendor, ok):
+        d = self.by_vendor.setdefault(vendor or "(unknown)", {"matched": 0, "unmatched": 0})
+        d["matched" if ok else "unmatched"] += 1
+    def mode(self, date_iso, raw_sku, qty, vendor=""):
         if not self.idx or not date_iso or date_iso == "N/A":
             return ""
-        pools, rows = self.idx["pools"], self.idx["rows"]
-        for key in ((date_iso, _sale_mode_sku_key(raw_sku)), (date_iso, _sale_mode_base_key(raw_sku))):
-            cand = pools.get(key)
-            if not cand:
-                continue
-            free = [i for i in cand if i not in self.used]
-            if free:
-                pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9), free[0])
-                self.used.add(pick)
-            else:
-                pick = next((i for i in cand if abs(rows[i][1] - qty) < 1e-9), cand[0])
-            self.hit += 1
-            return rows[pick][0]
+        rows = self.idx["rows"]
+        keys = ((date_iso, _sale_mode_sku_key(raw_sku)), (date_iso, _sale_mode_base_key(raw_sku)))
+        tries = []
+        if vendor:
+            tries.append((self.idx.get("vpools") or {}, tuple(k + (vendor,) for k in keys), False))
+        tries.append((self.idx["pools"], keys, False))
+        tries.append((self.idx.get("loose") or {}, keys, True))
+        for pool, ks, need_qty in tries:
+            for key in ks:
+                cand = pool.get(key)
+                if not cand:
+                    continue
+                pick = self._pick(cand, qty, need_qty)
+                if pick is None:
+                    continue
+                self.hit += 1
+                self._count(vendor, True)
+                return rows[pick][0]
         self.miss += 1
+        self._count(vendor, False)
         return ""
 _OTHER_ECOM_LABEL = "Other ECom"
 
@@ -3644,7 +3728,7 @@ def _refresh_data():
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         if channel == "SOR":
             # Dispatch-date based sheet -> Daily sales ko Dispatch Date (X) se match
-            _sm = sale_matcher_main.mode(date_iso, raw_sku, qty)
+            _sm = sale_matcher_main.mode(date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
             if _sm: entry["sale_mode"] = _si(_sm)
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
@@ -3652,6 +3736,7 @@ def _refresh_data():
         sales_exact[mapped_sku]["total_rev"] += rev
 
     dbg["sale_mode_main"] = {"matched": sale_matcher_main.hit, "unmatched": sale_matcher_main.miss}
+    dbg["sale_mode_main_by_vendor"] = sale_matcher_main.by_vendor
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
     try:
         del cosa
@@ -3872,7 +3957,7 @@ def _refresh_data():
             }
             if channel == "SOR":
                 # Order-date based sheet -> Daily sales ko Order Date (X) se match
-                _sm_od = sale_matcher_od.mode(order_date_iso, raw_sku, qty)
+                _sm_od = sale_matcher_od.mode(order_date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
                 if _sm_od:
                     entry["sale_mode"] = _si(_sm_od)
                     order_entry["sale_mode"] = _si(_sm_od)
@@ -3888,6 +3973,7 @@ def _refresh_data():
                 bucket["total_rev"] += rev
 
         dbg["sale_mode_orderdate"] = {"matched": sale_matcher_od.hit, "unmatched": sale_matcher_od.miss}
+        dbg["sale_mode_orderdate_by_vendor"] = sale_matcher_od.by_vendor
         dbg["cossa_orderdate_all_skus"] = len(orderdate_sales_exact)
         dbg["cossa_orderdate_all_rows"] = sum(len(v.get("entries", [])) for v in orderdate_sales_exact.values())
         dbg["cossa_orderdate_rakhi_skus"] = len(rakhi_sales_exact)
@@ -9817,7 +9903,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-head">
         <div>
           <div class="ops-title">WIP Receive — Month wise</div>
-          <div class="ops-sub">Every month found in the WIP-Recv sheet is a column heading. Click a month to see all SKUs received in that month with Order No., Order Date, Sr. No., Type, Channel and Delivery Date. These filters work only for this table.</div>
+          <div class="ops-sub">Every month found in the WIP-Recv sheet is a column heading. Click a month to see all SKUs received in that month with Order No., Order Date, Sr. No., Type, Channel and Delivery Date. Only SKUs with Bal Qty above 0 are listed (0 / negative balance rows are hidden). Filters: Order No., SKU search, Order dates, Channel, Type, Delivery Type, Delivery Week and Paste multiple SKUs — they work only for this table.</div>
         </div>
         <div class="ops-actions">
           <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipMonthReset()">Reset Filters</button>
@@ -9831,6 +9917,17 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Order To Date</label><input class="fi" type="date" id="wmTo" onchange="wipMonthRender()"></div>
         <div class="fc"><label class="fl">Channel</label><select class="fs" id="wmChannel" onchange="wipMonthRender()"><option value="">All Channels</option></select></div>
         <div class="fc"><label class="fl">Type</label><select class="fs" id="wmType" onchange="wipMonthRender()"><option value="">All Types</option></select></div>
+        <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wmDelivery" onchange="wipMonthRender()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option><option value="cancelled">Cancelled by Production team</option></select></div>
+        <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wmWeek" onchange="wipMonthRender()"><option value="">All Weeks</option></select></div>
+        <div class="fc op-paste">
+          <label class="fl">Paste multiple SKUs (any separator — comma, space, or new line)</label>
+          <textarea class="fi" id="wmPasteSkus" rows="3" placeholder="e.g.&#10;BT-0057&#10;BH-0001, BA-0001&#10;BH-0003" style="resize:vertical;font-family:monospace"></textarea>
+          <div class="op-paste-actions">
+            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:1px" onclick="applyWmPastedSkus()">Show Pasted SKUs</button>
+            <button class="go-btn" style="width:auto;padding:8px 14px;letter-spacing:1px;background:#eceff4;color:#111" onclick="clearWmPastedSkus()">Clear Pasted</button>
+            <span id="wmPasteInfo" class="small-note"></span>
+          </div>
+        </div>
       </div>
       <div id="wmSummary" class="ops-kpis"></div>
       <div id="wmPickBar" style="margin:0 2px 10px"></div>
@@ -20406,14 +20503,81 @@ function _wmFillSelect(id,arr,allLabel){
   sel.dataset.sig=sig;
   if(cur&&list.includes(cur))sel.value=cur;
 }
+/* ── Month-wise: Paste multiple SKUs (apna alag state, 1st table se independent) ── */
+let _wmPasteTokens=null;
+function _wmPasteMatch(sku){
+  if(!_wmPasteTokens)return true;
+  const u=String(sku||'').trim().toUpperCase(),b=u.split('_')[0];
+  return _wmPasteTokens.some(t=>t.includes('_')?u===t:(u===t||b===t));
+}
+function applyWmPastedSkus(){
+  const raw=(document.getElementById('wmPasteSkus')?.value||'').trim();
+  const info=document.getElementById('wmPasteInfo');
+  if(!raw){clearWmPastedSkus();return;}
+  const tokens=Array.from(new Set(raw.split(/[\s,;|]+/).map(t=>t.trim().toUpperCase()).filter(Boolean)));
+  if(!tokens.length){clearWmPastedSkus();return;}
+  _wmPasteTokens=tokens;
+  const known=new Set(),knownBase=new Set();
+  _wiprRows.forEach(r=>{const u=String(r.sku||'').trim().toUpperCase();known.add(u);knownBase.add(u.split('_')[0]);});
+  Object.keys(_masterSkuMap||{}).forEach(k=>{known.add(k);knownBase.add(k.split('_')[0]);});
+  const notFound=tokens.filter(t=>t.includes('_')?!known.has(t):!(known.has(t)||knownBase.has(t)));
+  if(info){
+    info.textContent=`${tokens.length-notFound.length} matched`+(notFound.length?` · not found: ${notFound.slice(0,8).join(', ')}${notFound.length>8?'…':''}`:'');
+    info.style.color=notFound.length?'#d97706':'#15803d';
+  }
+  wipMonthRender();
+}
+function clearWmPastedSkus(){
+  _wmPasteTokens=null;
+  const ta=document.getElementById('wmPasteSkus');if(ta)ta.value='';
+  const info=document.getElementById('wmPasteInfo');if(info)info.textContent='';
+  wipMonthRender();
+}
+/* Month-wise: Delivery Week options — sirf wahi weeks jinme kam se kam ek SKU ki balance qty > 0 hai (1st table jaisa) */
+function _wmFillWeeks(){
+  const sel=document.getElementById('wmWeek');if(!sel)return;
+  const wkSet=new Set();
+  _wiprRows.forEach(r=>{if((Number(r.balance)||0)>0&&r.delivery){const k=_wiprWeekOf(r.delivery);if(k)wkSet.add(k);}});
+  const sig=Array.from(wkSet).sort().join('|');
+  if(sel.dataset.sig===sig)return;
+  const cur=sel.value;
+  const months=Array.from(new Set(Array.from(wkSet).map(k=>k.split('|')[0]))).sort();
+  let html='<option value="">All Weeks</option>';
+  months.forEach(ym=>{
+    const y=+ym.slice(0,4),mo=+ym.slice(5),last=new Date(Date.UTC(y,mo,0)).getUTCDate(),mn=_WIPR_MON[mo-1];
+    let inner='';
+    for(let w=1;w<=5;w++){
+      const a=(w-1)*7+1,b=w===5?last:w*7;
+      if(a>last)break;
+      if(!wkSet.has(ym+'|'+w))continue;
+      inner+=`<option value="${ym}|${w}">${_WIPR_ORD[w-1]} week ${mn} (${a}${b>a?'–'+b:''} ${mn})</option>`;
+    }
+    if(inner)html+=`<optgroup label="${mn} ${y}">`+inner+'</optgroup>';
+  });
+  sel.innerHTML=html;sel.dataset.sig=sig;
+  if(cur&&sel.querySelector(`option[value="${cur}"]`))sel.value=cur;
+}
 function _wmBase(){
   const oq=String(document.getElementById('wmOrderNo')?.value||'').trim().toLowerCase();
   const q=String(document.getElementById('wmSku')?.value||'').trim().toLowerCase();
   const ch=String(document.getElementById('wmChannel')?.value||'').trim().toLowerCase();
   const ty=String(document.getElementById('wmType')?.value||'').trim().toLowerCase();
+  const dv=String(document.getElementById('wmDelivery')?.value||'').trim();
+  const wk=String(document.getElementById('wmWeek')?.value||'').trim();
   const of=document.getElementById('wmFrom')?.value||'',ot=document.getElementById('wmTo')?.value||'';
+  const td=_wiprTodayIST();
   return _wiprRows.filter(r=>{
+    /* Month-wise table: sirf Bal Qty > 0 (0, negative ya Production sheet me match na hone wale rows nahi aate) */
+    if(!((Number(r.balance)||0)>0))return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
+    if(!_wmPasteMatch(r.sku))return false;
+    if(dv==='cancelled'){ if(!r.cancelled)return false; }
+    else if(dv){ /* Delayed = delivery date aaj se pehle, Upcoming = aaj ya baad me (1st table jaisi logic) */
+      if(!r.delivery)return false;
+      if(dv==='delayed'&&!(String(r.delivery)<td))return false;
+      if(dv==='upcoming'&&!(String(r.delivery)>=td))return false;
+    }
+    if(wk&&_wiprWeekOf(r.delivery)!==wk)return false;
     if(of||ot){const od=String(r.order_date||'');if(!od)return false;if(of&&od<of)return false;if(ot&&od>ot)return false;}
     if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
     if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
@@ -20450,7 +20614,9 @@ function _wmView(){
 }
 function wipMonthPick(k){_wmPick=k||'';wipMonthRender();}
 function wipMonthReset(){
-  ['wmOrderNo','wmSku','wmFrom','wmTo','wmChannel','wmType'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['wmOrderNo','wmSku','wmFrom','wmTo','wmChannel','wmType','wmDelivery','wmWeek','wmPasteSkus'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  _wmPasteTokens=null;
+  const _pi=document.getElementById('wmPasteInfo');if(_pi)_pi.textContent='';
   _wmPick='';wipMonthRender();
 }
 function wipMonthRender(){
@@ -20458,6 +20624,7 @@ function wipMonthRender(){
   if(!host||!_wiprLoaded)return;
   _wmFillSelect('wmChannel',_wiprChannels,'All Channels');
   _wmFillSelect('wmType',_wiprTypes,'All Types');
+  _wmFillWeeks();
   const of=document.getElementById('wmFrom')?.value||'',ot=document.getElementById('wmTo')?.value||'';
   if(of&&ot&&of>ot){if(sum)sum.innerHTML='';if(bar)bar.innerHTML='';host.innerHTML='<div class="ops-empty">Order From Date is after Order To Date. Please correct the dates.</div>';return;}
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
@@ -20513,7 +20680,7 @@ function wipMonthExport(){
   const out=rows.map(x=>[...lead(x),...months.map(k=>x.byMonth[k]||0),fD(x.dl)]);
   _dlCsv([...base,...months.map(_wmMonthLabel),'Delivery Date'],out,'wip_receive_month_wise');
 }
-window.wipMonthRender=wipMonthRender;window.wipMonthRender_d=wipMonthRender_d;window.wipMonthPick=wipMonthPick;window.wipMonthReset=wipMonthReset;window.wipMonthExport=wipMonthExport;
+window.applyWmPastedSkus=applyWmPastedSkus;window.clearWmPastedSkus=clearWmPastedSkus;window.wipMonthRender=wipMonthRender;window.wipMonthRender_d=wipMonthRender_d;window.wipMonthPick=wipMonthPick;window.wipMonthReset=wipMonthReset;window.wipMonthExport=wipMonthExport;
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
