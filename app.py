@@ -1,3 +1,14 @@
+# Cosa Nostraa — V24.55 (TARGET TAB · MARKETPLACE SHEET SALES: AMAZON + BLINKIT = COSSA SHEET NET REVENUE)
+# - Target tab > "Daily Revenue Glimpse - Marketplace Sheet Sales": Amazon pehle cossa_orderdate col H (Selling Price) se aur Blinkit COSA col H (Selling Price) se aa raha tha.
+#   Ab dono cossa sheet ke NET REVENUE (col I) se: A = Dispatch Date, G = Final Qty, I = Net Revenue, J = Customer Name, K = Type (same rows jo Target table 1 use karti hai).
+# - Flipkart / Myntra / Nykaa / Ajio / Tata / Website apne sheet columns se as-is. Instamart / Other Marketplace / Others bhi pehle jaise.
+# - Baaki kuch change nahi kiya.
+# ============================================================
+# Cosa Nostraa — V24.54 (DELIVERY DATE · STONE WALI ROWS ME +7 DIN -> +10 DIN)
+# - Jis row me stone (PPC-WIP col S) likha ho, uski calculated Delivery Date me ab +10 din extra lagte hain (pehle +7). WIP Receive aur Production dono me yahi rule.
+# - Sheet ke column L me date likhi ho to wahi use hoti hai (pehle jaisa). New Ordering = 15 din, baaki = 12 din (as-is).
+# - Baaki kuch change nahi kiya.
+# ============================================================
 # Cosa Nostraa — V24.53 (TARGET TAB · TABLE 1 ACTUAL = COSSA SHEET NET REVENUE (COL I) · QTY TARGET ASP = NET REVENUE)
 # - Target tab ki PEHLI table (Target vs Actual / Stakeholder Leaderboard) ka Achieved / Qty Achieved ab seedha "cossa" sheet se:
 #   A = Dispatch Date, G = Final Qty, I = NET REVENUE, J = Customer Name, K = Type. (Pehle cossa_orderdate / SKU-entries se aa raha tha
@@ -10204,7 +10215,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">Daily Revenue Glimpse - Marketplace Sheet Sales</div>
-      <div class="insights-sub">Selling Price view: Amazon combines the original Amazon/Flipkart sheet column R (Selling value) with additional Amazon rows from cossa_orderdate column H (Selling Price). Flipkart uses the same combined sheet. Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet columns. Blinkit uses COSA column H.</div>
+      <div class="insights-sub">Selling Price view: Amazon aur Blinkit ab cossa sheet ke Net Revenue (column I, Dispatch Date basis) se aate hain. Flipkart original Amazon/Flipkart sheet column R (Selling value) se. Website, Myntra, Nykaa, Ajio and Tata keep their approved source-sheet columns.</div>
     </div>
     <div class="insight-toolbar-actions">
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDRGMarketplace(true)">Refresh</button>
@@ -16378,7 +16389,7 @@ function renderDRGMarketplaceTable(){
       &nbsp;|&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
     </p>
     <p style="color:var(--cn-mid);font-size:.74rem;margin:0 0 10px">
-      Price source: Website S (Total Price), Amazon = merged cossa_orderdate H (standard Amazon + former FBA), Flipkart R, Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
+      Price source: Website S (Total Price), Amazon + Blinkit = cossa sheet I (Net Revenue), Flipkart R, Nykaa AS (SellingPrice), Tata N (Price), Ajio AG (Selling Price), Myntra AM (Seller Price). Other channels use the existing cossa_orderdate revenue.
     </p>
     ${warnings}
     <table class="ro" style="width:100%;min-width:1640px">
@@ -28691,7 +28702,7 @@ def _production_delivery_days(order_type, order_no="", stone=""):
     """Delivery lead time (days after Order Date) decided by Order Type.
     New Ordering                            -> 15 days
     everything else (Customer etc.)         -> 12 days
-    Row has a stone (PPC-WIP column S)      -> +7 days on top
+    Row has a stone (PPC-WIP column S)      -> +10 days on top
     """
     t = re.sub(r"\s+", " ", str(order_type or "").strip().lower())
     if not t:
@@ -28699,7 +28710,7 @@ def _production_delivery_days(order_type, order_no="", stone=""):
     days = 15 if "new order" in t else 12
     st = str(stone or "").strip().lower()
     if st and st not in ("nan", "none", "null", "-", "--", "na", "n/a"):
-        days += 7
+        days += 10
     return days
 
 def _production_has_balance(value):
@@ -28788,7 +28799,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 pass   # sheet ke column L (Delivery Date) me date likhi hai -> wahi use hogi
             elif dt and _production_has_balance(_bal_val):
                 # Sheet me delivery date nahi hai -> Order Date + lead days (Order Type based,
-                # stone ho to +7), sirf un rows ki jinki Balance Qty (col K) 0 nahi hai.
+                # stone ho to +10), sirf un rows ki jinki Balance Qty (col K) 0 nahi hai.
                 _stone_txt = str(clean(r.get(C_STONE, "")) if C_STONE else "").strip()
                 dv = dt + timedelta(days=_production_delivery_days(_otype_txt, order_no, _stone_txt))
             else:
@@ -30678,6 +30689,14 @@ def _fetch_drg_marketplace_source_rows(force=False):
             err = str(e)[:240]
         return rows_local, err
 
+    def _run_cossa_net_revenue():
+        # V24.55: Amazon + Blinkit ab cossa sheet (COSA_URL) ke NET REVENUE (col I) se aate hain
+        # (A = Dispatch Date, G = Final Qty, I = Net Revenue, J = Customer Name, K = Type).
+        try:
+            return list(_cossa_target_rows(force=force)), ""
+        except Exception as e:
+            return [], str(e)[:240]
+
     def _run_blinkit():
         rows_local = []
         b_meta = {
@@ -30745,17 +30764,17 @@ def _fetch_drg_marketplace_source_rows(force=False):
     # Target tab used to take a long time to load / refresh.
     spec_results = {}
     orderdate_rows, orderdate_error = [], ""
-    blinkit_rows, blinkit_meta = [], {}
+    cossa_nr_rows, cossa_nr_error = [], ""
     with _cf.ThreadPoolExecutor(max_workers=8) as ex:
         futs = {ex.submit(_run_one_spec, spec): spec["key"] for spec in specs}
         futs[ex.submit(_run_orderdate)] = "__orderdate__"
-        futs[ex.submit(_run_blinkit)] = "__blinkit__"
+        futs[ex.submit(_run_cossa_net_revenue)] = "__cossa_nr__"
         for fut in _cf.as_completed(futs):
             tag = futs[fut]
             if tag == "__orderdate__":
                 orderdate_rows, orderdate_error = fut.result()
-            elif tag == "__blinkit__":
-                blinkit_rows, blinkit_meta = fut.result()
+            elif tag == "__cossa_nr__":
+                cossa_nr_rows, cossa_nr_error = fut.result()
             else:
                 key, rows_local, source_meta = fut.result()
                 spec_results[key] = (rows_local, source_meta)
@@ -30770,32 +30789,42 @@ def _fetch_drg_marketplace_source_rows(force=False):
         meta[spec["key"]] = source_meta
         out.extend(rows_local)
 
-    # Amazon for this Target-tab table comes ONLY from consolidated
-    # cossa_orderdate, using A=Order Date and H=Selling Price. This is already
-    # the merged Amazon family, so old Amazon-FBA labels are not required.
+    # V24.55: Amazon + Blinkit (Target tab > Marketplace Sheet Sales) ab cossa sheet ke
+    # NET REVENUE (col I) se aate hain — pehle Amazon cossa_orderdate H (Selling Price) aur
+    # Blinkit COSA H (Selling Price) se aa raha tha. Date = cossa Dispatch Date (A), Qty = G,
+    # Customer = J, Type = K. Baaki marketplaces (Flipkart/Myntra/Nykaa/Ajio/Tata) ke apne sheet columns as-is.
     amazon_extra_meta = {
-        "sheet": "cossa_orderdate", "price_column": "H",
-        "price_label": "Selling Price", "rows_total": len(orderdate_rows),
-        "rows_used": 0, "date_column": "A / Order Date",
-        "customer_column": "J / Customer Name", "error": orderdate_error,
+        "sheet": "cossa", "price_column": "I",
+        "price_label": "Net Revenue", "rows_total": len(cossa_nr_rows),
+        "rows_used": 0, "date_column": "A / Dispatch Date",
+        "customer_column": "J / Customer Name", "error": cossa_nr_error,
     }
-    meta["Amazon (merged cossa_orderdate)"] = amazon_extra_meta
-    for entry in orderdate_rows:
-        if _drg_bucket(entry.get("channel"), entry.get("sub_channel"), entry.get("type")) != "Amazon":
-            continue
+    blinkit_meta = {
+        "sheet": "cossa", "price_column": "I", "price_label": "Net Revenue",
+        "rows_total": len(cossa_nr_rows), "rows_used": 0,
+        "date_column": "A / Dispatch Date", "customer_column": "J / Customer Name",
+        "error": cossa_nr_error,
+    }
+    meta["Amazon (cossa Net Revenue)"] = amazon_extra_meta
+    for entry in cossa_nr_rows:
+        _cust_raw = str(entry.get("raw_customer") or entry.get("customer") or "")
+        if "blinkit" in _cust_raw.casefold():
+            _bk = "Blinkit"
+        else:
+            _ch = calc_channel(entry.get("customer"), entry.get("type"))
+            _bk = _drg_bucket(_ch, entry.get("sub_channel"), entry.get("type"))
+            if _bk != "Amazon":
+                continue
         dt_iso = str(entry.get("date") or "")
-        selling_price = float(to_num(entry.get("sp", 0)))
-        if not dt_iso or selling_price == 0:
+        net_rev = float(entry.get("rev") or 0)
+        if not dt_iso or net_rev == 0:
             continue
-        out.append({"date": dt_iso, "rev": selling_price, "qty": float(entry.get("qty") or 0), "bucket": "Amazon"})
-        amazon_extra_meta["rows_used"] += 1
-
-    # Blinkit is intentionally sourced from the main COSA sheet, not from
-    # cossa_orderdate. The approved mapping is exact: A = Dispatch Date,
-    # H = Selling Price, J = Customer Name; any Customer Name containing
-    # "blinkit" (case-insensitive) belongs to the Blinkit bucket.
+        out.append({"date": dt_iso, "rev": net_rev, "qty": float(entry.get("qty") or 0), "bucket": _bk})
+        if _bk == "Amazon":
+            amazon_extra_meta["rows_used"] += 1
+        else:
+            blinkit_meta["rows_used"] += 1
     meta["Blinkit"] = blinkit_meta
-    out.extend(blinkit_rows)
 
     # Channels not represented by dedicated source sheets keep the old
     # cossa_orderdate revenue logic exactly as before. Blinkit rows are skipped
