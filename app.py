@@ -1,3 +1,20 @@
+# Cosa Nostraa — V24.50 (BALANCE QTY FILTER: =0 / <0 / <=0 me negative balance jaisa hai waisa hi dikhta hai, 0 nahi banta)
+# ============================================================
+# Cosa Nostraa — V24.49 (WIP RECEIVE: BALANCE QTY FILTER IN BOTH TABLES — ALL / >0 / =0 / <0 / <=0)
+# - WIP Receive ke dono tables me naya "Balance Qty" dropdown. Table 1 default = All Balances (pehle jaisa), Table 2 default = Greater than 0 (pehle jaisa).
+#   Equal to 0 / Less than 0 / Less than or equal to 0 select karne par un rows ko show karta hai (pehle negative balance server par 0 ban jata tha, ya table 2 me hide hota tha).
+# - Server /api WIP receive rows me naya field "balance_raw" (negative bhi, clamp nahi). "balance" (clamped) aur sabhi purane totals jaise ke taise.
+#   < 0 / <= 0 filter me Bal Qty column asli (negative) value dikhata hai. Production sheet me match na hone wale rows (balance unknown) sirf "All Balances" me aate hain.
+# ============================================================
+# Cosa Nostraa — V24.48 (SOR ONLINE/OFFLINE: NEVER BLANK + ONLINE/OFFLINE DROPDOWN FILTER · OVERVIEW MONTH-YEAR FILTER REMOVED)
+# - Daily sales F column: text me "offline" kahin bhi likha ho -> Offline Sales; uske alawa kuch bhi (blank bhi) -> Online Order.
+#   SOR rows (PSL, Aza, N M Fashion, Mohanlal... sabhi SOR customers/channels) ab kabhi blank "—" nahi — match na mile to bhi Online Order.
+#   Match: cossa (Dispatch Date = X column) aur cossa_orderdate (Order Date = X column) dono me date + SKU (+qty); har Daily-sales row sirf ek baar use hoti hai (no double).
+# - Naya dropdown "Online / Offline (SOR only)": Overview + Repeat Orders filters me. Sirf tab enable hota hai jab SOR se related
+#   customer search/select ho ya SOR channel / SOR sub-channel (PSL, Aza...) select ho. Kuch select nahi = Online + Offline dono dikhte hain.
+#   Table, KPIs, totals, avg selling price aur exports (CSV/Excel/PDF) isi filter ko follow karte hain; export me Online/Offline column pehle se hai.
+# - Overview tab se "Month - Year" filter hata diya (Launch Month filter waise hi hai). Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.47 (WIP RECEIVE MONTH-WISE: BAL QTY > 0 ONLY + DELIVERY TYPE / DELIVERY WEEK / PASTE SKUs · SOR ONLINE/OFFLINE MATCH FIX)
 # - WIP Receive > "Month wise" (2nd table): sirf Bal Qty > 0 wale rows (0 / negative / Production me match nahi = nahi aayenge).
 #   Naye filters (1st table jaisi same logic, is table ke apne alag): Delivery Type (Delayed / Upcoming / Cancelled),
@@ -1383,7 +1400,7 @@ def _build_sale_mode_index(df, dbg=None):
         if dt is None or not sk:
             continue
         van_c = re.sub(r"[^a-z0-9]", "", str(van or "").casefold())
-        if van_c.startswith("offline"):
+        if "offline" in van_c:
             label = _SALE_MODE_OFFLINE; n_off += 1
         else:
             label = _SALE_MODE_ONLINE; n_on += 1
@@ -1465,6 +1482,13 @@ class _SaleModeMatcher:
         self.miss += 1
         self._count(vendor, False)
         return ""
+    def label(self, date_iso, raw_sku, qty, vendor=""):
+        """V24.48: SOR row ka final label. Daily-sales match mila to wahi (F me 'offline' likha ho -> Offline Sales),
+        match na mile to bhi BLANK nahi — F me offline ke alawa kuch bhi / blank = Online Order."""
+        m = self.mode(date_iso, raw_sku, qty, vendor)
+        if m:
+            return m
+        return _SALE_MODE_ONLINE if self.idx else ""
 _OTHER_ECOM_LABEL = "Other ECom"
 
 def _match_channel_keys(customer, table):
@@ -3728,7 +3752,7 @@ def _refresh_data():
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         if channel == "SOR":
             # Dispatch-date based sheet -> Daily sales ko Dispatch Date (X) se match
-            _sm = sale_matcher_main.mode(date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
+            _sm = sale_matcher_main.label(date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
             if _sm: entry["sale_mode"] = _si(_sm)
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
@@ -3957,7 +3981,7 @@ def _refresh_data():
             }
             if channel == "SOR":
                 # Order-date based sheet -> Daily sales ko Order Date (X) se match
-                _sm_od = sale_matcher_od.mode(order_date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
+                _sm_od = sale_matcher_od.label(order_date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
                 if _sm_od:
                     entry["sale_mode"] = _si(_sm_od)
                     order_entry["sale_mode"] = _si(_sm_od)
@@ -8325,6 +8349,12 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="fCust" list="custList" placeholder="type customer…" oninput="cnxUpdateCustSuggest('fCust','custList');applyF_d()">
           <datalist id="custList"></datalist></div>
+        <div class="fc"><label class="fl">Online / Offline (SOR only)</label>
+          <select class="fs" id="fSaleMode" onchange="applyF()" disabled title="SOR customer / channel select ya search karne par enable hoga">
+            <option value="All">Online + Offline (All)</option>
+            <option value="online">Online Order</option>
+            <option value="offline">Offline Sales</option></select>
+          <div class="small-note" style="margin-top:4px">SOR customer / channel select ya search karne par enable hota hai</div></div>
         <div class="fc"><label class="fl">Sheet Type (tick one or more)</label>
           <div id="fTypeChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">ECom (tick one or more)</label>
@@ -8354,9 +8384,6 @@ select.lg-in option{background:#fff;color:#1a1610}
             <option value="No Record">No Record</option></select></div>
         <div class="fc"><label class="fl">FY Year</label>
           <select class="fs" id="fFY" onchange="applyF()"></select></div>
-        <div class="fc"><label class="fl">Month - Year (select one or more)</label>
-          <div id="fMonthYearChecks" class="type-checks" style="max-height:190px;overflow:auto"></div>
-          <div id="fMonthYearInfo" class="small-note" style="margin-top:6px">All months</div></div>
         <div class="fc"><label class="fl">Plating</label>
           <select class="fs" id="fPlat" onchange="applyF()"></select></div>
         <div class="fc"><label class="fl">MRP Range</label>
@@ -8457,6 +8484,12 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Customer Name</label>
           <input class="fi" id="rCust" list="custList2" placeholder="type customer…" oninput="cnxUpdateCustSuggest('rCust','custList2');applyRO_d()">
           <datalist id="custList2"></datalist></div>
+        <div class="fc"><label class="fl">Online / Offline (SOR only)</label>
+          <select class="fs" id="rSaleMode" onchange="applyRO()" disabled title="SOR customer / channel select ya search karne par enable hoga">
+            <option value="All">Online + Offline (All)</option>
+            <option value="online">Online Order</option>
+            <option value="offline">Offline Sales</option></select>
+          <div class="small-note" style="margin-top:4px">SOR customer / channel select ya search karne par enable hota hai</div></div>
         <div class="fc"><label class="fl">Dispatch Date From</label>
           <input class="fi" type="date" id="rD1" onchange="applyRO()" style="margin-bottom:8px">
           <label class="fl">Dispatch Date To</label>
@@ -9883,6 +9916,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="wiprSearch" placeholder="Search SKU…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Order No.</label><input class="fi" id="wiprOrderNo" placeholder="Type order no…" oninput="renderWipReceive_d()"></div>
       <div class="fc"><label class="fl">Channel</label><select class="fs" id="wiprChannel" onchange="renderWipReceive()"><option value="">All Channels</option></select></div>
+      <div class="fc"><label class="fl">Balance Qty</label><select class="fs" id="wiprBal" onchange="renderWipReceive()"><option value="">All Balances</option><option value="gt">Greater than 0</option><option value="eq">Equal to 0</option><option value="lt">Less than 0 (negative)</option><option value="le">Less than or equal to 0</option></select></div>
       <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wiprDelivery" onchange="wiprDeliveryChanged()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option><option value="cancelled">Cancelled by Production team</option></select></div>
       <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wiprWeek" onchange="wiprWeekChanged()"><option value="">All Weeks</option></select></div>
       <div class="fc op-paste">
@@ -9903,7 +9937,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-head">
         <div>
           <div class="ops-title">WIP Receive — Month wise</div>
-          <div class="ops-sub">Every month found in the WIP-Recv sheet is a column heading. Click a month to see all SKUs received in that month with Order No., Order Date, Sr. No., Type, Channel and Delivery Date. Only SKUs with Bal Qty above 0 are listed (0 / negative balance rows are hidden). Filters: Order No., SKU search, Order dates, Channel, Type, Delivery Type, Delivery Week and Paste multiple SKUs — they work only for this table.</div>
+          <div class="ops-sub">Every month found in the WIP-Recv sheet is a column heading. Click a month to see all SKUs received in that month with Order No., Order Date, Sr. No., Type, Channel and Delivery Date. By default only SKUs with Bal Qty above 0 are listed; use the Balance Qty filter to show Equal to 0, Less than 0 or Less than or equal to 0 rows. Filters: Order No., SKU search, Order dates, Channel, Type, Delivery Type, Delivery Week and Paste multiple SKUs — they work only for this table.</div>
         </div>
         <div class="ops-actions">
           <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipMonthReset()">Reset Filters</button>
@@ -9917,6 +9951,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="fc"><label class="fl">Order To Date</label><input class="fi" type="date" id="wmTo" onchange="wipMonthRender()"></div>
         <div class="fc"><label class="fl">Channel</label><select class="fs" id="wmChannel" onchange="wipMonthRender()"><option value="">All Channels</option></select></div>
         <div class="fc"><label class="fl">Type</label><select class="fs" id="wmType" onchange="wipMonthRender()"><option value="">All Types</option></select></div>
+        <div class="fc"><label class="fl">Balance Qty</label><select class="fs" id="wmBal" onchange="wipMonthRender()"><option value="gt">Greater than 0 (default)</option><option value="">All Balances</option><option value="eq">Equal to 0</option><option value="lt">Less than 0 (negative)</option><option value="le">Less than or equal to 0</option></select></div>
         <div class="fc"><label class="fl">Delivery Type</label><select class="fs" id="wmDelivery" onchange="wipMonthRender()"><option value="">All Delivery Types</option><option value="delayed">Delayed</option><option value="upcoming">Upcoming</option><option value="cancelled">Cancelled by Production team</option></select></div>
         <div class="fc"><label class="fl">Delivery Week</label><select class="fs" id="wmWeek" onchange="wipMonthRender()"><option value="">All Weeks</option></select></div>
         <div class="fc op-paste">
@@ -10839,7 +10874,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
   const fy = String(ctx.fy || '').trim();
   const d1 = String(ctx.d1 || '').trim();
   const d2 = String(ctx.d2 || '').trim();
-  const hasFilter = !!(types.length || channels.length || subChannels.length || marketplaces.length || customer || fy || d1 || d2 || sourceField !== 'sales_entries');
+  const hasFilter = !!(types.length || channels.length || subChannels.length || marketplaces.length || customer || fy || d1 || d2 || ctx.saleMode || sourceField !== 'sales_entries');
   if (!hasFilter) {
     return {q7:Number(item.qty_7d)||0,q15:Number(item.qty_15d)||0,q30:Number(item.qty_1m)||0,sold:Number(item.final_qty)||0,rev:Number(item.total_net_revenue)||0};
   }
@@ -10854,6 +10889,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
     if (subChannels.length && !subChannels.includes(e.sub_channel)) return false;
     if (marketplaces.length && !marketplaces.includes(marketplaceOf(e))) return false;
     if (customer && !String(e && e.cust || '').toLowerCase().includes(customer)) return false;
+    if (ctx.saleMode && !cnxSaleModeOk(e, ctx.saleMode)) return false;
     if (fy && String(e && e.fy || '').trim() !== fy) return false;
     const d = cnxSaleEntryDate(e, ctx);
     if ((d1 || d2) && (!d || (d1 && d < d1) || (d2 && d > d2))) return false;
@@ -10890,6 +10926,7 @@ function cnxAvgSellingPriceForItem(rawItem, saleCtx){
     if(subChannels.length&&!subChannels.includes(e.sub_channel))return;
     if(marketplaces.length&&!marketplaces.includes(marketplaceOf(e)))return;
     if(customer&&!String(e&&e.cust||'').toLowerCase().includes(customer))return;
+    if(ctx.saleMode&&!cnxSaleModeOk(e,ctx.saleMode))return;
     if(fy&&String(e&&e.fy||'').trim()!==fy)return;
     const d=cnxSaleEntryDate(e,ctx);
     if(months.length&&(!d||!monthSet.has(d.slice(0,7))))return;
@@ -13231,6 +13268,40 @@ function matrixRollingMonthKeys(latestKey,count){
   }
   return out;
 }
+/* V24.48 — SOR Online/Offline filter helpers */
+function cnxModeOf(e){ const m=String((e&&e.sale_mode)||'').trim().toLowerCase(); return m?(m.startsWith('offline')?'offline':'online'):''; }
+function cnxIsSorEntry(e){ return !!(e && (e.sale_mode || String(e.channel||'').trim().toUpperCase()==='SOR')); }
+function cnxSaleModeOk(e, mode){
+  if(!mode || mode==='All') return true;
+  if(!cnxIsSorEntry(e)) return false;
+  return (cnxModeOf(e)||'online')===mode;
+}
+let _cnxSorIdxRef=null, _cnxSorCusts=[], _cnxSorSubs=new Set();
+function cnxSorIndex(){
+  if(_cnxSorIdxRef===master) return;
+  _cnxSorIdxRef=master;
+  const c=new Set(), s=new Set();
+  (master||[]).forEach(it=>(it.sales_entries||[]).forEach(e=>{
+    if(cnxIsSorEntry(e)){ if(e.cust) c.add(String(e.cust).toLowerCase()); if(e.sub_channel) s.add(String(e.sub_channel)); }
+  }));
+  _cnxSorCusts=Array.from(c); _cnxSorSubs=s;
+}
+/* Dropdown tabhi enable jab SOR channel / SOR sub-channel select ho ya customer search SOR customer se match kare.
+   Returns 'online' | 'offline' | '' ('' = dono). */
+function cnxSaleModeState(selId, custQ, chanSel, subChanSel){
+  const el=document.getElementById(selId);
+  let on=false;
+  try{
+    cnxSorIndex();
+    if((chanSel||[]).some(c=>String(c).trim().toLowerCase()==='sor')) on=true;
+    if(!on && (subChanSel||[]).some(s=>_cnxSorSubs.has(s))) on=true;
+    const q=String(custQ||'').trim().toLowerCase();
+    if(!on && q && (_cnxSorCusts.some(c=>c.includes(q)) || Array.from(_cnxSorSubs).some(s=>String(s).toLowerCase().includes(q)))) on=true;
+  }catch(_e){}
+  if(el){ el.disabled=!on; if(!on && el.value!=='All') el.value='All'; }
+  const v=el?el.value:'All';
+  return (on && (v==='online'||v==='offline')) ? v : '';
+}
 function getSelectedMatrixMonths(){
   return Array.from(document.querySelectorAll('#fMonthYearChecks input[type="checkbox"]:checked')).map(x=>x.value).filter(Boolean).sort();
 }
@@ -13257,6 +13328,7 @@ function applyF(){
   const typeSel = getSelectedTypes('fType');
   const chanSel = getSelectedChannels('fChan');
   const subChanSel = getSelectedSubChannels('fSubChan');
+  const saleModeQ = cnxSaleModeState('fSaleMode', custQ, chanSel, subChanSel);
   // Channel/Type-aware Inv Stock/WIP — same context used by the Repeat Orders
   // tab and the Overview export, so a Type/Channel filter (e.g. Website,
   // Marketplace, Purchase/Designer) shows that channel's own WIP on screen too.
@@ -13316,7 +13388,7 @@ function applyF(){
   const revenueShareMap = new Map();
   const CAP = 120;
   const drill = true; // Overview: Transactions table always shown (filtered by active filters when any are set)
-  const anyEntryFilter = !!(custQ || d1 || d2 || monthMode || typeSel.length || chanSel.length || subChanSel.length || fyQ !== 'All FYs');
+  const anyEntryFilter = !!(custQ || saleModeQ || d1 || d2 || monthMode || typeSel.length || chanSel.length || subChanSel.length || fyQ !== 'All FYs');
   const txns = [];
   const matrixEligibleItems = new Map();
 
@@ -13360,6 +13432,7 @@ function applyF(){
       const customerSet = new Set();
       for (const e of (item.sales_entries || [])) {
         if (custQ && !String(e.cust||'').toLowerCase().includes(custQ)) continue;
+        if (!cnxSaleModeOk(e, saleModeQ)) continue;
         if (!typeOk(e.type) || !chanOk(e) || !subChanOk(e.sub_channel)) continue;
         if (fyQ !== 'All FYs' && e.fy !== fyQ) continue;
         if (monthMode) {
@@ -13403,7 +13476,7 @@ function applyF(){
     revenueShareMap.set(_skuRevenueKey(item.sku), itemFilteredRevenue);
 
     if (drill) {
-      const filteredAvgSp=cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true});
+      const filteredAvgSp=cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,months:monthSel,businessChannel:true});
       fe.forEach(e => txns.push({ ...e, sku: item.sku, sku_name: item.sku_name, avg_selling_price:filteredAvgSp }));
     } else if (cards.length < CAP) {
       const cardItem = {
@@ -13551,7 +13624,7 @@ function applyF(){
           summaryRows.push({
             month_mode:true,sku:skuRaw,sku_name:item.sku_name||'',taxon:item.taxon||'',cn_name:item.cn_name||iv.cn||'',
             month_qty:monthQty,selected_months_qty:selectedMonthsQty,last_3m_qty:last3Qty,last_1y_qty:last1yQty,
-            avg_selling_price:cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true}),
+            avg_selling_price:cnxAvgSellingPriceForItem(item,{types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,months:monthSel,businessChannel:true}),
             rev:selectedMonthsRev,
             inv_stock:parseInt(iv.s)||0,inv_wip:parseInt(iv.w)||0,blocked_qty:parseInt(iv.b)||0,
             image_url:iv.img||'',cmbs:cmbNames,best_cmb:bestCmb,best_cmb_name:bestCmbName,best_cmb_sold_qty:bestCmbQty,best_cmb_image_url:bestCmbImage
@@ -13657,7 +13730,7 @@ function applyF(){
         }
 
         _matrixTxns=displayTxns;
-        _matrixPivot=Array.from(pivotMap.values()).map(x=>{const it=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,months:monthSel,businessChannel:true};return {sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,avg_selling_price:cnxAvgSellingPriceForItem(it,ctx),customer_count:x.customers.size,customer_names:Array.from(x.customers).sort(),rev:x.rev||0};}).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
+        _matrixPivot=Array.from(pivotMap.values()).map(x=>{const it=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,months:monthSel,businessChannel:true};return {sku:x.sku,sku_name:x.sku_name,qty:x.qty,combo_qty:x.combo_qty||0,total_qty:monthMode?(x.total_qty||0):x.qty,last_1y_qty:x.last_1y_qty||0,avg_selling_price:cnxAvgSellingPriceForItem(it,ctx),customer_count:x.customers.size,customer_names:Array.from(x.customers).sort(),rev:x.rev||0};}).sort((a,b)=>monthMode?(b.total_qty-a.total_qty):(b.qty-a.qty));
 
         const MATRIX_RENDER_CAP = 150;
         const visibleTxns=displayTxns.slice(0,MATRIX_RENDER_CAP), visiblePivot=_matrixPivot.slice(0,MATRIX_RENDER_CAP);
@@ -13933,6 +14006,7 @@ function resetFilters(){
   updateMatrixMonthInfo();
   _matrixMonthMode=false; _matrixLatestMonthKey=''; _matrixOneYearStart=''; _matrixOneYearEnd='';
   const _fm = document.getElementById('fMrp'); if (_fm) _fm.value = '';
+  const _fsm = document.getElementById('fSaleMode'); if (_fsm) _fsm.value = 'All';
   selectedSkuSet.clear();
   refreshChecklists();
   applyF();
@@ -13977,23 +14051,25 @@ function applyRO(){
   const relClassQ = document.getElementById('rRelClass')?.value || 'All';
   const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
+  const saleModeQ = cnxSaleModeState('rSaleMode', custQ, chanSel, subChanSel);
   const d1 = document.getElementById('rD1')?.value || '';
   const d2 = document.getElementById('rD2')?.value || '';
   const ticked = Array.from(selectedSkuSet);
   const packSel = getSelectedPacks();
-  const hasEntryFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || d1 || d2);
-  const roSaleCtx = {types:typeSel, channels:chanSel, subChannels:subChanSel, customer:custQ, d1, d2};
+  const hasEntryFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || saleModeQ || d1 || d2);
+  const roSaleCtx = {types:typeSel, channels:chanSel, subChannels:subChanSel, customer:custQ, saleMode:saleModeQ, d1, d2};
   const typeOk = t => typeSel.length === 0 || typeSel.includes(t);
   const chanOk = c => chanSel.length === 0 || chanSel.includes(c);
   const subChanOk = c => subChanSel.length === 0 || subChanSel.includes(c);
 
-  const drill = !!(custQ || d1 || d2);
+  const drill = !!(custQ || saleModeQ || d1 || d2);
 
   const entOk = e => {
     if (!typeOk(e.type)) return false;
     if (!chanOk(e.channel)) return false;
     if (!subChanOk(e.sub_channel)) return false;
     if (custQ && !String(e.cust).toLowerCase().includes(custQ)) return false;
+    if (!cnxSaleModeOk(e, saleModeQ)) return false;
     if (d1 || d2) {
       if (e.date === 'N/A') return false;
       if (d1 && e.date < d1) return false;
@@ -14039,7 +14115,7 @@ function applyRO(){
     // poore SKU ka overall average discount % hota hai (item.discount_pct
     // ke barabar).
     const mrp = parseFloat(item.mrp) || 0;
-    const anyRoFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || d1 || d2);
+    const anyRoFilter = !!(typeSel.length || chanSel.length || subChanSel.length || custQ || saleModeQ || d1 || d2);
     let fDiscPct = parseFloat(item.discount_pct) || 0;
     if (anyRoFilter) {
       const avgSp = totalQty ? (totalRev / totalQty) : 0;
@@ -14057,7 +14133,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - Math.max(0,n-1)*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
@@ -14100,7 +14176,7 @@ function applyRO(){
   });
   _setSkuRevenueShareContext('repeat', roRevenueShareMap, roRevenueShareTotal);
 
-  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -14522,6 +14598,7 @@ function resetRO(){
   cnxResetCategorySelection('rTaxon');
   const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
   const rrc = document.getElementById('rRelClass'); if (rrc) rrc.value='All';
+  const rsm = document.getElementById('rSaleMode'); if (rsm) rsm.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
   const pinfo = document.getElementById('rPasteInfo'); if (pinfo) pinfo.textContent = '';
@@ -20307,7 +20384,9 @@ function _wiprBase(){
   const cm=String(_wiprToday||_wiprMaxDate||'').slice(0,7);
   const of=document.getElementById('wiprFrom')?.value||'',ot=document.getElementById('wiprTo')?.value||'';
   const ordSet=!!(of||ot);
+  const bm=String(document.getElementById('wiprBal')?.value||'');
   return _wiprRows.filter(r=>{
+    if(!_wiprBalOk(r,bm))return false;
     if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(!_wiprPasteMatch(r.sku))return false;
@@ -20349,16 +20428,33 @@ function _wiprFmtFull(iso){
 function _wiprOrdKey(r){return (r.order||'')+'|'+r.sku;}
 /* One row per (receipt date, order no, SKU) — orders are never clubbed */
 function _wiprMergeDateSku(list){
-  const m=new Map();
+  const m=new Map();const bm=String(document.getElementById('wiprBal')?.value||'');
   list.forEach(r=>{
     const k=r.date+'|'+_wiprOrdKey(r);
-    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance)};
+    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm)};
     x.qty+=Number(r.qty)||0;
     if(!x.od&&r.order_date)x.od=r.order_date;
     if(!x.dl&&r.delivery)x.dl=r.delivery;
     m.set(k,x);
   });
   return Array.from(m.values());
+}
+/* V24.49 — Balance Qty filter (both WIP Receive tables). mode: ''=all, gt, eq, lt, le */
+function _wiprBalOk(r,mode){
+  if(!mode)return true;
+  const c=(r.balance===null||r.balance===undefined)?null:Number(r.balance);
+  const raw=(r.balance_raw===null||r.balance_raw===undefined)?c:Number(r.balance_raw);
+  if(c===null&&raw===null)return false; /* no Production-sheet match = balance unknown */
+  if(mode==='gt')return (c||0)>0;
+  if(mode==='eq')return Math.abs(raw)<1e-9;
+  if(mode==='lt')return raw<-1e-9;
+  if(mode==='le')return raw<=1e-9;
+  return true;
+}
+/* V24.50: Bal Qty shown = asli (negative bhi, 0 nahi banta) jab filter = 0 / < 0 / <= 0 ho, warna usual clamped value */
+function _wiprBalShow(r,mode){
+  if((mode==='eq'||mode==='lt'||mode==='le')&&r.balance_raw!==null&&r.balance_raw!==undefined)return Number(r.balance_raw);
+  return (r.balance===null||r.balance===undefined)?null:Number(r.balance);
 }
 function _wiprInRange(){
   _wiprSyncMonth();
@@ -20448,7 +20544,7 @@ function renderWipReceive(){
   host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead><tr>${head}</tr></thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
 function resetWipReceiveFilters(){
-  ['wiprType','wiprChannel','wiprDelivery','wiprWeek'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  ['wiprType','wiprChannel','wiprDelivery','wiprWeek','wiprBal'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   ['wiprSearch','wiprOrderNo','wiprPasteSkus'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   _wiprPasteTokens=null;
   const info=document.getElementById('wiprPasteInfo');if(info)info.textContent='';
@@ -20566,9 +20662,10 @@ function _wmBase(){
   const wk=String(document.getElementById('wmWeek')?.value||'').trim();
   const of=document.getElementById('wmFrom')?.value||'',ot=document.getElementById('wmTo')?.value||'';
   const td=_wiprTodayIST();
+  const bm=String(document.getElementById('wmBal')?.value||'');
   return _wiprRows.filter(r=>{
-    /* Month-wise table: sirf Bal Qty > 0 (0, negative ya Production sheet me match na hone wale rows nahi aate) */
-    if(!((Number(r.balance)||0)>0))return false;
+    /* Month-wise table: default Bal Qty > 0; Balance Qty filter se All / =0 / <0 / <=0 bhi dekh sakte ho */
+    if(!_wiprBalOk(r,bm))return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(!_wmPasteMatch(r.sku))return false;
     if(dv==='cancelled'){ if(!r.cancelled)return false; }
@@ -20588,10 +20685,10 @@ function _wmBase(){
 }
 /* one row per (order no, SKU) — never clubbed across orders; receipts split by month and by date */
 function _wmMatrix(list){
-  const m=new Map();
+  const m=new Map();const bm=String(document.getElementById('wmBal')?.value||'');
   list.forEach(r=>{
     const k=(r.order||'')+'|'+r.sku;
-    const x=m.get(k)||{order:r.order||'',sku:r.sku,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:(r.balance===null||r.balance===undefined)?null:Number(r.balance),byMonth:{},byDate:{},total:0};
+    const x=m.get(k)||{order:r.order||'',sku:r.sku,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm),byMonth:{},byDate:{},total:0};
     if(r.date){const q=Number(r.qty)||0;const mk=_wmMonthKey(r.date);x.byMonth[mk]=(x.byMonth[mk]||0)+q;x.byDate[r.date]=(x.byDate[r.date]||0)+q;x.total+=q;}
     if(!x.od&&r.order_date)x.od=r.order_date;
     if(!x.dl&&r.delivery)x.dl=r.delivery;
@@ -20616,6 +20713,7 @@ function wipMonthPick(k){_wmPick=k||'';wipMonthRender();}
 function wipMonthReset(){
   ['wmOrderNo','wmSku','wmFrom','wmTo','wmChannel','wmType','wmDelivery','wmWeek','wmPasteSkus'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
   _wmPasteTokens=null;
+  const _wb=document.getElementById('wmBal');if(_wb)_wb.value='gt';
   const _pi=document.getElementById('wmPasteInfo');if(_pi)_pi.textContent='';
   _wmPick='';wipMonthRender();
 }
@@ -29314,6 +29412,7 @@ def api_wip_receive():
     odt_by_order_sku, odt_by_order = {}, {}
     oq_by_order_sku = {}
     bal_by_order_sku = {}
+    bal_raw_by_order_sku = {}   # V24.49: net Bal Qty WITHOUT clamping negatives (Balance Qty filter: =0 / <0 / <=0)
     rq_by_order_sku = {}
     sr_by_order_sku = {}   # (order, sku) -> Sr. No. (PPC-WIP col C), shown next to the SKU
     for pr in prod_rows:
@@ -29328,6 +29427,7 @@ def api_wip_receive():
                 if _sr_txt not in _sr_list:
                     _sr_list.append(_sr_txt)
             bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + max(0.0, float(pr.get("bal_qty") or 0))   # negative (over-receipt) counts as 0
+            bal_raw_by_order_sku[_k3] = bal_raw_by_order_sku.get(_k3, 0.0) + float(pr.get("bal_qty") or 0)
             rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
         _on2 = _wipr_norm_order(pr.get("order_no"))
         if _on2:
@@ -29368,7 +29468,7 @@ def api_wip_receive():
         od = odt_by_order_sku.get((r["order"], r["sku"])) or odt_by_order.get(r["order"]) or ""
         k = (r["date"], r["sku"], ty, ch, dl, od, r["order"], _balv)
         _oqv = oq_by_order_sku.get((r["order"], r["sku"]), 0.0)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku), "sr_no": ", ".join(sr_by_order_sku.get((r["order"], r["sku"]), []))})
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "balance_raw": (lambda _bw: (None if _bw is None else (int(_bw) if float(_bw).is_integer() else round(_bw, 2))))(bal_raw_by_order_sku.get((r["order"], r["sku"]))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku), "sr_no": ", ".join(sr_by_order_sku.get((r["order"], r["sku"]), []))})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
@@ -29396,6 +29496,7 @@ def api_wip_receive():
             "order_qty": _wipr_num(oq_by_order_sku.get((_pon, _psk), 0.0)),
             "recv_qty": _wipr_num(rq_by_order_sku.get((_pon, _psk), 0.0)),
             "balance": _wipr_num(_pbal),
+            "balance_raw": _wipr_num(bal_raw_by_order_sku.get((_pon, _psk), _pbal)),
             "qty": 0, "orders": [_pon] if _pon else [],
             "cancelled": ((_pon, _psk) in cancel_by_order_sku),
             "sr_no": ", ".join(sr_by_order_sku.get((_pon, _psk), [])),
