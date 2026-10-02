@@ -1,3 +1,12 @@
+# Cosa Nostraa — V24.56 (SOR ONLINE/OFFLINE: DATE MISMATCH FIX — MONTH + SKU + NET VALUE MATCH)
+# - Asli wajah: cossa me PSL jaisi SOR rows month-end date (jaise 2026-09-30) par aati hain, jabki Daily sales (N column) me asli Dispatch Date
+#   (jaise 7-Sep-2026) hoti hai. Isliye date + SKU exact match kabhi nahi milta tha aur sab Online ya blank ban jata tha.
+# - Ab pehle exact date + SKU (+vendor) match; na mile to SAME MONTH + SKU (+vendor) me unused Daily sales row, jisme pehle
+#   Net Value (Daily sales X column) == cossa Net Revenue (+qty), phir sirf qty same. Har Daily sales row sirf ek baar use hoti hai (no double).
+#   F column me "offline" likha ho -> Offline Sales, baaki sab (blank bhi) -> Online Order. cossa (Dispatch) aur cossa_orderdate (Order) dono me.
+# - /api/debug: sale_mode_main / sale_mode_orderdate me "matched_by_month_fallback" count, daily_sales_mode me "net" column.
+# - Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.55 (TARGET TAB · MARKETPLACE SHEET SALES: AMAZON + BLINKIT = COSSA SHEET NET REVENUE)
 # - Target tab > "Daily Revenue Glimpse - Marketplace Sheet Sales": Amazon pehle cossa_orderdate col H (Selling Price) se aur Blinkit COSA col H (Selling Price) se aa raha tha.
 #   Ab dono cossa sheet ke NET REVENUE (col I) se: A = Dispatch Date, G = Final Qty, I = Net Revenue, J = Customer Name, K = Type (same rows jo Target table 1 use karti hai).
@@ -1390,6 +1399,7 @@ def _build_sale_mode_index(df, dbg=None):
     c_type = next((c for c in cols if nk(c) == "type"), None) or at(6)      # G
     c_sku  = next((c for c in cols if nk(c) in ("skuno", "sku")), None) or at(7)   # H
     c_qty  = next((c for c in cols if nk(c) in ("qty", "quantity")), None) or at(8)  # I
+    c_net  = next((c for c in cols if nk(c) in ("netvalue", "netrevenue")), None) or at(23)   # X = Net Value (V24.56: cossa Net Revenue se match)
     date_cands = []
     if at(13): date_cands.append(at(13))                                     # V24.51: N column = Dispatch Date = Order Date (primary)
     # fallback sirf tab jab N column me valid dates na hon
@@ -1410,13 +1420,15 @@ def _build_sale_mode_index(df, dbg=None):
             dbg["errors"].append(f"daily_sales: columns not resolved van={c_van} type={c_type} sku={c_sku} date={c_date}")
         return None
     # Vendor / customer columns (header me customer, party, vendor, buyer, channel... ho to) — SOR vendor pehchanne ke liye
-    vend_cols = [c for c in cols if c not in (c_van, c_type, c_sku, c_qty, c_date)
+    vend_cols = [c for c in cols if c not in (c_van, c_type, c_sku, c_qty, c_date, c_net)
                  and any(h in nk(c) for h in _SALE_MODE_VENDOR_HDRS)]
     vend_vals = [df[c].tolist() for c in vend_cols]
     rows, pools, vpools, loose = [], {}, {}, {}
+    mpools, mvpools = {}, {}      # V24.56: MONTH-level pools (cossa SOR rows month-end date par aati hain, Daily sales me asli dispatch date hoti hai)
     n_off = n_on = n_t1 = n_t2 = n_vendor = 0
     van_l, typ_l, sku_l, dv_l = df[c_van].tolist(), df[c_type].tolist(), df[c_sku].tolist(), df[c_date].tolist()
     qty_l = df[c_qty].tolist() if c_qty else [0] * len(df)
+    net_l = df[c_net].tolist() if c_net else [0] * len(df)
     for i in range(len(df)):
         van, typ, sku, qty, dv = van_l[i], typ_l[i], sku_l[i], qty_l[i], dv_l[i]
         typ_c = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
@@ -1447,10 +1459,16 @@ def _build_sale_mode_index(df, dbg=None):
             label = _SALE_MODE_ONLINE; n_on += 1
         iso = dt.strftime("%Y-%m-%d")
         rid = len(rows)
-        rows.append((label, to_num(qty), vendor))
+        rows.append((label, to_num(qty), vendor, to_num(net_l[i]), iso))
         k1, k2 = (iso, sk), (iso, _sale_mode_base_key(sku))
         if tier == 1:
             n_t1 += 1
+            _ym = iso[:7]
+            mpools.setdefault((_ym, sk), []).append(rid)
+            mpools.setdefault((_ym, k2[1]), []).append(rid)
+            if vendor:
+                mvpools.setdefault((_ym, sk, vendor), []).append(rid)
+                mvpools.setdefault((_ym, k2[1], vendor), []).append(rid)
             pools.setdefault(k1, []).append(rid)
             pools.setdefault(k2, []).append(rid)
             if vendor:
@@ -1464,10 +1482,10 @@ def _build_sale_mode_index(df, dbg=None):
     if dbg is not None:
         dbg["daily_sales_mode_sample_keys"] = [str(k) for k in list(pools.keys())[:6]]
         dbg["daily_sales_mode"] = {"van": c_van, "type": c_type, "sku": c_sku, "qty": c_qty, "date": c_date,
-                                   "vendor_cols": vend_cols,
+                                   "vendor_cols": vend_cols, "net": c_net,
                                    "sor_rows": n_t1, "sor_rows_with_vendor": n_vendor, "loose_rows": n_t2,
                                    "offline": n_off, "online": n_on}
-    return {"rows": rows, "pools": pools, "vpools": vpools, "loose": loose}
+    return {"rows": rows, "pools": pools, "vpools": vpools, "loose": loose, "mpools": mpools, "mvpools": mvpools}
 
 class _SaleModeMatcher:
     """Ek source (cossa ya cossa_orderdate) ke liye matcher. Har Daily-sales row ek hi baar consume hoti hai,
@@ -1481,11 +1499,16 @@ class _SaleModeMatcher:
         self.miss = 0
         self.by_vendor = {}
         self.unmatched_samples = []
-    def _pick(self, cands, qty, need_qty=False):
+        self.month_hit = 0
+    def _pick(self, cands, qty, need_qty=False, rev=None):
         rows = self.idx["rows"]
         free = [i for i in cands if i not in self.used]
         if free:
-            pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9), None)
+            pick = None
+            if rev is not None:   # V24.56: qty + Net Value (cossa Net Revenue) dono same ho to pehle wahi
+                pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9 and abs(rows[i][3] - rev) <= 1.5), None)
+            if pick is None:
+                pick = next((i for i in free if abs(rows[i][1] - qty) < 1e-9), None)
             if pick is None:
                 if need_qty:
                     return None
@@ -1501,7 +1524,37 @@ class _SaleModeMatcher:
     def _count(self, vendor, ok):
         d = self.by_vendor.setdefault(vendor or "(unknown)", {"matched": 0, "unmatched": 0})
         d["matched" if ok else "unmatched"] += 1
-    def mode(self, date_iso, raw_sku, qty, vendor=""):
+    def _month_fallback(self, date_iso, raw_sku, qty, vendor, rev):
+        """V24.56: exact date match na mile (cossa me SOR rows month-end date par, Daily sales me asli dispatch date)
+        to SAME MONTH + SKU (+ vendor) me unused row lo: pehle Net Value (cossa Net Revenue) same, phir qty same."""
+        mp = self.idx.get("mpools") or {}
+        mvp = self.idx.get("mvpools") or {}
+        rows = self.idx["rows"]
+        ym = str(date_iso)[:7]
+        sk, bk = _sale_mode_sku_key(raw_sku), _sale_mode_base_key(raw_sku)
+        pools = []
+        if vendor:
+            pools += [mvp.get((ym, sk, vendor)), mvp.get((ym, bk, vendor))]
+        pools += [mp.get((ym, sk)), mp.get((ym, bk))]
+        cands = []
+        for pl in pools:
+            for i in (pl or []):
+                if i not in self.used and i not in cands:
+                    cands.append(i)
+        if not cands:
+            return None
+        pick = None
+        if rev is not None:
+            pick = next((i for i in cands if abs(rows[i][3] - rev) <= 1.5 and abs(rows[i][1] - qty) < 1e-9), None)
+            if pick is None:
+                pick = next((i for i in cands if abs(rows[i][3] - rev) <= 1.5), None)
+        if pick is None:
+            pick = next((i for i in cands if abs(rows[i][1] - qty) < 1e-9), None)
+        if pick is None:
+            return None
+        self.used.add(pick)
+        return pick
+    def mode(self, date_iso, raw_sku, qty, vendor="", rev=None):
         if not self.idx or not date_iso or date_iso == "N/A":
             return ""
         rows = self.idx["rows"]
@@ -1516,12 +1569,18 @@ class _SaleModeMatcher:
                 cand = pool.get(key)
                 if not cand:
                     continue
-                pick = self._pick(cand, qty, need_qty)
+                pick = self._pick(cand, qty, need_qty, rev)
                 if pick is None:
                     continue
                 self.hit += 1
                 self._count(vendor, True)
                 return rows[pick][0]
+        _mp = self._month_fallback(date_iso, raw_sku, qty, vendor, rev)
+        if _mp is not None:
+            self.hit += 1
+            self.month_hit += 1
+            self._count(vendor, True)
+            return rows[_mp][0]
         self.miss += 1
         self._count(vendor, False)
         try:
@@ -1530,10 +1589,10 @@ class _SaleModeMatcher:
         except Exception:
             pass
         return ""
-    def label(self, date_iso, raw_sku, qty, vendor=""):
+    def label(self, date_iso, raw_sku, qty, vendor="", rev=None):
         """V24.48: SOR row ka final label. Daily-sales match mila to wahi (F me 'offline' likha ho -> Offline Sales),
         match na mile to bhi BLANK nahi — F me offline ke alawa kuch bhi / blank = Online Order."""
-        m = self.mode(date_iso, raw_sku, qty, vendor)
+        m = self.mode(date_iso, raw_sku, qty, vendor, rev)
         if m:
             return m
         return _SALE_MODE_ONLINE if self.idx else ""
@@ -3808,14 +3867,14 @@ def _refresh_data():
                  "channel":_si(channel),"sub_channel":_si(sub_channel),"fy":_si(fy)}
         if channel == "SOR":
             # Dispatch-date based sheet -> Daily sales ko Dispatch Date (X) se match
-            _sm = sale_matcher_main.label(date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
+            _sm = sale_matcher_main.label(date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS), rev)
             if _sm: entry["sale_mode"] = _si(_sm)
         
         if mapped_sku not in sales_exact: sales_exact[mapped_sku] = {"entries":[],"total_rev":0.0}
         sales_exact[mapped_sku]["entries"].append(entry)
         sales_exact[mapped_sku]["total_rev"] += rev
 
-    dbg["sale_mode_main"] = {"matched": sale_matcher_main.hit, "unmatched": sale_matcher_main.miss}
+    dbg["sale_mode_main"] = {"matched": sale_matcher_main.hit, "unmatched": sale_matcher_main.miss, "matched_by_month_fallback": sale_matcher_main.month_hit}
     dbg["sale_mode_main_by_vendor"] = sale_matcher_main.by_vendor
     dbg["sale_mode_main_unmatched_samples"] = sale_matcher_main.unmatched_samples
     # MEMORY: sales dataframe ka kaam khatam — turant free (60-120MB bachat)
@@ -4038,7 +4097,7 @@ def _refresh_data():
             }
             if channel == "SOR":
                 # Order-date based sheet -> Daily sales ko Order Date (X) se match
-                _sm_od = sale_matcher_od.label(order_date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS))
+                _sm_od = sale_matcher_od.label(order_date_iso, raw_sku, qty, _match_channel_keys(cust, _SOR_CHANNEL_KEYS), rev)
                 if _sm_od:
                     entry["sale_mode"] = _si(_sm_od)
                     order_entry["sale_mode"] = _si(_sm_od)
@@ -4053,7 +4112,7 @@ def _refresh_data():
                 bucket["entries"].append(entry)
                 bucket["total_rev"] += rev
 
-        dbg["sale_mode_orderdate"] = {"matched": sale_matcher_od.hit, "unmatched": sale_matcher_od.miss}
+        dbg["sale_mode_orderdate"] = {"matched": sale_matcher_od.hit, "unmatched": sale_matcher_od.miss, "matched_by_month_fallback": sale_matcher_od.month_hit}
         dbg["sale_mode_orderdate_by_vendor"] = sale_matcher_od.by_vendor
         dbg["sale_mode_orderdate_unmatched_samples"] = sale_matcher_od.unmatched_samples
         dbg["cossa_orderdate_all_skus"] = len(orderdate_sales_exact)
