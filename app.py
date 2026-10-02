@@ -1344,10 +1344,11 @@ _SOR_CHANNEL_KEYS = (
     ("Madhuram Apparels", ("madhuram",)),
     ("SV Fashions", ("svfashion",)),
     ("Join Commerce", ("joincommerce",)),   # Join Commerce Pvt. Ltd. = SOR (pehle ECom me tha)
+    ("Taj Trade and Transport", ("tajtrade",)),   # TAJ TRADE AND TRANSPORT COMPANY LIMITED = SOR (Target sheet: Taj-Khazan)
 )
 # V24.44: Taj Trade and Transport ab SOR nahi — Purchase (B2B) vendor hai. Customer Name se pehchan,
 # sheet Type kuch bhi ho (Website/Online/Store consumer sales ko chhod ke) Type = Purchase maana jaata hai.
-_PURCHASE_VENDOR_KEYS = ("tajtrade",)
+_PURCHASE_VENDOR_KEYS = ()   # updated Target: Taj Trade and Transport ab SOR channel hai (_SOR_CHANNEL_KEYS) — koi Purchase-vendor override nahi
 def _is_purchase_vendor(customer):
     c = re.sub(r"[^a-z0-9]", "", str(customer or "").casefold())
     return bool(c) and any(k in c for k in _PURCHASE_VENDOR_KEYS)
@@ -11904,7 +11905,7 @@ const _SD_SOR_MARKETPLACES = [
 // SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
 const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Qcom','Other ECom'];
 function saleModeText(e){ return String((e && e.sale_mode) || '').trim(); }
-const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions','Join Commerce'];
+const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions','Join Commerce','Taj Trade and Transport'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
@@ -16276,7 +16277,7 @@ function renderTargetTable(){
       <table class="ro" style="width:100%;min-width:1500px">
         <thead><tr>
           <th style="width:50px;text-align:center">#</th><th>Stake Holder</th><th>Channel</th>
-          <th>Target</th><th>Achieved</th><th>Short</th><th>Achievement</th><th>Projected</th>
+          <th>Net Revenue Target</th><th>Net Revenue Achieved</th><th>Net Revenue Short</th><th>Achievement</th><th>Projected</th>
           <th style="border-left:2px solid var(--cn-gold)">Qty Target</th><th>Qty Achieved</th><th>Qty Short</th><th>Qty Achievement</th><th>Qty Projected</th>
         </tr></thead>
         <tbody>${lbRows}</tbody>
@@ -16288,7 +16289,7 @@ function renderTargetTable(){
 function exportTarget(){
   const d = _tgtData;
   if (!d || !d.leaderboard || !d.leaderboard.length){ alert('No target data to export.'); return; }
-  const headers = ['Rank','Stake Holder','Channel','SP Target','SP Achieved','SP Short','% Achieved','% Projected',
+  const headers = ['Rank','Stake Holder','Channel','Net Revenue Target','Net Revenue Achieved','Net Revenue Short','% Achieved','% Projected',
     'Qty Target','Qty Achieved','Qty Short','% Qty Achieved','% Qty Projected'];
   const rows = d.leaderboard.map(L => [L.rank, L.stakeholder, marketplaceDisplayText(L.channel||''), Math.round(L.sp_target),
     Math.round(L.sp_actual), Math.round(L.sp_short), L.pct_achieved, L.proj_pct,
@@ -16404,6 +16405,9 @@ function drgFmtNum(n){
   }
   return (neg ? '-' : '') + s;
 }
+// Daily Run Rate = This Month ÷ days elapsed (server: d.days_elapsed). Qty ke liye bhi wahi.
+function _drgRR(r, d){ const n = Number(d && d.days_elapsed) || 0; return n > 0 ? (Number(r && r.mtd) || 0) / n : 0; }
+function _drgQRR(r, d){ const n = Number(d && d.days_elapsed) || 0; return n > 0 ? (Number(r && r.mtd_qty) || 0) / n : 0; }
 function renderDRGTable(){
   const host = document.getElementById('drgContent');
   const d = _drgData;
@@ -16423,7 +16427,9 @@ function renderDRGTable(){
       <td>${fmt(r.yesterday)}</td>
       <td>${r.mtd_target ? fmt(r.mtd_target) : 'NA'}</td>
       <td>${pctCell(r.mtd_target, r.mtd_achievement)}</td>
+      <td style="font-weight:800">${fmt(_drgRR(r, d))}</td>
       ${_drgQtyCells(r, pctCell)}
+      <td style="font-weight:800">${drgFmtNum(_drgQRR(r, d))}</td>
     </tr>`).join('');
   const totalRow = `<tr style="background:#eef7ea;font-weight:900">
       <td>TOTAL</td>
@@ -16434,20 +16440,23 @@ function renderDRGTable(){
       <td>${fmt(t.yesterday)}</td>
       <td>${t.mtd_target ? fmt(t.mtd_target) : 'NA'}</td>
       <td>${pctCell(t.mtd_target, t.mtd_achievement)}</td>
+      <td>${fmt(_drgRR(t, d))}</td>
       ${_drgQtyCells(t, pctCell)}
+      <td>${drgFmtNum(_drgQRR(t, d))}</td>
     </tr>`;
   host.innerHTML = `
     <p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">
       YTD: ${escHtml(d.fy_label||'')} &nbsp;•&nbsp; Last Month: ${escHtml(d.last_month_label||'')}
       &nbsp;•&nbsp; This Month: ${escHtml(d.month_label||'')} &nbsp;•&nbsp; Day Before: ${escHtml(d.day_before_label||'')}
       &nbsp;•&nbsp; Yesterday: ${escHtml(d.yesterday_label||'')}
+      &nbsp;•&nbsp; Daily Run Rate = This Month ÷ ${Number(d.days_elapsed)||0} day${(Number(d.days_elapsed)||0)===1?'':'s'}
       ${d.is_current_month === false ? '<br><span style="color:var(--cn-gold)">Past month view — YTD runs till month end; Day Before / Yesterday = last two days of ' + escHtml(d.month_label||'') + '.</span>' : ''}
     </p>
-    <table class="ro" style="width:100%;min-width:1640px">
+    <table class="ro" style="width:100%;min-width:1900px">
       <thead><tr>
         <th>Channel</th><th>YTD</th><th>Last Month</th><th>This Month</th>
-        <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th>
-        ${_DRG_QTY_HEAD}
+        <th>Day Before</th><th>Yesterday</th><th>This Month Target</th><th>Achievement %</th><th>Daily Run Rate</th>
+        ${_DRG_QTY_HEAD}<th>Qty Daily Run Rate</th>
       </tr></thead>
       <tbody>${rowsHtml}${totalRow}</tbody>
     </table>`;
@@ -16455,14 +16464,14 @@ function renderDRGTable(){
 function exportDRG(){
   const d = _drgData;
   if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %',
-    'YTD Qty','Last Month Qty','This Month Qty','Day Before Qty','Yesterday Qty','This Month Qty Target','Qty Achievement %'];
-  const titleRow = [d.title_date || '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+  const headers = ['Channel','YTD','Last Month','This Month','Day Before','Yesterday','This Month Target','Achievement %','Daily Run Rate',
+    'YTD Qty','Last Month Qty','This Month Qty','Day Before Qty','Yesterday Qty','This Month Qty Target','Qty Achievement %','Qty Daily Run Rate'];
+  const titleRow = [d.title_date || '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
   const rows = d.rows.map(r => [r.channel, drgFmtNum(r.ytd), drgFmtNum(r.last_month), drgFmtNum(r.mtd),
-    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : ''].concat(_drgQtyCsvCells(r)));
+    drgFmtNum(r.day_before), drgFmtNum(r.yesterday), r.mtd_target ? drgFmtNum(r.mtd_target) : 'NA', r.mtd_target ? r.mtd_achievement : '', drgFmtNum(_drgRR(r, d))].concat(_drgQtyCsvCells(r)).concat([drgFmtNum(_drgQRR(r, d))]));
   const t = d.totals||{};
   rows.push(['TOTAL', drgFmtNum(t.ytd||0), drgFmtNum(t.last_month||0), drgFmtNum(t.mtd||0),
-    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : ''].concat(_drgQtyCsvCells(t)));
+    drgFmtNum(t.day_before||0), drgFmtNum(t.yesterday||0), t.mtd_target ? drgFmtNum(t.mtd_target) : 'NA', t.mtd_target ? t.mtd_achievement : '', drgFmtNum(_drgRR(t, d))].concat(_drgQtyCsvCells(t)).concat([drgFmtNum(_drgQRR(t, d))]));
   const csv = [titleRow, headers].concat(rows).map(r => r.map(c => {
     const s = String(c==null?'':c);
     return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
@@ -31590,8 +31599,9 @@ def api_daily_target_report_export_xlsx():
 # ════════════════════════════════════════════════════════════════
 _TARGET_26_27_MONTHS = ("2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03")
 _TARGET_26_27 = (
-    # B2B = Purchase Type + Taj Trade and Transport (Taj ka target: 100000, 300000, 400000, 400000, 200000, 200000 add kiya)
-    ('Purchase', 'B2B', (5600000, 6800000, 5400000, 6400000, 3800000, 4700000)),
+    # UPDATED TARGET SHEET (FY_26-27, Oct..Mar). Revenue = NET REVENUE (sheet ke "SP" label ko Net Revenue padho).
+    # SIS = SOR. B2B ab sirf Purchase Type (Taj ka alag SOR row hai).
+    ('Purchase', 'B2B', (5500000, 6500000, 5000000, 6000000, 3600000, 4500000)),
     ('Exhibition', 'B2C', (0, 0, 2500000, 0, 0, 0)),
     ('ECom', 'Amazon', (1200000, 1200000, 1500000, 3000000, 3000000, 2000000)),
     ('ECom', 'Flipkart', (500000, 500000, 400000, 400000, 300000, 100000)),
@@ -31604,22 +31614,22 @@ _TARGET_26_27 = (
     ('Website', 'D2C', (14000000, 13500000, 12000000, 11000000, 11000000, 4200000)),
     ('Store', 'Store', (4000000, 4000000, 3500000, 4000000, 4000000, 4000000)),
     ('Bulk', 'Bulk', (4500000, 4500000, 3500000, 3500000, 3500000, 2300000)),
-    # SOR rows = _SOR_CHANNEL_KEYS ke labels (ek vendor = ek hi row). Naye vendors ka target abhi 0 —
-    # target milte hi yahan bhar do.
-    ('SOR', 'PSL Retail', (500000, 500000, 300000, 300000, 200000, 200000)),
-    ('SOR', 'Aza Fashions', (100000, 100000, 100000, 80000, 50000, 50000)),
-    ('SOR', 'Aditya Birla Fashion', (50000, 100000, 100000, 100000, 100000, 50000)),
-    ('SOR', 'Mirraw', (0, 0, 0, 0, 0, 0)),
-    ('SOR', 'N M Fashion Designs', (600000, 600000, 500000, 500000, 500000, 500000)),
-    ('SOR', 'Mohanlal Sons', (400000, 500000, 500000, 400000, 400000, 300000)),
-    ('SOR', 'Kalki Fashion', (800000, 800000, 800000, 700000, 700000, 700000)),
-    ('SOR', 'Parkash Sons', (80000, 100000, 80000, 50000, 50000, 30000)),
-    ('SOR', 'Madhuram Apparels', (0, 0, 0, 0, 0, 0)),
-    ('SOR', 'SV Fashions', (200000, 200000, 100000, 100000, 100000, 100000)),
-    ('SOR', 'Join Commerce', (600000, 600000, 400000, 300000, 200000, 200000)),   # pehle ECom row tha, target same
-    # Hata diye gaye (ab SOR channel nahi): KORA (600000, 600000, 500000, 500000, 500000, 500000),
-    # Arved (200000, 200000, 100000, 100000, 100000, 100000),
-    # Taj -Khazan (100000, 300000, 400000, 400000, 200000, 200000)
+    # SIS = SOR rows (sheet name -> customer name se pehchan, _SOR_CHANNEL_KEYS):
+    #   PSL = "PSL Retail..." · Aza = "Aza Fashions..." · Prakash Sons · Madhuram (The Hub) · Jaypore = Aditya Birla Fashion ·
+    #   IGP = Join Commerce · Mirraw · Kalki · KORA = N M Fashion Designs · S. V. Fashion · Taj-Khazan = TAJ TRADE AND TRANSPORT COMPANY LIMITED
+    ('SOR', 'PSL Retail', (190000, 190000, 190000, 190000, 190000, 190000)),
+    ('SOR', 'Aza Fashions', (25000, 25000, 25000, 25000, 25000, 25000)),
+    ('SOR', 'Parkash Sons', (20000, 20000, 20000, 20000, 20000, 20000)),
+    ('SOR', 'Madhuram Apparels', (20000, 20000, 20000, 20000, 20000, 20000)),
+    ('SOR', 'Aditya Birla Fashion', (30000, 35000, 35000, 35000, 35000, 30000)),
+    ('SOR', 'Join Commerce', (30000, 35000, 35000, 35000, 35000, 30000)),
+    ('SOR', 'Mirraw', (5000, 10000, 10000, 10000, 10000, 5000)),
+    ('SOR', 'Kalki Fashion', (150000, 300000, 300000, 300000, 200000, 200000)),
+    ('SOR', 'N M Fashion Designs', (150000, 300000, 300000, 300000, 200000, 200000)),
+    ('SOR', 'SV Fashions', (25000, 25000, 25000, 25000, 25000, 25000)),
+    ('SOR', 'Taj Trade and Transport', (0, 0, 0, 0, 0, 0)),
+    # Naye target sheet me nahi hai, par SOR vendor hai — actual SOR me hi count ho (target 0)
+    ('SOR', 'Mohanlal Sons', (0, 0, 0, 0, 0, 0)),
 )
 
 _T26_LABEL_WEBSITE = "Website (DTC)"
@@ -31656,7 +31666,8 @@ _T26_MARKETPLACE_TYPES = {"marketplace", "sor", "sis", "ecom", "ecommerce", "reg
 # Stakeholder per Type for Target vs Actual (table 1). SOR = Sakshi (told by user); ECom = Mahesh and
 # Website = Kiran (same owners as the Sept-2026 plan). Purchase / Exhibition / Store / Bulk have no
 # owner given yet -> the Type name is shown; change here when an owner is decided.
-_T26_STAKEHOLDER_BY_TYPE = {"SOR": "Sakshi", "ECom": "Mahesh", "Website": "Kiran"}
+_T26_STAKEHOLDER_BY_TYPE = {"SOR": "Sakshi", "ECom": "Mahesh", "Website": "Kiran",
+                            "Purchase": "Uma", "Exhibition": "Naman", "Store": "Ravikant", "Bulk": "Sparsh"}   # Store: pehle Tanuj, ab Ravikant
 
 # ── QTY TARGET (Target_26-27) ───────────────────────────────────────────────────────────────
 # Qty Target = Revenue Target ÷ channel ka Average NET REVENUE per piece (V24.53: pehle Selling Price basis tha).
@@ -31874,6 +31885,9 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets, month=""):
     dbef_dt  = today_dt - timedelta(days=2)
     cm_start = upper_dt.replace(day=1)
     cur_month = month            # selected month (target / This Month isi ka)
+    # Daily Run Rate = This Month / is mahine ke beete din (current month: aaj tak ke din; past month: poora mahina).
+    days_elapsed = max(1, int(upper_dt.day))
+    days_in_month = int(((datetime(upper_dt.year, upper_dt.month, 28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)).day)
 
     lm_end   = cm_start - timedelta(days=1)
     lm_start = lm_end.replace(day=1)
@@ -31951,6 +31965,7 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets, month=""):
             "day_before_qty": slot["day_before_qty"], "yesterday_qty": slot["yesterday_qty"],
             "mtd_qty": slot["mtd_qty"],
             "mtd_qty_target": mtd_qty_target, "mtd_qty_achievement": ach_qty,
+            "run_rate": slot["mtd"] / days_elapsed, "qty_run_rate": slot["mtd_qty"] / days_elapsed,
         })
         tot["ytd"]        += slot["ytd"]
         tot["last_month"] += slot["last_month"]; tot["day_before"] += slot["day_before"]
@@ -31959,6 +31974,8 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets, month=""):
         for _qk in ("ytd_qty", "last_month_qty", "day_before_qty", "yesterday_qty", "mtd_qty"):
             tot[_qk] += slot[_qk]
         tot["mtd_qty_target"] += mtd_qty_target
+    tot["run_rate"] = tot["mtd"] / days_elapsed
+    tot["qty_run_rate"] = tot["mtd_qty"] / days_elapsed
     tot["mtd_achievement"] = round((tot["mtd"] / tot["mtd_target"] * 100), 1) if tot["mtd_target"] else 0.0
     tot["mtd_qty_achievement"] = round((tot["mtd_qty"] / tot["mtd_qty_target"] * 100), 1) if tot["mtd_qty_target"] else 0.0
 
@@ -31976,6 +31993,7 @@ def _build_daily_revenue_glimpse_uncached(src_rows, targets, month=""):
         "month_selected": cur_month,
         "cur_month": real_month,
         "is_current_month": (cur_month == real_month),
+        "days_elapsed": days_elapsed, "days_in_month": days_in_month,
         "months": _drg_month_options(src_rows, real_month, cur_month),
     }
 
@@ -33434,9 +33452,9 @@ def api_daily_revenue_glimpse_export_xlsx():
         title_txt = rep.get("title_date") or today_dt.strftime("%d - %b - %Y")
 
         headers = ["Channel", "YTD", "Last Month", "This Month", "Day Before",
-                   "Yesterday", "This Month Target", "Achievement %",
+                   "Yesterday", "This Month Target", "Achievement %", "Daily Run Rate",
                    "YTD Qty", "Last Month Qty", "This Month Qty", "Day Before Qty",
-                   "Yesterday Qty", "This Month Qty Target", "Qty Achievement %"]
+                   "Yesterday Qty", "This Month Qty Target", "Qty Achievement %", "Qty Daily Run Rate"]
         n_cols = len(headers)
         NUM_FMT = "[>=10000000]##\\,##\\,##\\,##0;[>=100000]##\\,##\\,##0;##,##0"
 
@@ -33481,17 +33499,19 @@ def api_daily_revenue_glimpse_export_xlsx():
             else:
                 ws.cell(row=r_idx, column=7, value="NA")
                 ws.cell(row=r_idx, column=8, value="")
-            ws.cell(row=r_idx, column=9, value=round(r.get("ytd_qty", 0))).number_format = NUM_FMT
-            ws.cell(row=r_idx, column=10, value=round(r.get("last_month_qty", 0))).number_format = NUM_FMT
-            ws.cell(row=r_idx, column=11, value=round(r.get("mtd_qty", 0))).number_format = NUM_FMT
-            ws.cell(row=r_idx, column=12, value=round(r.get("day_before_qty", 0))).number_format = NUM_FMT
-            ws.cell(row=r_idx, column=13, value=round(r.get("yesterday_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=10, value=round(r.get("ytd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=11, value=round(r.get("last_month_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=12, value=round(r.get("mtd_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=13, value=round(r.get("day_before_qty", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=14, value=round(r.get("yesterday_qty", 0))).number_format = NUM_FMT
             if r.get("mtd_qty_target"):
-                ws.cell(row=r_idx, column=14, value=round(r["mtd_qty_target"])).number_format = NUM_FMT
-                ws.cell(row=r_idx, column=15, value=r.get("mtd_qty_achievement", 0))
+                ws.cell(row=r_idx, column=15, value=round(r["mtd_qty_target"])).number_format = NUM_FMT
+                ws.cell(row=r_idx, column=16, value=r.get("mtd_qty_achievement", 0))
             else:
-                ws.cell(row=r_idx, column=14, value="NA")
-                ws.cell(row=r_idx, column=15, value="")
+                ws.cell(row=r_idx, column=15, value="NA")
+                ws.cell(row=r_idx, column=16, value="")
+            ws.cell(row=r_idx, column=9, value=round(r.get("run_rate", 0))).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=17, value=round(r.get("qty_run_rate", 0))).number_format = NUM_FMT
             for col in range(1, n_cols + 1):
                 ws.cell(row=r_idx, column=col).border = border
             r_idx += 1
@@ -33509,22 +33529,24 @@ def api_daily_revenue_glimpse_export_xlsx():
         else:
             ws.cell(row=r_idx, column=7, value="NA")
             ws.cell(row=r_idx, column=8, value="")
-        ws.cell(row=r_idx, column=9, value=round(tot.get("ytd_qty", 0))).number_format = NUM_FMT
-        ws.cell(row=r_idx, column=10, value=round(tot.get("last_month_qty", 0))).number_format = NUM_FMT
-        ws.cell(row=r_idx, column=11, value=round(tot.get("mtd_qty", 0))).number_format = NUM_FMT
-        ws.cell(row=r_idx, column=12, value=round(tot.get("day_before_qty", 0))).number_format = NUM_FMT
-        ws.cell(row=r_idx, column=13, value=round(tot.get("yesterday_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=10, value=round(tot.get("ytd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=11, value=round(tot.get("last_month_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=12, value=round(tot.get("mtd_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=13, value=round(tot.get("day_before_qty", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=14, value=round(tot.get("yesterday_qty", 0))).number_format = NUM_FMT
         if tot.get("mtd_qty_target"):
-            ws.cell(row=r_idx, column=14, value=round(tot["mtd_qty_target"])).number_format = NUM_FMT
-            ws.cell(row=r_idx, column=15, value=tot.get("mtd_qty_achievement", 0))
+            ws.cell(row=r_idx, column=15, value=round(tot["mtd_qty_target"])).number_format = NUM_FMT
+            ws.cell(row=r_idx, column=16, value=tot.get("mtd_qty_achievement", 0))
         else:
-            ws.cell(row=r_idx, column=14, value="NA")
-            ws.cell(row=r_idx, column=15, value="")
+            ws.cell(row=r_idx, column=15, value="NA")
+            ws.cell(row=r_idx, column=16, value="")
+        ws.cell(row=r_idx, column=9, value=round(tot.get("run_rate", 0))).number_format = NUM_FMT
+        ws.cell(row=r_idx, column=17, value=round(tot.get("qty_run_rate", 0))).number_format = NUM_FMT
         for col in range(1, n_cols + 1):
             cell = ws.cell(row=r_idx, column=col)
             cell.fill = total_fill; cell.font = total_font; cell.border = border
 
-        widths = [26, 14, 14, 14, 12, 12, 16, 14, 12, 14, 14, 14, 14, 18, 16]
+        widths = [26, 14, 14, 14, 12, 12, 16, 14, 14, 12, 14, 14, 14, 14, 18, 16, 16]
         for i, w in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
