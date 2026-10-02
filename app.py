@@ -8146,6 +8146,13 @@ table thead th:not(#_h1):not(#_h2){
 #prodContent table.prod-table:not(#_h1):not(#_h2),
 #vBulk table.bulk-table:not(#_h1):not(#_h2),
 .ops-page table.ops-table.ops-rank-table:not(#_h1):not(#_h2){table-layout:auto !important}
+
+/* ── FREEZE TABLE HEADINGS (all tables) ── */
+table.ro thead th,table.ops-table thead th,table.ops-table th,table.crr-table th,table.prod-table thead th,table.festival-table thead th,table.rkh-grid thead th{position:sticky!important;top:0;z-index:12}
+table.ro thead,table.ops-table thead,table.crr-table thead{position:relative;z-index:12}
+.crr-table-wrap,.cnx-table-wrap{overflow:auto!important}
+.crr-table-wrap{max-height:70vh}
+.cnx-freeze-wrap{overflow-y:auto!important;max-height:72vh}
 </style></head><body data-tab="home">
 
 <canvas id="pcanvas"></canvas>
@@ -13490,7 +13497,7 @@ function applyF(){
   _matrixMonthMode=monthMode; _matrixLatestMonthKey=latestMonthKey; _matrixOneYearStart=rollingYear.start; _matrixOneYearEnd=rollingYear.end;
   const hasSelectedSkus = selectedSkuSet.size > 0;
   const hasPastedSkus = matrixPastedSkuSet instanceof Set;
-  const matrixActiveSkuScope = hasPastedSkus ? matrixPastedSkuSet : (hasSelectedSkus ? selectedSkuSet : null);
+  const matrixActiveSkuScope = null; // FIX: pasted/ticked SKUs me bhi In CMBs Sold poore parent CMBs se aayega (single search jaisa)
   // Rolling sales shown on Overall cards must follow the same active
   // transaction filters (channel/sub-channel/FY/customer/date) as Sold Qty.
   const _overallDaysAgoIso = days => {
@@ -14035,7 +14042,7 @@ function _matrixBuildPayload(kind){
     });
   }
   const fyRaw=document.getElementById('fFY')?.value||'All FYs', d1=document.getElementById('fD1')?.value||'', d2=document.getElementById('fD2')?.value||'';
-  const scope=(matrixPastedSkuSet instanceof Set) ? matrixPastedSkuSet : (selectedSkuSet&&selectedSkuSet.size?selectedSkuSet:null);
+  const scope=null; // FIX: In CMBs Sold ko pasted/ticked SKU set se restrict nahi karna
   return _matrixPivot.map(p => {
     const iv = invBy[String(p.sku||'').trim().toUpperCase()] || {s:0, w:0, img:''};
     const item=_masterSkuMap[String(p.sku||'').trim().toUpperCase()]||{sku:p.sku};
@@ -14239,7 +14246,13 @@ function applyRO(){
     // every item and scanning every sales entry again.
     if (!hasEntryFilter) return item;
     const fe = (item.sales_entries || []).filter(entOk);
-    if (!fe.length) return null;
+    if (!fe.length) {
+      // FIX: SKU search / paste ke saath date-type filter lagane par agar individual sale nahi hai
+      // par parent CMB me sale hui hai to row dikhao (In CMBs Sold + Total Sold ke saath).
+      if (!(pastedSkuSet || txt)) return null;
+      const _cmbOnly = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {}).inCmb.sold;
+      if (!(Number(_cmbOnly) > 0)) return null;
+    }
     const totalRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
     const totalQty = fe.reduce((s,e) => s + (parseFloat(e.qty) || 0), 0);
     // Filter-aware Discount % — jo bhi Date/Channel/Type filter abhi lage
@@ -14491,7 +14504,7 @@ function applyRO(){
     const saleVals = cnxSaleTotalsForItem(item, roSaleCtx);
     const q7 = saleVals.q7, q15 = saleVals.q15, q30 = saleVals.q30;
     const qty = saleVals.sold;
-    const cmbSold = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
+    const cmbSold = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Combo SKU ki WIP — Type filter ke hisaab se channel-wise, warna total.
@@ -14673,7 +14686,7 @@ function applyColFilters(){
     const wip = wipOfCF(item);
     const sv = cnxSaleTotalsForItem(item, cfSaleCtx);
     const q7 = sv.q7, q15 = sv.q15, q30 = sv.q30, qty = sv.sold;
-    const cmbSold = cnxSoldSplit(item, cfSaleCtx, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
+    const cmbSold = cnxSoldSplit(item, cfSaleCtx, {}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
@@ -14878,7 +14891,7 @@ function exportRO(fmtType){
     // Main row uses the same authoritative sales helper as the screen/KPIs.
     const rsv = cnxSaleTotalsForItem(item, roSaleCtxX);
     const r7 = rsv.q7, r15 = rsv.q15, r30 = rsv.q30, rSold = rsv.sold;
-    const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {allowedParentSkus:pastedSkuSet}).inCmb.sold;
+    const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {}).inCmb.sold;
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
@@ -24799,8 +24812,7 @@ mkCard = function(item, rev, conf, slow){
   const low = (parseFloat(item.total_inv) || 0) <= 10 ? ' style="color:#d97706"' : '';
   const code = escHtml(skuLabel(item.sku, item.sku_name));
   const soldCtx = cnxCurrentSaleContext();
-  const soldScope = currentTab === 'repeat' ? pastedSkuSet
-    : (currentTab === 'matrix' && selectedSkuSet && selectedSkuSet.size ? selectedSkuSet : null);
+  const soldScope = null; // FIX: In CMBs Sold ko pasted/ticked SKU set se restrict nahi karna
   const soldSplit = cnxSoldSplit(item, soldCtx, {allowedParentSkus:soldScope});
   const individualSold = Number(soldSplit.individual.sold) || 0;
   const inCmbSold = Number(soldSplit.inCmb.sold) || 0;
@@ -25887,6 +25899,26 @@ document.addEventListener('click',function(ev){
     scrolled = s;
     bar.style.boxShadow = s ? '0 10px 30px rgba(26,22,16,.10)' : '0 8px 26px rgba(26,22,16,.05)';
   }, {passive:true});
+})();
+
+/* ── FREEZE TABLE HEADINGS: scroll wrapper ko vertical scroll do taaki heading chipki rahe ── */
+(function(){
+  const SEL='table.ro,table.ops-table,table.crr-table,table.prod-table,table.festival-table';
+  function fix(){
+    document.querySelectorAll(SEL).forEach(t=>{
+      if(t.dataset.cnxFrz)return;
+      const p=t.parentElement;
+      if(!p||p===document.body)return;
+      const cs=getComputedStyle(p);
+      const xs=(cs.overflowX==='auto'||cs.overflowX==='scroll');
+      if(xs && cs.maxHeight==='none'){ p.classList.add('cnx-freeze-wrap'); }
+      t.dataset.cnxFrz='1';
+    });
+  }
+  let tm=null;
+  const run=()=>{clearTimeout(tm);tm=setTimeout(fix,250);};
+  new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
+  run();
 })();
 
 </script>
