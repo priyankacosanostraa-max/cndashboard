@@ -1,3 +1,15 @@
+# Cosa Nostraa — V24.58 (TARGET TAB TABLE 1 · MARKETPLACE = COSSA SHEET "Type = Marketplace" ROWS KA NET REVENUE)
+# - Pehle Marketplace bucket merge ke baad wale Type se banta tha: Purchase/Bulk type wale SOR-vendor rows (N M Fashion, Mohanlal Sons, Kalki, Parkash Sons...)
+#   bhi Marketplace me jud jaate the, isliye Sep-2026 Marketplace sheet ke Type = Marketplace filter (Net Revenue col I) se zyada aa raha tha.
+# - Ab Marketplace actual = cossa col K (Type) me sheet par jo Marketplace likha hai (purane SOR / ECom / SIS labels bhi) un rows ka Net Revenue (col I) aur Final Qty (col G),
+#   Dispatch Date (col A) ke month se. Amazon ka alag bucket pehle jaisa. /api/target me "marketplace_check" (rows, net_revenue, final_qty) — sheet ke filtered Sum se match karne ke liye.
+# - Baaki kuch change nahi.
+# ============================================================
+# Cosa Nostraa — V24.57 (TARGET TAB · REVENUE COLUMN = "NET REVENUE" HEADER SE, SELLING PRICE KABHI NAHI)
+# - Target table 1 (Marketplace row bhi) + Marketplace Sheet Sales ka cossa revenue column ab pehle header naam "Net Revenue" se milta hai;
+#   position I sirf fallback. Header me sell / mrp wala column revenue nahi banta. /api/target me "cossa_columns_used" se dikhta hai kaun sa column liya.
+# - Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.56 (SOR ONLINE/OFFLINE: DATE MISMATCH FIX — MONTH + SKU + NET VALUE MATCH)
 # - Asli wajah: cossa me PSL jaisi SOR rows month-end date (jaise 2026-09-30) par aati hain, jabki Daily sales (N column) me asli Dispatch Date
 #   (jaise 7-Sep-2026) hoti hai. Isliye date + SKU exact match kabhi nahi milta tha aur sab Online ya blank ban jata tha.
@@ -29177,7 +29189,7 @@ def _t26_actuals_by_month(rows):
     _T26_ACT_CACHE["stamp"] = stamp
     return by
 
-_TGT_COSSA_CACHE = {"rows": None, "ts": 0.0}
+_TGT_COSSA_CACHE = {"rows": None, "ts": 0.0, "rev_col": "", "qty_col": "", "date_col": "", "columns": []}
 _TGT_COSSA_LOCK = threading.Lock()
 _TGT_COSSA_TTL = 300
 
@@ -29205,7 +29217,17 @@ def _cossa_target_rows(force=False):
         df.columns = [str(c).strip() for c in df.columns]
         c_date = _drg_source_position_col(df, 0) or find_col(df.columns, "Dispatch Date", "Date")
         c_qty = _drg_source_position_col(df, 6) or find_col(df.columns, "Final Qty", "final quantity", "final_qty")
-        c_rev = _drg_source_position_col(df, 8) or find_col(df.columns, "Net Revenue", "NetRevenue", "net rev")
+        # V24.57: Revenue column pehle HEADER NAAM "Net Revenue" se (position I sirf fallback). Selling Price / Selling Value
+        # header wala column kabhi revenue ke roop me nahi liya jata — Target table 1 + Marketplace Sheet Sales dono Net Revenue par.
+        def _is_sell_col(_c):
+            _k = re.sub(r"[^a-z0-9]", "", str(_c).lower())
+            return ("sell" in _k) or ("mrp" in _k)
+        c_rev = find_col(df.columns, "Net Revenue", "NetRevenue", "net rev", "Net Rev")
+        if not c_rev or _is_sell_col(c_rev):
+            _pos_rev = _drg_source_position_col(df, 8)
+            c_rev = _pos_rev if (_pos_rev and not _is_sell_col(_pos_rev)) else None
+        if not c_rev:
+            c_rev = next((c for c in df.columns if re.sub(r"[^a-z0-9]", "", str(c).lower()) in ("netrevenue", "netvalue", "netrev")), None)
         c_cust = _drg_source_position_col(df, 9) or find_col(df.columns, "Customer Name", "Customer", "Client", "Party")
         c_type = _drg_source_position_col(df, 10) or find_col(df.columns, "Type", "Channel", "Mode")
         if not (c_date and c_rev):
@@ -29252,6 +29274,10 @@ def _cossa_target_rows(force=False):
                         "sub_channel": sub_channel, "raw_customer": raw_c, "raw_type": raw_t})
         _TGT_COSSA_CACHE["rows"] = out
         _TGT_COSSA_CACHE["ts"] = time.time()
+        _TGT_COSSA_CACHE["rev_col"] = str(c_rev)
+        _TGT_COSSA_CACHE["qty_col"] = str(c_qty or "")
+        _TGT_COSSA_CACHE["date_col"] = str(c_date)
+        _TGT_COSSA_CACHE["columns"] = [str(c) for c in list(df.columns)[:20]]
         return out
 
 def _cossa_target_rows_swr():
@@ -29287,12 +29313,27 @@ def _target_legacy_actuals_cossa():
         sub = _marketplace_display_text(e.get("sub_channel") or "").strip().lower()
         cust = _marketplace_display_text(e.get("customer") or "").strip().lower()
         entry_keys = {typ}
+        _strict_mp = None   # V24.58: typ khud "marketplace" ban sakta hai (SOR/ECom merge se) — usse bucket me nahi jodna
+        # V24.58: "marketplace" bucket = cossa sheet ke col K (Type) me jo SHEET me likha hai wahi (Marketplace / purane SOR, ECom labels).
+        # Pehle merge ke baad ka Type use hota tha, isliye Purchase/Bulk type wale SOR-vendor rows (N M Fashion, Mohanlal...) bhi
+        # Marketplace me jud jaate the aur sheet ke Type = Marketplace filter se number zyada aata tha.
+        _raw_t = str(e.get("raw_type") or "").strip()
+        _strict_mp = bool(_is_marketplace_type(_raw_t) or _is_amazon_fba_value(_raw_t))
         if _is_marketplace_type(typ):
+            entry_keys.discard(typ)
+            if typ != "marketplace":
+                entry_keys.add(typ)
+            else:
+                pass
+        if _strict_mp:
             entry_keys.add("marketplace")
+        else:
+            entry_keys.discard("marketplace")
         if (sub == "amazon" or cust == "amazon"
                 or _is_amazon_fba_value(e.get("sub_channel"), e.get("customer"), e.get("type"))):
             entry_keys.add("amazon")
-            entry_keys.add("marketplace")
+            if _is_marketplace_type(_raw_t) or _is_amazon_fba_value(_raw_t):
+                entry_keys.add("marketplace")
         if sub in {"flipkart", "myntra", "nykaa", "ajio", "tata cliq", "tata"}:
             entry_keys.add("tata" if sub == "tata cliq" else sub)
         for entry_key in entry_keys:
@@ -29304,6 +29345,25 @@ def _target_legacy_actuals_cossa():
     _TGT_LEGACY_COSSA_CACHE["act"] = act
     _TGT_LEGACY_COSSA_CACHE["stamp"] = stamp
     return act
+
+def _target_marketplace_check(month_key):
+    """Debug: cossa sheet Type = Marketplace rows ka month total (Net Revenue col I + Final Qty col G) — sheet filter se compare ke liye."""
+    try:
+        rev = qty = 0.0
+        n = 0
+        for e in (_TGT_COSSA_CACHE.get("rows") or []):
+            d = e.get("date") or ""
+            if d[:7] != month_key:
+                continue
+            rt = str(e.get("raw_type") or "").strip()
+            if _is_marketplace_type(rt) or _is_amazon_fba_value(rt):
+                rev += float(e.get("rev") or 0)
+                qty += float(e.get("qty") or 0)
+                n += 1
+        return {"month": month_key, "rows": n, "net_revenue": round(rev, 2), "final_qty": round(qty, 2),
+                "revenue_column": _TGT_COSSA_CACHE.get("rev_col", "")}
+    except Exception as _e:
+        return {"error": str(_e)}
 
 def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
     """Target vs Actual + Achievement Forecast + Stakeholder Leaderboard.
@@ -29454,6 +29514,9 @@ def _build_target_report(month_filter="", stake_filter="", channel_filter=""):
         "days_in_month": days_in_month, "day_elapsed": day_elapsed,
         "is_current_month": (month_filter == cur_month),
         "months": sorted(months_set, reverse=True),
+        "marketplace_check": _target_marketplace_check(month_filter),
+        "cossa_columns_used": {"revenue": _TGT_COSSA_CACHE.get("rev_col", ""), "qty": _TGT_COSSA_CACHE.get("qty_col", ""),
+                               "date": _TGT_COSSA_CACHE.get("date_col", ""), "loaded_columns": _TGT_COSSA_CACHE.get("columns", [])},
         "stakeholders": sorted(stakes_set),
         "channels": sorted(channels_set),
         # Qty Target basis (Target_26-27 months): channel-wise Sep-2026 ASP + kahan se aaya (own/group/proxy/overall)
