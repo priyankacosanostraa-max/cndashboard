@@ -14754,6 +14754,59 @@ function resetRO(){
   applyRO();
 }
 
+/* Online / Offline split (export): Offline = Store, Purchase/B2B, Exhibition. Baaki sab (Website, Marketplace/ECom,
+   SOR, Bulk aur jiska type/channel na mile) = Online. */
+function cnxIsOfflineEntry(e){
+  const k = v => String(v || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  const off = ['store','purchase','b2b','exhibition'];
+  return off.includes(k(e && e.type)) || off.includes(k(e && e.channel));
+}
+function cnxOfflineQtyForItem(rawItem, saleCtx){
+  const item = roExactSkuItem(rawItem || {});
+  const ctx = saleCtx || {};
+  const sourceField = ctx.sourceField || 'sales_entries';
+  const rows = Array.isArray(item && item[sourceField]) ? item[sourceField] : [];
+  const types = Array.isArray(ctx.types) ? ctx.types : [];
+  const channels = Array.isArray(ctx.channels) ? ctx.channels : [];
+  const subChannels = Array.isArray(ctx.subChannels) ? ctx.subChannels : [];
+  const marketplaces = Array.isArray(ctx.marketplaces) ? ctx.marketplaces : [];
+  const customer = String(ctx.customer || '').trim().toLowerCase();
+  const fy = String(ctx.fy || '').trim();
+  const d1 = String(ctx.d1 || '').trim(), d2 = String(ctx.d2 || '').trim();
+  const marketplaceOf = e => {
+    try { if (typeof _sdSorMarketplace === 'function') return String(_sdSorMarketplace(e) || ''); } catch (_e) {}
+    return String(e && e.sub_channel || e && e.cust || '').trim();
+  };
+  let off = 0;
+  rows.forEach(e => {
+    if (types.length && !types.includes(e.type)) return;
+    const ch = ctx.businessChannel ? cnxBusinessChannelOfEntry(e) : String(e && e.channel || '').trim();
+    if (channels.length && !channels.includes(ch)) return;
+    if (subChannels.length && !subChannels.includes(e.sub_channel)) return;
+    if (marketplaces.length && !marketplaces.includes(marketplaceOf(e))) return;
+    if (customer && !String(e && e.cust || '').toLowerCase().includes(customer)) return;
+    if (ctx.saleMode && !cnxSaleModeOk(e, ctx.saleMode)) return;
+    if (fy && String(e && e.fy || '').trim() !== fy) return;
+    const d = cnxSaleEntryDate(e, ctx);
+    if ((d1 || d2) && (!d || (d1 && d < d1) || (d2 && d > d2))) return;
+    if (cnxIsOfflineEntry(e)) off += Number(e && e.qty) || 0;
+  });
+  return off;
+}
+/* Individual + In CMBs ka Online/Offline bantwara. online + offline hamesha Total Sold ke barabar. */
+function cnxOnlineOfflineSplit(rawItem, saleCtx){
+  const split = cnxSoldSplit(rawItem, saleCtx || {}, {});
+  const ind = Math.round(Number(split.individual.sold) || 0);
+  const cmb = Math.round(Number(split.inCmb.sold) || 0);
+  const total = ind + cmb;
+  let off = cnxOfflineQtyForItem(rawItem, saleCtx);
+  const childKey = String((roExactSkuItem(rawItem || {}) || {}).sku || (rawItem && rawItem.sku) || '').trim().toUpperCase();
+  (split.parents || []).forEach(parent => {
+    off += cnxOfflineQtyForItem(parent, saleCtx) * cnxChildComponentQty(parent, childKey);
+  });
+  off = Math.max(0, Math.min(total, Math.round(off)));
+  return {online: total - off, offline: off, total};
+}
 function _roExpCn(sku, provided){ return exportCnName(sku,'') || String(provided||'').trim(); }
 function _roExpTypes(ents, typeSel){
   const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
@@ -14776,7 +14829,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold','Online Sold','Offline Sold'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -14811,6 +14864,8 @@ function exportRO(fmtType){
       'Remark': roRemarks[t.sku] || '',
       'Image Link': t.image_url || '',
       'Total Sold': (parseFloat(t.qty) || 0) + 0,
+      'Online Sold': cnxIsOfflineEntry(t) ? 0 : (parseFloat(t.qty) || 0),
+      'Offline Sold': cnxIsOfflineEntry(t) ? (parseFloat(t.qty) || 0) : 0,
       });
       children.forEach(c=>{
         const childKey=String(c.sku||'').trim().toUpperCase();
@@ -14837,7 +14892,9 @@ function exportRO(fmtType){
           'Inv WIP':childWip,
           'Remark':'Child SKU of '+t.sku,
           'Image Link':c.image_url||'',
-          'Total Sold': 0 + ((parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku))
+          'Total Sold': 0 + ((parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku)),
+          'Online Sold': cnxIsOfflineEntry(t) ? 0 : ((parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku)),
+          'Offline Sold': cnxIsOfflineEntry(t) ? ((parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku)) : 0
         });
       });
     });
@@ -14891,13 +14948,14 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
     const rsv = cnxSaleTotalsForItem(item, roSaleCtxX);
     const r7 = rsv.q7, r15 = rsv.q15, r30 = rsv.q30, rSold = rsv.sold;
     const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {}).inCmb.sold;
+    const onOff = cnxOnlineOfflineSplit(item, roSaleCtxX);
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
@@ -14928,6 +14986,8 @@ function exportRO(fmtType){
       'Remark 2': roRemarks2[item.sku] || '',
       'Image Link': item.image_url || '',
       'Total Sold': Math.round(rSold) + Math.round(parentCmbSold),
+      'Online Sold': onOff.online,
+      'Offline Sold': onOff.offline,
     });
     // One-row-per-SKU export: child CMB usage is already captured in the main
     // SKU row's "In CMBs Sold" column, so child rows are intentionally not
