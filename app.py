@@ -1323,7 +1323,7 @@ _ECOM_TOKENS = ("myntra", "nykaa", "ajio", "tata", "fnp", "fern",
 # keys <= 4 letters whole-word match, lambi keys compact text me kahin bhi.
 _ECOM_CHANNEL_KEYS = (
     ("Amazon", ("amazon",)), ("Flipkart", ("flipkart",)), ("Myntra", ("myntra",)), ("Nykaa", ("nykaa",)),
-    ("Tata CLiQ", ("tata", "tatacliq")), ("AJIO", ("ajio",)), ("Join Commerce", ("joincommerce",)),
+    ("Tata CLiQ", ("tata", "tatacliq")), ("AJIO", ("ajio",)),
     ("Qcom", ("blinkit", "instamart", "zepto", "swiggy", "bigbasket", "qcom", "quickcommerce")),
 )
 # V24.42: SOR channels = ye 11 vendors (Customer Name ke variants ek hi channel me merge hote hain,
@@ -1343,6 +1343,7 @@ _SOR_CHANNEL_KEYS = (
     ("Parkash Sons", ("parkashsons", "parkashson", "prakashsons", "prakashson")),
     ("Madhuram Apparels", ("madhuram",)),
     ("SV Fashions", ("svfashion",)),
+    ("Join Commerce", ("joincommerce",)),   # Join Commerce Pvt. Ltd. = SOR (pehle ECom me tha)
 )
 # V24.44: Taj Trade and Transport ab SOR nahi — Purchase (B2B) vendor hai. Customer Name se pehchan,
 # sheet Type kuch bhi ho (Website/Online/Store consumer sales ko chhod ke) Type = Purchase maana jaata hai.
@@ -11901,9 +11902,9 @@ const _SD_SOR_MARKETPLACES = [
   {key:'Tata',       token:'tata'},
 ];
 // SKU Details ECom / SOR filter options (names as in the updated Target_26-27 plan).
-const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Join Commerce','Qcom','Other ECom'];
+const _SD_ECOM_OPTIONS = ['Myntra','Nykaa','Amazon','Flipkart','Ajio','Tata','Qcom','Other ECom'];
 function saleModeText(e){ return String((e && e.sale_mode) || '').trim(); }
-const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions'];
+const _SD_SOR_OPTIONS  = ['PSL Retail','Aza Fashions','Aditya Birla Fashion','Mirraw','N M Fashion Designs','Mohanlal Sons','Kalki Fashion','Parkash Sons','Madhuram Apparels','SV Fashions','Join Commerce'];
 function _sdSorMarketplace(entry){
   const typ = String(entry?.type || '').trim().toLowerCase();
   const channel = String(entry?.channel || '').trim().toLowerCase();
@@ -14753,6 +14754,11 @@ function resetRO(){
   applyRO();
 }
 
+function _roExpCn(sku, provided){ return exportCnName(sku,'') || String(provided||'').trim(); }
+function _roExpTypes(ents, typeSel){
+  const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
+  return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
+}
 function exportRO(fmtType){
   if (roTxns) {
     if (!roTxns.length) { alert('No transactions to export.'); return; }
@@ -14787,7 +14793,7 @@ function exportRO(fmtType){
       'Row Type': children.length ? 'Gift Set' : 'Product',
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
       SKU: t.sku,
-      'CN Name': parentItem.cn_name || '',
+      'CN Name': _roExpCn(t.sku, parentItem.cn_name),
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
       'Set Item Of': '',
       'Stone Color': stoneMap[skuKey] || '',
@@ -14816,7 +14822,7 @@ function exportRO(fmtType){
           'Row Type':'— Set Item',
           'Dispatch Date':t.date==='N/A'?'':t.date,
           SKU:c.sku||'',
-          'CN Name':(childItem && childItem.cn_name) || c.cn_name || '',
+          'CN Name':_roExpCn(c.sku, (childItem && childItem.cn_name) || c.cn_name),
           'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
           'Set Item Of':t.sku,
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
@@ -14895,6 +14901,7 @@ function exportRO(fmtType){
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
+      'CN Name': _roExpCn(item.sku, item.cn_name),
       'SKU Name': exportSkuName(item.sku, item.sku_name),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
@@ -14915,7 +14922,7 @@ function exportRO(fmtType){
       Status: item.status || '',
       Taxon: item.taxon || '',
       Plating: item.plating || '',
-      Type: (typeSel.length > 0 ? typeSel.join(', ') : ((item.sales_entries && item.sales_entries[0] && item.sales_entries[0].type) ? item.sales_entries[0].type : '')),
+      Type: _roExpTypes(filtEnts(item), typeSel),   // FIX: customer/channel/date filter ke baad bachi entries ka hi Type
       'Customer Count': item._customer_count || (item.customer_count || 0),
       'Remark': roRemarks[item.sku] || '',
       'Remark 2': roRemarks2[item.sku] || '',
@@ -31532,7 +31539,6 @@ _TARGET_26_27 = (
     ('ECom', 'Nykaa', (400000, 500000, 400000, 300000, 300000, 300000)),
     ('ECom', 'Tata', (100000, 100000, 100000, 100000, 100000, 100000)),
     ('ECom', 'AJIO', (200000, 200000, 200000, 100000, 100000, 100000)),
-    ('ECom', 'Join Commerce', (600000, 600000, 400000, 300000, 200000, 200000)),
     ('ECom', 'Qcom', (500000, 500000, 400000, 300000, 200000, 200000)),
     ('ECom', 'Other ECom', (0, 0, 0, 0, 0, 0)),   # FNP / Fern / any other marketplace — no target, actual counted under ECom
     ('Website', 'D2C', (14000000, 13500000, 12000000, 11000000, 11000000, 4200000)),
@@ -31550,6 +31556,7 @@ _TARGET_26_27 = (
     ('SOR', 'Parkash Sons', (80000, 100000, 80000, 50000, 50000, 30000)),
     ('SOR', 'Madhuram Apparels', (0, 0, 0, 0, 0, 0)),
     ('SOR', 'SV Fashions', (200000, 200000, 100000, 100000, 100000, 100000)),
+    ('SOR', 'Join Commerce', (600000, 600000, 400000, 300000, 200000, 200000)),   # pehle ECom row tha, target same
     # Hata diye gaye (ab SOR channel nahi): KORA (600000, 600000, 500000, 500000, 500000, 500000),
     # Arved (200000, 200000, 100000, 100000, 100000, 100000),
     # Taj -Khazan (100000, 300000, 400000, 400000, 200000, 200000)
@@ -31572,7 +31579,7 @@ _T26_CUSTOMER_KEYS = []
 for _t, _ch, _v in _TARGET_26_27:
     if _t == "ECom":
         _k = {"Amazon": ("amazon",), "Flipkart": ("flipkart",), "Myntra": ("myntra",), "Nykaa": ("nykaa",),
-              "Tata": ("tata", "tatacliq"), "AJIO": ("ajio",), "Join Commerce": ("joincommerce",),
+              "Tata": ("tata", "tatacliq"), "AJIO": ("ajio",),
               "Qcom": ("blinkit", "instamart", "zepto", "swiggy", "bigbasket", "qcom", "quickcommerce"),
               "Other ECom": ("fnp", "fern", "ferns")}.get(_ch, (_ch.lower(),))
     elif _t == "SOR":
