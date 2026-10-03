@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.59 (WIP RECEIVE · NEW "ORDER SUMMARY" TABLE)
+# - WIP Receive tab me 3rd table (Month wise ke neeche): har Order No. ki ek row — Order No., No. of SKUs (us order ke unique SKUs),
+#   Channel, Type, Order Qty, Rec Qty, Bal Qty (negative = 0, sheet jaisa) aur Delivery Date (us order ke pending SKUs ki sabse door ki date).
+# - Filters: Order No. search + Channel / Type (type karke search ya list se select). Reset Filters + Export CSV. Baaki kuch change nahi.
+
 # Cosa Nostraa — V24.58 (TARGET TAB TABLE 1 · MARKETPLACE = COSSA SHEET "Type = Marketplace" ROWS KA NET REVENUE)
 # - Pehle Marketplace bucket merge ke baad wale Type se banta tha: Purchase/Bulk type wale SOR-vendor rows (N M Fashion, Mohanlal Sons, Kalki, Parkash Sons...)
 #   bhi Marketplace me jud jaate the, isliye Sep-2026 Marketplace sheet ke Type = Marketplace filter (Net Revenue col I) se zyada aa raha tha.
@@ -7805,6 +7810,13 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 .ops-page table.ops-table.wipr-table td.wipr-ch{white-space:normal !important;min-width:96px;max-width:150px}
 .ops-page table.ops-table.wipr-table td.wipr-ty{white-space:normal !important;min-width:90px;max-width:190px;font-weight:700}
 .ops-page table.ops-table.wipr-table .sku-link{white-space:nowrap !important;overflow-wrap:normal !important;word-break:normal !important}
+/* ── WIP Receive: Order Summary — searchable Channel / Type filters ── */
+.wo-combo{position:relative}
+.wo-combo-list{position:absolute;left:0;right:0;top:100%;z-index:60;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #d9e0ea;border-radius:10px;box-shadow:0 12px 28px rgba(15,23,42,.14);margin-top:4px;min-width:190px}
+.wo-opt{padding:8px 11px;font-size:13px;cursor:pointer;white-space:normal;word-break:break-word}
+.wo-opt:hover{background:#eef3fb}
+.wo-opt-all{font-weight:800;border-bottom:1px solid #eef2f7}
+.wo-none{padding:8px 11px;font-size:12px;color:#8a93a3}
 
 /* ── GLOBAL TABLE READABILITY ─────────────────────────────────────────────
    Keep every dashboard data table centred, vertically aligned and wrapped.
@@ -10105,6 +10117,25 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="wmSummary" class="ops-kpis"></div>
       <div id="wmPickBar" style="margin:0 2px 10px"></div>
       <div id="wmContent" class="ops-table-wrap"></div>
+    </div>
+    <div id="wipOrdSection" style="margin-top:28px">
+      <div class="ops-head">
+        <div>
+          <div class="ops-title">WIP Receive — Order Summary</div>
+          <div class="ops-sub">One row per Order No. No. of SKUs = number of different SKUs in that order. Order Qty, Rec Qty and Bal Qty are the totals of all its SKUs (negative Bal Qty counts as 0, same as the PPC-WIP sheet). Delivery Date = the latest delivery date among the order's pending SKUs (hover to see the earliest). Filters: Order No., Channel and Type (type to search or pick from the list) — they work only for this table.</div>
+        </div>
+        <div class="ops-actions">
+          <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipOrdReset()">Reset Filters</button>
+          <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="wipOrdExport()">Export CSV</button>
+        </div>
+      </div>
+      <div class="ops-filters">
+        <div class="fc"><label class="fl">Order No.</label><input class="fi" id="woOrderNo" placeholder="Type order no…" oninput="wipOrdRender_d()"></div>
+        <div class="fc"><label class="fl">Channel</label><div class="wo-combo" id="woChannelBox"><input class="fi" id="woChannel" placeholder="Search / select channel…" autocomplete="off" oninput="woComboInput('woChannel')" onfocus="woComboOpen('woChannel')"><div class="wo-combo-list" id="woChannelList" style="display:none" onmousedown="woComboPick(event,'woChannel')"></div></div></div>
+        <div class="fc"><label class="fl">Type</label><div class="wo-combo" id="woTypeBox"><input class="fi" id="woType" placeholder="Search / select type…" autocomplete="off" oninput="woComboInput('woType')" onfocus="woComboOpen('woType')"><div class="wo-combo-list" id="woTypeList" style="display:none" onmousedown="woComboPick(event,'woType')"></div></div></div>
+      </div>
+      <div id="woSummary" class="ops-kpis"></div>
+      <div id="woContent" class="ops-table-wrap"></div>
     </div>
     <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default; the receiving-date columns show the present month 1 to 30/31 by default and switch to All Dates when an order date range is set), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with all receiving dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
@@ -20743,6 +20774,7 @@ function renderWipReceive(){
   const host=document.getElementById('wiprContent'),sum=document.getElementById('wiprSummary'),bar=document.getElementById('wiprPickBar');if(!host)return;
   if(!_wiprLoaded)return;
   try{wipMonthRender();}catch(_e){console.error('WIP month table',_e);}
+  try{wipOrdRender();}catch(_e){console.error('WIP order summary',_e);}
   _wiprSyncMonth();
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   const from=_wiprRF,to=_wiprRT; /* receiving-date range */
@@ -21023,6 +21055,121 @@ function wipMonthExport(){
   const out=rows.map(x=>[...lead(x),...months.map(k=>x.byMonth[k]||0),fD(x.dl)]);
   _dlCsv([...base,...months.map(_wmMonthLabel),'Delivery Date'],out,'wip_receive_month_wise');
 }
+/* ── WIP Receive: Order Summary table (one row per Order No.; own filters, independent of the other two tables) ── */
+let _woTimer=null;
+const _woSel={woChannel:{text:'',exact:false},woType:{text:'',exact:false}};
+function wipOrdRender_d(){clearTimeout(_woTimer);_woTimer=setTimeout(wipOrdRender,220);}
+function _woOptions(id){return id==='woChannel'?_wiprChannels:_wiprTypes;}
+function _woComboList(id){
+  const box=document.getElementById(id+'List');if(!box)return;
+  const q=String((document.getElementById(id)||{}).value||'').trim().toLowerCase();
+  const all=(_woOptions(id)||[]).filter(Boolean);
+  const hit=q?all.filter(t=>String(t).toLowerCase().includes(q)):all;
+  let h='<div class="wo-opt wo-opt-all" data-v="">'+(id==='woChannel'?'All Channels':'All Types')+'</div>';
+  h+=hit.slice(0,300).map(t=>'<div class="wo-opt" data-v="'+escHtml(t)+'">'+escHtml(t)+'</div>').join('');
+  if(!hit.length)h+='<div class="wo-none">No match</div>';
+  box.innerHTML=h;
+}
+function woComboOpen(id){_woComboList(id);const b=document.getElementById(id+'List');if(b)b.style.display='block';}
+function woComboClose(id){const b=document.getElementById(id+'List');if(b)b.style.display='none';}
+function woComboInput(id){
+  _woSel[id]={text:String((document.getElementById(id)||{}).value||''),exact:false}; /* typing = "contains" search */
+  woComboOpen(id);wipOrdRender_d();
+}
+function woComboPick(ev,id){
+  const el=ev&&ev.target&&ev.target.closest?ev.target.closest('.wo-opt'):null;if(!el)return;
+  ev.preventDefault();
+  const v=el.getAttribute('data-v')||'';
+  const inp=document.getElementById(id);if(inp)inp.value=v;
+  _woSel[id]={text:v,exact:!!v}; /* picked from the list = exact match */
+  woComboClose(id);wipOrdRender();
+}
+document.addEventListener('mousedown',function(e){['woChannel','woType'].forEach(function(id){const bx=document.getElementById(id+'Box');if(bx&&!bx.contains(e.target))woComboClose(id);});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){woComboClose('woChannel');woComboClose('woType');}});
+/* Builds one row per Order No.: first one row per (order, SKU) from the production-matched values, then summed per order */
+function _woBuild(){
+  const oq=String(document.getElementById('woOrderNo')?.value||'').trim().toLowerCase();
+  const cs=_woSel.woChannel,ts=_woSel.woType;
+  const cq=String(cs.text||'').trim().toLowerCase(),tq=String(ts.text||'').trim().toLowerCase();
+  const pairs=new Map();
+  _wiprRows.forEach(r=>{
+    const order=String(r.order||'').trim(),sku=String(r.sku||'').trim().toUpperCase();
+    if(!order||!sku)return;
+    if(!cnxSkuMatchesGlobalCn(r.sku))return;
+    const k=order+'|'+sku;
+    let p=pairs.get(k);
+    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:(r.balance===null||r.balance===undefined)?null:(Number(r.balance)||0),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',od:r.order_date||''};pairs.set(k,p);}
+    else{
+      if(!p.ch&&r.channel)p.ch=String(r.channel).trim();
+      if(!p.ty&&r.type)p.ty=String(r.type).trim();
+      if(!p.od&&r.order_date)p.od=r.order_date;
+      if(p.bal===null&&r.balance!==null&&r.balance!==undefined)p.bal=Number(r.balance)||0;
+      if(!p.oq&&r.order_qty)p.oq=Number(r.order_qty)||0;
+      if(!p.rq&&r.recv_qty)p.rq=Number(r.recv_qty)||0;
+    }
+    const dl=String(r.delivery||'');
+    if(dl&&dl>p.dl)p.dl=dl;
+  });
+  const ords=new Map();
+  pairs.forEach(p=>{
+    let o=ords.get(p.order);
+    if(!o){o={order:p.order,skus:0,oq:0,rq:0,bal:0,balKnown:false,chs:[],tys:[],dl:'',dlMin:'',od:''};ords.set(p.order,o);}
+    o.skus++;o.oq+=p.oq;o.rq+=p.rq;
+    if(p.bal!==null){o.bal+=p.bal;o.balKnown=true;}
+    if(p.ch&&!o.chs.includes(p.ch))o.chs.push(p.ch);
+    if(p.ty&&!o.tys.includes(p.ty))o.tys.push(p.ty);
+    if(p.dl){if(!o.dl||p.dl>o.dl)o.dl=p.dl;if(!o.dlMin||p.dl<o.dlMin)o.dlMin=p.dl;}
+    if(p.od&&(!o.od||p.od<o.od))o.od=p.od;
+  });
+  const match=(list,q,exact)=>{if(!q)return true;return list.some(v=>{const t=String(v).toLowerCase();return exact?t===q:t.includes(q);});};
+  return Array.from(ords.values()).filter(o=>{
+    if(oq&&!o.order.toLowerCase().includes(oq))return false;
+    if(!match(o.chs,cq,cs.exact))return false;
+    if(!match(o.tys,tq,ts.exact))return false;
+    return true;
+  }).sort((a,b)=>String(b.od||'').localeCompare(String(a.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}));
+}
+function wipOrdRender(){
+  const host=document.getElementById('woContent'),sum=document.getElementById('woSummary');
+  if(!host||!_wiprLoaded)return;
+  const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
+  const rows=_woBuild();
+  let sT=0,oqT=0,rqT=0,balT=0;
+  rows.forEach(o=>{sT+=o.skus;oqT+=o.oq;rqT+=o.rq;balT+=o.bal;});
+  if(sum)sum.innerHTML=_opsKpi('Orders',n(rows.length),'Unique order nos. shown')+_opsKpi('Total Order Qty',n(oqT),'All SKUs of the orders shown')+_opsKpi('Total Rec Qty',n(rqT),'All SKUs of the orders shown')+_opsKpi('Total Bal Qty',n(balT),'Negative balance counted as 0');
+  const stick='position:sticky;bottom:0;z-index:4;background:#eef3ea;box-shadow:0 -2px 0 #c9d8c0';
+  const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
+  let body='';
+  rows.forEach(o=>{
+    const dlTip=(o.dlMin&&o.dlMin!==o.dl)?(' title="Earliest delivery: '+escHtml(_wiprFmtFull(o.dlMin))+'"'):'';
+    body+='<tr><td style="font-weight:800">'+escHtml(o.order)+'</td>'
+      +'<td class="ops-num"><b>'+n(o.skus)+'</b></td>'
+      +'<td class="wipr-ch">'+escHtml(o.chs.join(', ')||'—')+'</td>'
+      +'<td class="wipr-ty" title="'+escHtml(o.tys.join(', '))+'">'+escHtml(o.tys.map(_wiprShortType).join(', ')||'—')+'</td>'
+      +'<td class="ops-num">'+(o.oq?n(o.oq):'—')+'</td>'
+      +'<td class="ops-num">'+n(o.rq)+'</td>'
+      +'<td class="ops-num"><b>'+(o.balKnown?n(o.bal):'—')+'</b></td>'
+      +'<td'+dlTip+'>'+fD(o.dl)+'</td></tr>';
+  });
+  const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
+  const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td></tr></tfoot>':'';
+  host.innerHTML='<table class="ops-table wipr-table" style="min-width:0"><thead><tr><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
+}
+function wipOrdReset(){
+  ['woOrderNo','woChannel','woType'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  _woSel.woChannel={text:'',exact:false};_woSel.woType={text:'',exact:false};
+  woComboClose('woChannel');woComboClose('woType');
+  wipOrdRender();
+}
+function wipOrdExport(){
+  if(!_wiprLoaded){alert('Data is still loading');return;}
+  const rows=_woBuild();
+  if(!rows.length){alert('No orders to export');return;}
+  const fD=v=>v?_wiprFmtFull(v):'';
+  const out=rows.map(o=>[o.order,o.skus,o.chs.join(', '),o.tys.join(', '),o.oq||0,o.rq||0,o.balKnown?o.bal:'',fD(o.dl)]);
+  _dlCsv(['Order No.','No. of SKUs','Channel','Type','Order Qty','Rec Qty','Bal Qty','Delivery Date'],out,'wip_receive_order_summary');
+}
+window.wipOrdRender=wipOrdRender;window.wipOrdRender_d=wipOrdRender_d;window.wipOrdReset=wipOrdReset;window.wipOrdExport=wipOrdExport;window.woComboInput=woComboInput;window.woComboOpen=woComboOpen;window.woComboPick=woComboPick;
 window.applyWmPastedSkus=applyWmPastedSkus;window.clearWmPastedSkus=clearWmPastedSkus;window.wipMonthRender=wipMonthRender;window.wipMonthRender_d=wipMonthRender_d;window.wipMonthPick=wipMonthPick;window.wipMonthReset=wipMonthReset;window.wipMonthExport=wipMonthExport;
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
 
