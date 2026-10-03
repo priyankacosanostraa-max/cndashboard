@@ -1,7 +1,7 @@
 # Cosa Nostraa — V24.61 (WIP RECEIVE · REC QTY = PPC-WIP SHEET COL J EXACT · ORDER SUMMARY DELIVERY DATES COMMA SE)
 # - WIP Receive ki sabhi tables me Rec Qty ab PPC-WIP sheet ke col J ki har row ka exact sum hai (pehle exact-duplicate rows skip ho jati thi, isliye qty kam aati thi).
 # - Order Summary: ek order ki 1 se zyada delivery dates ho to range ("A to B") ki jagah saari dates comma lagakar dikhti hain.
-# - WIP Receive Bal Qty: sheet col K galat/purani aaye (K != Order Qty - Rec Qty) to Order Qty - Rec Qty dikhti hai (sheet jaisi: 210 - 0 = 210). Cancelled rows me K hi.
+# - WIP Receive: Order No., SKU, Type, Channel, Order Qty, Rec Qty, Bal Qty — PPC-WIP sheet me jaisa likha hai waisa hi (koi calculation, clamp ya renaming nahi). Sirf Delivery Date calculate hoti hai.
 # - Baaki kuch change nahi (Production tab ka dedupe/logic same).
 # ============================================================
 # Cosa Nostraa — V24.60 (WIP RECEIVE · DELIVERY DATE = PPC-WIP SHEET KI DATE PEHLE, WARNA PURANA CALCULATION)
@@ -10156,7 +10156,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div id="woSummary" class="ops-kpis"></div>
       <div id="woContent" class="ops-table-wrap"></div>
     </div>
-    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default; the receiving-date columns show the present month 1 to 30/31 by default and switch to All Dates when an order date range is set), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with all receiving dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). A negative Bal Qty (over-receipt) is counted as 0, so the Bal Qty total is the sum of the positive Bal Qty values of the Production sheet (column K); Delivery Date appears only for SKUs with balance above 0. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
+    <div class="ops-note">Qty is the total received for that SKU on that date across all orders in the WIP-Recv sheet. Channel and Type come from the matching order in the Production (PPC-WIP) sheet; receipts whose order is not found there appear only under All Types. Order date range (From / To Date, blank by default; the receiving-date columns show the present month 1 to 30/31 by default and switch to All Dates when an order date range is set), Channel, Type, Delivery Type (Delayed = delivery date before today, Upcoming = today or later; only balance above 0; Cancelled by Production team = orders whose Remark in the Production sheet says so, shown with all receiving dates) and SKU search all filter the table, the date-heading totals and the Grand Total. Each row is one order + SKU (orders are not clubbed): Order No., Order Date, SKU, photo, Inv Stock (no grand total for it), Channel (the channel the order was placed for), Order Qty, Rec Qty, Bal Qty (from the Production sheet), then the receiving-date columns, and Delivery Date as the last column. Delivery Week splits each month into 1-7, 8-14, 15-21, 22-28 and 29-end and lists only weeks having a balance above 0; picking a week sets the receipt range to All Dates and shows every SKU whose delivery date falls in that week. Every order-SKU with a receipt is listed, including those whose Bal Qty is 0, and every pending order-SKU (Bal Qty above 0) is listed even if nothing has been received yet (its date cells show a dash). Order No., SKU, Type, Channel, Order Qty, Rec Qty and Bal Qty are taken exactly as written in the PPC-WIP sheet (columns F, G, H, I, J, K; negative Bal Qty is shown as is); only the Delivery Date is calculated when the sheet's Delivery Date (column L) is blank. The Grand Total row totals every column except Inv Stock (Order Qty, Rec Qty, Bal Qty and each date/Qty column), and always matches whatever filters are currently applied. Paste multiple SKUs to see only those SKUs. Click a date heading to see only that date (SKU, photo, inv stock, qty, grand total); Export CSV downloads exactly what is on screen.</div>
   </div>
 
 
@@ -29169,6 +29169,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "sku":       sku,
                 "order_type": _marketplace_display_text(r.get(C_TYPE, "")) if C_TYPE else "",
                 "channel":   _marketplace_display_text(r.get(C_CHAN, "")) if C_CHAN else "",
+                "order_type_raw": clean(r.get(C_TYPE, "")) if C_TYPE else "",
+                "channel_raw":    clean(r.get(C_CHAN, "")) if C_CHAN else "",
                 "order_qty": to_num(r.get(C_OQTY, 0)) if C_OQTY else 0.0,
                 "recv_qty":  to_num(r.get(C_RQTY, 0)) if C_RQTY else 0.0,
                 "bal_qty":   to_num(r.get(C_BQTY, 0)) if C_BQTY else 0.0,
@@ -29181,7 +29183,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "sr_no":     str(clean(r.get(C_SRNO, "")) if C_SRNO else "").strip(),
             }
             rows_raw.append({"order_no": row["order_no"], "sku": row["sku"], "recv_qty": row["recv_qty"],
-                             "order_qty": row["order_qty"], "bal_k": row["bal_qty"], "remark": row["remark"]})
+                             "order_qty": row["order_qty"], "bal_k": row["bal_qty"], "remark": row["remark"],
+                             "type_raw": row["order_type_raw"], "channel_raw": row["channel_raw"]})
             # Exact-duplicate row (same date+order no+sku+everything) — skip repeats
             dedup_key = tuple(row[k] for k in (
                 "date", "order_no", "sku", "order_type", "channel",
@@ -30101,23 +30104,26 @@ def api_wip_receive():
     # V24.61: Rec Qty PPC-WIP sheet ke col J se, har row jodkar (exact-duplicate rows bhi) — sheet jaisi hi value
     _raw_list = _PROD_CACHE.get("rows_raw") or []
     if _raw_list:
-        bal_by_order_sku.clear(); bal_raw_by_order_sku.clear(); rq_by_order_sku.clear()
+        bal_by_order_sku.clear(); bal_raw_by_order_sku.clear(); rq_by_order_sku.clear(); oq_by_order_sku.clear()
+        type_by_order_sku.clear(); chan_by_order_sku.clear()
     for _rr in _raw_list:
         _ron = _wipr_norm_order(_rr.get("order_no"))
-        if _ron:
-            _rk = (_ron, str(_rr.get("sku") or "").strip().upper())
-            _rrq = float(_rr.get("recv_qty") or 0)
-            _roq = float(_rr.get("order_qty") or 0)
-            _rb = float(_rr.get("bal_k") or 0)
-            # V24.61: Bal Qty = sheet ka Bal (col K); agar K, "Order Qty - Rec Qty" se match nahi karta
-            # (published CSV purani/galat value) to Order Qty - Rec Qty use hota hai (Cancelled row me K hi).
-            if abs(_rb - (_roq - _rrq)) > 1e-9 and not _wipr_is_cancelled(_rr.get("remark")):
-                _rb = _roq - _rrq
-            rq_by_order_sku[_rk] = rq_by_order_sku.get(_rk, 0.0) + _rrq
-            bal_raw_by_order_sku[_rk] = bal_raw_by_order_sku.get(_rk, 0.0) + _rb
-            bal_by_order_sku[_rk] = bal_by_order_sku.get(_rk, 0.0) + max(0.0, _rb)
-    types = sorted({str(pr.get("order_type") or "").strip() for pr in prod_rows if str(pr.get("order_type") or "").strip()})
-    channels = sorted({str(pr.get("channel") or "").strip() for pr in prod_rows if str(pr.get("channel") or "").strip()})
+        if not _ron:
+            continue
+        _rk = (_ron, str(_rr.get("sku") or "").strip().upper())
+        # V24.61: Order Qty / Rec Qty / Bal Qty / Type / Channel — PPC-WIP sheet me jaisa likha hai waisa hi (har row, koi calculation/clamp nahi).
+        oq_by_order_sku[_rk] = oq_by_order_sku.get(_rk, 0.0) + float(_rr.get("order_qty") or 0)
+        rq_by_order_sku[_rk] = rq_by_order_sku.get(_rk, 0.0) + float(_rr.get("recv_qty") or 0)
+        _rb = float(_rr.get("bal_k") or 0)
+        bal_raw_by_order_sku[_rk] = bal_raw_by_order_sku.get(_rk, 0.0) + _rb
+        bal_by_order_sku[_rk] = bal_by_order_sku.get(_rk, 0.0) + _rb
+        if _rr.get("type_raw"):
+            type_by_order_sku.setdefault(_rk, _rr["type_raw"])
+        if _rr.get("channel_raw"):
+            chan_by_order_sku.setdefault(_rk, _rr["channel_raw"])
+    type_by_order.clear(); chan_by_order.clear()
+    types = sorted(set(type_by_order_sku.values()))
+    channels = sorted(set(chan_by_order_sku.values()))
 
     def _wipr_pick_delivery(_o, _s, _balv):
         """V24.60 — Delivery Date rule for every WIP Receive table.
