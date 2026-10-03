@@ -20973,8 +20973,8 @@ function wipMonthRender(){
   const n=v=>Math.round(Number(v)||0).toLocaleString('en-IN');
   const {months,rows}=_wmView();
   const recOf=x=>_wmPick?(x.byMonth[_wmPick]||0):x.total;
-  let recT=0,oqT=0,balT=0;
-  rows.forEach(x=>{recT+=recOf(x);oqT+=Number(x.oq)||0;balT+=(x.bal===null||x.bal===undefined)?0:Number(x.bal)||0;});
+  let recT=0,oqT=0,balT=0,rqT=0;
+  rows.forEach(x=>{recT+=recOf(x);rqT+=Number(x.rq)||0;oqT+=Number(x.oq)||0;balT+=(x.bal===null||x.bal===undefined)?0:Number(x.bal)||0;});
   const scope=_wmPick?_wmMonthLabel(_wmPick):'All months';
   if(sum)sum.innerHTML=_opsKpi('Total Receiving',n(recT),scope)+_opsKpi('Bal Qty',n(balT),'Order/SKU rows shown: '+rows.length.toLocaleString('en-IN'))+_opsKpi('Total Order Qty',n(oqT),'Order/SKU rows shown: '+rows.length.toLocaleString('en-IN'));
   if(bar){
@@ -20995,14 +20995,14 @@ function wipMonthRender(){
       const ds=Object.keys(x.byDate).filter(d=>_wmMonthKey(d)===_wmPick).sort().map(d=>`${_wmShortDay(d)} (${n(x.byDate[d])})`).join(', ');
       body+=`<tr>${lead(x)}<td class="ops-num"><b>${n(x.byMonth[_wmPick]||0)}</b></td><td style="white-space:normal;min-width:120px">${escHtml(ds)}</td><td>${fD(x.dl)}</td></tr>`;
     });
-    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(recT)}</b></td><td style="${stick}"></td><td style="${stick}"></td></tr></tfoot>`;
+    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td><td class="ops-num" style="${stick}"><b>${n(recT)}</b></td><td style="${stick}"></td><td style="${stick}"></td></tr></tfoot>`;
   }else{
     const mTot={};rows.forEach(x=>months.forEach(k=>{mTot[k]=(mTot[k]||0)+(x.byMonth[k]||0);}));
     head=`<tr>${leadHead}`+months.map(k=>`<th class="ops-num" style="cursor:pointer;text-decoration:underline;text-underline-offset:3px" title="Click to see all SKUs received in ${escHtml(_wmMonthLabel(k))}" onclick="wipMonthPick('${k}')">${escHtml(_wmMonthLabel(k))}</th>`).join('')+'<th>Delivery Date</th></tr>';
     rows.forEach(x=>{
       body+=`<tr>${lead(x)}`+months.map(k=>x.byMonth[k]?`<td class="ops-num"><b>${n(x.byMonth[k])}</b></td>`:`<td class="ops-num" style="color:#b8b0a0">–</td>`).join('')+`<td>${fD(x.dl)}</td></tr>`;
     });
-    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td style="${stick}"></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+months.map(k=>`<td class="ops-num" style="${stick}"><b>${n(mTot[k]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`;
+    if(rows.length)foot=`<tfoot><tr style="font-weight:900"><td colspan="7" style="${stick}">Grand Total</td><td class="ops-num" style="${stick}"><b>${n(oqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(rqT)}</b></td><td class="ops-num" style="${stick}"><b>${n(balT)}</b></td>`+months.map(k=>`<td class="ops-num" style="${stick}"><b>${n(mTot[k]||0)}</b></td>`).join('')+`<td style="${stick}"></td></tr></tfoot>`;
   }
   host.innerHTML=`<table class="ops-table wipr-table" style="min-width:0"><thead>${head}</thead><tbody>${body||emptyMsg}</tbody>${foot}</table>`;
 }
