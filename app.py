@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.61 (WIP RECEIVE · REC QTY = PPC-WIP SHEET COL J EXACT · ORDER SUMMARY DELIVERY DATES COMMA SE)
+# - WIP Receive ki sabhi tables me Rec Qty ab PPC-WIP sheet ke col J ki har row ka exact sum hai (pehle exact-duplicate rows skip ho jati thi, isliye qty kam aati thi).
+# - Order Summary: ek order ki 1 se zyada delivery dates ho to range ("A to B") ki jagah saari dates comma lagakar dikhti hain.
+# - WIP Receive Bal Qty: sheet col K galat/purani aaye (K != Order Qty - Rec Qty) to Order Qty - Rec Qty dikhti hai (sheet jaisi: 210 - 0 = 210). Cancelled rows me K hi.
+# - Baaki kuch change nahi (Production tab ka dedupe/logic same).
+# ============================================================
 # Cosa Nostraa — V24.60 (WIP RECEIVE · DELIVERY DATE = PPC-WIP SHEET KI DATE PEHLE, WARNA PURANA CALCULATION)
 # - WIP Receive ki teeno tables (date-wise, Month wise, Order Summary) + CSV exports: agar PPC-WIP sheet ke col L (Delivery Date) me date likhi hai to wahi dikhti hai
 #   (balance 0 wali rows me bhi). Sheet me date nahi ho to wahi purana method: Order Date + 15 din (New Ordering) / 12 din (baaki), stone ho to +10 — sirf Bal Qty > 0 rows ke liye.
@@ -21113,7 +21119,7 @@ function _woBuild(){
     if(!cnxSkuMatchesGlobalCn(r.sku))return;
     const k=order+'|'+sku;
     let p=pairs.get(k);
-    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',od:r.order_date||''};pairs.set(k,p);}
+    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',dls:new Set(),od:r.order_date||''};pairs.set(k,p);}
     else{
       if(!p.ch&&r.channel)p.ch=String(r.channel).trim();
       if(!p.ty&&r.type)p.ty=String(r.type).trim();
@@ -21123,17 +21129,18 @@ function _woBuild(){
       if(!p.rq&&r.recv_qty)p.rq=Number(r.recv_qty)||0;
     }
     const dl=String(r.delivery_disp||r.delivery||'');
-    if(dl){if(dl>p.dl)p.dl=dl;if(!p.dlMin||dl<p.dlMin)p.dlMin=dl;}
+    if(dl){if(dl>p.dl)p.dl=dl;if(!p.dlMin||dl<p.dlMin)p.dlMin=dl;p.dls.add(dl);}
   });
   const ords=new Map();
   pairs.forEach(p=>{
     let o=ords.get(p.order);
-    if(!o){o={order:p.order,skus:0,oq:0,rq:0,bal:0,balKnown:false,chs:[],tys:[],dl:'',dlMin:'',od:''};ords.set(p.order,o);}
+    if(!o){o={order:p.order,skus:0,oq:0,rq:0,bal:0,balKnown:false,chs:[],tys:[],dl:'',dlMin:'',dls:new Set(),od:''};ords.set(p.order,o);}
     o.skus++;o.oq+=p.oq;o.rq+=p.rq;
     if(p.bal!==null&&p.bal!==undefined){o.bal+=Number(p.bal)||0;o.balKnown=true;}
     if(p.ch&&!o.chs.includes(p.ch))o.chs.push(p.ch);
     if(p.ty&&!o.tys.includes(p.ty))o.tys.push(p.ty);
     if(p.dl){if(!o.dl||p.dl>o.dl)o.dl=p.dl;if(!o.dlMin||p.dl<o.dlMin)o.dlMin=p.dl;}
+    p.dls.forEach(function(x){o.dls.add(x);});
     if(p.od&&(!o.od||p.od<o.od))o.od=p.od;
   });
   const match=(list,q,exact)=>{if(!q)return true;return list.some(v=>{const t=String(v).toLowerCase();return exact?t===q:t.includes(q);});};
@@ -21148,7 +21155,7 @@ function _woBuild(){
 function _woDlText(o,html){
   const f=v=>html?escHtml(_wiprFmtFull(v)):_wiprFmtFull(v);
   if(!o.dl)return html?'—':'';
-  if(o.dlMin&&o.dlMin!==o.dl)return f(o.dlMin)+(html?' to ':' to ')+f(o.dl);
+  if(o.dls&&o.dls.size>1)return Array.from(o.dls).sort().map(f).join(', ');
   return f(o.dl);
 }
 function wipOrdRender(){
@@ -21163,7 +21170,7 @@ function wipOrdRender(){
   const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
   let body='';
   rows.forEach(o=>{
-    const dlTip=(o.dlMin&&o.dlMin!==o.dl)?(' title="SKUs of this order have different delivery dates ('+escHtml(_wiprFmtFull(o.dlMin))+' to '+escHtml(_wiprFmtFull(o.dl))+')"'):'';
+    const dlTip='';
     body+='<tr><td style="font-weight:800">'+escHtml(o.order)+'</td>'
       +'<td class="ops-num"><b>'+n(o.skus)+'</b></td>'
       +'<td class="wipr-ch">'+escHtml(o.chs.join(', ')||'—')+'</td>'
@@ -29133,6 +29140,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
         C_SRNO = _at(2)   # C  Sr. No.
         C_STONE = find_col(cols, "stone") or _at(18)   # S  stone (blank = no stone)
         rows_all = []
+        rows_raw = []   # V24.61: sheet ki har row (duplicate bhi) — WIP Receive Rec Qty ke liye
         _seen_rows = set()
         for _, r in df.iterrows():
             sku = clean(r.get(C_SKU, "")).upper() if C_SKU else ""
@@ -29172,6 +29180,8 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "remark":    str(clean(r.get(C_REMK, "")) if C_REMK else "").strip(),
                 "sr_no":     str(clean(r.get(C_SRNO, "")) if C_SRNO else "").strip(),
             }
+            rows_raw.append({"order_no": row["order_no"], "sku": row["sku"], "recv_qty": row["recv_qty"],
+                             "order_qty": row["order_qty"], "bal_k": row["bal_qty"], "remark": row["remark"]})
             # Exact-duplicate row (same date+order no+sku+everything) — skip repeats
             dedup_key = tuple(row[k] for k in (
                 "date", "order_no", "sku", "order_type", "channel",
@@ -29181,6 +29191,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             _seen_rows.add(dedup_key)
             rows_all.append(row)
         _PROD_CACHE["rows"] = rows_all
+        _PROD_CACHE["rows_raw"] = rows_raw
         _PROD_CACHE["ts"] = time.time()
 
     # Taxon har row me daal do (inv map se)
@@ -30054,7 +30065,8 @@ def api_wip_receive():
                     _sr_list.append(_sr_txt)
             bal_by_order_sku[_k3] = bal_by_order_sku.get(_k3, 0.0) + max(0.0, float(pr.get("bal_qty") or 0))   # negative (over-receipt) counts as 0
             bal_raw_by_order_sku[_k3] = bal_raw_by_order_sku.get(_k3, 0.0) + float(pr.get("bal_qty") or 0)
-            rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
+            if not _PROD_CACHE.get("rows_raw"):
+                rq_by_order_sku[_k3] = rq_by_order_sku.get(_k3, 0.0) + float(pr.get("recv_qty") or 0)
         _on2 = _wipr_norm_order(pr.get("order_no"))
         if _on2:
             _k2 = (_on2, str(pr.get("sku") or "").strip().upper())
@@ -30086,6 +30098,24 @@ def api_wip_receive():
         if ch:
             chan_by_order_sku.setdefault((on, sk), ch)
             chan_by_order.setdefault(on, ch)
+    # V24.61: Rec Qty PPC-WIP sheet ke col J se, har row jodkar (exact-duplicate rows bhi) — sheet jaisi hi value
+    _raw_list = _PROD_CACHE.get("rows_raw") or []
+    if _raw_list:
+        bal_by_order_sku.clear(); bal_raw_by_order_sku.clear(); rq_by_order_sku.clear()
+    for _rr in _raw_list:
+        _ron = _wipr_norm_order(_rr.get("order_no"))
+        if _ron:
+            _rk = (_ron, str(_rr.get("sku") or "").strip().upper())
+            _rrq = float(_rr.get("recv_qty") or 0)
+            _roq = float(_rr.get("order_qty") or 0)
+            _rb = float(_rr.get("bal_k") or 0)
+            # V24.61: Bal Qty = sheet ka Bal (col K); agar K, "Order Qty - Rec Qty" se match nahi karta
+            # (published CSV purani/galat value) to Order Qty - Rec Qty use hota hai (Cancelled row me K hi).
+            if abs(_rb - (_roq - _rrq)) > 1e-9 and not _wipr_is_cancelled(_rr.get("remark")):
+                _rb = _roq - _rrq
+            rq_by_order_sku[_rk] = rq_by_order_sku.get(_rk, 0.0) + _rrq
+            bal_raw_by_order_sku[_rk] = bal_raw_by_order_sku.get(_rk, 0.0) + _rb
+            bal_by_order_sku[_rk] = bal_by_order_sku.get(_rk, 0.0) + max(0.0, _rb)
     types = sorted({str(pr.get("order_type") or "").strip() for pr in prod_rows if str(pr.get("order_type") or "").strip()})
     channels = sorted({str(pr.get("channel") or "").strip() for pr in prod_rows if str(pr.get("channel") or "").strip()})
 
