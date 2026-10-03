@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.60 (WIP RECEIVE · DELIVERY DATE = PPC-WIP SHEET KI DATE PEHLE, WARNA PURANA CALCULATION)
+# - WIP Receive ki teeno tables (date-wise, Month wise, Order Summary) + CSV exports: agar PPC-WIP sheet ke col L (Delivery Date) me date likhi hai to wahi dikhti hai
+#   (balance 0 wali rows me bhi). Sheet me date nahi ho to wahi purana method: Order Date + 15 din (New Ordering) / 12 din (baaki), stone ho to +10 — sirf Bal Qty > 0 rows ke liye.
+# - Ek hi Order+SKU ki kai PPC rows hon to sheet wali date ko calculated date par priority; pending (Bal > 0) row ki sheet date pehle.
+# - Order Summary me ek order ke SKUs ki sheet dates alag ho to ab "earliest to latest" range dikhti hai (same ho to ek date).
+# - Delayed / Upcoming / Delivery Week filters pehle jaise (sirf Bal Qty > 0 rows). Baaki kuch change nahi.
+# ============================================================
 # Cosa Nostraa — V24.59 (WIP RECEIVE · NEW "ORDER SUMMARY" TABLE)
 # - WIP Receive tab me 3rd table (Month wise ke neeche): har Order No. ki ek row — Order No., No. of SKUs (us order ke unique SKUs),
 #   Channel, Type, Order Qty, Rec Qty, Bal Qty (negative = 0, sheet jaisa) aur Delivery Date (us order ke pending SKUs ki sabse door ki date).
@@ -10127,7 +10134,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-head">
         <div>
           <div class="ops-title">WIP Receive — Order Summary</div>
-          <div class="ops-sub">One row per Order No. No. of SKUs = number of different SKUs in that order. Order Qty, Rec Qty and Bal Qty are the totals of its SKUs. By default only SKUs with Bal Qty above 0 are counted (so a fully received SKU is left out); use the Balance Qty filter to show All Balances, Equal to 0, Less than 0 or Less than or equal to 0 (the real negative balance is shown for those three). Delivery Date = the latest delivery date among the order's pending SKUs (hover to see the earliest). Filters: Order No., Channel and Type (type to search or pick from the list) and Balance Qty — they work only for this table.</div>
+          <div class="ops-sub">One row per Order No. No. of SKUs = number of different SKUs in that order. Order Qty, Rec Qty and Bal Qty are the totals of its SKUs. By default only SKUs with Bal Qty above 0 are counted (so a fully received SKU is left out); use the Balance Qty filter to show All Balances, Equal to 0, Less than 0 or Less than or equal to 0 (the real negative balance is shown for those three). Delivery Date = the date written in the PPC-WIP sheet (column L); if the sheet is blank it is calculated (Order Date + 15 days for New Ordering, 12 for others, +10 with stone, only while Bal Qty is above 0). When the SKUs of an order have different dates, the earliest to latest date is shown. Filters: Order No., Channel and Type (type to search or pick from the list) and Balance Qty — they work only for this table.</div>
         </div>
         <div class="ops-actions">
           <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipOrdReset()">Reset Filters</button>
@@ -20713,10 +20720,10 @@ function _wiprMergeDateSku(list){
   const m=new Map();const bm=String(document.getElementById('wiprBal')?.value||'');
   list.forEach(r=>{
     const k=r.date+'|'+_wiprOrdKey(r);
-    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm)};
+    const x=m.get(k)||{date:r.date,order:r.order||'',sku:r.sku,qty:0,od:r.order_date||'',dl:r.delivery_disp||r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm)};
     x.qty+=Number(r.qty)||0;
     if(!x.od&&r.order_date)x.od=r.order_date;
-    if(!x.dl&&r.delivery)x.dl=r.delivery;
+    if(!x.dl&&(r.delivery_disp||r.delivery))x.dl=r.delivery_disp||r.delivery;
     m.set(k,x);
   });
   return Array.from(m.values());
@@ -20971,10 +20978,10 @@ function _wmMatrix(list){
   const m=new Map();const bm=String(document.getElementById('wmBal')?.value||'');
   list.forEach(r=>{
     const k=(r.order||'')+'|'+r.sku;
-    const x=m.get(k)||{order:r.order||'',sku:r.sku,od:r.order_date||'',dl:r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm),byMonth:{},byDate:{},total:0};
+    const x=m.get(k)||{order:r.order||'',sku:r.sku,od:r.order_date||'',dl:r.delivery_disp||r.delivery||'',oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,ch:r.channel||'',ty:r.type||'',sr:r.sr_no||'',bal:_wiprBalShow(r,bm),byMonth:{},byDate:{},total:0};
     if(r.date){const q=Number(r.qty)||0;const mk=_wmMonthKey(r.date);x.byMonth[mk]=(x.byMonth[mk]||0)+q;x.byDate[r.date]=(x.byDate[r.date]||0)+q;x.total+=q;}
     if(!x.od&&r.order_date)x.od=r.order_date;
-    if(!x.dl&&r.delivery)x.dl=r.delivery;
+    if(!x.dl&&(r.delivery_disp||r.delivery))x.dl=r.delivery_disp||r.delivery;
     if(!x.sr&&r.sr_no)x.sr=r.sr_no;
     m.set(k,x);
   });
@@ -21106,7 +21113,7 @@ function _woBuild(){
     if(!cnxSkuMatchesGlobalCn(r.sku))return;
     const k=order+'|'+sku;
     let p=pairs.get(k);
-    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',od:r.order_date||''};pairs.set(k,p);}
+    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',od:r.order_date||''};pairs.set(k,p);}
     else{
       if(!p.ch&&r.channel)p.ch=String(r.channel).trim();
       if(!p.ty&&r.type)p.ty=String(r.type).trim();
@@ -21115,8 +21122,8 @@ function _woBuild(){
       if(!p.oq&&r.order_qty)p.oq=Number(r.order_qty)||0;
       if(!p.rq&&r.recv_qty)p.rq=Number(r.recv_qty)||0;
     }
-    const dl=String(r.delivery||'');
-    if(dl&&dl>p.dl)p.dl=dl;
+    const dl=String(r.delivery_disp||r.delivery||'');
+    if(dl){if(dl>p.dl)p.dl=dl;if(!p.dlMin||dl<p.dlMin)p.dlMin=dl;}
   });
   const ords=new Map();
   pairs.forEach(p=>{
@@ -21137,6 +21144,13 @@ function _woBuild(){
     return true;
   }).sort((a,b)=>String(b.od||'').localeCompare(String(a.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}));
 }
+/* One date when all SKUs of the order share it, else "earliest to latest" (dates are PPC-WIP sheet dates; calculated only where the sheet is blank) */
+function _woDlText(o,html){
+  const f=v=>html?escHtml(_wiprFmtFull(v)):_wiprFmtFull(v);
+  if(!o.dl)return html?'—':'';
+  if(o.dlMin&&o.dlMin!==o.dl)return f(o.dlMin)+(html?' to ':' to ')+f(o.dl);
+  return f(o.dl);
+}
 function wipOrdRender(){
   const host=document.getElementById('woContent'),sum=document.getElementById('woSummary');
   if(!host||!_wiprLoaded)return;
@@ -21149,7 +21163,7 @@ function wipOrdRender(){
   const fD=v=>v?escHtml(_wiprFmtFull(v)):'—';
   let body='';
   rows.forEach(o=>{
-    const dlTip=(o.dlMin&&o.dlMin!==o.dl)?(' title="Earliest delivery: '+escHtml(_wiprFmtFull(o.dlMin))+'"'):'';
+    const dlTip=(o.dlMin&&o.dlMin!==o.dl)?(' title="SKUs of this order have different delivery dates ('+escHtml(_wiprFmtFull(o.dlMin))+' to '+escHtml(_wiprFmtFull(o.dl))+')"'):'';
     body+='<tr><td style="font-weight:800">'+escHtml(o.order)+'</td>'
       +'<td class="ops-num"><b>'+n(o.skus)+'</b></td>'
       +'<td class="wipr-ch">'+escHtml(o.chs.join(', ')||'—')+'</td>'
@@ -21157,7 +21171,7 @@ function wipOrdRender(){
       +'<td class="ops-num">'+(o.oq?n(o.oq):'—')+'</td>'
       +'<td class="ops-num">'+n(o.rq)+'</td>'
       +'<td class="ops-num"><b>'+(o.balKnown?n(o.bal):'—')+'</b></td>'
-      +'<td'+dlTip+'>'+fD(o.dl)+'</td></tr>';
+      +'<td'+dlTip+'>'+_woDlText(o,true)+'</td></tr>';
   });
   const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
   const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td></tr></tfoot>':'';
@@ -21175,7 +21189,7 @@ function wipOrdExport(){
   const rows=_woBuild();
   if(!rows.length){alert('No orders to export');return;}
   const fD=v=>v?_wiprFmtFull(v):'';
-  const out=rows.map(o=>[o.order,o.skus,o.chs.join(', '),o.tys.join(', '),o.oq||0,o.rq||0,o.balKnown?o.bal:'',fD(o.dl)]);
+  const out=rows.map(o=>[o.order,o.skus,o.chs.join(', '),o.tys.join(', '),o.oq||0,o.rq||0,o.balKnown?o.bal:'',_woDlText(o,false)]);
   _dlCsv(['Order No.','No. of SKUs','Channel','Type','Order Qty','Rec Qty','Bal Qty','Delivery Date'],out,'wip_receive_order_summary');
 }
 window.wipOrdRender=wipOrdRender;window.wipOrdRender_d=wipOrdRender_d;window.wipOrdReset=wipOrdReset;window.wipOrdExport=wipOrdExport;window.woComboInput=woComboInput;window.woComboOpen=woComboOpen;window.woComboPick=woComboPick;
@@ -29130,6 +29144,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
             rv = parse_date_any(r.get(C_RECV, "")) if C_RECV else None
             _otype_txt = _marketplace_display_text(r.get(C_TYPE, "")) if C_TYPE else ""
             _bal_val = to_num(r.get(C_BQTY, 0)) if C_BQTY else 0.0
+            _dv_from_sheet = bool(dv)   # V24.60: True = date PPC-WIP sheet ke column L se aayi (calculated nahi)
             if dv:
                 pass   # sheet ke column L (Delivery Date) me date likhi hai -> wahi use hogi
             elif dt and _production_has_balance(_bal_val):
@@ -29151,6 +29166,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "bal_qty":   to_num(r.get(C_BQTY, 0)) if C_BQTY else 0.0,
                 "delivery_date": dv.strftime("%d-%b-%Y") if dv else "",
                 "delivery_iso":  dv.strftime("%Y-%m-%d") if dv else "",
+                "delivery_from_sheet": _dv_from_sheet,
                 "receiving_date": rv.strftime("%d-%b-%Y") if rv else "",
                 "receiving_iso": rv.strftime("%Y-%m-%d") if rv else "",
                 "remark":    str(clean(r.get(C_REMK, "")) if C_REMK else "").strip(),
@@ -30017,7 +30033,8 @@ def api_wip_receive():
     type_by_order_sku, type_by_order = {}, {}
     chan_by_order_sku, chan_by_order = {}, {}
     cancel_by_order_sku = set()
-    dlv_by_order_sku, dlv_by_order = {}, {}
+    dlv_by_order_sku, dlv_by_order = {}, {}     # calculated delivery dates (PPC sheet me date nahi thi)
+    dlv_sheet_by_order_sku = {}                 # V24.60: PPC-WIP col L ki asli date: (order, sku) -> [(iso, bal>0?)]
     odt_by_order_sku, odt_by_order = {}, {}
     oq_by_order_sku = {}
     bal_by_order_sku = {}
@@ -30050,7 +30067,11 @@ def api_wip_receive():
         _dl = str(pr.get("delivery_iso") or "").strip()
         _on0 = _wipr_norm_order(pr.get("order_no"))
         if _on0 and _dl:
-            dlv_by_order_sku.setdefault((_on0, str(pr.get("sku") or "").strip().upper()), _dl)
+            _k0 = (_on0, str(pr.get("sku") or "").strip().upper())
+            if pr.get("delivery_from_sheet"):
+                dlv_sheet_by_order_sku.setdefault(_k0, []).append((_dl, float(pr.get("bal_qty") or 0) > 0))
+            else:
+                dlv_by_order_sku.setdefault(_k0, _dl)
         ty = str(pr.get("order_type") or "").strip()
         ch = str(pr.get("channel") or "").strip()
         on = _wipr_norm_order(pr.get("order_no"))
@@ -30068,16 +30089,32 @@ def api_wip_receive():
     types = sorted({str(pr.get("order_type") or "").strip() for pr in prod_rows if str(pr.get("order_type") or "").strip()})
     channels = sorted({str(pr.get("channel") or "").strip() for pr in prod_rows if str(pr.get("channel") or "").strip()})
 
+    def _wipr_pick_delivery(_o, _s, _balv):
+        """V24.60 — Delivery Date rule for every WIP Receive table.
+        1) PPC-WIP sheet (col L) me date likhi ho to wahi (pending Bal>0 row ki date ko priority, phir latest).
+        2) Warna purana calculation (Order Date + lead days), sirf jab net Bal Qty > 0.
+        Returns (delivery, delivery_disp): `delivery` = filters ke liye (sirf Bal>0 rows), `delivery_disp` = table/CSV me dikhne wali date."""
+        _lst = dlv_sheet_by_order_sku.get((_o, _s)) or []
+        _sheet = ""
+        if _lst:
+            _pend = [d for d, p in _lst if p]
+            _sheet = max(_pend) if _pend else max(d for d, _p in _lst)
+        _calc = dlv_by_order_sku.get((_o, _s)) or ""
+        _pos = (_balv is not None and _balv > 0)
+        _filt = (_sheet or _calc) if _pos else ""
+        _disp = _sheet or (_calc if _pos else "")
+        return _filt, _disp
+
     merged = {}
     for r in rows:
         ty = type_by_order_sku.get((r["order"], r["sku"])) or type_by_order.get(r["order"]) or ""
         ch = chan_by_order_sku.get((r["order"], r["sku"])) or chan_by_order.get(r["order"]) or ""
         _balv = bal_by_order_sku.get((r["order"], r["sku"]))
-        dl = (dlv_by_order_sku.get((r["order"], r["sku"])) or "") if (_balv is not None and _balv > 0) else ""
+        dl, dl_disp = _wipr_pick_delivery(r["order"], r["sku"], _balv)
         od = odt_by_order_sku.get((r["order"], r["sku"])) or odt_by_order.get(r["order"]) or ""
-        k = (r["date"], r["sku"], ty, ch, dl, od, r["order"], _balv)
+        k = (r["date"], r["sku"], ty, ch, dl, dl_disp, od, r["order"], _balv)
         _oqv = oq_by_order_sku.get((r["order"], r["sku"]), 0.0)
-        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "balance_raw": (lambda _bw: (None if _bw is None else (int(_bw) if float(_bw).is_integer() else round(_bw, 2))))(bal_raw_by_order_sku.get((r["order"], r["sku"]))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku), "sr_no": ", ".join(sr_by_order_sku.get((r["order"], r["sku"]), []))})
+        m = merged.setdefault(k, {"date": r["date"], "sku": r["sku"], "type": ty, "channel": ch, "delivery": dl, "delivery_disp": dl_disp, "order_date": od, "order": r["order"], "order_qty": (int(_oqv) if float(_oqv).is_integer() else round(_oqv, 2)), "recv_qty": (lambda _rv: (int(_rv) if float(_rv).is_integer() else round(_rv, 2)))(rq_by_order_sku.get((r["order"], r["sku"]), 0.0)), "balance": (None if _balv is None else (int(_balv) if float(_balv).is_integer() else round(_balv, 2))), "balance_raw": (lambda _bw: (None if _bw is None else (int(_bw) if float(_bw).is_integer() else round(_bw, 2))))(bal_raw_by_order_sku.get((r["order"], r["sku"]))), "qty": 0.0, "orders": [], "cancelled": ((r["order"], r["sku"]) in cancel_by_order_sku), "sr_no": ", ".join(sr_by_order_sku.get((r["order"], r["sku"]), []))})
         m["qty"] += r["qty"]
         if r["order"] and r["order"] not in m["orders"]:
             m["orders"].append(r["order"])
@@ -30099,7 +30136,8 @@ def api_wip_receive():
             "date": "", "sku": _psk,
             "type": type_by_order_sku.get((_pon, _psk)) or type_by_order.get(_pon) or "",
             "channel": chan_by_order_sku.get((_pon, _psk)) or chan_by_order.get(_pon) or "",
-            "delivery": dlv_by_order_sku.get((_pon, _psk)) or "",
+            "delivery": _wipr_pick_delivery(_pon, _psk, _pbal)[0],
+            "delivery_disp": _wipr_pick_delivery(_pon, _psk, _pbal)[1],
             "order_date": odt_by_order_sku.get((_pon, _psk)) or odt_by_order.get(_pon) or "",
             "order": _pon,
             "order_qty": _wipr_num(oq_by_order_sku.get((_pon, _psk), 0.0)),
