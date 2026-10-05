@@ -1,3 +1,6 @@
+# Cosa Nostraa — V24.62 (WIP RECEIVE · STONE WALI ROWS ME DELIVERY DATE +10 -> +12 DIN)
+# - Sirf WIP Receive ki calculated Delivery Date me stone wale SKU par ab +12 din (pehle +10). Production tab aur baaki sab kuch pehle jaisa.
+
 # Cosa Nostraa — V24.61 (WIP RECEIVE · REC QTY = PPC-WIP SHEET COL J EXACT · ORDER SUMMARY DELIVERY DATES COMMA SE)
 # - WIP Receive ki sabhi tables me Rec Qty ab PPC-WIP sheet ke col J ki har row ka exact sum hai (pehle exact-duplicate rows skip ho jati thi, isliye qty kam aati thi).
 # - Order Summary: ek order ki 1 se zyada delivery dates ho to range ("A to B") ki jagah saari dates comma lagakar dikhti hain.
@@ -10140,7 +10143,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="ops-head">
         <div>
           <div class="ops-title">WIP Receive — Order Summary</div>
-          <div class="ops-sub">One row per Order No. No. of SKUs = number of different SKUs in that order. Order Qty, Rec Qty and Bal Qty are the totals of its SKUs. By default only SKUs with Bal Qty above 0 are counted (so a fully received SKU is left out); use the Balance Qty filter to show All Balances, Equal to 0, Less than 0 or Less than or equal to 0 (the real negative balance is shown for those three). Delivery Date = the date written in the PPC-WIP sheet (column L); if the sheet is blank it is calculated (Order Date + 15 days for New Ordering, 12 for others, +10 with stone, only while Bal Qty is above 0). When the SKUs of an order have different dates, the earliest to latest date is shown. Filters: Order No., Channel and Type (type to search or pick from the list) and Balance Qty — they work only for this table.</div>
+          <div class="ops-sub">One row per Order No. No. of SKUs = number of different SKUs in that order. Order Qty, Rec Qty and Bal Qty are the totals of its SKUs. By default only SKUs with Bal Qty above 0 are counted (so a fully received SKU is left out); use the Balance Qty filter to show All Balances, Equal to 0, Less than 0 or Less than or equal to 0 (the real negative balance is shown for those three). Delivery Date = the date written in the PPC-WIP sheet (column L); if the sheet is blank it is calculated (Order Date + 15 days for New Ordering, 12 for others, +12 with stone, only while Bal Qty is above 0). When the SKUs of an order have different dates, the earliest to latest date is shown. Filters: Order No., Channel and Type (type to search or pick from the list) and Balance Qty — they work only for this table.</div>
         </div>
         <div class="ops-actions">
           <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="wipOrdReset()">Reset Filters</button>
@@ -29177,6 +29180,7 @@ def _build_production(channel_filter="", sku_query="", od1="", od2="", dd1="", d
                 "delivery_date": dv.strftime("%d-%b-%Y") if dv else "",
                 "delivery_iso":  dv.strftime("%Y-%m-%d") if dv else "",
                 "delivery_from_sheet": _dv_from_sheet,
+                "has_stone": bool(str(clean(r.get(C_STONE, "")) if C_STONE else "").strip().lower() not in ("", "nan", "none", "null", "-", "--", "na", "n/a")),   # V24.62: WIP Receive stone +12 ke liye
                 "receiving_date": rv.strftime("%d-%b-%Y") if rv else "",
                 "receiving_iso": rv.strftime("%Y-%m-%d") if rv else "",
                 "remark":    str(clean(r.get(C_REMK, "")) if C_REMK else "").strip(),
@@ -30086,7 +30090,13 @@ def api_wip_receive():
             if pr.get("delivery_from_sheet"):
                 dlv_sheet_by_order_sku.setdefault(_k0, []).append((_dl, float(pr.get("bal_qty") or 0) > 0))
             else:
-                dlv_by_order_sku.setdefault(_k0, _dl)
+                _dl_w = _dl
+                if pr.get("has_stone"):   # V24.62: WIP Receive me stone wali rows +12 din (Production tab me +10 hi rahega)
+                    try:
+                        _dl_w = (datetime.strptime(_dl, "%Y-%m-%d") + timedelta(days=2)).strftime("%Y-%m-%d")
+                    except Exception:
+                        _dl_w = _dl
+                dlv_by_order_sku.setdefault(_k0, _dl_w)
         ty = str(pr.get("order_type") or "").strip()
         ch = str(pr.get("channel") or "").strip()
         on = _wipr_norm_order(pr.get("order_no"))
