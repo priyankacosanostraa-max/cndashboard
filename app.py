@@ -1,3 +1,8 @@
+# Cosa Nostraa — V24.63 (WIP RECEIVE · PPC-WIP SHEET SE LIVE SYNC FIX)
+# - FIX: WIP Receive 'Refresh' ab Production (PPC-WIP) cache bhi force-refresh karta hai (pehle sirf WIP-Recv sheet fresh hoti thi, PPC-WIP ka 60s purana/stale cache use hota tha -> Rec/Bal Qty sheet se match nahi karti thi).
+# - FIX: PPC-WIP / WIP-Recv ke liye optional env PRODUCTION_LIVE_URL / WIP_RECV_LIVE_URL (Google 'publish to web' CSV kai baar purana hota hai; export/gviz link do to turant live data aata hai).
+# - NEW: /api/wip-receive-debug?order=1491 — us order ki sheet rows, Rec/Bal Qty totals aur sheet ka fetch time dikhata hai (dashboard vs sheet check karne ke liye).
+
 # Cosa Nostraa — V24.62 (WIP RECEIVE · STONE WALI ROWS ME DELIVERY DATE +10 -> +12 DIN)
 # - Sirf WIP Receive ki calculated Delivery Date me stone wale SKU par ab +12 din (pehle +10). Production tab aur baaki sab kuch pehle jaisa.
 
@@ -765,7 +770,7 @@ WEBSITE_RETURN_RTO_LIVE_URL = os.environ.get("WEBSITE_RETURN_RTO_LIVE_URL", "").
 WEBSITE_UNIWARE_LIVE_URL = os.environ.get("WEBSITE_UNIWARE_LIVE_URL", "").strip()
 # Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
-PRODUCTION_URL = os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv")
+PRODUCTION_URL = (os.environ.get("PRODUCTION_LIVE_URL", "").strip() or os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv"))
 
 
 PKL_FILE  = "sku_finder.pkl"
@@ -29949,7 +29954,7 @@ def api_operations_inventory():
 #  📥 WIP RECEIVE — date-wise SKUs received (WIP-Recv sheet)
 #  Sheet columns: A=Date, B=Order No., C=SKU No., D=SUM of Qty.
 # ════════════════════════════════════════════════════════════════
-WIP_RECV_URL = os.environ.get("WIP_RECV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1048577529&single=true&output=csv")
+WIP_RECV_URL = os.environ.get("WIP_RECV_LIVE_URL", "").strip() or os.environ.get("WIP_RECV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1048577529&single=true&output=csv")
 _WIPRECV_CACHE = {"rows": None, "ts": 0.0}
 _WIPRECV_TTL = 60
 
@@ -30020,6 +30025,11 @@ def api_wip_receive():
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     fresh = request.args.get("fresh", "0").strip().lower() in ("1", "true", "yes")
+    if fresh:
+        # V24.63: Refresh par PPC-WIP (Production) cache bhi reset — pehle stale rehta tha
+        _PROD_CACHE["rows"] = None
+        _PROD_CACHE["rows_raw"] = None
+        _PROD_CACHE["ts"] = 0
     try:
         rows = _load_wip_receive(force=fresh)
         warn = ""
@@ -30206,6 +30216,35 @@ def api_wip_receive():
         "warning": warn,
     })
 
+
+
+@app.route("/api/wip-receive-debug")
+def api_wip_receive_debug():
+    """V24.63: ek order ki PPC-WIP sheet rows (jaise server ko CSV me mili) — dashboard vs sheet compare karne ke liye."""
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    on = _wipr_norm_order(request.args.get("order", ""))
+    try:
+        _PROD_CACHE["rows"] = None
+        _PROD_CACHE["rows_raw"] = None
+        _PROD_CACHE["ts"] = 0
+        _build_production(order_query="\x00no-match\x00", row_limit=0)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    raw = _PROD_CACHE.get("rows_raw") or []
+    sel = [r for r in raw if (not on) or _wipr_norm_order(r.get("order_no")) == on]
+    return jsonify({
+        "order": on,
+        "csv_url": PRODUCTION_URL.split("?")[0] + "?…" + PRODUCTION_URL.split("?")[-1][:60],
+        "fetched_at_ist": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
+        "sheet_rows_total": len(raw),
+        "rows_found": len(sel),
+        "sum_order_qty": sum(float(r.get("order_qty") or 0) for r in sel),
+        "sum_rec_qty": sum(float(r.get("recv_qty") or 0) for r in sel),
+        "sum_bal_qty_all": sum(float(r.get("bal_k") or 0) for r in sel),
+        "sum_bal_qty_gt0": sum(float(r.get("bal_k") or 0) for r in sel if float(r.get("bal_k") or 0) > 0),
+        "rows": [{"sku": r.get("sku"), "order_qty": r.get("order_qty"), "rec_qty": r.get("recv_qty"), "bal_qty": r.get("bal_k")} for r in sel],
+    })
 
 
 @app.route("/api/ops-support")
