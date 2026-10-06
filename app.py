@@ -1,3 +1,6 @@
+# Cosa Nostraa — V24.64 (WIP RECEIVE · ORDER SUMMARY TABLE FULL-WIDTH + BADI FONT)
+# - Sirf Order Summary table ab poori width me, bade font/padding ke saath (Channel/Type columns chaude). Baaki kuch change nahi.
+
 # Cosa Nostraa — V24.63 (WIP RECEIVE · PPC-WIP SHEET SE LIVE SYNC FIX)
 # - FIX: WIP Receive 'Refresh' ab Production (PPC-WIP) cache bhi force-refresh karta hai (pehle sirf WIP-Recv sheet fresh hoti thi, PPC-WIP ka 60s purana/stale cache use hota tha -> Rec/Bal Qty sheet se match nahi karti thi).
 # - FIX: PPC-WIP / WIP-Recv ke liye optional env PRODUCTION_LIVE_URL / WIP_RECV_LIVE_URL (Google 'publish to web' CSV kai baar purana hota hai; export/gviz link do to turant live data aata hai).
@@ -7837,6 +7840,15 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
    Lift the whole filter box of this table above its siblings so the Channel / Type lists always open on top. */
 .ops-page #wipOrdSection .ops-filters{position:relative;z-index:40}
 .ops-page #wipOrdSection .ops-filters .wo-combo:focus-within{z-index:60}
+.ops-page #woContent{overflow-x:auto}
+.ops-page table.ops-table.wipr-table.wipr-sum{width:100% !important;min-width:100% !important;table-layout:auto !important;font-size:15px}
+.ops-page table.ops-table.wipr-table.wipr-sum th{font-size:12px !important;padding-top:13px !important;padding-bottom:13px !important}
+.ops-page table.ops-table.wipr-table.wipr-sum td{font-size:15px !important;padding:15px 16px !important;line-height:1.45}
+.ops-page table.ops-table.wipr-table.wipr-sum th{padding-left:16px !important;padding-right:16px !important}
+.ops-page table.ops-table.wipr-table.wipr-sum td.wipr-ch{min-width:260px;max-width:none !important;font-size:14px !important}
+.ops-page table.ops-table.wipr-table.wipr-sum td.wipr-ty{min-width:220px;max-width:none !important;font-size:14px !important}
+.ops-page table.ops-table.wipr-table.wipr-sum td:last-child{white-space:normal !important;min-width:200px}
+.ops-page table.ops-table.wipr-table.wipr-sum td.ops-num{font-size:16px !important}
 .wo-combo{position:relative}
 .wo-combo-list{position:absolute;left:0;right:0;top:100%;z-index:200;max-height:260px;overflow-y:auto;background:#fff;border:1px solid #d9e0ea;border-radius:10px;box-shadow:0 12px 28px rgba(15,23,42,.14);margin-top:4px;min-width:190px}
 .wo-opt{padding:8px 11px;font-size:13px;cursor:pointer;white-space:normal;word-break:break-word}
@@ -21190,7 +21202,7 @@ function wipOrdRender(){
   });
   const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
   const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td></tr></tfoot>':'';
-  host.innerHTML='<table class="ops-table wipr-table" style="min-width:0"><thead><tr><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
+  host.innerHTML='<table class="ops-table wipr-table wipr-sum" style="min-width:0"><thead><tr><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
 }
 function wipOrdReset(){
   ['woOrderNo','woChannel','woType'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
