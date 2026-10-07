@@ -1,5 +1,7 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
+# - V24.68: Overview tab ki Transactions table aur uske neeche Pivot — SKU-wise Summary me SKU column me ab sirf SKU code (naam / GOOD RUNNING / OOS SOON jaise tags nahi).
+# - V24.67b: Home par WIP data load fail ho to banner chup rehne ki jagah error karan dikhata hai.
 # - V24.67: Delivery Alert banner me aaj ki delivery aur delay wale Order No. bhi dikhte hain.
 # - V24.66: WIP Receive calculated Delivery Date me stone +12 din sirf jab Order Qty > 20; Order Qty <= 20 par stone wali row bhi sirf base days (12; New Ordering 15). Sheet col L ki date par asar nahi. Production tab unchanged.
 # - V24.65c: Banner sirf Home page (bina siren) aur WIP Receive tab (siren ke saath) me; baaki tabs me nahi.
@@ -13961,7 +13963,7 @@ function applyF(){
           const stk=parseInt(iv.s)||0,wip=parseInt(iv.w)||0,blk=parseInt(iv.b)||0;
           if(monthMode)return `<tr>
             <td class="gold">${safeText(t.date)}</td>
-            <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(String(t.sku||''))}</button></div></td>
             <td>${safeText(t.cn_name||iv.cn||'')}</td>
             <td class="gold">${Math.round(Number(t.qty)||0)}</td>
             <td class="gold">${Math.round(Number(t.combo_qty)||0)}</td>
@@ -13973,7 +13975,7 @@ function applyF(){
             <td class="gold"><b>${Math.round((Number(t.qty)||0)+(Number(t.combo_qty)||0))}</b></td></tr>`;
           return `<tr>
             <td class="gold">${t.date==='N/A'?'—':t.date}</td>
-            <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku,t.sku_name)}</button></div></td>
+            <td><div class="sku-cell">${roThumb(iv.img,t.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(String(t.sku||''))}</button></div></td>
             <td>${safeText(t.cust)}</td><td>${safeText(t.type)}</td><td>${safeText(saleModeText(t) || '—')}</td><td class="gold">${Number(t.qty)||0}</td><td class="gold">0</td><td class="gold"><b>${cnxAvgSpText(t.avg_selling_price)}</b></td>
             ${empF?'':`<td class="gold"><b>${fmt(t.rev||0)}</b></td>`}
             <td class="${stk>10?'red':stk>0?'orange':'muted'}">${stk}</td><td class="${wip>10?'orange':wip>0?'gold':'muted'}">${wip}</td><td class="${blk>0?'red':'muted'}">${blk}</td>
@@ -13988,7 +13990,7 @@ function applyF(){
           const pivotItem=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};
           const combo=monthMode?(Number(x.combo_qty)||0):cnxSoldSplit(pivotItem,pivotCtx,{allowedParentSkus:matrixActiveSkuScope}).inCmb.sold;
           const total=monthMode?(Number(x.total_qty)||0):(Number(x.qty)||0)+(Number(combo)||0);
-          return `<tr><td><div class="sku-cell">${roThumb(iv.img,x.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(x.sku,x.sku_name)}</button></div></td>
+          return `<tr><td><div class="sku-cell">${roThumb(iv.img,x.sku)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${escHtml(String(x.sku||''))}</button></div></td>
             <td class="gold" title="${escHtml((x.customer_names||[]).join(', '))}">${Number(x.customer_count||0).toLocaleString('en-IN')}</td>
             <td class="gold">${Math.round(Number(x.qty)||0)}</td><td class="gold">${Math.round(combo)}</td>
             ${monthMode?`<td class="gold"><b>${Math.round(total)}</b></td><td class="gold"><b>${Math.round(Number(x.last_1y_qty)||0)}</b></td>`:''}
@@ -21329,6 +21331,17 @@ function _wipOrdList(set){
   const max=25,shown=a.slice(0,max).map(function(v){return escHtml(v);}).join(', ');
   return '<div class="wa-o">ऑर्डर नं.: '+shown+(a.length>max?' तथा '+(a.length-max)+' और':'')+'</div>';
 }
+function wipAlertError(e){
+  let bar=document.getElementById('wipAlertBar');
+  if(!bar){wipAlertFromRows([],false);bar=document.getElementById('wipAlertBar');}
+  if(!bar)return;
+  wipSirenStop();bar.className='wa-amber';
+  bar.querySelector('.wa-t').textContent='⚠️ डिलीवरी सूचना — डेटा लोड नहीं हो सका';
+  bar.querySelector('.wa-d').textContent='';
+  bar.querySelector('.wa-l1').textContent='WIP Receive का डेटा प्राप्त नहीं हुआ: '+String((e&&e.message)||e||'unknown error').slice(0,160);
+  bar.querySelector('.wa-l2').textContent='कृपया पेज रिफ्रेश करके दोबारा प्रयास करें।';
+  bar.querySelector('.wa-h').style.display='none';bar.style.display='block';
+}
 function wipAlertClose(){
   wipSirenStop();
   const bar=document.getElementById('wipAlertBar');if(bar)bar.style.display='none';
@@ -21362,8 +21375,8 @@ let _wipAlertTab='home';
 function wipAlertOnDashboardLoad(){
   return fetch('/api/wip-receive?fresh=0&_='+Date.now(),{cache:'no-store',credentials:'same-origin',headers:{'ngrok-skip-browser-warning':'true'}})
     .then(function(r){return r.ok?r.json():Promise.reject(new Error('HTTP '+r.status));})
-    .then(function(d){if(!d||d.error||_wipAlertTab!=='home')return;wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
-    .catch(function(e){console.warn('WIP alert load failed',e);});
+    .then(function(d){if(_wipAlertTab!=='home')return;if(!d||d.error)throw new Error((d&&d.error)||'empty response');wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
+    .catch(function(e){console.warn('WIP alert load failed',e);if(_wipAlertTab==='home')wipAlertError(e);});
 }
 window.wipAlertClose=wipAlertClose;window.wipSirenStop=wipSirenStop;window.wipAlertFromRows=wipAlertFromRows;window.wipAlertOnDashboardLoad=wipAlertOnDashboardLoad;
 window.wipOrdRender=wipOrdRender;window.wipOrdRender_d=wipOrdRender_d;window.wipOrdReset=wipOrdReset;window.wipOrdExport=wipOrdExport;window.woComboInput=woComboInput;window.woComboOpen=woComboOpen;window.woComboPick=woComboPick;
