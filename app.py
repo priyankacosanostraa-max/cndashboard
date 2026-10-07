@@ -1,5 +1,6 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
+# - V24.67: Delivery Alert banner me aaj ki delivery aur delay wale Order No. bhi dikhte hain.
 # - V24.66: WIP Receive calculated Delivery Date me stone +12 din sirf jab Order Qty > 20; Order Qty <= 20 par stone wali row bhi sirf base days (12; New Ordering 15). Sheet col L ki date par asar nahi. Production tab unchanged.
 # - V24.65c: Banner sirf Home page (bina siren) aur WIP Receive tab (siren ke saath) me; baaki tabs me nahi.
 # - V24.65b: Siren sirf 1.5 sec aur sirf WIP Receive tab open karne par; dashboard refresh par banner bina siren ke.
@@ -21239,6 +21240,7 @@ function wipOrdExport(){
    +'#wipAlertBar .wa-d{font-size:12px;opacity:.9;margin-bottom:8px}'
    +'#wipAlertBar .wa-l{font-size:15.5px;line-height:1.6;margin:3px 0}'
    +'#wipAlertBar .wa-l b{font-size:18px;background:rgba(255,255,255,.18);padding:1px 8px;border-radius:6px}'
+   +'#wipAlertBar .wa-o{font-size:13px;margin:2px 0 8px;opacity:.95;line-height:1.5;word-break:break-word}'
    +'#wipAlertBar .wa-h{font-size:12px;margin-top:8px;opacity:.95;display:none}'
    +'#wipAlertBar .wa-b{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}'
    +'#wipAlertBar .wa-b button{cursor:pointer;border:0;border-radius:8px;padding:7px 14px;font-weight:700;font-size:13px;background:#fff;color:#222}'
@@ -21321,6 +21323,12 @@ function _wipAlertCalc(rows){
   });
   return res;
 }
+function _wipOrdList(set){
+  const a=Array.from(set||[]).sort(function(x,y){return String(x).localeCompare(String(y),undefined,{numeric:true});});
+  if(!a.length)return '';
+  const max=25,shown=a.slice(0,max).map(function(v){return escHtml(v);}).join(', ');
+  return '<div class="wa-o">ऑर्डर नं.: '+shown+(a.length>max?' तथा '+(a.length-max)+' और':'')+'</div>';
+}
 function wipAlertClose(){
   wipSirenStop();
   const bar=document.getElementById('wipAlertBar');if(bar)bar.style.display='none';
@@ -21339,10 +21347,10 @@ function wipAlertFromRows(rows,withSound){
   bar.querySelector('.wa-t').textContent=(hasD?'⚠️ ':'🔔 ')+'डिलीवरी सूचना — WIP Receive';
   bar.querySelector('.wa-d').textContent='दिनांक: '+_wiprFmtFull(c.today);
   bar.querySelector('.wa-l1').innerHTML=hasT
-    ?'आज कुल <b>'+n(c.tQty)+'</b> पीस की डिलीवरी निर्धारित है ('+n(c.tOrd.size)+' ऑर्डर)।'
+    ?'आज कुल <b>'+n(c.tQty)+'</b> पीस की डिलीवरी निर्धारित है ('+n(c.tOrd.size)+' ऑर्डर)।'+_wipOrdList(c.tOrd)
     :'आज किसी भी ऑर्डर की डिलीवरी निर्धारित नहीं है।';
   bar.querySelector('.wa-l2').innerHTML=hasD
-    ?'इसके अतिरिक्त <b>'+n(c.dQty)+'</b> पीस की डिलीवरी में विलंब चल रहा है, जो कुल <b>'+n(c.dOrd.size)+'</b> ऑर्डर में लंबित है।'
+    ?'इसके अतिरिक्त <b>'+n(c.dQty)+'</b> पीस की डिलीवरी में विलंब चल रहा है, जो कुल <b>'+n(c.dOrd.size)+'</b> ऑर्डर में लंबित है।'+_wipOrdList(c.dOrd)
     :'कोई भी ऑर्डर विलंबित नहीं है।';
   bar.querySelector('.wa-h').style.display='none';
   bar.style.display='block';
