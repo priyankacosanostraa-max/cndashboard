@@ -1,5 +1,7 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
+# - V24.66: WIP Receive calculated Delivery Date me stone +12 din sirf jab Order Qty > 20; Order Qty <= 20 par stone wali row bhi sirf base days (12; New Ordering 15). Sheet col L ki date par asar nahi. Production tab unchanged.
+# - V24.65c: Banner sirf Home page (bina siren) aur WIP Receive tab (siren ke saath) me; baaki tabs me nahi.
 # - V24.65b: Siren sirf 1.5 sec aur sirf WIP Receive tab open karne par; dashboard refresh par banner bina siren ke.
 # - NEW: Delivery Alert banner (Hindi) — aaj ki delivery ki total qty/orders aur delay chal rahi qty/orders. Dashboard refresh/login par aur WIP Receive tab kholne ya Refresh dabane par har baar dikhta hai, saath me siren bajta hai.
 # - Browser rule: refresh par bina click ke sound block ho sakti hai — us case me pehle click/key par siren baj jaata hai. Baaki kuch change nahi.
@@ -15392,7 +15394,6 @@ function enterApp(role){
   // Today's corporate greetings appear immediately after authenticated entry.
   setTimeout(maybeShowSawanLastSomwarWish, 180);
   setTimeout(maybeShowKrishnaJanmashtamiWish, 180);
-  setTimeout(function(){ try{ wipAlertOnDashboardLoad(); }catch(e){} }, 2500); /* WIP delivery alert */
   // Login overlay ko pehle browser paint karne do. Home rendering and the
   // multi-megabyte data sync run on the next task, so successful sign-in feels
   // instant even on slower machines or a Railway cold start.
@@ -21349,10 +21350,11 @@ function wipAlertFromRows(rows,withSound){
   if(hasT||hasD){bar.classList.add('wa-ring');if(withSound)wipSirenPlay();else wipSirenStop();}else{wipSirenStop();}
 }
 /* Dashboard refresh / login: WIP Receive data alag se laakar wahi banner + siren (tab ka data/filters touch nahi hote) */
+let _wipAlertTab='home';
 function wipAlertOnDashboardLoad(){
   return fetch('/api/wip-receive?fresh=0&_='+Date.now(),{cache:'no-store',credentials:'same-origin',headers:{'ngrok-skip-browser-warning':'true'}})
     .then(function(r){return r.ok?r.json():Promise.reject(new Error('HTTP '+r.status));})
-    .then(function(d){if(!d||d.error)return;wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
+    .then(function(d){if(!d||d.error||_wipAlertTab!=='home')return;wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
     .catch(function(e){console.warn('WIP alert load failed',e);});
 }
 window.wipAlertClose=wipAlertClose;window.wipSirenStop=wipSirenStop;window.wipAlertFromRows=wipAlertFromRows;window.wipAlertOnDashboardLoad=wipAlertOnDashboardLoad;
@@ -25175,6 +25177,7 @@ showTab = function(t){
   if (backBtn) backBtn.style.display = t === 'skudetails' ? 'inline-flex' : 'none';
   toggleNavMenu(false);
   if (t === 'home') renderProHeader();
+  try{ _wipAlertTab=t; if(t==='home') wipAlertOnDashboardLoad(); else if(t!=='wipreceive') wipAlertClose(); }catch(e){} /* WIP delivery banner: sirf Home (bina siren) aur WIP Receive (siren ke saath) */
   // Heavy renders ko defer karo — tab turant switch ho jaye (UI block na ho),
   // bhaari kaam agle frame me. Isse page badalne par hang nahi hoga.
   if (t === 'repeat')   setTimeout(()=>{ try{ renderRoSkuChecklist(); applyRO(); }catch(e){console.error(e);} }, 0);
@@ -30252,7 +30255,9 @@ def api_wip_receive():
                 _dl_w = _dl
                 if pr.get("has_stone"):   # V24.62: WIP Receive me stone wali rows +12 din (Production tab me +10 hi rahega)
                     try:
-                        _dl_w = (datetime.strptime(_dl, "%Y-%m-%d") + timedelta(days=2)).strftime("%Y-%m-%d")
+                        # V24.66: stone +12 sirf jab Order Qty 20 se zyada ho; warna stone ka extra hata kar base days hi (12 / New Ordering 15)
+                        _stone_adj = 2 if float(pr.get("order_qty") or 0) > 20 else -10
+                        _dl_w = (datetime.strptime(_dl, "%Y-%m-%d") + timedelta(days=_stone_adj)).strftime("%Y-%m-%d")
                     except Exception:
                         _dl_w = _dl
                 dlv_by_order_sku.setdefault(_k0, _dl_w)
