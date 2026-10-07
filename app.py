@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
+# - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
+# - V24.65b: Siren sirf 1.5 sec aur sirf WIP Receive tab open karne par; dashboard refresh par banner bina siren ke.
+# - NEW: Delivery Alert banner (Hindi) — aaj ki delivery ki total qty/orders aur delay chal rahi qty/orders. Dashboard refresh/login par aur WIP Receive tab kholne ya Refresh dabane par har baar dikhta hai, saath me siren bajta hai.
+# - Browser rule: refresh par bina click ke sound block ho sakti hai — us case me pehle click/key par siren baj jaata hai. Baaki kuch change nahi.
+
 # Cosa Nostraa — V24.64 (WIP RECEIVE · ORDER SUMMARY TABLE FULL-WIDTH + BADI FONT)
 # - Sirf Order Summary table ab poori width me, bade font/padding ke saath (Channel/Type columns chaude). Baaki kuch change nahi.
 
@@ -15386,6 +15392,7 @@ function enterApp(role){
   // Today's corporate greetings appear immediately after authenticated entry.
   setTimeout(maybeShowSawanLastSomwarWish, 180);
   setTimeout(maybeShowKrishnaJanmashtamiWish, 180);
+  setTimeout(function(){ try{ wipAlertOnDashboardLoad(); }catch(e){} }, 2500); /* WIP delivery alert */
   // Login overlay ko pehle browser paint karne do. Home rendering and the
   // multi-megabyte data sync run on the next task, so successful sign-in feels
   // instant even on slower machines or a Railway cold start.
@@ -20653,6 +20660,7 @@ function loadWipReceive(force){
       const info=document.getElementById('wiprInfo');
       if(info){info.textContent=(d.warning?d.warning+' · ':'')+(_wiprMaxDate?'Latest receipt in sheet: '+_wiprFmt(_wiprMaxDate)+' · ':'')+_wiprRows.filter(r=>!r.norecv).length.toLocaleString('en-IN')+' date-wise SKU rows loaded';info.style.color=d.warning?'#b3261e':'';}
       renderWipReceive();
+      try{wipAlertFromRows(_wiprRows,!force);}catch(_e){console.error('WIP alert',_e);}
     })
     .catch(e=>{if(host)host.innerHTML='<div class="ops-empty">Failed: '+escHtml(e.message||e)+'</div>';});
 }
@@ -21191,7 +21199,7 @@ function wipOrdRender(){
   let body='';
   rows.forEach(o=>{
     const dlTip='';
-    body+='<tr><td style="font-weight:800">'+escHtml(o.order)+'</td>'
+    body+='<tr><td style="white-space:nowrap">'+(o.od?escHtml(_wiprFmtFull(o.od)):'—')+'</td><td style="font-weight:800">'+escHtml(o.order)+'</td>'
       +'<td class="ops-num"><b>'+n(o.skus)+'</b></td>'
       +'<td class="wipr-ch">'+escHtml(o.chs.join(', ')||'—')+'</td>'
       +'<td class="wipr-ty" title="'+escHtml(o.tys.join(', '))+'">'+escHtml(o.tys.map(_wiprShortType).join(', ')||'—')+'</td>'
@@ -21201,8 +21209,8 @@ function wipOrdRender(){
       +'<td'+dlTip+'>'+_woDlText(o,true)+'</td></tr>';
   });
   const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
-  const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td></tr></tfoot>':'';
-  host.innerHTML='<table class="ops-table wipr-table wipr-sum" style="min-width:0"><thead><tr><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
+  const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td></tr></tfoot>':'';
+  host.innerHTML='<table class="ops-table wipr-table wipr-sum" style="min-width:0"><thead><tr><th>Order Date</th><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
 }
 function wipOrdReset(){
   ['woOrderNo','woChannel','woType'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
@@ -21216,9 +21224,138 @@ function wipOrdExport(){
   const rows=_woBuild();
   if(!rows.length){alert('No orders to export');return;}
   const fD=v=>v?_wiprFmtFull(v):'';
-  const out=rows.map(o=>[o.order,o.skus,o.chs.join(', '),o.tys.join(', '),o.oq||0,o.rq||0,o.balKnown?o.bal:'',_woDlText(o,false)]);
-  _dlCsv(['Order No.','No. of SKUs','Channel','Type','Order Qty','Rec Qty','Bal Qty','Delivery Date'],out,'wip_receive_order_summary');
+  const out=rows.map(o=>[fD(o.od),o.order,o.skus,o.chs.join(', '),o.tys.join(', '),o.oq||0,o.rq||0,o.balKnown?o.bal:'',_woDlText(o,false)]);
+  _dlCsv(['Order Date','Order No.','No. of SKUs','Channel','Type','Order Qty','Rec Qty','Bal Qty','Delivery Date'],out,'wip_receive_order_summary');
 }
+/* ── WIP Receive: Delivery Alert banner (Hindi) + siren ── */
+(function(){
+  var st=document.createElement('style');
+  st.textContent='#wipAlertBar{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:2147483000;width:min(760px,94vw);box-sizing:border-box;border-radius:14px;padding:16px 20px 16px 18px;box-shadow:0 14px 40px rgba(0,0,0,.35);font-family:inherit;color:#fff;display:none;animation:wipAlertIn .45s ease-out}'
+   +'#wipAlertBar.wa-red{background:linear-gradient(135deg,#8f1111,#d42b2b);border:2px solid #ffb4b4}'
+   +'#wipAlertBar.wa-amber{background:linear-gradient(135deg,#8a5200,#d98a10);border:2px solid #ffe0a3}'
+   +'#wipAlertBar.wa-green{background:linear-gradient(135deg,#1d5e34,#2f8f52);border:2px solid #b9efcb}'
+   +'#wipAlertBar .wa-t{font-size:17px;font-weight:800;letter-spacing:.2px;margin-bottom:6px}'
+   +'#wipAlertBar .wa-d{font-size:12px;opacity:.9;margin-bottom:8px}'
+   +'#wipAlertBar .wa-l{font-size:15.5px;line-height:1.6;margin:3px 0}'
+   +'#wipAlertBar .wa-l b{font-size:18px;background:rgba(255,255,255,.18);padding:1px 8px;border-radius:6px}'
+   +'#wipAlertBar .wa-h{font-size:12px;margin-top:8px;opacity:.95;display:none}'
+   +'#wipAlertBar .wa-b{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}'
+   +'#wipAlertBar .wa-b button{cursor:pointer;border:0;border-radius:8px;padding:7px 14px;font-weight:700;font-size:13px;background:#fff;color:#222}'
+   +'#wipAlertBar .wa-x{position:absolute;top:8px;right:12px;font-size:22px;line-height:1;cursor:pointer;background:none;border:0;color:#fff;opacity:.85}'
+   +'#wipAlertBar.wa-ring{animation:wipAlertIn .45s ease-out,wipAlertPulse 1s ease-in-out 5}'
+   +'@keyframes wipAlertIn{from{opacity:0;transform:translate(-50%,-30px)}to{opacity:1;transform:translate(-50%,0)}}'
+   +'@keyframes wipAlertPulse{0%,100%{box-shadow:0 14px 40px rgba(0,0,0,.35)}50%{box-shadow:0 0 0 6px rgba(255,255,255,.45),0 14px 40px rgba(0,0,0,.45)}}';
+  document.head.appendChild(st);
+})();
+let _wipAlertCtx=null,_wipAlertOsc=null,_wipAlertGain=null,_wipAlertStopT=null,_wipSirenWanted=false,_wipSirenArmed=false,_wipAlertLastAt=0;
+function wipSirenStop(){
+  try{clearTimeout(_wipAlertStopT);}catch(e){}
+  try{if(_wipAlertOsc){_wipAlertOsc.stop();_wipAlertOsc.disconnect();}}catch(e){}
+  try{if(_wipAlertGain)_wipAlertGain.disconnect();}catch(e){}
+  _wipAlertOsc=null;_wipAlertGain=null;_wipSirenWanted=false;
+}
+function _wipSirenBuild(ctx){
+  _wipSirenWanted=false;
+  try{clearTimeout(_wipAlertStopT);}catch(e){}
+  try{if(_wipAlertOsc){_wipAlertOsc.stop();_wipAlertOsc.disconnect();}}catch(e){}
+  try{if(_wipAlertGain)_wipAlertGain.disconnect();}catch(e){}
+  const t0=ctx.currentTime+0.03,total=1.5,step=0.3;
+  const osc=ctx.createOscillator(),g=ctx.createGain();
+  osc.type='sawtooth';
+  osc.frequency.setValueAtTime(700,t0);
+  for(let t=0,i=0;t<total;t+=step,i++){osc.frequency.linearRampToValueAtTime(i%2===0?1150:700,t0+t+step);}
+  g.gain.setValueAtTime(0.0001,t0);
+  g.gain.exponentialRampToValueAtTime(0.22,t0+0.08);
+  g.gain.setValueAtTime(0.22,t0+total-0.25);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+total);
+  osc.connect(g);g.connect(ctx.destination);
+  osc.start(t0);osc.stop(t0+total+0.1);
+  _wipAlertOsc=osc;_wipAlertGain=g;
+  _wipAlertStopT=setTimeout(wipSirenStop,(total+0.4)*1000);
+  const bar=document.getElementById('wipAlertBar');
+  if(bar){const h=bar.querySelector('.wa-h');if(h)h.style.display='none';}
+}
+function _wipSirenArm(){
+  if(_wipSirenArmed)return;_wipSirenArmed=true;
+  const bar=document.getElementById('wipAlertBar');
+  if(bar){const h=bar.querySelector('.wa-h');if(h)h.style.display='block';}
+  const fire=function(){
+    ['pointerdown','keydown','touchstart','click'].forEach(function(ev){document.removeEventListener(ev,fire,true);});
+    _wipSirenArmed=false;
+    if(!_wipSirenWanted)return;
+    const ctx=_wipAlertCtx;if(!ctx)return;
+    const go=function(){if(ctx.state==='running'&&_wipSirenWanted)_wipSirenBuild(ctx);};
+    if(ctx.state==='running')go();else ctx.resume().then(go,function(){});
+  };
+  ['pointerdown','keydown','touchstart','click'].forEach(function(ev){document.addEventListener(ev,fire,true);});
+}
+function wipSirenPlay(){
+  const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+  try{if(!_wipAlertCtx)_wipAlertCtx=new AC();}catch(e){return;}
+  const ctx=_wipAlertCtx;
+  _wipSirenWanted=true;
+  if(ctx.state==='running'){_wipSirenBuild(ctx);return;}
+  try{ctx.resume().then(function(){if(ctx.state==='running'&&_wipSirenWanted)_wipSirenBuild(ctx);},function(){});}catch(e){}
+  setTimeout(function(){if(_wipSirenWanted&&ctx.state!=='running')_wipSirenArm();},350); /* autoplay block: pehle click/key par siren */
+}
+/* Pending Bal > 0 SKUs, one entry per Order+SKU. Today = delivery date aaj ki; Delayed = delivery date aaj se pehle (WIP Receive ke "Delayed" filter jaisa) */
+function _wipAlertCalc(rows){
+  const td=_wiprTodayIST();
+  const pairs=new Map();
+  (rows||[]).forEach(function(r){
+    const o=String(r.order||'').trim(),s=String(r.sku||'').trim().toUpperCase();
+    if(!o||!s)return;
+    const k=o+'|'+s;
+    let p=pairs.get(k);
+    if(!p){p={o:o,bal:0,dl:''};pairs.set(k,p);}
+    const b=Number(r.balance);
+    if(!p.bal&&b>0)p.bal=b;
+    if(!p.dl&&r.delivery)p.dl=String(r.delivery);
+  });
+  const res={today:td,tQty:0,tOrd:new Set(),dQty:0,dOrd:new Set()};
+  pairs.forEach(function(p){
+    if(!(p.bal>0)||!p.dl)return;
+    if(p.dl===td){res.tQty+=p.bal;res.tOrd.add(p.o);}
+    else if(p.dl<td){res.dQty+=p.bal;res.dOrd.add(p.o);}
+  });
+  return res;
+}
+function wipAlertClose(){
+  wipSirenStop();
+  const bar=document.getElementById('wipAlertBar');if(bar)bar.style.display='none';
+}
+function wipAlertFromRows(rows,withSound){
+  const c=_wipAlertCalc(rows);
+  const n=function(v){return Math.round(Number(v)||0).toLocaleString('en-IN');};
+  let bar=document.getElementById('wipAlertBar');
+  if(!bar){
+    bar=document.createElement('div');bar.id='wipAlertBar';
+    bar.innerHTML='<button class="wa-x" type="button" title="बंद करें" onclick="wipAlertClose()">&times;</button><div class="wa-t"></div><div class="wa-d"></div><div class="wa-l wa-l1"></div><div class="wa-l wa-l2"></div><div class="wa-h">🔊 सायरन सुनने हेतु कृपया स्क्रीन पर कहीं भी क्लिक करें।</div><div class="wa-b"><button type="button" onclick="wipSirenStop()">🔇 सायरन बंद करें</button><button type="button" onclick="wipAlertClose()">सूचना बंद करें</button></div>';
+    document.body.appendChild(bar);
+  }
+  const hasT=c.tQty>0,hasD=c.dQty>0;
+  bar.className=hasD?'wa-red':(hasT?'wa-amber':'wa-green');
+  bar.querySelector('.wa-t').textContent=(hasD?'⚠️ ':'🔔 ')+'डिलीवरी सूचना — WIP Receive';
+  bar.querySelector('.wa-d').textContent='दिनांक: '+_wiprFmtFull(c.today);
+  bar.querySelector('.wa-l1').innerHTML=hasT
+    ?'आज कुल <b>'+n(c.tQty)+'</b> पीस की डिलीवरी निर्धारित है ('+n(c.tOrd.size)+' ऑर्डर)।'
+    :'आज किसी भी ऑर्डर की डिलीवरी निर्धारित नहीं है।';
+  bar.querySelector('.wa-l2').innerHTML=hasD
+    ?'इसके अतिरिक्त <b>'+n(c.dQty)+'</b> पीस की डिलीवरी में विलंब चल रहा है, जो कुल <b>'+n(c.dOrd.size)+'</b> ऑर्डर में लंबित है।'
+    :'कोई भी ऑर्डर विलंबित नहीं है।';
+  bar.querySelector('.wa-h').style.display='none';
+  bar.style.display='block';
+  bar.classList.remove('wa-ring');void bar.offsetWidth;
+  if(hasT||hasD){bar.classList.add('wa-ring');if(withSound)wipSirenPlay();else wipSirenStop();}else{wipSirenStop();}
+}
+/* Dashboard refresh / login: WIP Receive data alag se laakar wahi banner + siren (tab ka data/filters touch nahi hote) */
+function wipAlertOnDashboardLoad(){
+  return fetch('/api/wip-receive?fresh=0&_='+Date.now(),{cache:'no-store',credentials:'same-origin',headers:{'ngrok-skip-browser-warning':'true'}})
+    .then(function(r){return r.ok?r.json():Promise.reject(new Error('HTTP '+r.status));})
+    .then(function(d){if(!d||d.error)return;wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
+    .catch(function(e){console.warn('WIP alert load failed',e);});
+}
+window.wipAlertClose=wipAlertClose;window.wipSirenStop=wipSirenStop;window.wipAlertFromRows=wipAlertFromRows;window.wipAlertOnDashboardLoad=wipAlertOnDashboardLoad;
 window.wipOrdRender=wipOrdRender;window.wipOrdRender_d=wipOrdRender_d;window.wipOrdReset=wipOrdReset;window.wipOrdExport=wipOrdExport;window.woComboInput=woComboInput;window.woComboOpen=woComboOpen;window.woComboPick=woComboPick;
 window.applyWmPastedSkus=applyWmPastedSkus;window.clearWmPastedSkus=clearWmPastedSkus;window.wipMonthRender=wipMonthRender;window.wipMonthRender_d=wipMonthRender_d;window.wipMonthPick=wipMonthPick;window.wipMonthReset=wipMonthReset;window.wipMonthExport=wipMonthExport;
 window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;window.exportWipReceive=exportWipReceive;window.wiprResetRange=wiprResetRange;window.wiprLast7Range=wiprLast7Range;window.wiprAllDates=wiprAllDates;window.wiprPickDate=wiprPickDate;window.wiprRangeChanged=wiprRangeChanged;window.wiprClearPick=wiprClearPick;window.applyWiprPastedSkus=applyWiprPastedSkus;window.clearWiprPastedSkus=clearWiprPastedSkus;
