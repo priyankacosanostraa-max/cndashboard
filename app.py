@@ -1,5 +1,6 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
+# - V24.71b: BT SKUs me numeric suffix (BT-0778_(S)_13, BT-1234_(7), child/CMB lists samet) ab kahin nahi dikhta — sheets load hote hi hat jata hai (sabhi tabs, exports, child SKUs) + API response safety net.
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
 # - V24.70: Repeat Orders tab ke Export (SKU pivot view) me ab Net Revenue column bhi (screen jaisi value, Avg Selling Price / Discount % ke baad). Employee login ke liye revenue columns pehle ki tarah hidden.
 # - V24.69: Banner ab galat "koi delivery nahi" nahi dikhata jab PPC-WIP (Production) sheet load na ho — amber warning + auto retry (3 baar). Server par bhi PPC-WIP load ek baar retry hota hai.
@@ -1054,6 +1055,46 @@ def _cn_base_code(s):
     return b
 
 
+# ── V24.71: BT SKU numeric suffix hatao (poore dashboard me) ─────────────────
+# BT-0778_(S)_13 -> BT-0778_(S) ; BT-1234_(7) -> BT-1234 ; BT-1046_(X)_1 -> BT-1046_(X)
+# Sirf BT code ke baad aane wale NUMERIC parts (_13 ya _(7)) hatte hain.
+# Letter wale parts (_(S), _(P), _(X), -CELB ...) jaise ke taise rehte hain.
+_BT_SKU_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])BT-?\d+(?:_(?:\([A-Za-z0-9]+\)|[A-Za-z0-9]+))*", re.I)
+_BT_NUM_PART_RE = re.compile(r"_(?:\(\d+\)|\d+)(?![A-Za-z0-9])")
+_BT_SKU_TOKEN_RE_B = re.compile(rb"(?<![A-Za-z0-9])BT-?\d+(?:_(?:\([A-Za-z0-9]+\)|[A-Za-z0-9]+))*", re.I)
+_BT_NUM_PART_RE_B = re.compile(rb"_(?:\(\d+\)|\d+)(?![A-Za-z0-9])")
+
+def strip_bt_numeric(text):
+    """Text me jitne bhi BT SKUs hon (CMB lists / comma lists samet), unka numeric suffix hata do."""
+    if not isinstance(text, str) or "_" not in text or "bt" not in text.lower():
+        return text
+    return _BT_SKU_TOKEN_RE.sub(lambda m: _BT_NUM_PART_RE.sub("", m.group(0)), text)
+
+def _strip_bt_numeric_bytes(data):
+    if not data or b"_" not in data:
+        return data
+    return _BT_SKU_TOKEN_RE_B.sub(lambda m: _BT_NUM_PART_RE_B.sub(b"", m.group(0)), data)
+
+def _bt_strip_frame(frame):
+    """Loaded sheet DataFrame ke har text column me BT SKU numeric suffix hata do (in place)."""
+    try:
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            return frame
+        for col in list(frame.columns):
+            try:
+                ser = frame[col]
+                if not (pd.api.types.is_object_dtype(ser) or pd.api.types.is_string_dtype(ser)):
+                    continue
+                has = ser.str.contains(r"(?<![A-Za-z0-9])BT-?\d+_", case=False, regex=True, na=False)
+                if has.any():
+                    frame.loc[has, col] = ser[has].map(strip_bt_numeric)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return frame
+
+
 def _inventory_suffix_candidates(sku):
     """Inventory lookup candidates while preserving the displayed/sales SKU.
 
@@ -1144,7 +1185,7 @@ def cn_build_catalog(force=False):
             if not title:
                 continue
             for v in (p.get("variants") or []):
-                sku = clean(v.get("sku", ""))
+                sku = strip_bt_numeric(clean(v.get("sku", "")))
                 if not sku:
                     continue
                 ns = _cn_normalize(sku)
@@ -2093,6 +2134,11 @@ def _fetch_inventory_fresh():
 
 
 def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
+    """Published Google CSV fetch + V24.71 BT SKU numeric suffix cleanup."""
+    return _bt_strip_frame(_fetch_csv_fresh_raw(url, select_groups, select_positions))
+
+
+def _fetch_csv_fresh_raw(url, select_groups=None, select_positions=None):
     """Fetch one published Google CSV without CDN-stale data.
 
     PERFORMANCE: parse directly from response bytes instead of decoding the
@@ -2213,6 +2259,7 @@ def _merge_historical_sales(live_frame, date_candidates, debug=None, source_name
             history[live_date_col] = history[hist_date_col]
 
         combined = pd.concat([history, live_current], ignore_index=True, sort=False)
+        combined = _bt_strip_frame(combined)
         if isinstance(debug, dict):
             debug.setdefault("historical_sales", {})[source_name] = {
                 "path": os.path.basename(history_path),
@@ -26553,6 +26600,24 @@ def add_headers(resp):
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
 
+    # V24.71: safety net — JSON/CSV/text responses me koi BT SKU numeric suffix
+    # (BT-0778_(S)_13 / BT-1234_(7)) bacha ho to bhi browser tak nahi pahunchega.
+    try:
+        _ct0 = (resp.headers.get("Content-Type") or "").lower()
+        if (
+            resp.status_code == 200
+            and resp.direct_passthrough is False
+            and "Content-Encoding" not in resp.headers
+            and (_ct0.startswith("application/json") or _ct0.startswith("text/csv") or _ct0.startswith("text/plain"))
+            and (resp.content_length is None or resp.content_length < 80 * 1024 * 1024)
+        ):
+            _raw = resp.get_data()
+            _new = _strip_bt_numeric_bytes(_raw)
+            if _new != _raw:
+                resp.set_data(_new)
+    except Exception:
+        pass
+
     try:
         accepts = (request.headers.get("Accept-Encoding") or "").lower()
         ctype = (resp.headers.get("Content-Type") or "").lower()
@@ -26996,6 +27061,10 @@ def _wr_last_nonblank(old, new):
 
 
 def _wr_read_csv_bytes(content):
+    return _bt_strip_frame(_wr_read_csv_bytes_raw(content))
+
+
+def _wr_read_csv_bytes_raw(content):
     """Parse CSV bytes safely for the Website Returns source fallbacks."""
     try:
         return pd.read_csv(
@@ -28808,7 +28877,7 @@ def _build_website_oos_report(force=False):
                         product_image_url = _src or product_image_url
 
                 for v in ((p or {}).get("variants") or []):
-                    sku = clean((v or {}).get("sku", ""))
+                    sku = strip_bt_numeric(clean((v or {}).get("sku", "")))
                     if not sku:
                         continue
                     key = _cn_normalize(sku)
