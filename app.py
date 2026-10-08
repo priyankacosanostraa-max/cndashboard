@@ -1,5 +1,7 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
+# - V24.71c: Myntra API integration poori tarah hata di (MYNTRA_MERCHANT_ID / MYNTRA_SECRET_KEY / token-refresh-search URLs / portal cookie sync / /api/marketplaces). Myntra ka sales-sheet data (MYNTRA_SALES_URL) pehle jaisa.
+# - V24.71d: Debug pass — upload request size cap (MAX_UPLOAD_MB, default 64) + bare `except:` -> `except Exception:` (Ctrl-C / shutdown signals ab swallow nahi hote).
 # - V24.71b: BT SKUs me numeric suffix (BT-0778_(S)_13, BT-1234_(7), child/CMB lists samet) ab kahin nahi dikhta — sheets load hote hi hat jata hai (sabhi tabs, exports, child SKUs) + API response safety net.
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
 # - V24.70: Repeat Orders tab ke Export (SKU pivot view) me ab Net Revenue column bhi (screen jaisi value, Avg Selling Price / Discount % ke baad). Employee login ke liye revenue columns pehle ki tarah hidden.
@@ -893,25 +895,6 @@ UPLOAD_REPORTS = {}
 AI_READY = False
 db_data, processor, dino_model, client = None, None, None, None
 
-MARKETPLACE_CACHE = {"data": None, "ts": 0, "error": None}
-MARKETPLACE_TTL = 300
-# SECURITY: credentials must come from environment variables, never from source.
-# (The old hard-coded merchant id / secret key were removed — rotate that key in the
-# Myntra partner portal, because it was stored in plain text in this file.)
-MYNTRA_WAREHOUSE_CODE = os.getenv("MYNTRA_WAREHOUSE_CODE", "cosanostraa")
-# BUGFIX: these four constants were referenced by the Myntra API fallback but were never
-# defined anywhere, so every call raised NameError (hidden by a broad except).
-# Set them from env with the endpoint URLs given in your Myntra API documentation.
-MYNTRA_TOKEN_URL = os.getenv("MYNTRA_TOKEN_URL", "")
-MYNTRA_REFRESH_URL = os.getenv("MYNTRA_REFRESH_URL", "")
-MYNTRA_V4_SEARCH_URL = os.getenv("MYNTRA_V4_SEARCH_URL", "")
-MYNTRA_V3_SEARCH_URL = os.getenv("MYNTRA_V3_SEARCH_URL", "")
-
-MYNTRA_PORTAL_BASE_URL  = "https://partners.myntrainfo.com/"
-MYNTRA_PORTAL_REPORT_URL = "https://partners.myntrainfo.com/Reports/ops-reports"
-MYNTRA_PORTAL_COOKIE     = os.getenv("MYNTRA_PORTAL_COOKIE", os.getenv("MYNTRA_PORTAL_COOKIES", ""))
-MYNTRA_PORTAL_USER       = os.getenv("MYNTRA_PORTAL_USER", "")
-MYNTRA_PORTAL_PASS       = os.getenv("MYNTRA_PORTAL_PASS", "")
 
 # ── Helpers ──────────────────────────────────────────────────
 def now_ist():
@@ -964,7 +947,7 @@ def to_num(v):
     try:
         num = float(m.group()) if m else 0.0
         return -abs(num) if negative_parentheses else num
-    except: return 0.0
+    except Exception: return 0.0
 
 def to_int(v): return int(round(to_num(v)))
 
@@ -988,7 +971,7 @@ def parse_date_any(v):
         if 1_000_000_000_000 <= fv <= 4_102_444_800_000:
             dt = pd.to_datetime(fv, unit="ms", errors="coerce")
             if not pd.isna(dt): return dt.to_pydatetime().replace(tzinfo=None)
-    except: pass
+    except Exception: pass
 
     if re.fullmatch(r"\d{8}", s):
         for fmt in ("%Y%m%d", "%d%m%Y"):
@@ -1004,7 +987,7 @@ def parse_date_any(v):
         try:
             y, mo, d = int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))
             return datetime(y, mo, d)
-        except: pass
+        except Exception: pass
 
     m_dmy = re.match(r"^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})", s)
     if m_dmy:
@@ -1013,13 +996,13 @@ def parse_date_any(v):
         try:
             if 1 <= d <= 31 and 1 <= mo <= 12:
                 return datetime(y, mo, d)
-        except: pass
+        except Exception: pass
 
     for dayfirst in (True, False):
         try:
             dt = pd.to_datetime(s, errors="coerce", dayfirst=dayfirst)
             if not pd.isna(dt): return dt.to_pydatetime().replace(tzinfo=None)
-        except: pass
+        except Exception: pass
     return None
 
 def base_sku(s): return str(s).strip().upper().split("_")[0]
@@ -4332,7 +4315,7 @@ def _refresh_data():
             try:
                 if datetime.strptime(e["date"],"%Y-%m-%d").replace(tzinfo=TZ) >= dt_cutoff:
                     total += e["qty"]
-            except: pass
+            except Exception: pass
         return int(round(total))
 
     # SPEED: date windows ko ISO strings me badlo — har entry par strptime ke
@@ -5105,7 +5088,7 @@ def get_embedding(path):
         emb = out.last_hidden_state[:,0]
         emb = emb / emb.norm(dim=-1, keepdim=True)
         return emb.squeeze().numpy()
-    except: return None
+    except Exception: return None
 
 def vision_search(img_bytes, inventory, top_k=10):
     if not AI_READY or db_data is None: return None
@@ -5154,602 +5137,6 @@ def vision_search(img_bytes, inventory, top_k=10):
 
 
 
-def _chunks(seq, size):
-    for i in range(0, len(seq), size):
-        yield seq[i:i+size]
-
-def _safe_json(resp):
-    try:
-        return resp.json()
-    except Exception:
-        txt = (getattr(resp, "text", "") or "").strip()
-        if not txt:
-            return {}
-        try:
-            return json.loads(txt)
-        except Exception:
-            return {"raw_text": txt}
-
-def _first_nonempty(*vals):
-    for v in vals:
-        if v is None:
-            continue
-        s = str(v).strip()
-        if s:
-            return s
-    return ""
-
-def _status_is_error(resp, body):
-    if resp is not None and getattr(resp, "status_code", 0) in (401, 403):
-        return True
-    if isinstance(body, dict):
-        st = str(body.get("statusType", "")).strip().upper()
-        sc = body.get("statusCode")
-        msg = str(body.get("statusMessage", body.get("message", ""))).lower()
-        if st == "ERROR":
-            return True
-        if sc in (401, 403):
-            return True
-        if any(k in msg for k in ("invalid token", "expired", "unauthorized", "token required", "authentication")):
-            return True
-    return False
-
-def _extract_token(resp, body):
-    access = _first_nonempty(
-        resp.headers.get("access_token") if resp else "",
-        resp.headers.get("Access-Token") if resp else "",
-        resp.headers.get("access-token") if resp else "",
-        body.get("access_token") if isinstance(body, dict) else "",
-        body.get("token") if isinstance(body, dict) else "",
-        body.get("data", {}).get("access_token") if isinstance(body, dict) else "",
-        body.get("data", {}).get("token") if isinstance(body, dict) else "",
-    )
-    refresh = _first_nonempty(
-        resp.headers.get("refresh_token") if resp else "",
-        resp.headers.get("Refresh-Token") if resp else "",
-        resp.headers.get("refresh-token") if resp else "",
-        body.get("refresh_token") if isinstance(body, dict) else "",
-        body.get("data", {}).get("refresh_token") if isinstance(body, dict) else "",
-    )
-    return access, refresh
-
-def _store_cfg():
-    return {
-        "merchant_id": _first_nonempty(os.getenv("MYNTRA_MERCHANT_ID")),
-        "secret_key": _first_nonempty(os.getenv("MYNTRA_SECRET_KEY")),
-        "warehouse_code": _first_nonempty(os.getenv("MYNTRA_WAREHOUSE_CODE"), MYNTRA_WAREHOUSE_CODE, "cosanostraa"),
-    }
-
-def myntra_refresh_access_token(refresh_token, merchant_id):
-    if not refresh_token:
-        raise RuntimeError("Myntra refresh token missing")
-    if not MYNTRA_REFRESH_URL:
-        raise RuntimeError("MYNTRA_REFRESH_URL env var is not configured")
-    rr = requests.post(
-        MYNTRA_REFRESH_URL,
-        headers={"refresh_token": refresh_token, "Content-Type": "application/json"},
-        json={"merchant_id": merchant_id},
-        timeout=45,
-    )
-    body = _safe_json(rr)
-    access, refresh = _extract_token(rr, body)
-    return access, refresh or refresh_token, body, rr
-
-def myntra_get_token(force=False):
-    global MARKETPLACE_CACHE
-    cfg = _store_cfg()
-    if not cfg["merchant_id"] or not cfg["secret_key"]:
-        raise RuntimeError("Myntra credentials are missing (set MYNTRA_MERCHANT_ID / MYNTRA_SECRET_KEY)")
-    if not MYNTRA_TOKEN_URL:
-        raise RuntimeError("MYNTRA_TOKEN_URL env var is not configured")
-
-    token_info = (MARKETPLACE_CACHE.get("data") or {}).get("myntra_token") or {}
-    if (not force and token_info.get("access_token") and time.time() - float(token_info.get("ts", 0)) < 20 * 24 * 3600):
-        return token_info["access_token"], token_info.get("refresh_token", ""), cfg
-
-    headers = {"secret_key": cfg["secret_key"], "Content-Type": "application/json"}
-    payload = {"merchant_id": cfg["merchant_id"]}
-
-    r = requests.post(MYNTRA_TOKEN_URL, headers=headers, json=payload, timeout=45)
-    body = _safe_json(r)
-    access, refresh = _extract_token(r, body)
-
-    if not access:
-        cached_refresh = _first_nonempty(token_info.get("refresh_token"), refresh)
-        if cached_refresh:
-            try:
-                access2, refresh2, body2, rr = myntra_refresh_access_token(cached_refresh, cfg["merchant_id"])
-                access = access2
-                refresh = refresh2
-                body = body2
-                r = rr
-            except Exception:
-                pass
-
-    if not access:
-        msg = _first_nonempty(
-            body.get("statusMessage") if isinstance(body, dict) else "",
-            body.get("message") if isinstance(body, dict) else "",
-            body.get("raw_text") if isinstance(body, dict) else "",
-            f"Myntra token failed (HTTP {getattr(r, 'status_code', 'NA')})",
-        )
-        raise RuntimeError(msg)
-
-    data = MARKETPLACE_CACHE.get("data") or {}
-    data["myntra_token"] = {
-        "access_token": access,
-        "refresh_token": refresh,
-        "ts": time.time(),
-        "merchant_id": cfg["merchant_id"],
-    }
-    MARKETPLACE_CACHE["data"] = data
-    MARKETPLACE_CACHE["ts"] = time.time()
-    MARKETPLACE_CACHE["error"] = None
-    return access, refresh, cfg
-
-def _myntra_strategy_order():
-    strategies = [
-        (MYNTRA_V4_SEARCH_URL, "json"),
-        (MYNTRA_V4_SEARCH_URL, "form"),
-        (MYNTRA_V4_SEARCH_URL, "data"),
-        (MYNTRA_V3_SEARCH_URL, "json"),
-        (MYNTRA_V3_SEARCH_URL, "form"),
-        (MYNTRA_V3_SEARCH_URL, "data"),
-    ]
-    return [(u, m) for (u, m) in strategies if u]   # skip endpoints that are not configured
-
-def _request_inventory(url, token, store, batch, mode="json"):
-    headers = {"access_token": token, "x-partner-store": store}
-    if mode == "json":
-        headers["Content-Type"] = "application/json"
-        return requests.post(url, headers=headers, json=batch, timeout=60)
-    if mode == "form":
-        return requests.post(url, headers=headers, files={"List": (None, json.dumps(batch))}, timeout=60)
-    if mode == "data":
-        return requests.post(url, headers=headers, data={"List": json.dumps(batch)}, timeout=60)
-    raise ValueError(f"Unknown mode: {mode}")
-
-def _pick_store_row(stores, desired_store):
-    desired = re.sub(r"[^a-z0-9]", "", str(desired_store).lower())
-    fallback = None
-    for st in stores:
-        code = _first_nonempty(
-            st.get("stores_code"), st.get("store_code"), st.get("storeCode"),
-            st.get("warehouse_code"), st.get("warehouseCode"),
-            st.get("code"), st.get("store"), st.get("name")
-        )
-        if fallback is None and code:
-            fallback = (st, code)
-        if re.sub(r"[^a-z0-9]", "", str(code).lower()) == desired:
-            return st, code
-    return (fallback if fallback else (None, ""))
-
-def _qty_from_store(node):
-    if not isinstance(node, dict):
-        return int(round(to_num(node)))
-    for key in (
-        "inventoryCount", "inventorycount", "inventory_count",
-        "availableQuantity", "available_quantity", "availableQty", "available_qty",
-        "quantity", "qty", "count", "stock", "live_qty"
-    ):
-        if key in node:
-            return int(round(to_num(node.get(key))))
-    return 0
-
-def _extract_inventory_entries(payload):
-    entries = []
-    seen = set()
-
-    def add_node(node):
-        try:
-            key = json.dumps(node, sort_keys=True, default=str)
-        except Exception:
-            key = repr(node)
-        if key in seen:
-            return
-        seen.add(key)
-        entries.append(node)
-
-    def walk(node):
-        if isinstance(node, dict):
-            if "sku" in node and any(k in node for k in ("stores", "inventoryCount", "inventorycount", "quantity", "qty", "availableQuantity", "available_quantity")):
-                add_node(node)
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for item in node:
-                walk(item)
-
-    walk(payload)
-    if entries:
-        return entries
-
-    if isinstance(payload, dict):
-        for key in ("inventoryDetails", "inventory_details", "inventories", "items", "rows", "data", "result", "payload"):
-            v = payload.get(key)
-            if isinstance(v, list):
-                return [x for x in v if isinstance(x, dict)]
-            if isinstance(v, dict) and v.get("sku"):
-                return [v]
-    if isinstance(payload, list):
-        return [x for x in payload if isinstance(x, dict)]
-    return []
-
-def _normalize_myntra_row(entry, desired_store, endpoint, mode):
-    sku = _first_nonempty(entry.get("sku"), entry.get("sellerSku"), entry.get("seller_sku"), entry.get("itemSku"))
-    stores = entry.get("stores")
-    store_code = ""
-    live_qty = 0
-    all_store_qty = 0
-
-    if isinstance(stores, list) and stores:
-        picked, store_code = _pick_store_row(stores, desired_store)
-        if picked:
-            live_qty = _qty_from_store(picked)
-        for st in stores:
-            all_store_qty += _qty_from_store(st)
-        if not live_qty and all_store_qty:
-            live_qty = all_store_qty
-        if not store_code:
-            store_code = _first_nonempty(stores[0].get("stores_code"), stores[0].get("store_code"), stores[0].get("storeCode"), desired_store)
-    else:
-        live_qty = _qty_from_store(entry)
-        store_code = _first_nonempty(entry.get("stores_code"), entry.get("store_code"), entry.get("storeCode"), entry.get("warehouse_code"), entry.get("warehouseCode"), desired_store)
-
-    return {
-        "sku": sku,
-        "live_qty": int(live_qty or 0),
-        "store_code": store_code or desired_store,
-        "raw": entry,
-        "endpoint": endpoint,
-        "mode": mode,
-    }
-
-def _call_inventory_search_once(token, store, batch, endpoint, mode):
-    resp = _request_inventory(endpoint, token, store, batch, mode=mode)
-    body = _safe_json(resp)
-    if _status_is_error(resp, body):
-        msg = _first_nonempty(
-            body.get("statusMessage") if isinstance(body, dict) else "",
-            body.get("message") if isinstance(body, dict) else "",
-            body.get("raw_text") if isinstance(body, dict) else "",
-            f"HTTP {getattr(resp, 'status_code', 'NA')}"
-        )
-        return None, msg, resp, body
-    entries = _extract_inventory_entries(body)
-    rows = [_normalize_myntra_row(e, store, endpoint, mode) for e in entries]
-    return rows, "", resp, body
-
-def myntra_search_inventory(skus, force_token=False):
-    if not _myntra_strategy_order():
-        raise RuntimeError("Myntra search URLs are not configured (MYNTRA_V4_SEARCH_URL / MYNTRA_V3_SEARCH_URL)")
-    token, refresh, cfg = myntra_get_token(force=force_token)
-    store = cfg["warehouse_code"]
-
-    clean_skus = []
-    seen = set()
-    for s in skus:
-        ss = str(s).strip()
-        if not ss:
-            continue
-        key = ss.upper()
-        if key not in seen:
-            seen.add(key)
-            clean_skus.append(ss)
-
-    rows = []
-    errors = []
-    attempts = []
-    returned_keys = set()
-
-    for batch in _chunks(clean_skus, 20):
-        batch_rows = None
-        batch_errs = []
-
-        for endpoint, mode in _myntra_strategy_order():
-            attempts.append(f"{endpoint.split('/')[-2]}/{mode}")
-            try:
-                rows_try, err, resp, body = _call_inventory_search_once(token, store, batch, endpoint, mode)
-                if rows_try is None and _status_is_error(resp, body):
-                    try:
-                        new_access, new_refresh, body2, rr = myntra_refresh_access_token(refresh, cfg["merchant_id"])
-                        if new_access:
-                            token = new_access
-                            refresh = new_refresh
-                            data = MARKETPLACE_CACHE.get("data") or {}
-                            data["myntra_token"] = {
-                                "access_token": token,
-                                "refresh_token": refresh,
-                                "ts": time.time(),
-                                "merchant_id": cfg["merchant_id"],
-                            }
-                            MARKETPLACE_CACHE["data"] = data
-                            rows_try, err, resp, body = _call_inventory_search_once(token, store, batch, endpoint, mode)
-                    except Exception:
-                        pass
-
-                if rows_try:
-                    batch_rows = rows_try
-                    break
-                if err:
-                    batch_errs.append(err)
-            except Exception as e:
-                batch_errs.append(str(e))
-
-        if not batch_rows:
-            for sku in batch:
-                single_row = None
-                for endpoint, mode in _myntra_strategy_order():
-                    attempts.append(f"single:{endpoint.split('/')[-2]}/{mode}")
-                    try:
-                        rows_try, err, resp, body = _call_inventory_search_once(token, store, [sku], endpoint, mode)
-                        if rows_try is None and _status_is_error(resp, body):
-                            try:
-                                new_access, new_refresh, body2, rr = myntra_refresh_access_token(refresh, cfg["merchant_id"])
-                                if new_access:
-                                    token = new_access
-                                    refresh = new_refresh
-                                    data = MARKETPLACE_CACHE.get("data") or {}
-                                    data["myntra_token"] = {
-                                        "access_token": token,
-                                        "refresh_token": refresh,
-                                        "ts": time.time(),
-                                        "merchant_id": cfg["merchant_id"],
-                                    }
-                                    MARKETPLACE_CACHE["data"] = data
-                                    rows_try, err, resp, body = _call_inventory_search_once(token, store, [sku], endpoint, mode)
-                            except Exception:
-                                pass
-
-                        if rows_try:
-                            single_row = rows_try[0]
-                            break
-                        if err:
-                            batch_errs.append(f"{sku}: {err}")
-                    except Exception as e:
-                        batch_errs.append(f"{sku}: {e}")
-                if single_row:
-                    batch_rows = batch_rows or []
-                    batch_rows.append(single_row)
-
-        if batch_rows:
-            for r in batch_rows:
-                sku_key = str(r.get("sku", "")).strip().upper()
-                if not sku_key:
-                    continue
-                returned_keys.add(sku_key)
-                rows.append(r)
-        errors.extend(batch_errs)
-
-    missing = [s for s in clean_skus if str(s).strip().upper() not in returned_keys]
-    coverage = round((len(returned_keys) / len(clean_skus) * 100.0), 1) if clean_skus else 0.0
-
-    return {
-        "marketplace": "myntra",
-        "connected": True,
-        "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
-        "store_code": store,
-        "merchant_id": cfg["merchant_id"],
-        "query_count": len(clean_skus),
-        "returned_count": len(returned_keys),
-        "coverage": coverage,
-        "count": len(rows),
-        "live_total_qty": int(sum(r["live_qty"] for r in rows)),
-        "low_stock": int(sum(1 for r in rows if r["live_qty"] <= 10)),
-        "missing_count": len(missing),
-        "missing_skus": missing[:250],
-        "attempts": attempts[:80],
-        "errors": errors[-50:],
-        "items": rows,
-    }
-
-def _portal_cookie_dict(cookie_header):
-    cookie_header = (cookie_header or "").strip()
-    if not cookie_header:
-        return {}
-    out = {}
-    if cookie_header.startswith("{"):
-        try:
-            obj = json.loads(cookie_header)
-            if isinstance(obj, dict):
-                return {str(k).strip(): str(v).strip() for k, v in obj.items() if str(k).strip()}
-        except Exception:
-            pass
-    for part in cookie_header.split(";"):
-        if "=" not in part:
-            continue
-        k, v = part.split("=", 1)
-        k = k.strip()
-        v = v.strip()
-        if k:
-            out[k] = v
-    return out
-
-def _portal_session():
-    sess = requests.Session()
-    sess.headers.update({
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0 Safari/537.36",
-        "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Referer": MYNTRA_PORTAL_BASE_URL,
-    })
-    cookies = _portal_cookie_dict(MYNTRA_PORTAL_COOKIE)
-    for k, v in cookies.items():
-        sess.cookies.set(k, v, domain=".myntrainfo.com")
-    return sess
-
-def _looks_like_login_or_loading(html_text):
-    t = (html_text or "").lower()
-    return ("loading" in t and len(t) < 5000) or ("login" in t and "password" in t and "partner portal" in t)
-
-def _read_html_tables(html_text):
-    tables = []
-    try:
-        from io import StringIO
-        dfs = pd.read_html(StringIO(html_text))
-        for df in dfs:
-            if df is not None and not df.empty:
-                tables.append(df)
-    except Exception:
-        pass
-    return tables
-
-def _normalize_table_to_items(df):
-    cols = {str(c).strip().lower(): c for c in df.columns}
-    sku_col = None
-    qty_col = None
-    store_col = None
-    for cand in ("sku", "seller sku", "seller sku code", "seller_sku", "seller skucode", "skucode", "item sku", "product sku", "style id"):
-        if cand in cols:
-            sku_col = cols[cand]
-            break
-    for cand in ("qty", "quantity", "available qty", "available quantity", "inventory", "stock", "current stock", "live qty"):
-        if cand in cols:
-            qty_col = cols[cand]
-            break
-    for cand in ("store", "warehouse", "warehouse code", "store code", "location"):
-        if cand in cols:
-            store_col = cols[cand]
-            break
-    if sku_col is None and qty_col is None:
-        return []
-    out = []
-    for _, row in df.iterrows():
-        sku = clean(row.get(sku_col, "")) if sku_col else ""
-        qty = to_int(row.get(qty_col, 0)) if qty_col else 0
-        store = clean(row.get(store_col, MYNTRA_WAREHOUSE_CODE), MYNTRA_WAREHOUSE_CODE) if store_col else MYNTRA_WAREHOUSE_CODE
-        if sku:
-            out.append({"sku": sku, "live_qty": qty, "store_code": store, "raw": row.to_dict(), "endpoint": "portal/ops-reports", "mode": "html"})
-    return out
-
-def myntra_portal_ops_sync(skus, force=False):
-    sess = _portal_session()
-    resp = sess.get(MYNTRA_PORTAL_REPORT_URL, timeout=60, allow_redirects=True)
-    html = getattr(resp, "text", "") or ""
-    if _looks_like_login_or_loading(html):
-        return {
-            "marketplace": "myntra",
-            "connected": False,
-            "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
-            "store_code": MYNTRA_WAREHOUSE_CODE,
-            "merchant_id": _store_cfg()["merchant_id"],
-            "query_count": len(skus),
-            "returned_count": 0,
-            "coverage": 0.0,
-            "count": 0,
-            "live_total_qty": 0,
-            "low_stock": 0,
-            "missing_count": len(skus),
-            "missing_skus": [str(s) for s in skus[:250]],
-            "attempts": ["portal/ops-reports"],
-            "errors": [
-                "Portal session not authenticated or page is JS-loaded.",
-                "Set MYNTRA_PORTAL_COOKIE as a browser session cookie string, then resync."
-            ],
-            "items": [],
-            "portal_url": MYNTRA_PORTAL_REPORT_URL,
-        }
-
-    items = []
-    parsed_tables = _read_html_tables(html)
-    for df in parsed_tables:
-        items.extend(_normalize_table_to_items(df))
-
-    clean_skus = []
-    seen = set()
-    for s in skus:
-        ss = str(s).strip()
-        if not ss:
-            continue
-        k = ss.upper()
-        if k not in seen:
-            seen.add(k)
-            clean_skus.append(ss)
-
-    if items:
-        item_map = {str(i["sku"]).strip().upper(): i for i in items if i.get("sku")}
-        rows = []
-        returned = set()
-        for sku in clean_skus:
-            key = sku.upper()
-            if key in item_map:
-                rows.append(item_map[key])
-                returned.add(key)
-        if not rows:
-            rows = items[:]
-            returned = {str(i["sku"]).strip().upper() for i in rows if i.get("sku")}
-    else:
-        rows = []
-        returned = set()
-
-    missing = [s for s in clean_skus if s.upper() not in returned]
-    coverage = round((len(returned) / len(clean_skus) * 100.0), 1) if clean_skus else 0.0
-
-    return {
-        "marketplace": "myntra",
-        "connected": True,
-        "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
-        "store_code": MYNTRA_WAREHOUSE_CODE,
-        "merchant_id": _store_cfg()["merchant_id"],
-        "query_count": len(clean_skus),
-        "returned_count": len(returned),
-        "coverage": coverage,
-        "count": len(rows),
-        "live_total_qty": int(sum(to_num(r.get("live_qty", 0)) for r in rows)),
-        "low_stock": int(sum(1 for r in rows if to_num(r.get("live_qty", 0)) <= 10)),
-        "missing_count": len(missing),
-        "missing_skus": missing[:250],
-        "attempts": [f"portal:{MYNTRA_PORTAL_REPORT_URL}"],
-        "errors": [],
-        "items": rows,
-        "portal_url": MYNTRA_PORTAL_REPORT_URL,
-    }
-
-def get_marketplaces(force=False):
-    global MARKETPLACE_CACHE
-    if not force and MARKETPLACE_CACHE.get("data") and (time.time() - MARKETPLACE_CACHE.get("ts", 0) < MARKETPLACE_TTL):
-        return MARKETPLACE_CACHE["data"]
-
-    master, *_ = get_data(False)
-    skus = [i.get("sku") for i in (master or []) if i.get("sku")]
-
-    out = {
-        "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
-        "myntra": {"connected": False, "items": [], "count": 0, "live_total_qty": 0, "low_stock": 0, "coverage": 0, "errors": []},
-        "nykaa": {"connected": False, "items": [], "count": 0, "live_total_qty": 0, "low_stock": 0, "errors": ["Pending integration"]},
-        "ajio": {"connected": False, "items": [], "count": 0, "live_total_qty": 0, "low_stock": 0, "errors": ["Pending integration"]},
-        "tata": {"connected": False, "items": [], "count": 0, "live_total_qty": 0, "low_stock": 0, "errors": ["Pending integration"]},
-        "flipkart": {"connected": False, "items": [], "count": 0, "live_total_qty": 0, "low_stock": 0, "errors": ["Pending integration"]},
-    }
-
-    portal_err = None
-    try:
-        portal_result = myntra_portal_ops_sync(skus, force=force)
-        out["myntra"] = portal_result
-        if not portal_result.get("connected"):
-            portal_err = "; ".join(portal_result.get("errors", []) or []) or "Portal sync unavailable"
-    except Exception as e:
-        portal_err = str(e)
-
-    if (not out["myntra"].get("connected")) or (not out["myntra"].get("items")):
-        try:
-            api_result = myntra_search_inventory(skus, force_token=force)
-            if not out["myntra"].get("items"):
-                out["myntra"] = api_result
-            else:
-                out["myntra"]["api_fallback"] = api_result
-            if portal_err:
-                out["myntra"]["errors"] = list(dict.fromkeys((out["myntra"].get("errors") or []) + [portal_err]))
-        except Exception as e:
-            if portal_err:
-                out["myntra"]["errors"] = list(dict.fromkeys((out["myntra"].get("errors") or []) + [portal_err, str(e)]))
-            else:
-                out["myntra"]["errors"] = [str(e)]
-
-    MARKETPLACE_CACHE["data"] = out
-    MARKETPLACE_CACHE["ts"] = time.time()
-    MARKETPLACE_CACHE["error"] = portal_err
-    return out
 # ── HTML ─────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -10562,7 +9949,6 @@ let master = [], allCusts = [], allTypes = [], allPlatings = [],
 let currentFY = "", previousFY = "", todayISO = "",
     yesterdayISO = "", currentMonthKey = "";
 let grandNetRevenue = 0, grandFinalQty = 0;
-let marketplaceData = null;
 let websitePaymentSummary = {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
 let websiteReturnsPaymentSummary = {cod:0, prepaid:0, total:0, cod_returned:0, prepaid_returned:0, daily:[]};
 let marketplaceReturnsPaymentSummary = {};
@@ -24276,71 +23662,6 @@ function bulkRenderCombo(forcedMessage){
   </table>`;
 }
 
-function renderMarketplaces(){
-  const root = document.getElementById('marketplaceRoot');
-  if (!root) return;
-  const md = marketplaceData || {};
-  const myn = md.myntra || {};
-  const cards = [
-    {title:'Myntra', status: myn.connected ? 'Live Sync' : 'Not Connected', note: myn.connected ? `Synced ${myn.synced_at || ''}` : 'Live seller portal sync', qty: myn.live_total_qty || 0},
-    {title:'Coverage', status: myn.connected ? `${myn.coverage || 0}% matched` : '—', note: myn.connected ? `${myn.returned_count || 0} of ${myn.query_count || 0} SKUs returned` : 'Portal sync coverage', qty: myn.returned_count || 0},
-    {title:'Missing', status: myn.connected ? `${myn.missing_count || 0} SKUs` : '—', note: myn.connected ? 'Queried from portal live' : 'Awaiting sync', qty: myn.missing_count || 0},
-    {title:'Nykaa', status:'Pending', note:'Credentials and endpoint mapping pending', qty: 0},
-    {title:'Ajio', status:'Pending', note:'Credentials and endpoint mapping pending', qty: 0},
-    {title:'Flipkart Seller', status:'Pending', note:'Credentials and endpoint mapping pending', qty: 0},
-  ];
-
-  const summaryHtml = cards.map(c => `
-    <div class="insight-summary-card">
-      <div class="label">${escHtml(c.title)}</div>
-      <div class="value">${String(c.qty).toLocaleString('en-IN')}</div>
-      <div class="home-card-sub">${escHtml(c.status)}</div>
-      <div class="home-card-sub">${escHtml(c.note)}</div>
-    </div>`).join('');
-
-  const rows = (myn.items || []).slice(0, 200).map((r, idx) => {
-    const sku = r.sku || '';
-    const masterItem = (master || []).find(x => String(x.sku).trim().toUpperCase() === String(sku).trim().toUpperCase());
-    const localQty = masterItem ? (parseInt(masterItem.total_inv || 0, 10) || 0) : 0;
-    const diff = (r.live_qty || 0) - localQty;
-    const diffCls = diff === 0 ? 'gold' : diff > 0 ? 'green' : 'red';
-    return `<tr>
-      <td>${idx + 1}</td>
-      <td class="gold">${escHtml(sku)}</td>
-      <td>${localQty}</td>
-      <td class="${diffCls}">${diff >= 0 ? '+' : ''}${diff}</td>
-      <td class="green">${r.live_qty || 0}</td>
-      <td class="muted">${escHtml(r.store_code || '')}</td>
-    </tr>`;
-  }).join('');
-
-  const errHtml = (myn.errors && myn.errors.length) ? `<div class="tno-data" style="padding:14px 0 8px;color:#dc2626">${myn.errors.map(e => escHtml(String(e))).join(' • ')}</div>` : '';
-
-  root.innerHTML = `
-    <div class="insights-head">
-      <div>
-        <div class="insights-title">Marketplaces</div>
-        <div class="insights-sub">Live portal sync. Myntra reads the ops-reports portal page first and falls back to API only when portal parsing is unavailable.</div>
-      </div>
-      <div class="insight-toolbar-actions">
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadData(true)">Sync Now</button>
-        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="renderMarketplaces()">Refresh View</button>
-      </div>
-    </div>
-    <div class="insight-summary">${summaryHtml}</div>
-    <div class="filter-box">
-      <div class="small-note">Myntra live inventory uses the partner portal ops-reports page first. If you provide an authenticated portal cookie, the page can be parsed directly; otherwise API fallback is used.</div>
-    </div>
-    <div class="ro-table-wrap">
-      <table class="ro">
-        <thead><tr><th>#</th><th>SKU</th><th>Local Qty</th><th>Diff</th><th>Myntra Live Qty</th><th>Store Code</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="6" class="tno-data">No Myntra live rows</td></tr>'}</tbody>
-      </table>
-    </div>
-    ${errHtml}
-  `;
-}
-
 /* ── ALL-PRODUCT SALES COMPARISON: AF Name Rel vs Non-Rel ── */
 let _scInitialized=false;
 let _scExportRows=[];
@@ -26480,6 +25801,13 @@ app.config["SESSION_COOKIE_SECURE"] = bool(DEPLOY_HOST)
 app.config["PREFERRED_URL_SCHEME"] = "https" if DEPLOY_HOST else "http"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SESSION_REFRESH_EACH_REQUEST"] = False
+# V24.71d: request-body cap. Without it any logged-in user (incl. employee) could POST a
+# multi-GB file to an upload route and exhaust RAM on a 512-MB host. Override with MAX_UPLOAD_MB.
+try:
+    _max_upload_mb = max(1, int(os.environ.get("MAX_UPLOAD_MB", "64") or 64))
+except (TypeError, ValueError):
+    _max_upload_mb = 64
+app.config["MAX_CONTENT_LENGTH"] = _max_upload_mb * 1024 * 1024
 
 # ── server-side users (production: env vars se override karo) ──
 USERS = {
@@ -36288,13 +35616,6 @@ def api_debug():
     if CACHE["data"] is None: get_data(True)
     return jsonify(CACHE.get("debug", {}))
 
-@app.route("/api/marketplaces")
-def api_marketplaces():
-    if session.get("role") != "admin":          # Marketplaces tab is hidden from employees in the UI
-        return jsonify({"error": "admin only"}), 403
-    force = request.args.get("force","false").lower() == "true"
-    return jsonify(get_marketplaces(force))
-
 @app.route("/search", methods=["POST"])
 def search():
     # SECURITY: this route is outside /api/, so _auth_guard never protected it. It returned the
@@ -37624,4 +36945,4 @@ if __name__ == "__main__":
     finally:
         if tunnel_proc:
             try: tunnel_proc.terminate()
-            except: pass
+            except Exception: pass
