@@ -1,5 +1,7 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
+# - V24.70: Repeat Orders tab ke Export (SKU pivot view) me ab Net Revenue column bhi (screen jaisi value, Avg Selling Price / Discount % ke baad). Employee login ke liye revenue columns pehle ki tarah hidden.
+# - V24.69: Banner ab galat "koi delivery nahi" nahi dikhata jab PPC-WIP (Production) sheet load na ho — amber warning + auto retry (3 baar). Server par bhi PPC-WIP load ek baar retry hota hai.
 # - V24.68: Overview tab ki Transactions table aur uske neeche Pivot — SKU-wise Summary me SKU column me ab sirf SKU code (naam / GOOD RUNNING / OOS SOON jaise tags nahi).
 # - V24.67b: Home par WIP data load fail ho to banner chup rehne ki jagah error karan dikhata hai.
 # - V24.67: Delivery Alert banner me aaj ki delivery aur delay wale Order No. bhi dikhte hain.
@@ -15030,7 +15032,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %','Net Revenue']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -15053,7 +15055,7 @@ function exportRO(fmtType){
       'Individual Sold': Math.round(rSold),
       'In CMBs Sold': Math.round(parentCmbSold),
       'MRP': parseFloat(item.mrp) || 0,
-      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Discount %': (item._fDiscPct||0) + '%'}),
+      ...(emp1 ? {} : {'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(item,roSaleCtxX);return v==null?'':Number(v.toFixed(2));})(), 'Discount %': (item._fDiscPct||0) + '%', 'Net Revenue': Number((Number(rsv.rev)||0).toFixed(2))}),
       'Inv Stock': chStock(item),
       'Inv WIP': chWip(item),
       'Blocked Qty': item.blocked_qty || 0,
@@ -21332,9 +21334,7 @@ function _wipOrdList(set){
   return '<div class="wa-o">ऑर्डर नं.: '+shown+(a.length>max?' तथा '+(a.length-max)+' और':'')+'</div>';
 }
 function wipAlertError(e){
-  let bar=document.getElementById('wipAlertBar');
-  if(!bar){wipAlertFromRows([],false);bar=document.getElementById('wipAlertBar');}
-  if(!bar)return;
+  const bar=_wipAlertEnsureBar();
   wipSirenStop();bar.className='wa-amber';
   bar.querySelector('.wa-t').textContent='⚠️ डिलीवरी सूचना — डेटा लोड नहीं हो सका';
   bar.querySelector('.wa-d').textContent='';
@@ -21342,19 +21342,48 @@ function wipAlertError(e){
   bar.querySelector('.wa-l2').textContent='कृपया पेज रिफ्रेश करके दोबारा प्रयास करें।';
   bar.querySelector('.wa-h').style.display='none';bar.style.display='block';
 }
-function wipAlertClose(){
-  wipSirenStop();
-  const bar=document.getElementById('wipAlertBar');if(bar)bar.style.display='none';
-}
-function wipAlertFromRows(rows,withSound){
-  const c=_wipAlertCalc(rows);
-  const n=function(v){return Math.round(Number(v)||0).toLocaleString('en-IN');};
+function _wipAlertEnsureBar(){
   let bar=document.getElementById('wipAlertBar');
   if(!bar){
     bar=document.createElement('div');bar.id='wipAlertBar';
     bar.innerHTML='<button class="wa-x" type="button" title="बंद करें" onclick="wipAlertClose()">&times;</button><div class="wa-t"></div><div class="wa-d"></div><div class="wa-l wa-l1"></div><div class="wa-l wa-l2"></div><div class="wa-h">🔊 सायरन सुनने हेतु कृपया स्क्रीन पर कहीं भी क्लिक करें।</div><div class="wa-b"><button type="button" onclick="wipSirenStop()">🔇 सायरन बंद करें</button><button type="button" onclick="wipAlertClose()">सूचना बंद करें</button></div>';
     document.body.appendChild(bar);
   }
+  return bar;
+}
+let _wipAlertTries=0,_wipAlertSoundPending=false,_wipAlertRetryT=null;
+/* PPC-WIP (Production) sheet load na ho to balance / delivery date blank aate hain — us haalat me galat "koi delivery nahi" nahi dikhana */
+function _wipAlertHasProd(rows){return Array.isArray(rows)&&rows.some(function(r){return r&&r.balance!==null&&r.balance!==undefined;});}
+function wipAlertWarn(l1,l2){
+  const bar=_wipAlertEnsureBar();
+  wipSirenStop();bar.className='wa-amber';
+  bar.querySelector('.wa-t').textContent='⚠️ डिलीवरी सूचना — डेटा अधूरा है';
+  bar.querySelector('.wa-d').textContent='दिनांक: '+_wiprFmtFull(_wiprTodayIST());
+  bar.querySelector('.wa-l1').textContent=l1;
+  bar.querySelector('.wa-l2').textContent=l2||'';
+  bar.querySelector('.wa-h').style.display='none';bar.style.display='block';
+}
+function _wipAlertRetry(){
+  clearTimeout(_wipAlertRetryT);
+  if(_wipAlertTries>=3){wipAlertWarn('PPC-WIP (Production) शीट का डेटा लोड नहीं हो पाया, इसलिए आज की डिलीवरी और विलंब की जानकारी उपलब्ध नहीं है।','कृपया कुछ क्षण बाद WIP Receive में Refresh दबाएँ।');return;}
+  _wipAlertTries++;
+  wipAlertWarn('PPC-WIP (Production) शीट का डेटा अभी लोड नहीं हुआ है, इसलिए डिलीवरी की जानकारी उपलब्ध नहीं है।','स्वतः पुनः प्रयास किया जा रहा है… ('+_wipAlertTries+'/3)');
+  _wipAlertRetryT=setTimeout(function(){
+    if(_wipAlertTab==='wipreceive'){try{loadWipReceive(true);}catch(e){}}
+    else if(_wipAlertTab==='home'){try{wipAlertOnDashboardLoad(true);}catch(e){}}
+  },6000);
+}
+function wipAlertClose(){
+  wipSirenStop();
+  const bar=document.getElementById('wipAlertBar');if(bar)bar.style.display='none';
+}
+function wipAlertFromRows(rows,withSound){
+  if(!_wipAlertHasProd(rows)){if(withSound)_wipAlertSoundPending=true;_wipAlertRetry();return;}
+  _wipAlertTries=0;clearTimeout(_wipAlertRetryT);
+  if(_wipAlertSoundPending){withSound=true;_wipAlertSoundPending=false;}
+  const c=_wipAlertCalc(rows);
+  const n=function(v){return Math.round(Number(v)||0).toLocaleString('en-IN');};
+  const bar=_wipAlertEnsureBar();
   const hasT=c.tQty>0,hasD=c.dQty>0;
   bar.className=hasD?'wa-red':(hasT?'wa-amber':'wa-green');
   bar.querySelector('.wa-t').textContent=(hasD?'⚠️ ':'🔔 ')+'डिलीवरी सूचना — WIP Receive';
@@ -21372,8 +21401,8 @@ function wipAlertFromRows(rows,withSound){
 }
 /* Dashboard refresh / login: WIP Receive data alag se laakar wahi banner + siren (tab ka data/filters touch nahi hote) */
 let _wipAlertTab='home';
-function wipAlertOnDashboardLoad(){
-  return fetch('/api/wip-receive?fresh=0&_='+Date.now(),{cache:'no-store',credentials:'same-origin',headers:{'ngrok-skip-browser-warning':'true'}})
+function wipAlertOnDashboardLoad(fresh){
+  return fetch('/api/wip-receive?fresh='+(fresh?'1':'0')+'&_='+Date.now(),{cache:'no-store',credentials:'same-origin',headers:{'ngrok-skip-browser-warning':'true'}})
     .then(function(r){return r.ok?r.json():Promise.reject(new Error('HTTP '+r.status));})
     .then(function(d){if(_wipAlertTab!=='home')return;if(!d||d.error)throw new Error((d&&d.error)||'empty response');wipAlertFromRows(Array.isArray(d.rows)?d.rows:[],false);})
     .catch(function(e){console.warn('WIP alert load failed',e);if(_wipAlertTab==='home')wipAlertError(e);});
@@ -30215,19 +30244,25 @@ def api_wip_receive():
     # Order Type comes from the Production (PPC-WIP) sheet, matched on Order No. (+ SKU).
     prod_rows = []
     _prod_err = ""
-    try:
-        # Only the Production cache is needed here (not the 1,000 display rows), so use a
-        # no-match filter: the cache gets filled/refreshed exactly the same, but the heavy
-        # per-row enrichment is skipped. This makes the WIP Receive load much faster.
-        _build_production(order_query="\x00no-match\x00", row_limit=0)
-        prod_rows = list(_PROD_CACHE.get("rows") or [])
-    except Exception as _pe:
-        _prod_err = str(_pe)
+    for _prod_attempt in (1, 2):   # V24.69: pehli baar me PPC-WIP sheet khali aaye to ek baar fresh retry
+        _prod_err = ""
         try:
-            app.logger.warning("WIP receive: Production sheet load failed: %s", _pe)
-        except Exception:
-            pass
-        prod_rows = list(_PROD_CACHE.get("rows") or [])
+            _build_production(order_query="\x00no-match\x00", row_limit=0)
+            prod_rows = list(_PROD_CACHE.get("rows") or [])
+        except Exception as _pe:
+            _prod_err = str(_pe) or repr(_pe)
+            try:
+                app.logger.warning("WIP receive: Production sheet load failed: %s", _pe)
+            except Exception:
+                pass
+            prod_rows = list(_PROD_CACHE.get("rows") or [])
+        if prod_rows:
+            break
+        if _prod_attempt == 1:
+            _PROD_CACHE["rows"] = None
+            _PROD_CACHE["rows_raw"] = None
+            _PROD_CACHE["ts"] = 0
+            time.sleep(1.5)
     if not prod_rows:
         _pw = "Production sheet could not be loaded, so Type / Channel / Balance are blank. Click Refresh in a few seconds." + ((" (" + _prod_err[:120] + ")") if _prod_err else "")
         warn = (warn + " · " + _pw) if warn else _pw
