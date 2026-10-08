@@ -1,4 +1,5 @@
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
+# - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
 # - Order Summary table me Order No. se pehle naya "Order Date" column (us order ki sabse purani order date). CSV export me bhi.
 # - V24.70: Repeat Orders tab ke Export (SKU pivot view) me ab Net Revenue column bhi (screen jaisi value, Avg Selling Price / Discount % ke baad). Employee login ke liye revenue columns pehle ki tarah hidden.
 # - V24.69: Banner ab galat "koi delivery nahi" nahi dikhata jab PPC-WIP (Production) sheet load na ho — amber warning + auto retry (3 baar). Server par bhi PPC-WIP load ek baar retry hota hai.
@@ -3049,14 +3050,13 @@ def _refresh_data():
     dbg["cosa_cols"] = list(cosa.columns)
 
     # ── Inventory columns ────────────────────────────────────
-    # Live All Product source-of-truth layout: B=SKU, E=Image Link, N=MRP.
-    # Physical column B is now PRIMARY: the sheet also carries a derived
-    # helper column ("SKU_1" etc, e.g. "BT-1046_(X)_1") right next to it, and
-    # that must never be picked up as the SKU value — most visible on BT
-    # (button) SKUs, whose "_(P)/_(S)/_(X)" suffixes made a stray "_1" easy
-    # to miss. Header-name search is only a fallback for when column B is
-    # missing entirely (e.g. sheet re-shuffled with fewer columns).
-    I_SKU = (inv.columns[1] if len(inv.columns) > 1 else None) or find_col(inv.columns, "SKU") or inv.columns[0]
+    # Live All Product source-of-truth layout: C=SKU, E=Image Link, N=MRP.
+    # Physical column C is PRIMARY (V24.71: SKU ab column C se, B se nahi).
+    # The sheet also carries a derived helper column ("SKU_1" etc, e.g.
+    # "BT-1046_(X)_1") that must never be picked up as the SKU value.
+    # Header-name search is only a fallback for when column C is missing
+    # entirely (e.g. sheet re-shuffled with fewer columns).
+    I_SKU = (inv.columns[2] if len(inv.columns) > 2 else None) or find_col(inv.columns, "SKU") or inv.columns[0]
     # Image Link is authoritative in physical column E. Prefer an exact
     # Image-Link header, then E, and only then a generic image-looking field.
     # This prevents column D (often just named "Image") from being selected
@@ -30129,9 +30129,9 @@ def _build_operations_inventory(force=False):
         inv = _fetch_csv_fresh(INV_URL)
         inv.columns = [str(c).strip() for c in inv.columns]
         cols = list(inv.columns)
-        # Live All Product source keeps SKU in physical column B. Header match
-        # remains primary; B is the safe fallback (A is S. No.).
-        sku_col = find_col(cols, "SKU") or (cols[1] if len(cols) > 1 else (cols[0] if cols else None))
+        # V24.71: All Product SKU = physical column C (index 2), same as the
+        # main dashboard data. Header match is only a fallback if C is missing.
+        sku_col = (cols[2] if len(cols) > 2 else None) or find_col(cols, "SKU") or (cols[0] if cols else None)
 
         stock_candidates = [
             c for c in cols
@@ -34732,9 +34732,9 @@ def _build_sku_costs():
             df = _fetch_csv_fresh(INV_URL)
             cols = list(df.columns)
             def _at(i): return cols[i] if len(cols) > i else None
-            # Live All Product: B=SKU, E=Image Link, M=Cost, N=MRP. Header
-            # matching stays primary; physical fallbacks protect renamed headers.
-            C_SKU  = find_col(df.columns, "SKU", "sku code", "item code") or _at(1)
+            # Live All Product: C=SKU, E=Image Link, M=Cost, N=MRP. V24.71: SKU
+            # physical column C primary; header match only as fallback.
+            C_SKU  = _at(2) or find_col(df.columns, "SKU", "sku code", "item code")
             C_COST = find_col(df.columns, "Cost", "cost", "product cost", "hi cost", "item cost") or _at(12)
             C_MRP  = find_col(df.columns, "MRP", "mrp", "m.r.p") or _at(13)
             C_IMG2 = find_col(df.columns, "Image Link", "imagelink", "image", "img") or _at(4)
