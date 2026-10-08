@@ -718,6 +718,7 @@ except Exception as _genai_err:
     GENAI_AVAILABLE = False
     print("google-genai not installed — AI Studio disabled (baaki sab chalega).",
           str(_genai_err)[:120])
+import tempfile, hmac
 from flask import Flask, request, jsonify, render_template_string, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -892,9 +893,17 @@ db_data, processor, dino_model, client = None, None, None, None
 
 MARKETPLACE_CACHE = {"data": None, "ts": 0, "error": None}
 MARKETPLACE_TTL = 300
-MYNTRA_MERCHANT_ID = "K81WKJ4N"
-MYNTRA_SECRET_KEY = "d7y4YD2rx1ZXOIY8czG2mxXDEzspTLFgJkqEak"
-MYNTRA_WAREHOUSE_CODE = "cosanostraa"
+# SECURITY: credentials must come from environment variables, never from source.
+# (The old hard-coded merchant id / secret key were removed — rotate that key in the
+# Myntra partner portal, because it was stored in plain text in this file.)
+MYNTRA_WAREHOUSE_CODE = os.getenv("MYNTRA_WAREHOUSE_CODE", "cosanostraa")
+# BUGFIX: these four constants were referenced by the Myntra API fallback but were never
+# defined anywhere, so every call raised NameError (hidden by a broad except).
+# Set them from env with the endpoint URLs given in your Myntra API documentation.
+MYNTRA_TOKEN_URL = os.getenv("MYNTRA_TOKEN_URL", "")
+MYNTRA_REFRESH_URL = os.getenv("MYNTRA_REFRESH_URL", "")
+MYNTRA_V4_SEARCH_URL = os.getenv("MYNTRA_V4_SEARCH_URL", "")
+MYNTRA_V3_SEARCH_URL = os.getenv("MYNTRA_V3_SEARCH_URL", "")
 
 MYNTRA_PORTAL_BASE_URL  = "https://partners.myntrainfo.com/"
 MYNTRA_PORTAL_REPORT_URL = "https://partners.myntrainfo.com/Reports/ops-reports"
@@ -5053,9 +5062,15 @@ def get_embedding(path):
 
 def vision_search(img_bytes, inventory, top_k=10):
     if not AI_READY or db_data is None: return None
-    tmp = "/tmp/query.jpg"
-    with open(tmp,"wb") as f: f.write(img_bytes)
-    q = get_embedding(tmp)
+    # BUGFIX: a fixed "/tmp/query.jpg" was shared by every request, so two users searching
+    # at the same moment overwrote each other's image (wrong results) -> unique temp file.
+    _fd, tmp = tempfile.mkstemp(suffix=".jpg", prefix="query_")
+    try:
+        with os.fdopen(_fd, "wb") as f: f.write(img_bytes)
+        q = get_embedding(tmp)
+    finally:
+        try: os.remove(tmp)
+        except OSError: pass
     if q is None: return None
     sims   = db_data["embeddings"] @ q
     top    = np.argsort(sims)[::-1][:top_k]
@@ -5072,7 +5087,7 @@ def vision_search(img_bytes, inventory, top_k=10):
                 ],
             )
             top_skus[0] = resp.text.strip()
-        except: pass
+        except Exception: pass
     out = []
     for sku, score in zip(top_skus, top_scores):
         m = next((i for i in inventory if i["sku"].upper()==str(sku).upper()), None)
@@ -5153,14 +5168,16 @@ def _extract_token(resp, body):
 
 def _store_cfg():
     return {
-        "merchant_id": _first_nonempty(os.getenv("MYNTRA_MERCHANT_ID"), MYNTRA_MERCHANT_ID),
-        "secret_key": _first_nonempty(os.getenv("MYNTRA_SECRET_KEY"), MYNTRA_SECRET_KEY),
+        "merchant_id": _first_nonempty(os.getenv("MYNTRA_MERCHANT_ID")),
+        "secret_key": _first_nonempty(os.getenv("MYNTRA_SECRET_KEY")),
         "warehouse_code": _first_nonempty(os.getenv("MYNTRA_WAREHOUSE_CODE"), MYNTRA_WAREHOUSE_CODE, "cosanostraa"),
     }
 
 def myntra_refresh_access_token(refresh_token, merchant_id):
     if not refresh_token:
         raise RuntimeError("Myntra refresh token missing")
+    if not MYNTRA_REFRESH_URL:
+        raise RuntimeError("MYNTRA_REFRESH_URL env var is not configured")
     rr = requests.post(
         MYNTRA_REFRESH_URL,
         headers={"refresh_token": refresh_token, "Content-Type": "application/json"},
@@ -5175,7 +5192,9 @@ def myntra_get_token(force=False):
     global MARKETPLACE_CACHE
     cfg = _store_cfg()
     if not cfg["merchant_id"] or not cfg["secret_key"]:
-        raise RuntimeError("Myntra credentials are missing")
+        raise RuntimeError("Myntra credentials are missing (set MYNTRA_MERCHANT_ID / MYNTRA_SECRET_KEY)")
+    if not MYNTRA_TOKEN_URL:
+        raise RuntimeError("MYNTRA_TOKEN_URL env var is not configured")
 
     token_info = (MARKETPLACE_CACHE.get("data") or {}).get("myntra_token") or {}
     if (not force and token_info.get("access_token") and time.time() - float(token_info.get("ts", 0)) < 20 * 24 * 3600):
@@ -5222,7 +5241,7 @@ def myntra_get_token(force=False):
     return access, refresh, cfg
 
 def _myntra_strategy_order():
-    return [
+    strategies = [
         (MYNTRA_V4_SEARCH_URL, "json"),
         (MYNTRA_V4_SEARCH_URL, "form"),
         (MYNTRA_V4_SEARCH_URL, "data"),
@@ -5230,6 +5249,7 @@ def _myntra_strategy_order():
         (MYNTRA_V3_SEARCH_URL, "form"),
         (MYNTRA_V3_SEARCH_URL, "data"),
     ]
+    return [(u, m) for (u, m) in strategies if u]   # skip endpoints that are not configured
 
 def _request_inventory(url, token, store, batch, mode="json"):
     headers = {"access_token": token, "x-partner-store": store}
@@ -5354,6 +5374,8 @@ def _call_inventory_search_once(token, store, batch, endpoint, mode):
     return rows, "", resp, body
 
 def myntra_search_inventory(skus, force_token=False):
+    if not _myntra_strategy_order():
+        raise RuntimeError("Myntra search URLs are not configured (MYNTRA_V4_SEARCH_URL / MYNTRA_V3_SEARCH_URL)")
     token, refresh, cfg = myntra_get_token(force=force_token)
     store = cfg["warehouse_code"]
 
@@ -5563,7 +5585,7 @@ def myntra_portal_ops_sync(skus, force=False):
             "connected": False,
             "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
             "store_code": MYNTRA_WAREHOUSE_CODE,
-            "merchant_id": MYNTRA_MERCHANT_ID,
+            "merchant_id": _store_cfg()["merchant_id"],
             "query_count": len(skus),
             "returned_count": 0,
             "coverage": 0.0,
@@ -5621,7 +5643,7 @@ def myntra_portal_ops_sync(skus, force=False):
         "connected": True,
         "synced_at": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
         "store_code": MYNTRA_WAREHOUSE_CODE,
-        "merchant_id": MYNTRA_MERCHANT_ID,
+        "merchant_id": _store_cfg()["merchant_id"],
         "query_count": len(clean_skus),
         "returned_count": len(returned),
         "coverage": coverage,
@@ -13000,7 +13022,6 @@ function exportSD(fmtType){
       SKU: item.sku,
       'CN Name': item.cn_name || '',
       'SKU Name': exportSkuName(item.sku, item.sku_name),
-      'CN Name': item.cn_name || '',
       'CN Class': cnClassOf(item),
       'Stone Color': item.stone_color || '',
       'Product Dimensions': item.dimensions || '',
@@ -16820,7 +16841,7 @@ function renderDiscount(){
     const img = (r.image_url && String(r.image_url).trim() && String(r.image_url).toLowerCase()!=='nan')
       ? `<img src="${escHtml(r.image_url)}" loading="lazy" style="width:34px;height:34px;object-fit:cover;border-radius:6px;margin-right:8px;vertical-align:middle">` : '';
     return `<tr>
-      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
+      <td><div class="sku-cell">${img}<button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
       <td>${escHtml(r.stone_color||'')}</td>
       <td>${escHtml(r.taxon||'')}</td>
       <td>${fmt(r.mrp)}</td>
@@ -19115,7 +19136,7 @@ function renderProduction(){
     return `<tr>
       <td class="gold">${escHtml(r.date_disp || '—')}</td>
       <td style="font-weight:800">${escHtml(r.order_no || '—')}</td>
-      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
+      <td><div class="prod-sku-cell">${img}<button class="sku-link prod-sku-text" style="font-weight:800" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku, r.sku_name))}</button></div></td>
       <td>${escHtml(r.stone_color || '—')}</td>
       <td>${escHtml(r.taxon || '—')}</td>
       <td>${escHtml(r.order_type || '—')}</td>
@@ -19223,7 +19244,7 @@ function pmSkuType(){
     ? matches.map(c => {
         const im = (c.image_url && String(c.image_url).trim() && String(c.image_url).toLowerCase()!=='nan')
           ? `<img src="${escHtml(c.image_url)}" loading="lazy" style="width:26px;height:26px;object-fit:cover;border-radius:5px;margin-right:8px;vertical-align:middle" onerror="this.style.display='none'">` : '';
-        return `<div class="pm-skuopt" onclick="pmPickSku('${c.sku.replace(/'/g,"\\\\'")}')"><span>${im}${escHtml(skuLabel(c.sku, c.sku_name))}</span><span class="mrp">${c.mrp?'MRP '+pmRupee(c.mrp):'MRP —'}${c.cost?' · Cost '+pmRupee(c.cost):''}</span></div>`;
+        return `<div class="pm-skuopt" onclick="pmPickSku('${c.sku.replace(/'/g,"\\'")}')"><span>${im}${escHtml(skuLabel(c.sku, c.sku_name))}</span><span class="mrp">${c.mrp?'MRP '+pmRupee(c.mrp):'MRP —'}${c.cost?' · Cost '+pmRupee(c.cost):''}</span></div>`;
       }).join('')
     : '<div class="pm-skuopt" style="cursor:default;color:#a99">No match</div>';
   list.classList.add('show');
@@ -24224,10 +24245,10 @@ function renderMarketplaces(){
 
   const summaryHtml = cards.map(c => `
     <div class="insight-summary-card">
-      <div class="label">${c.title}</div>
+      <div class="label">${escHtml(c.title)}</div>
       <div class="value">${String(c.qty).toLocaleString('en-IN')}</div>
-      <div class="home-card-sub">${c.status}</div>
-      <div class="home-card-sub">${c.note}</div>
+      <div class="home-card-sub">${escHtml(c.status)}</div>
+      <div class="home-card-sub">${escHtml(c.note)}</div>
     </div>`).join('');
 
   const rows = (myn.items || []).slice(0, 200).map((r, idx) => {
@@ -24238,15 +24259,15 @@ function renderMarketplaces(){
     const diffCls = diff === 0 ? 'gold' : diff > 0 ? 'green' : 'red';
     return `<tr>
       <td>${idx + 1}</td>
-      <td class="gold">${sku}</td>
+      <td class="gold">${escHtml(sku)}</td>
       <td>${localQty}</td>
       <td class="${diffCls}">${diff >= 0 ? '+' : ''}${diff}</td>
       <td class="green">${r.live_qty || 0}</td>
-      <td class="muted">${r.store_code || ''}</td>
+      <td class="muted">${escHtml(r.store_code || '')}</td>
     </tr>`;
   }).join('');
 
-  const errHtml = (myn.errors && myn.errors.length) ? `<div class="tno-data" style="padding:14px 0 8px;color:#dc2626">${myn.errors.map(e => String(e)).join(' • ')}</div>` : '';
+  const errHtml = (myn.errors && myn.errors.length) ? `<div class="tno-data" style="padding:14px 0 8px;color:#dc2626">${myn.errors.map(e => escHtml(String(e))).join(' • ')}</div>` : '';
 
   root.innerHTML = `
     <div class="insights-head">
@@ -24594,7 +24615,7 @@ function renderSalesComparisonOrders(){
   const mixText=lowMix.length?` Low-AOV products gaining volume: ${lowMix.map(r=>r.sku).join(', ')}.`:'';
   if(insight)insight.innerHTML=`<b>AOV analysis:</b> ${escHtml(headline+lossText+mixText)}`;
   const shown=data.drivers;
-  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
+  const body=shown.map((r,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(r.item?.image_url||'')}</td><td><button class="sku-link" onclick="openSkuDetails('${String(r.sku).replace(/'/g,"\\'")}')">${escHtml(skuLabel(r.sku,r.skuName))}</button></td><td class="ops-num">${Math.round(r.a.qty).toLocaleString('en-IN')}</td><td class="ops-num">${Math.round(r.b.qty).toLocaleString('en-IN')}</td><td class="ops-num"><b>${Math.round(r.qtyDelta).toLocaleString('en-IN')}</b></td><td class="ops-num">${r.a.orders.toLocaleString('en-IN')}</td><td class="ops-num">${r.b.orders.toLocaleString('en-IN')}</td><td class="ops-num">${fmt(r.a.rev)}</td><td class="ops-num">${fmt(r.b.rev)}</td><td class="ops-num" style="color:${r.revDelta<0?'#b91c1c':'#15803d'}"><b>${r.revDelta<0?'-':'+'}${fmt(Math.abs(r.revDelta))}</b></td><td class="ops-num">${r.a.orders?fmt(r.a.aov):'—'}</td><td class="ops-num">${r.b.orders?fmt(r.b.aov):'—'}</td><td class="ops-num" style="color:${r.aovDelta<0?'#b91c1c':'#15803d'}"><b>${r.aovDelta<0?'-':'+'}${fmt(Math.abs(r.aovDelta))}</b></td></tr>`).join('');
   host.innerHTML=`<table class="ops-table"><thead><tr><th>Rank</th><th>Photo</th><th>SKU / Product</th><th>${escHtml(ranges.labelA)} Qty</th><th>${escHtml(ranges.labelB)} Qty</th><th>Qty Δ</th><th>Baseline Orders</th><th>Comparison Orders</th><th>Baseline Revenue</th><th>Comparison Revenue</th><th>Revenue Δ</th><th>Baseline Product AOV</th><th>Comparison Product AOV</th><th>Product AOV Δ</th></tr></thead><tbody>${body||'<tr><td colspan="14" class="ops-empty">No baseline-date selling SKUs match the selected filters.</td></tr>'}</tbody></table>`;
   if(note)note.textContent=`Channel: ${data.channel==='All'?'All Channels':data.channel}. Website uses exact Display Order Code (column A) only (${b.websiteExactOrders.toLocaleString('en-IN')} exact orders; ${b.websiteFallbackOrders.toLocaleString('en-IN')} unmatched lines). Myntra/Amazon/Flipkart use source column H Order ID; Nykaa/Tata/Ajio use source column D Order ID (${b.marketplaceOrders.toLocaleString('en-IN')} exact marketplace orders; ${b.marketplaceFallbackOrders.toLocaleString('en-IN')} unmatched lines). Purchase/B2B uses same Order Date + Customer Name (${b.purchaseOrders.toLocaleString('en-IN')} orders; ${b.purchaseFallbackOrders.toLocaleString('en-IN')} missing-customer lines). Product AOV = SKU Net Revenue ÷ unique orders containing that SKU. Showing all ${shown.length.toLocaleString('en-IN')} matching SKUs sold in the baseline period${data.search?` for search “${data.search}”`:''}; export includes the same rows.`;
 }
@@ -26423,6 +26444,19 @@ USERS = {
 
 _PUBLIC_API = ("/api/login", "/api/me", "/api/logout", "/api/warmup-status", "/api/health")
 
+def _warn_insecure_defaults():
+    problems = []
+    if not (os.environ.get("SECRET_KEY") or os.environ.get("FLASK_SECRET_KEY")):
+        problems.append("SECRET_KEY is not set -> session cookies are signed with a PUBLIC key found in the source "
+                        "(anyone can forge an admin session)")
+    if not os.environ.get("ADMIN_PASS"):
+        problems.append("ADMIN_PASS is not set -> the default admin password from the source code is active")
+    if not os.environ.get("EMP_PASS"):
+        problems.append("EMP_PASS is not set -> the default employee password from the source code is active")
+    for m in problems:
+        print("\n*** SECURITY WARNING:", m)
+_warn_insecure_defaults()
+
 @app.before_request
 def _auth_guard():
     # Never block a browser/proxy preflight.  Normal API requests still require
@@ -26447,14 +26481,36 @@ def api_health():
         "public": bool(PUBLIC_BASE_URL),
     })
 
+# --- login brute-force throttle (per client IP, in-memory) ---------------------------------
+_LOGIN_FAILS = {}                      # ip -> [timestamps of recent failures]
+_LOGIN_LOCK = threading.Lock()
+_LOGIN_MAX_FAILS, _LOGIN_WINDOW = 8, 300   # 8 failures / 5 minutes -> 429
+
+def _login_blocked(ip):
+    now = time.time()
+    with _LOGIN_LOCK:
+        fails = [t for t in _LOGIN_FAILS.get(ip, []) if now - t < _LOGIN_WINDOW]
+        if fails: _LOGIN_FAILS[ip] = fails
+        else: _LOGIN_FAILS.pop(ip, None)
+        return len(fails) >= _LOGIN_MAX_FAILS
+
+def _login_fail(ip):
+    with _LOGIN_LOCK:
+        _LOGIN_FAILS.setdefault(ip, []).append(time.time())
+
 @app.route("/api/login", methods=["POST"])
 def api_login():
+    ip = request.remote_addr or "?"
+    if _login_blocked(ip):
+        return jsonify({"ok": False, "error": "Too many failed attempts. Try again in a few minutes."}), 429
     d = request.get_json(silent=True) or {}
     u = str(d.get("username") or "").strip()
     pw = str(d.get("password") or "")
     remember = bool(d.get("remember", True))
     rec = USERS.get(u)
-    if rec and rec[0] == pw:
+    # constant-time comparison (a plain == leaks timing information)
+    if rec and hmac.compare_digest(str(rec[0]).encode("utf-8"), pw.encode("utf-8")):
+        with _LOGIN_LOCK: _LOGIN_FAILS.pop(ip, None)
         # Remember checked -> 30-day renewable signed cookie. Unchecked ->
         # normal browser-session cookie. Both survive an ordinary page refresh.
         session.permanent = remember
@@ -26463,6 +26519,7 @@ def api_login():
         session["remember"] = remember
         session.modified = True
         return jsonify({"ok": True, "role": rec[1], "remember": remember})
+    _login_fail(ip)
     return jsonify({"ok": False, "error": "Invalid username or password."}), 401
 
 @app.route("/api/me")
@@ -26765,7 +26822,9 @@ def _build_role_gz(role, force=False):
 @app.route("/api/data")
 def api_data():
     force = request.args.get("force", "false").lower() == "true"
-    role = session.get("role") or request.args.get("role", "admin")
+    role = session.get("role")   # SECURITY: never trust ?role= (it used to default to "admin")
+    if role not in ("admin", "employee"):
+        return jsonify({"error": "auth required"}), 401
     # If data is still warming, never block the web worker. The static shell and
     # login remain available while the browser polls this lightweight status.
     if CACHE.get("data") is None:
@@ -36155,16 +36214,25 @@ def _vision_self_test():
 
 @app.route("/api/debug")
 def api_debug():
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin only"}), 403
     if CACHE["data"] is None: get_data(True)
     return jsonify(CACHE.get("debug", {}))
 
 @app.route("/api/marketplaces")
 def api_marketplaces():
+    if session.get("role") != "admin":          # Marketplaces tab is hidden from employees in the UI
+        return jsonify({"error": "admin only"}), 403
     force = request.args.get("force","false").lower() == "true"
     return jsonify(get_marketplaces(force))
 
 @app.route("/search", methods=["POST"])
 def search():
+    # SECURITY: this route is outside /api/, so _auth_guard never protected it. It returned the
+    # full SKU record (sales_entries, revenue, MRP) to anonymous callers.
+    _role = session.get("role")
+    if _role not in ("admin", "employee"):
+        return jsonify({"error": "auth required"}), 401
     try:
         if not AI_READY:
             # Lazy load: SKU Finder pehli baar use hone par hi model load karo
@@ -36179,6 +36247,8 @@ def search():
         img_bytes  = base64.b64decode(image_data.split(",")[1])
         comp       = get_data()[0]
         results    = vision_search(img_bytes, comp, top_k=10)
+        if results is not None and _role == "employee":
+            results, _ = _employee_view(results, {})   # employees never receive revenue/price data
         if results is None:
             why = ""
             if EMBED_MODE == "space":
@@ -37032,8 +37102,10 @@ def api_upload_report():
         })
         records.append(rec)
 
-    token = uuid.uuid4().hex[:12]
+    _prune_upload_reports()
+    token = uuid.uuid4().hex          # full 128-bit token (was truncated to 48 bits)
     UPLOAD_REPORTS[token] = {
+        "_ts": time.time(),
         "name": filename,
         "sku_col": sku_col,
         "created": now_ist().strftime("%Y-%m-%d %H:%M:%S"),
@@ -37043,45 +37115,45 @@ def api_upload_report():
     }
     return jsonify({"url": f"/upload-report/{token}"})
 
-@app.route("/upload-report/<token>")
-def upload_report(token):
-    report = UPLOAD_REPORTS.get(token)
-    if not report:
-        return "Report not found or expired.", 404
+_UPLOAD_REPORT_TTL = 6 * 3600     # reports expire after 6 hours (the 404 message always promised this)
+_UPLOAD_REPORT_MAX = 50           # ...and at most 50 are kept in memory (each holds up to 5000 rows)
 
-    rows = report.get("rows", [])
-    cols = report.get("columns", [])
-    df = pd.DataFrame(rows, columns=cols)
+def _prune_upload_reports():
+    now = time.time()
+    for k in [k for k, v in UPLOAD_REPORTS.items() if now - v.get("_ts", now) > _UPLOAD_REPORT_TTL]:
+        UPLOAD_REPORTS.pop(k, None)
+    while len(UPLOAD_REPORTS) > _UPLOAD_REPORT_MAX:
+        oldest = min(UPLOAD_REPORTS, key=lambda k: UPLOAD_REPORTS[k].get("_ts", 0))
+        UPLOAD_REPORTS.pop(oldest, None)
 
-    def esc(v):
-        return (
-            "" if v is None else str(v)
-        ).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-
-    table_html = df.to_html(index=False, escape=True, classes="ro", border=0) if not df.empty else "<div class='tno-data'>No rows found</div>"
-    return render_template_string(f"""
-<!DOCTYPE html>
+# BUGFIX + SECURITY: this page used to be built with render_template_string(f"""...""").
+#  1) its CSS used single { } inside an f-string, so Python tried to evaluate `position`, `display`...
+#     -> NameError: the page crashed on every request;
+#  2) uploaded cell values / file name were pasted into the *template source*, so a cell containing
+#     {{ ... }} was executed by Jinja (server-side template injection = remote code execution).
+# Now the template is a constant and user data is passed only as variables (auto-escaped).
+UPLOAD_REPORT_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Uploaded File Details</title>
 <style>
-body{{font-family:Arial,sans-serif;background:#0b1220;color:#e5eefb;margin:0;padding:24px}}
-.wrap{{max-width:1500px;margin:0 auto}}
-.head{{background:linear-gradient(135deg,#111827,#0f172a);border:1px solid rgba(212,175,90,.25);border-radius:20px;padding:20px 22px;margin-bottom:16px}}
-.head h1{{margin:0;color:#fff6df;font-size:26px;letter-spacing:1px}}
-.sub{{margin-top:8px;color:#d4af5a;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:11px}}
-.kpis{{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}}
-.kpi{{background:#fff;border-radius:14px;padding:14px 16px;border:1px solid #e5e7eb;min-width:160px}}
-.kpi .l{{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8c7a42;font-weight:800}}
-.kpi .v{{margin-top:6px;font-size:20px;font-weight:900;color:#111827}}
-.table-wrap{{overflow:auto;border-radius:18px;border:1px solid #dbe3ed;background:#fff}}
-table.ro{{width:100%;border-collapse:collapse;font-size:12px}}
-table.ro th, table.ro td{{padding:10px 12px;border-bottom:1px solid #eef2f7;white-space:nowrap;text-align:left;color:#1f2937}}
-table.ro th{{position:sticky;top:0;background:#f8fafc;color:#8c7a42;text-transform:uppercase;letter-spacing:1px;font-size:10px;z-index:2}}
-a{{color:#b8860b;text-decoration:none}}
-a:hover{{text-decoration:underline}}
+body{font-family:Arial,sans-serif;background:#0b1220;color:#e5eefb;margin:0;padding:24px}
+.wrap{max-width:1500px;margin:0 auto}
+.head{background:linear-gradient(135deg,#111827,#0f172a);border:1px solid rgba(212,175,90,.25);border-radius:20px;padding:20px 22px;margin-bottom:16px}
+.head h1{margin:0;color:#fff6df;font-size:26px;letter-spacing:1px}
+.sub{margin-top:8px;color:#d4af5a;font-weight:700;letter-spacing:1px;text-transform:uppercase;font-size:11px}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
+.kpi{background:#fff;border-radius:14px;padding:14px 16px;border:1px solid #e5e7eb;min-width:160px}
+.kpi .l{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#8c7a42;font-weight:800}
+.kpi .v{margin-top:6px;font-size:20px;font-weight:900;color:#111827}
+.table-wrap{overflow:auto;border-radius:18px;border:1px solid #dbe3ed;background:#fff}
+table.ro{width:100%;border-collapse:collapse;font-size:12px}
+table.ro th, table.ro td{padding:10px 12px;border-bottom:1px solid #eef2f7;white-space:nowrap;text-align:left;color:#1f2937}
+table.ro th{position:sticky;top:0;background:#f8fafc;color:#8c7a42;text-transform:uppercase;letter-spacing:1px;font-size:10px;z-index:2}
+a{color:#b8860b;text-decoration:none}
+a:hover{text-decoration:underline}
 
 /* ===== Premium top app bar + navigation polish ===== */
 .app-bar{
@@ -37205,20 +37277,43 @@ body:not([data-tab="home"]) .app-bar{
 <div class="wrap">
   <div class="head">
     <h1>Uploaded File Details</h1>
-    <div class="sub">{esc(report.get("name",""))} • {esc(report.get("count",0))} rows • SKU column: {esc(report.get("sku_col",""))} • Created: {esc(report.get("created",""))}</div>
+    <div class="sub">{{ name }} &bull; {{ count }} rows &bull; SKU column: {{ sku_col }} &bull; Created: {{ created }}</div>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="l">Rows</div><div class="v">{esc(report.get("count",0))}</div></div>
-    <div class="kpi"><div class="l">Columns</div><div class="v">{esc(len(cols))}</div></div>
-    <div class="kpi"><div class="l">Matched SKU Field</div><div class="v">{esc(report.get("sku_col",""))}</div></div>
+    <div class="kpi"><div class="l">Rows</div><div class="v">{{ count }}</div></div>
+    <div class="kpi"><div class="l">Columns</div><div class="v">{{ n_cols }}</div></div>
+    <div class="kpi"><div class="l">Matched SKU Field</div><div class="v">{{ sku_col }}</div></div>
   </div>
   <div class="table-wrap">
-    {table_html}
+    {{ table_html|safe }}
   </div>
 </div>
 </body>
 </html>
-""")
+"""
+
+@app.route("/upload-report/<token>")
+def upload_report(token):
+    # SECURITY: not under /api/, so the global guard did not apply -> check the session here.
+    if session.get("role") not in ("admin", "employee"):
+        return "Login required.", 401
+    _prune_upload_reports()
+    report = UPLOAD_REPORTS.get(token)
+    if not report:
+        return "Report not found or expired.", 404
+
+    rows = report.get("rows", [])
+    cols = report.get("columns", [])
+    df = pd.DataFrame(rows, columns=cols)
+
+    # escape=True HTML-escapes every cell; the result is passed as a *variable* (never as template code).
+    table_html = df.to_html(index=False, escape=True, classes="ro", border=0) if not df.empty else "<div class='tno-data'>No rows found</div>"
+    return render_template_string(
+        UPLOAD_REPORT_TEMPLATE,
+        name=report.get("name", ""), count=report.get("count", 0),
+        sku_col=report.get("sku_col", ""), created=report.get("created", ""),
+        n_cols=len(cols), table_html=table_html,
+    )
 
 # ── Cloudflare Tunnel ────────────────────────────────────────
 def find_cloudflared():
