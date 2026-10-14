@@ -1,3 +1,4 @@
+# - FIX: WIP Receive > Order Summary table ab Delivery Date ke hisaab se sort hoti hai (earliest delivery date upar, bina date wale neeche).
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
 # - V24.71c: Myntra API integration poori tarah hata di (MYNTRA_MERCHANT_ID / MYNTRA_SECRET_KEY / token-refresh-search URLs / portal cookie sync / /api/marketplaces). Myntra ka sales-sheet data (MYNTRA_SALES_URL) pehle jaisa.
@@ -20637,7 +20638,7 @@ function _woBuild(){
     if(!match(o.chs,cq,cs.exact))return false;
     if(!match(o.tys,tq,ts.exact))return false;
     return true;
-  }).sort((a,b)=>String(b.od||'').localeCompare(String(a.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}));
+  }).sort((a,b)=>{ /* Delivery Date ke hisaab se: sabse pehli (earliest) delivery date upar; jinki date nahi hai wo sabse neeche */ const ad=a.dlMin||'',bd=b.dlMin||''; if(ad&&!bd)return -1; if(!ad&&bd)return 1; return ad.localeCompare(bd)||String(a.dl||'').localeCompare(String(b.dl||''))||String(a.od||'').localeCompare(String(b.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}); });
 }
 /* One date when all SKUs of the order share it, else "earliest to latest" (dates are PPC-WIP sheet dates; calculated only where the sheet is blank) */
 function _woDlText(o,html){
