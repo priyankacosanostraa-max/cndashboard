@@ -1,3 +1,6 @@
+# Cosa Nostraa — V24.75 (WIP RECEIVE · TYPE / CHANNEL FILTERS: HAR ORDER+SKU KI SAARI ROWS KE TYPE — "SOR- PSL" JAISE TYPE AB DROPDOWN + FILTERS ME AATE HAIN)
+# - Pehle Type/Channel dropdown aur filters sirf (order, SKU) ki PEHLI row ke Type se bante the; dusri row ka Type (jaise SOR- PSL) kisi filter me nahi aata tha.
+# - Ab dropdown list PPC-WIP ki saari rows ke Type/Channel se banti hai aur teeno tables (date-wise, month-wise, order summary) ka Type/Channel filter sab Types me match karta hai. Baaki kuch change nahi.
 # - FIX: WIP Receive > Order Summary table ab Delivery Date ke hisaab se sort hoti hai (earliest delivery date upar, bina date wale neeche).
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
@@ -20192,7 +20195,7 @@ function _wiprBase(){
   const bm=String(document.getElementById('wiprBal')?.value||'');
   return _wiprRows.filter(r=>{
     if(!_wiprBalOk(r,bm))return false;
-    if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
+    if(!_wiprHasType(r,ty))return false;
     if(!cnxSkuMatchesGlobalCn(r.sku))return false;
     if(!_wiprPasteMatch(r.sku))return false;
     if(ordSet){ /* Order From / To Date: filter by the ORDER date of the row */
@@ -20212,7 +20215,7 @@ function _wiprBase(){
     }
     if(wk&&(!((Number(r.balance)||0)>0)||_wiprWeekOf(r.delivery)!==wk))return false;
     if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
-    if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
+    if(!_wiprHasChannel(r,ch))return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
     return true;
   });
@@ -20231,6 +20234,17 @@ function _wiprFmtFull(iso){
   return m[3]+'-'+_WIPR_MON[Number(m[2])-1]+'-'+m[1];
 }
 function _wiprOrdKey(r){return (r.order||'')+'|'+r.sku;}
+/* V24.75: Type / Channel filter ab row ke saare Types / Channels me match karta hai (sirf pehle me nahi) */
+function _wiprHasType(r,tyLower){
+  if(!tyLower)return true;
+  if(String(r.type||'').trim().toLowerCase()===tyLower)return true;
+  return Array.isArray(r.types_all)&&r.types_all.some(t=>String(t||'').trim().toLowerCase()===tyLower);
+}
+function _wiprHasChannel(r,chLower){
+  if(!chLower)return true;
+  if(String(r.channel||'').trim().toLowerCase()===chLower)return true;
+  return Array.isArray(r.channels_all)&&r.channels_all.some(t=>String(t||'').trim().toLowerCase()===chLower);
+}
 /* One row per (receipt date, order no, SKU) — orders are never clubbed */
 function _wiprMergeDateSku(list){
   const m=new Map();const bm=String(document.getElementById('wiprBal')?.value||'');
@@ -20483,8 +20497,8 @@ function _wmBase(){
     if(wk&&_wiprWeekOf(r.delivery)!==wk)return false;
     if(of||ot){const od=String(r.order_date||'');if(!od)return false;if(of&&od<of)return false;if(ot&&od>ot)return false;}
     if(oq&&!String(r.order||'').toLowerCase().includes(oq))return false;
-    if(ch&&String(r.channel||'').trim().toLowerCase()!==ch)return false;
-    if(ty&&String(r.type||'').trim().toLowerCase()!==ty)return false;
+    if(!_wiprHasChannel(r,ch))return false;
+    if(!_wiprHasType(r,ty))return false;
     if(q){const it=_masterSkuMap[_opsSkuKey(r.sku)]||{};if(!`${r.sku} ${it.sku_name||''}`.toLowerCase().includes(q))return false;}
     return true;
   });
@@ -20629,10 +20643,14 @@ function _woBuild(){
     if(!cnxSkuMatchesGlobalCn(r.sku))return;
     const k=order+'|'+sku;
     let p=pairs.get(k);
-    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',dls:new Set(),od:r.order_date||''};pairs.set(k,p);}
+    if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',dls:new Set(),od:r.order_date||'',tyx:[],chx:[]};pairs.set(k,p);
+      if(Array.isArray(r.types_all))r.types_all.forEach(t=>{t=String(t||'').trim();if(t&&!p.tyx.includes(t))p.tyx.push(t);});
+      if(Array.isArray(r.channels_all))r.channels_all.forEach(t=>{t=String(t||'').trim();if(t&&!p.chx.includes(t))p.chx.push(t);});}
     else{
       if(!p.ch&&r.channel)p.ch=String(r.channel).trim();
       if(!p.ty&&r.type)p.ty=String(r.type).trim();
+      if(Array.isArray(r.types_all))r.types_all.forEach(t=>{t=String(t||'').trim();if(t&&!p.tyx.includes(t))p.tyx.push(t);});
+      if(Array.isArray(r.channels_all))r.channels_all.forEach(t=>{t=String(t||'').trim();if(t&&!p.chx.includes(t))p.chx.push(t);});
       if(!p.od&&r.order_date)p.od=r.order_date;
       if(p.bal===null||p.bal===undefined){const _b=_wiprBalShow(r,bm);if(_b!==null&&_b!==undefined)p.bal=_b;}
       if(!p.oq&&r.order_qty)p.oq=Number(r.order_qty)||0;
@@ -20649,6 +20667,8 @@ function _woBuild(){
     if(p.bal!==null&&p.bal!==undefined){o.bal+=Number(p.bal)||0;o.balKnown=true;}
     if(p.ch&&!o.chs.includes(p.ch))o.chs.push(p.ch);
     if(p.ty&&!o.tys.includes(p.ty))o.tys.push(p.ty);
+    (p.chx||[]).forEach(c=>{if(c&&!o.chs.includes(c))o.chs.push(c);});
+    (p.tyx||[]).forEach(t=>{if(t&&!o.tys.includes(t))o.tys.push(t);});
     if(p.dl){if(!o.dl||p.dl>o.dl)o.dl=p.dl;if(!o.dlMin||p.dl<o.dlMin)o.dlMin=p.dl;}
     p.dls.forEach(function(x){o.dls.add(x);});
     if(p.od&&(!o.od||p.od<o.od))o.od=p.od;
@@ -29830,8 +29850,29 @@ def api_wip_receive():
         if _rr.get("channel_raw"):
             chan_by_order_sku.setdefault(_rk, _rr["channel_raw"])
     type_by_order.clear(); chan_by_order.clear()
-    types = sorted(set(type_by_order_sku.values()))
-    channels = sorted(set(chan_by_order_sku.values()))
+    # V24.75: Type / Channel dropdown + filters ab (order, SKU) ki SAARI rows ke Type / Channel se bante hain
+    # (pehle sirf pehli row ka Type liya jata tha, isliye dusri row ka Type — jaise "SOR- PSL" — kisi filter me nahi aata tha)
+    types_all_by_key, chans_all_by_key = {}, {}
+    _all_types_set, _all_chans_set = set(), set()
+    for _rr in _raw_list:
+        _ron = _wipr_norm_order(_rr.get("order_no"))
+        if not _ron:
+            continue
+        _rk = (_ron, str(_rr.get("sku") or "").strip().upper())
+        _tr = str(_rr.get("type_raw") or "").strip()
+        _cr = str(_rr.get("channel_raw") or "").strip()
+        if _tr:
+            _all_types_set.add(_tr)
+            _tl = types_all_by_key.setdefault(_rk, [])
+            if _tr not in _tl:
+                _tl.append(_tr)
+        if _cr:
+            _all_chans_set.add(_cr)
+            _cl = chans_all_by_key.setdefault(_rk, [])
+            if _cr not in _cl:
+                _cl.append(_cr)
+    types = sorted(set(type_by_order_sku.values()) | _all_types_set)
+    channels = sorted(set(chan_by_order_sku.values()) | _all_chans_set)
 
     def _wipr_pick_delivery(_o, _s, _balv):
         """V24.60 — Delivery Date rule for every WIP Receive table.
@@ -29864,6 +29905,12 @@ def api_wip_receive():
             m["orders"].append(r["order"])
     rows = []
     for m in merged.values():
+        _ta2 = types_all_by_key.get((m["order"], m["sku"])) or []
+        _ca2 = chans_all_by_key.get((m["order"], m["sku"])) or []
+        if len(_ta2) > 1:
+            m["types_all"] = list(_ta2)
+        if len(_ca2) > 1:
+            m["channels_all"] = list(_ca2)
         q = m["qty"]
         m["qty"] = int(q) if float(q).is_integer() else round(q, 2)
         rows.append(m)
@@ -29893,6 +29940,10 @@ def api_wip_receive():
             "sr_no": ", ".join(sr_by_order_sku.get((_pon, _psk), [])),
             "norecv": True,
         })
+        if len(types_all_by_key.get((_pon, _psk)) or []) > 1:
+            rows[-1]["types_all"] = list(types_all_by_key[(_pon, _psk)])
+        if len(chans_all_by_key.get((_pon, _psk)) or []) > 1:
+            rows[-1]["channels_all"] = list(chans_all_by_key[(_pon, _psk)])
     return jsonify({
         "rows": rows,
         "types": types,
