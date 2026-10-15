@@ -1,6 +1,7 @@
 # - FIX: WIP Receive > Order Summary table ab Delivery Date ke hisaab se sort hoti hai (earliest delivery date upar, bina date wale neeche).
 # Cosa Nostraa — V24.65 (WIP RECEIVE · ORDER SUMMARY ME ORDER DATE · DELIVERY ALERT BANNER + SIREN)
 # - V24.71: All Product (inventory) sheet se SKU ab har jagah physical COLUMN C se aata hai (pehle column B). Main dashboard data, Operations inventory aur Profit Margin SKU-cost patch teeno me.
+# - V24.72: Repeat Orders export (Transactions + SKU pivot dono) me naya "Launch Date" column (SKU Name ke baad) — All Product sheet ki Launch Date; blank ho to SKU ki first sold (dispatch) date. Baaki kuch change nahi.
 # - V24.71c: Myntra API integration poori tarah hata di (MYNTRA_MERCHANT_ID / MYNTRA_SECRET_KEY / token-refresh-search URLs / portal cookie sync / /api/marketplaces). Myntra ka sales-sheet data (MYNTRA_SALES_URL) pehle jaisa.
 # - V24.71d: Debug pass — upload request size cap (MAX_UPLOAD_MB, default 64) + bare `except:` -> `except Exception:` (Ctrl-C / shutdown signals ab swallow nahi hote).
 # - V24.71b: BT SKUs me numeric suffix (BT-0778_(S)_13, BT-1234_(7), child/CMB lists samet) ab kahin nahi dikhta — sheets load hote hi hat jata hai (sabhi tabs, exports, child SKUs) + API response safety net.
@@ -14351,6 +14352,23 @@ function _roExpTypes(ents, typeSel){
   const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
   return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
 }
+function _roLaunchDate(item){
+  // Launch Date = All Product sheet ki Launch Date; blank/invalid ho to SKU ki pehli sold (dispatch) date.
+  if (!item) return '';
+  const ld = _bizIso(item.launch_date);
+  if (ld) return ld;
+  let first = '';
+  const scan = ents => { for (const e of (ents || [])) {
+    if ((parseFloat(e && e.qty) || 0) <= 0) continue;
+    const dd = _bizIso(e && (e.date || e.dispatch_date));
+    if (dd && (!first || dd < first)) first = dd;
+  } };
+  scan(item.sales_entries);
+  const key = String(item.sku || '').trim().toUpperCase();
+  ((key && cnxComboParentIndex().get(key)) || []).forEach(p => scan(p && p.sales_entries));
+  return first;
+}
+
 function exportRO(fmtType){
   if (roTxns) {
     if (!roTxns.length) { alert('No transactions to export.'); return; }
@@ -14368,7 +14386,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold','Online Sold','Offline Sold'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Launch Date','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold','Online Sold','Offline Sold'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -14387,6 +14405,7 @@ function exportRO(fmtType){
       SKU: t.sku,
       'CN Name': _roExpCn(t.sku, parentItem.cn_name),
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
+      'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
       'Set Item Of': '',
       'Stone Color': stoneMap[skuKey] || '',
       'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
@@ -14418,6 +14437,7 @@ function exportRO(fmtType){
           SKU:c.sku||'',
           'CN Name':_roExpCn(c.sku, (childItem && childItem.cn_name) || c.cn_name),
           'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
+          'Launch Date':_roLaunchDate(itemMap[childKey] || childItem),
           'Set Item Of':t.sku,
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
           'Product Dimensions':c.dimensions||dimMap[childKey]||'',
@@ -14487,7 +14507,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %','Net Revenue']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Launch Date','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %','Net Revenue']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -14500,6 +14520,7 @@ function exportRO(fmtType){
       SKU: item.sku,
       'CN Name': _roExpCn(item.sku, item.cn_name),
       'SKU Name': exportSkuName(item.sku, item.sku_name),
+      'Launch Date': _roLaunchDate(item),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
