@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.76 (WIP RECEIVE · CHANNEL = SOR FILTER ME TYPE KA SOR BHI AATA HAI — SOR / Sor / sor / "SOR- PSL")
+# - Teeno tables (date-wise, month-wise, order summary) me Channel = SOR select karne par wo rows bhi aati hain jinke Type me sor (kisi bhi case me) likha ho. Baaki kuch change nahi.
 # Cosa Nostraa — V24.75 (WIP RECEIVE · TYPE / CHANNEL FILTERS: HAR ORDER+SKU KI SAARI ROWS KE TYPE — "SOR- PSL" JAISE TYPE AB DROPDOWN + FILTERS ME AATE HAIN)
 # - Pehle Type/Channel dropdown aur filters sirf (order, SKU) ki PEHLI row ke Type se bante the; dusri row ka Type (jaise SOR- PSL) kisi filter me nahi aata tha.
 # - Ab dropdown list PPC-WIP ki saari rows ke Type/Channel se banti hai aur teeno tables (date-wise, month-wise, order summary) ka Type/Channel filter sab Types me match karta hai. Baaki kuch change nahi.
@@ -20240,10 +20242,17 @@ function _wiprHasType(r,tyLower){
   if(String(r.type||'').trim().toLowerCase()===tyLower)return true;
   return Array.isArray(r.types_all)&&r.types_all.some(t=>String(t||'').trim().toLowerCase()===tyLower);
 }
+/* V24.76: Type me "sor" (SOR / Sor / sor / SOR- PSL ...) kisi bhi tarah likha ho to Channel = SOR filter me wo rows aani chahiye */
+function _wiprIsSorTxt(t){return String(t||'').toLowerCase().includes('sor');}
 function _wiprHasChannel(r,chLower){
   if(!chLower)return true;
   if(String(r.channel||'').trim().toLowerCase()===chLower)return true;
-  return Array.isArray(r.channels_all)&&r.channels_all.some(t=>String(t||'').trim().toLowerCase()===chLower);
+  if(Array.isArray(r.channels_all)&&r.channels_all.some(t=>String(t||'').trim().toLowerCase()===chLower))return true;
+  if(chLower==='sor'){
+    if(_wiprIsSorTxt(r.type))return true;
+    return Array.isArray(r.types_all)&&r.types_all.some(_wiprIsSorTxt);
+  }
+  return false;
 }
 /* One row per (receipt date, order no, SKU) — orders are never clubbed */
 function _wiprMergeDateSku(list){
@@ -20676,7 +20685,7 @@ function _woBuild(){
   const match=(list,q,exact)=>{if(!q)return true;return list.some(v=>{const t=String(v).toLowerCase();return exact?t===q:t.includes(q);});};
   return Array.from(ords.values()).filter(o=>{
     if(oq&&!o.order.toLowerCase().includes(oq))return false;
-    if(!match(o.chs,cq,cs.exact))return false;
+    if(!match(o.chs,cq,cs.exact)&&!(cq==='sor'&&o.tys.some(_wiprIsSorTxt)))return false; /* V24.76: Channel SOR + Type me sor (kisi bhi case me) */
     if(!match(o.tys,tq,ts.exact))return false;
     return true;
   }).sort((a,b)=>{ /* Delivery Date ke hisaab se: sabse pehli (earliest) delivery date upar; jinki date nahi hai wo sabse neeche */ const ad=a.dlMin||'',bd=b.dlMin||''; if(ad&&!bd)return -1; if(!ad&&bd)return 1; return ad.localeCompare(bd)||String(a.dl||'').localeCompare(String(b.dl||''))||String(a.od||'').localeCompare(String(b.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}); });
