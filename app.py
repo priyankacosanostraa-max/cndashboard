@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.79 (REPEAT ORDERS + OVERVIEW SOLD QTY CONSISTENCY FIX)
+# - Individual Sold, In CMBs Sold aur Total Sold ab ek hi filter context use karte hain.
+# - Online/Offline (SOR) filter CMB parent sales par bhi lagta hai; column-filter aur export bhi screen se match karte hain.
+# - Overview month aggregation me Online/Offline filter miss nahi hota.
+# - Type/Channel/Date filter ke baad direct sale 0 lekin CMB sale > 0 ho to child SKU row ab hide nahi hoti.
+# - Month list passed to the shared sold helper is now actually applied.
 # Cosa Nostraa — V24.78 (QTY CHECK: SHEET vs DASHBOARD — admin /api/debug me "qty_reconcile")
 # - Sirf diagnostic (koi qty/logic change nahi): sheet ki total qty, export wale item-qty total, All Product me na milne wale SKUs ki qty (top 40 SKUs ke saath) aur future Dispatch Date ki skipped qty dikhata hai.
 # Cosa Nostraa — V24.77b (REPEAT ORDERS · QTY MISMATCH FIX)
@@ -10594,7 +10600,9 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
   const fy = String(ctx.fy || '').trim();
   const d1 = String(ctx.d1 || '').trim();
   const d2 = String(ctx.d2 || '').trim();
-  const hasFilter = !!(types.length || channels.length || subChannels.length || marketplaces.length || customer || fy || d1 || d2 || ctx.saleMode || sourceField !== 'sales_entries');
+  const months = Array.isArray(ctx.months) ? ctx.months.map(v=>String(v||'').trim()).filter(Boolean) : [];
+  const monthSet = new Set(months);
+  const hasFilter = !!(types.length || channels.length || subChannels.length || marketplaces.length || months.length || customer || fy || d1 || d2 || ctx.saleMode || sourceField !== 'sales_entries');
   if (!hasFilter) {
     return {q7:Number(item.qty_7d)||0,q15:Number(item.qty_15d)||0,q30:Number(item.qty_1m)||0,sold:Number(item.final_qty)||0,rev:Number(item.total_net_revenue)||0};
   }
@@ -10612,6 +10620,7 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
     if (ctx.saleMode && !cnxSaleModeOk(e, ctx.saleMode)) return false;
     if (fy && String(e && e.fy || '').trim() !== fy) return false;
     const d = cnxSaleEntryDate(e, ctx);
+    if (months.length && (!d || !monthSet.has(d.slice(0,7)))) return false;
     if ((d1 || d2) && (!d || (d1 && d < d1) || (d2 && d > d2))) return false;
     return true;
   });
@@ -10780,9 +10789,15 @@ function cnxCurrentSaleContext(){
   if (currentTab === 'repeat') {
     const raw=getSelectedTypes('rType');
     const types=raw.filter(t=>t!==ANU_MAAM_TYPE_VALUE);
-    return {types,channels:getSelectedChannels('rChan'),subChannels:getSelectedSubChannels('rSubChan'),customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''};
+    const channels=getSelectedChannels('rChan'),subChannels=getSelectedSubChannels('rSubChan');
+    const customer=(document.getElementById('rCust')?.value||'').trim().toLowerCase();
+    return {types,channels,subChannels,customer,saleMode:cnxSaleModeState('rSaleMode',customer,channels,subChannels),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''};
   }
-  if (currentTab === 'matrix') return {types:getSelectedTypes('fType'),channels:getSelectedChannels('fChan'),subChannels:getSelectedSubChannels('fSubChan'),customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:(document.getElementById('fFY')?.value||'All FYs')==='All FYs'?'':(document.getElementById('fFY')?.value||''),d1:document.getElementById('fD1')?.value||'',d2:document.getElementById('fD2')?.value||'',businessChannel:true};
+  if (currentTab === 'matrix') {
+    const types=getSelectedTypes('fType'),channels=getSelectedChannels('fChan'),subChannels=getSelectedSubChannels('fSubChan');
+    const customer=(document.getElementById('fCust')?.value||'').trim().toLowerCase();
+    return {types,channels,subChannels,customer,saleMode:cnxSaleModeState('fSaleMode',customer,channels,subChannels),fy:(document.getElementById('fFY')?.value||'All FYs')==='All FYs'?'':(document.getElementById('fFY')?.value||''),d1:document.getElementById('fD1')?.value||'',d2:document.getElementById('fD2')?.value||'',businessChannel:true};
+  }
   if (currentTab === 'skudetails') return {types:Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c=>c.value),marketplaces:Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c=>c.value),d1:document.getElementById('sdD1')?.value||'',d2:document.getElementById('sdD2')?.value||''};
   if (currentTab === 'rakhi') {
     const rt=document.getElementById('rkhTypeFilter')?.value||'All';
@@ -13183,7 +13198,13 @@ function applyF(){
       // sales but were sold through one or more CMB parents. The month summary
       // below rolls parent CMB sales into the child before deciding whether the
       // row should be displayed.
-      if (!fe.length && !monthMode) return;
+      if (!fe.length && !monthMode) {
+        // A child may have no standalone sale in the active filter but still
+        // be consumed by a filtered parent CMB. Keep it eligible so Overview's
+        // SKU pivot can show Individual=0, In CMBs>0 and the correct Total.
+        const comboOnlyCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,businessChannel:true};
+        if (!(Number(cnxSoldSplit(item,comboOnlyCtx,{}).inCmb.sold)>0)) return;
+      }
       filteredCustomerCount = customerSet.size;
     }
     matrixEligibleItems.set(String(item.sku||'').trim().toUpperCase(), item);
@@ -13221,6 +13242,8 @@ function applyF(){
       txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
       const rawTxns = txns;
       let displayTxns = rawTxns;
+      const nonMonthSoldCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,businessChannel:true};
+      const hasComboOnlyOverviewRows=!monthMode && Array.from(matrixEligibleItems.values()).some(item=>Number(cnxSoldSplit(item,nonMonthSoldCtx,{}).inCmb.sold)>0);
       if (monthMode) {
         // Month-Year view is intentionally one row per NON-CMB SKU. For child
         // SKUs, sold qty = the SKU's own individual sales + sales of every CMB
@@ -13242,6 +13265,7 @@ function applyF(){
           const revByMonth=Object.create(null);
           (srcItem.sales_entries || []).forEach(e => {
             if (custQ && !String(e && e.cust || '').toLowerCase().includes(custQ)) return;
+            if (!cnxSaleModeOk(e, saleModeQ)) return;
             if (!typeOk(e && e.type) || !chanOk(e) || !subChanOk(e && e.sub_channel)) return;
             if (fyQ !== 'All FYs' && String(e && e.fy || '') !== fyQ) return;
             const ed=String(e && e.date || '').trim();
@@ -13404,7 +13428,7 @@ function applyF(){
             ${displayTxns.length>MATRIX_RENDER_CAP?`<div class="ops-note">Showing top ${MATRIX_RENDER_CAP} of ${displayTxns.length.toLocaleString('en-IN')} SKUs. Export includes all rows.</div>`:''}
           </div>`;
         }
-      } else if (!rawTxns.length) {
+      } else if (!rawTxns.length && !hasComboOnlyOverviewRows) {
         _matrixTxns = [];
         _matrixPivot = [];
         grid.innerHTML = '<div class="no-data">No transactions match filters</div>';
@@ -13421,6 +13445,19 @@ function applyF(){
           const c=String(t.cust||'').trim(); if(c)x.customers.add(c);
         });
 
+        // rawTxns only contains a SKU's own transaction rows. Seed child SKUs
+        // that sold exclusively through CMB parents so the non-month Overview
+        // pivot does not silently omit valid In CMBs Sold quantities.
+        if (!monthMode) {
+          const pivotCtx=nonMonthSoldCtx;
+          matrixEligibleItems.forEach((item,key)=>{
+            if(pivotMap.has(key))return;
+            const split=cnxSoldSplit(item,pivotCtx,{});
+            if(!(Number(split.inCmb.sold)>0))return;
+            pivotMap.set(key,{sku:item.sku,sku_name:item.sku_name||'',qty:Number(split.individual.sold)||0,rev:Number(split.individual.rev)||0,customers:new Set(),combo_qty:Number(split.inCmb.sold)||0,total_qty:Number(split.total.sold)||0,last_1y_qty:0});
+          });
+        }
+
         if (monthMode) {
           const monthly = new Map();
           rawTxns.forEach(t => {
@@ -13436,10 +13473,10 @@ function applyF(){
             const item=matrixEligibleItems.get(sk)||_masterSkuMap[sk]||{sku:r.sku};
             const mb=matrixMonthBounds(r.month_key);
             const rowD1=d1&&d1>mb.start?d1:mb.start, rowD2=d2&&d2<mb.end?d2:mb.end;
-            const monthCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1:rowD1,d2:rowD2,businessChannel:true};
+            const monthCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1:rowD1,d2:rowD2,saleMode:saleModeQ,businessChannel:true};
             const ms=cnxSoldSplit(item,monthCtx,{allowedParentSkus:matrixActiveSkuScope});
             if(!yearQtyCache.has(sk)){
-              const yctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1:rollingYear.start,d2:rollingYear.end,businessChannel:true};
+              const yctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1:rollingYear.start,d2:rollingYear.end,saleMode:saleModeQ,businessChannel:true};
               yearQtyCache.set(sk,cnxSoldSplit(item,yctx,{allowedParentSkus:matrixActiveSkuScope}).total.sold);
             }
             const iv=invBy[sk]||{s:0,w:0,b:0,img:'',cn:''};
@@ -13482,7 +13519,7 @@ function applyF(){
           const skuEsc=String(x.sku).replace(/'/g,"\\'");
           const iv=invBy[String(x.sku||'').trim().toUpperCase()]||{s:0,w:0,img:'',cn:''};
           const stk=parseInt(iv.s)||0,wip=parseInt(iv.w)||0;
-          const pivotCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,businessChannel:true};
+          const pivotCtx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,fy:fyQ==='All FYs'?'':fyQ,d1,d2,saleMode:saleModeQ,businessChannel:true};
           const pivotItem=_masterSkuMap[String(x.sku||'').trim().toUpperCase()]||{sku:x.sku};
           const combo=monthMode?(Number(x.combo_qty)||0):cnxSoldSplit(pivotItem,pivotCtx,{allowedParentSkus:matrixActiveSkuScope}).inCmb.sold;
           const total=monthMode?(Number(x.total_qty)||0):(Number(x.qty)||0)+(Number(combo)||0);
@@ -13621,11 +13658,13 @@ function _matrixBuildPayload(kind){
     });
   }
   const fyRaw=document.getElementById('fFY')?.value||'All FYs', d1=document.getElementById('fD1')?.value||'', d2=document.getElementById('fD2')?.value||'';
+  const customerX=(document.getElementById('fCust')?.value||'').trim().toLowerCase();
+  const saleModeX=cnxSaleModeState('fSaleMode',customerX,chanSel,subChanSel);
   const scope=null; // FIX: In CMBs Sold ko pasted/ticked SKU set se restrict nahi karna
   return _matrixPivot.map(p => {
     const iv = invBy[String(p.sku||'').trim().toUpperCase()] || {s:0, w:0, img:''};
     const item=_masterSkuMap[String(p.sku||'').trim().toUpperCase()]||{sku:p.sku};
-    const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:(document.getElementById('fCust')?.value||'').trim().toLowerCase(),fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,businessChannel:true};
+    const ctx={types:typeSel,channels:chanSel,subChannels:subChanSel,customer:customerX,fy:fyRaw==='All FYs'?'':fyRaw,d1,d2,saleMode:saleModeX,businessChannel:true};
     const comboQty=_matrixMonthMode?(Number(p.combo_qty)||0):cnxSoldSplit(item,ctx,{allowedParentSkus:scope}).inCmb.sold;
     const totalQty0=_matrixMonthMode?(Number(p.total_qty)||0):(Number(p.qty)||0)+(Number(comboQty)||0);
     return {
@@ -13828,8 +13867,7 @@ function applyRO(){
     if (!fe.length) {
       // FIX: SKU search / paste ke saath date-type filter lagane par agar individual sale nahi hai
       // par parent CMB me sale hui hai to row dikhao (In CMBs Sold + Total Sold ke saath).
-      if (!(pastedSkuSet || txt)) return null;
-      const _cmbOnly = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {}).inCmb.sold;
+      const _cmbOnly = cnxSoldSplit(item, roSaleCtx, {}).inCmb.sold;
       if (!(Number(_cmbOnly) > 0)) return null;
     }
     const totalRev = fe.reduce((s,e) => s + (parseFloat(e.rev) || 0), 0);
@@ -14083,7 +14121,7 @@ function applyRO(){
     const saleVals = cnxSaleTotalsForItem(item, roSaleCtx);
     const q7 = saleVals.q7, q15 = saleVals.q15, q30 = saleVals.q30;
     const qty = saleVals.sold;
-    const cmbSold = cnxSoldSplit(item, {types:typeSel,channels:chanSel,subChannels:subChanSel,customer:custQ,d1,d2}, {}).inCmb.sold;
+    const cmbSold = cnxSoldSplit(item, roSaleCtx, {}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Combo SKU ki WIP — Type filter ke hisaab se channel-wise, warna total.
@@ -14267,7 +14305,7 @@ function applyColFilters(){
     const wip = wipOfCF(item);
     const sv = cnxSaleTotalsForItem(item, cfSaleCtx);
     const q7 = sv.q7, q15 = sv.q15, q30 = sv.q30, qty = sv.sold;
-    const cmbSold = cnxSoldSplit(item, Object.assign({}, cfSaleCtx, {saleMode:''}), {}).inCmb.sold; // main table jaisa (In CMBs par Online/Offline nahi)
+    const cmbSold = cnxSoldSplit(item, cfSaleCtx, {}).inCmb.sold;
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
@@ -14297,9 +14335,12 @@ function applyColFilters(){
       ${LOGIN_ROLE==='employee' ? '' : `<td class="gold"><b>${fmt(sv.rev)}</b></td>`}
       <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
       <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
+      <td class="${(item.blocked_qty||0) > 0 ? 'red' : 'muted'}">${item.blocked_qty || 0}</td>
       <td><span class="forecast-pill">${item.forecast_60d || 0}</span></td>
       <td><span class="forecast-pill" style="background:#fff4e0;color:#b45309;border-color:#f3d9a8">${item.reorder_qty || 0}</span></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
+      <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
+      <td class="gold"><b>${Math.round((Number(qty)||0)+(Number(cmbSold)||0))}</b></td>
     </tr>`;
   }).join('') + (colFiltered.length > RO_CAP
     ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
@@ -14555,7 +14596,7 @@ function exportRO(fmtType){
     // Main row uses the same authoritative sales helper as the screen/KPIs.
     const rsv = cnxSaleTotalsForItem(item, roSaleCtxX);
     const r7 = rsv.q7, r15 = rsv.q15, r30 = rsv.q30, rSold = rsv.sold;
-    const parentCmbSold = cnxSoldSplit(item, Object.assign({}, roSaleCtxX, {saleMode:''}), {}).inCmb.sold; // screen jaisa (In CMBs Sold par Online/Offline filter nahi lagta)
+    const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {}).inCmb.sold;
     const _onOffRaw = cnxOnlineOfflineSplit(item, roSaleCtxX);
     const _totSoldX = Math.round(rSold) + Math.round(parentCmbSold);
     const _offX = Math.max(0, Math.min(_totSoldX, Number(_onOffRaw.offline) || 0));
