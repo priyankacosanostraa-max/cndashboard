@@ -1,3 +1,9 @@
+# Cosa Nostraa — V24.77b (REPEAT ORDERS · QTY MISMATCH FIX)
+# - Column filters lagne par table ki Sold / 7D / 15D / 30D qty ab Online/Offline (SOR) filter ko bhi follow karti hai (pehle ignore karti thi), export wahi dikhata hai.
+# - Export me Online Sold + Offline Sold ab hamesha Total Sold ke barabar (SOR Online/Offline filter ke saath CMB wale SKUs me alag aa raha tha).
+# Cosa Nostraa — V24.77 (REPEAT ORDERS EXPORT · SCREEN JAISA DATA — COLUMN FILTERS + ONLINE/OFFLINE (SOR) FILTER)
+# - Export ab screen ki column filters (SKU / 7D / 15D / 30D / Sold / Inv Stock / WIP / Forecast / Reorder / Remark) ke baad bachi rows hi deta hai (pehle sab rows aati thi).
+# - SKU pivot export me Online/Offline (SOR) filter ab 7D/15D/30D, Individual Sold, Avg Selling Price, Net Revenue, Type par lagta hai (pehle ignore hota tha). Baaki kuch change nahi.
 # Cosa Nostraa — V24.76 (WIP RECEIVE · CHANNEL = SOR FILTER ME TYPE KA SOR BHI AATA HAI — SOR / Sor / sor / "SOR- PSL")
 # - Teeno tables (date-wise, month-wise, order summary) me Channel = SOR select karne par wo rows bhi aati hain jinke Type me sor (kisi bhi case me) likha ho. Baaki kuch change nahi.
 # Cosa Nostraa — V24.75 (WIP RECEIVE · TYPE / CHANNEL FILTERS: HAR ORDER+SKU KI SAARI ROWS KE TYPE — "SOR- PSL" JAISE TYPE AB DROPDOWN + FILTERS ME AATE HAIN)
@@ -9982,6 +9988,7 @@ function setRoView(v){
 }
 let pastedSkuSet = null;
 let roFiltered = [];
+let roColFiltered = null, roColFilteredBase = null; // V24.77: column-filter ke baad ki list (export screen jaisa ho)
 let roTxns = null;
 let currentSdSku = null;
 let currentTab = "home";
@@ -14151,6 +14158,7 @@ function applyColFilters(){
   const cfSaleCtx = {
     types:typeSelCF, channels:chanSelCF, subChannels:subChanSelCF,
     customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),
+    saleMode:cnxSaleModeState('rSaleMode',(document.getElementById('rCust')?.value||'').trim().toLowerCase(),chanSelCF,subChanSelCF), // V24.77: main table jaisa Online/Offline
     d1:document.getElementById('rD1')?.value||'', d2:document.getElementById('rD2')?.value||''
   };
   if (_cfActive) {
@@ -14179,6 +14187,7 @@ function applyColFilters(){
     });
   }
 
+  roColFiltered = colFiltered; roColFilteredBase = roFiltered; // V24.77: export isi list se chalega
   // Column filters change the visible row-set, so top KPIs must follow that
   // exact row-set too; otherwise the cards and table can show different totals.
   const cfTotals = colFiltered.reduce((a,it) => {
@@ -14232,7 +14241,7 @@ function applyColFilters(){
     const wip = wipOfCF(item);
     const sv = cnxSaleTotalsForItem(item, cfSaleCtx);
     const q7 = sv.q7, q15 = sv.q15, q30 = sv.q30, qty = sv.sold;
-    const cmbSold = cnxSoldSplit(item, cfSaleCtx, {}).inCmb.sold;
+    const cmbSold = cnxSoldSplit(item, Object.assign({}, cfSaleCtx, {saleMode:''}), {}).inCmb.sold; // main table jaisa (In CMBs par Online/Offline nahi)
     const checked = selectedSkuSet.has(item.sku) ? 'checked' : '';
     const skuEsc = String(item.sku).replace(/'/g, "\\\\'");
     // Gift Set / combo SKU — Stone Details ke andar jo SKUs hain unki stock+wip
@@ -14451,7 +14460,7 @@ function exportRO(fmtType){
           'Individual Sold':0,
           'In CMBs Sold':(parseFloat(t.qty)||0) * cnxChildComponentQty(parentItem, c.sku),
           'MRP':parseFloat(c.mrp)||parseFloat(mrpMap[childKey])||0,
-          ...(emp0?{}:{'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(childItem,{types:typeSelTx,channels:chanSelTx,subChannels:subChanSelTx,customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''});return v==null?'':Number(v.toFixed(2));})(),'Net Revenue':'','Discount %':''}),
+          ...(emp0?{}:{'Avg Selling Price':(()=>{const v=cnxAvgSellingPriceForItem(childItem,{types:typeSelTx,channels:chanSelTx,subChannels:subChanSelTx,customer:(document.getElementById('rCust')?.value||'').trim().toLowerCase(),saleMode:cnxSaleModeState('rSaleMode',(document.getElementById('rCust')?.value||'').trim().toLowerCase(),chanSelTx,subChanSelTx),d1:document.getElementById('rD1')?.value||'',d2:document.getElementById('rD2')?.value||''});return v==null?'':Number(v.toFixed(2));})(),'Net Revenue':'','Discount %':''}),
           'Inv Stock':childStock,
           'Inv WIP':childWip,
           'Remark':'Child SKU of '+t.sku,
@@ -14466,7 +14475,7 @@ function exportRO(fmtType){
     return;
   }
 
-  let rows = roFiltered || [];
+  let rows = ((_cfActive && roColFiltered && roColFilteredBase === roFiltered) ? roColFiltered : roFiltered) || []; // V24.77: column filters bhi export me
   const hasTicks = selectedSkuSet && selectedSkuSet.size > 0;
   if (hasTicks) {
     rows = rows.filter(item => selectedSkuSet.has(item.sku));
@@ -14485,11 +14494,12 @@ function exportRO(fmtType){
   const roInvCtxX = roInvContext(typeSel, chanSel, subChanSel);
   const custSelX = (document.getElementById('rCust')?.value||'').trim().toLowerCase();
   const d1SelX = document.getElementById('rD1')?.value||'', d2SelX = document.getElementById('rD2')?.value||'';
+  const saleModeX = cnxSaleModeState('rSaleMode', custSelX, chanSel, subChanSel); // V24.77: screen jaisa Online/Offline (SOR) filter
   const roSaleCtxX = {
     types:typeSel, channels:chanSel, subChannels:subChanSel,
-    customer:custSelX, d1:d1SelX, d2:d2SelX
+    customer:custSelX, saleMode:saleModeX, d1:d1SelX, d2:d2SelX
   };
-  const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || custSelX || d1SelX || d2SelX);
+  const roNoFilterX = !(typeSel.length > 0 || chanSel.length > 0 || subChanSel.length > 0 || custSelX || saleModeX || d1SelX || d2SelX);
   const nowX = todayISO || new Date().toISOString().slice(0,10);
   const _dAgo = n => new Date(new Date(nowX) - Math.max(0,n-1)*86400000).toISOString().slice(0,10);
   const D7 = _dAgo(7), D15 = _dAgo(15), D30 = _dAgo(30);
@@ -14501,6 +14511,7 @@ function exportRO(fmtType){
         (!chanSel.length || chanSel.includes(e.channel)) &&
         (!subChanSel.length || subChanSel.includes(e.sub_channel)) &&
         (!custSelX || String(e.cust||'').toLowerCase().includes(custSelX)) &&
+        cnxSaleModeOk(e, saleModeX) &&
         (!d1SelX || (e.date!=='N/A' && e.date>=d1SelX)) &&
         (!d2SelX || (e.date!=='N/A' && e.date<=d2SelX))
       );
@@ -14518,8 +14529,11 @@ function exportRO(fmtType){
     // Main row uses the same authoritative sales helper as the screen/KPIs.
     const rsv = cnxSaleTotalsForItem(item, roSaleCtxX);
     const r7 = rsv.q7, r15 = rsv.q15, r30 = rsv.q30, rSold = rsv.sold;
-    const parentCmbSold = cnxSoldSplit(item, roSaleCtxX, {}).inCmb.sold;
-    const onOff = cnxOnlineOfflineSplit(item, roSaleCtxX);
+    const parentCmbSold = cnxSoldSplit(item, Object.assign({}, roSaleCtxX, {saleMode:''}), {}).inCmb.sold; // screen jaisa (In CMBs Sold par Online/Offline filter nahi lagta)
+    const _onOffRaw = cnxOnlineOfflineSplit(item, roSaleCtxX);
+    const _totSoldX = Math.round(rSold) + Math.round(parentCmbSold);
+    const _offX = Math.max(0, Math.min(_totSoldX, Number(_onOffRaw.offline) || 0));
+    const onOff = {online: _totSoldX - _offX, offline: _offX}; // V24.77: Online + Offline hamesha Total Sold ke barabar
     data.push({
       'Row Type': (item.combo_details && item.combo_details.length) ? 'Gift Set' : 'Product',
       SKU: item.sku,
