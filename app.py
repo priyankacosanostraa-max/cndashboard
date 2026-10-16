@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.78 (QTY CHECK: SHEET vs DASHBOARD — admin /api/debug me "qty_reconcile")
+# - Sirf diagnostic (koi qty/logic change nahi): sheet ki total qty, export wale item-qty total, All Product me na milne wale SKUs ki qty (top 40 SKUs ke saath) aur future Dispatch Date ki skipped qty dikhata hai.
 # Cosa Nostraa — V24.77b (REPEAT ORDERS · QTY MISMATCH FIX)
 # - Column filters lagne par table ki Sold / 7D / 15D / 30D qty ab Online/Offline (SOR) filter ko bhi follow karti hai (pehle ignore karti thi), export wahi dikhata hai.
 # - Export me Online Sold + Offline Sold ab hamesha Total Sold ke barabar (SOR Online/Offline filter ke saath CMB wale SKUs me alag aa raha tha).
@@ -4768,6 +4770,30 @@ def _refresh_data():
             }
             seen[cand] = child_rec
             it["combo_details"].append(child_rec)
+
+    # V24.78: SHEET vs DASHBOARD QTY CHECK (admin /api/debug -> "qty_reconcile")
+    try:
+        _rc_items_qty = sum(float(_it.get("final_qty") or 0) for _it in compiled)
+        _rc_unm = []
+        for _rk, _rv in sales_exact.items():
+            if _rk in seen_skus:
+                continue
+            _rq = sum(float(_e.get("qty") or 0) for _e in (_rv.get("entries") or []))
+            if _rq:
+                _rc_unm.append((_rk, round(_rq, 2), len(_rv.get("entries") or [])))
+        _rc_unm.sort(key=lambda x: -abs(x[1]))
+        dbg["qty_reconcile"] = {
+            "sheet_total_qty_counted": round(grand_final_qty, 2),   # screen top KPI (no filter) = sheet Final Qty sum, future-dispatch rows chhodkar
+            "sum_of_item_final_qty": round(_rc_items_qty, 2),       # export (no filter) me Individual Sold ka total yahi hota hai
+            "qty_sales_sku_not_in_inventory": round(sum(x[1] for x in _rc_unm), 2),   # sheet me hai par All Product me SKU nahi -> export me nahi aati
+            "sales_sku_not_in_inventory_count": len(_rc_unm),
+            "top_unmatched_skus": [{"sku": a, "qty": b, "rows": c} for a, b, c in _rc_unm[:40]],
+            "future_dispatch_qty_skipped": round(_future_dispatch_qty_skipped, 2),   # sheet me hai par Dispatch Date aaj ke baad -> count nahi hoti
+            "future_dispatch_rows_skipped": _future_dispatch_rows_skipped,
+            "rows_without_sku_qty": round(grand_final_qty - sum(float(e.get("qty") or 0) for _v in sales_exact.values() for e in (_v.get("entries") or [])), 2),
+        }
+    except Exception as _rc_e:
+        dbg["qty_reconcile_error"] = str(_rc_e)[:200]
 
     # ── PHYSICAL SKU DEMAND ROLL-UP (Individual + In CMBs) ──
     # A child SKU consumes one inventory unit whenever a unique parent CMB is
