@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.82 (WIP DELIVERY ALERT POPUP = ORDER SUMMARY TABLE DATA)
+# - Popup ka "Delayed" ab Order Summary table ke Delayed + Slight Delay orders ka Bal Qty hai (same logic, same numbers); filters se popup par asar nahi.
 # Cosa Nostraa — V24.81 (WIP RECEIVE ORDER SUMMARY: MULTI-SELECT FILTERS)
 # - Order Summary table ke Channel, Type, Balance Qty aur Delivery Status filters me ab ek se zyada option select ho sakte hain.
 # Cosa Nostraa — V24.80 (WIP RECEIVE ORDER SUMMARY: DELIVERY STATUS FILTER + COLUMN)
@@ -20795,20 +20797,21 @@ function _woStatusBadge(s){
   return '<span style="color:var(--cn-mid)">—</span>';
 }
 /* Builds one row per Order No.: first one row per (order, SKU) from the production-matched values, then summed per order */
-function _woBuild(){
-  const oq=String(document.getElementById('woOrderNo')?.value||'').trim().toLowerCase();
-  const cs=_woSel.woChannel,ts=_woSel.woType;
+function _woBuild(forRows){
+  const fa=!!forRows; /* fa = popup mode: same grouping/status logic, default Bal Qty > 0, no table filters */
+  const oq=fa?'':String(document.getElementById('woOrderNo')?.value||'').trim().toLowerCase();
+  const cs=fa?{text:'',exact:false,sel:new Set()}:_woSel.woChannel,ts=fa?{text:'',exact:false,sel:new Set()}:_woSel.woType;
   const cq=String(cs.text||'').trim().toLowerCase(),tq=String(ts.text||'').trim().toLowerCase();
-  const balModes=Array.from(_woMs.woBal.sel);
+  const balModes=fa?['gt']:Array.from(_woMs.woBal.sel);
   const bm=balModes.length?(balModes.some(function(m){return m==='eq'||m==='lt'||m==='le';})?'le':'gt'):'';
   const balOk=function(r){return !balModes.length||balModes.some(function(m){return _wiprBalOk(r,m);});};
-  const dvSet=new Set(Array.from(_woMs.woDelivery.sel).map(function(k){return k==='delayed'?'Delayed':k==='slight'?'Slight Delay':'Upcoming';}));
+  const dvSet=fa?new Set():new Set(Array.from(_woMs.woDelivery.sel).map(function(k){return k==='delayed'?'Delayed':k==='slight'?'Slight Delay':'Upcoming';}));
   const pairs=new Map();
-  _wiprRows.forEach(r=>{
+  (forRows||_wiprRows).forEach(r=>{
     const order=String(r.order||'').trim(),sku=String(r.sku||'').trim().toUpperCase();
     if(!order||!sku)return;
     if(!balOk(r))return; /* Balance Qty filter (multi-select) — same rule as the other two WIP Receive tables */
-    if(!cnxSkuMatchesGlobalCn(r.sku))return;
+    if(!fa&&!cnxSkuMatchesGlobalCn(r.sku))return;
     const k=order+'|'+sku;
     let p=pairs.get(k);
     if(!p){p={order:order,sku:sku,oq:Number(r.order_qty)||0,rq:Number(r.recv_qty)||0,bal:_wiprBalShow(r,bm),ch:String(r.channel||'').trim(),ty:String(r.type||'').trim(),dl:'',dlMin:'',dls:new Set(),pdls:new Set(),od:r.order_date||'',tyx:[],chx:[]};pairs.set(k,p);
@@ -20985,9 +20988,14 @@ function wipSirenPlay(){
   try{ctx.resume().then(function(){if(ctx.state==='running'&&_wipSirenWanted)_wipSirenBuild(ctx);},function(){});}catch(e){}
   setTimeout(function(){if(_wipSirenWanted&&ctx.state!=='running')_wipSirenArm();},350); /* autoplay block: pehle click/key par siren */
 }
-/* Pending Bal > 0 SKUs, one entry per Order+SKU. Today = delivery date aaj ki; Delayed = delivery date aaj se pehle (WIP Receive ke "Delayed" filter jaisa) */
+/* Popup = Order Summary table ka data. Delayed = table ke "Delayed" + "Slight Delay" orders ka Bal Qty (same _woBuild logic, delivery dates sheet se ya calculated).
+   Today = pending SKUs jinki delivery date aaj ki hai. */
 function _wipAlertCalc(rows){
   const td=_wiprTodayIST();
+  const res={today:td,tQty:0,tOrd:new Set(),dQty:0,dOrd:new Set()};
+  _woBuild(rows||[]).forEach(function(o){
+    if(o.status==='Delayed'||o.status==='Slight Delay'){res.dQty+=Number(o.bal)||0;res.dOrd.add(o.order);}
+  });
   const pairs=new Map();
   (rows||[]).forEach(function(r){
     const o=String(r.order||'').trim(),s=String(r.sku||'').trim().toUpperCase();
@@ -20999,11 +21007,9 @@ function _wipAlertCalc(rows){
     if(!p.bal&&b>0)p.bal=b;
     if(!p.dl&&r.delivery)p.dl=String(r.delivery);
   });
-  const res={today:td,tQty:0,tOrd:new Set(),dQty:0,dOrd:new Set()};
   pairs.forEach(function(p){
     if(!(p.bal>0)||!p.dl)return;
     if(p.dl===td){res.tQty+=p.bal;res.tOrd.add(p.o);}
-    else if(p.dl<td){res.dQty+=p.bal;res.dOrd.add(p.o);}
   });
   return res;
 }
