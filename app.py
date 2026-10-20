@@ -1,3 +1,6 @@
+# Cosa Nostraa — V24.83 (STABILITY: SKU FINDER HF-SPACE TIMEOUT + PRODUCT IMAGE PROXY FAIL-FAST)
+# - HF Space (SKU Finder) so raha ho to ab pehle wake-ping, 3 attempts, lamba httpx timeout, total 105s cap.
+# - Product image proxy: slow host (stock.cosanostraa.com) par 4s/10s timeout, failed URL 2 min skip, host circuit-breaker, max 6 parallel fetch. Baaki kuch change nahi.
 # Cosa Nostraa — V24.82 (WIP DELIVERY ALERT POPUP = ORDER SUMMARY TABLE DATA)
 # - Popup ka "Delayed" ab Order Summary table ke Delayed + Slight Delay orders ka Bal Qty hai (same logic, same numbers); filters se popup par asar nahi.
 # Cosa Nostraa — V24.81 (WIP RECEIVE ORDER SUMMARY: MULTI-SELECT FILTERS)
@@ -4996,6 +4999,18 @@ def init_vision():
 _HF_LAST_ERROR = {"msg": ""}
 _SPACE_CLI = {"cli": None}
 
+def _wake_space():
+    """Sleeping/cold HF Space ko jagaane ke liye ek plain GET (fail ho to ignore).
+    ReadTimeout aksar isi wajah se aata hai ki Space so raha hota hai."""
+    try:
+        host = str(SPACE_ID or "").strip().lower().replace("/", "-").replace("_", "-")
+        if not host:
+            return
+        requests.get("https://%s.hf.space/" % host, timeout=(8, 25),
+                     headers={"User-Agent": "Mozilla/5.0"})
+    except Exception as _e:
+        print("Space wake ping:", type(_e).__name__)
+
 def _space_dinov2_embedding(path):
     """DINOv2 embedding apne HF Space se (free CPU, 16GB) — lite servers ke liye.
     HARD TIMEOUT lagaya hai: agar free HF Space so raha hai (cold/inactive),
@@ -5011,15 +5026,20 @@ def _space_dinov2_embedding(path):
         _HF_LAST_ERROR["msg"] = "gradio_client is not installed: " + str(e)[:80]
         return None
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FutTimeout
-    CONNECT_TIMEOUT = 25   # Space cold-start/connect ke liye max wait
-    PREDICT_TIMEOUT  = 45   # actual embedding inference ke liye max wait
+    CONNECT_TIMEOUT = 40   # Space cold-start/connect ke liye max wait
+    PREDICT_TIMEOUT  = 55   # actual embedding inference ke liye max wait
+    _deadline = time.time() + 105   # total cap (< gunicorn 120s worker timeout)
     last = ""
-    for attempt in range(2):
+    for attempt in range(3):
+        if attempt and time.time() > _deadline - 20:
+            break
         try:
             cli = _SPACE_CLI["cli"]
             if cli is None:
+                if attempt:
+                    _wake_space()          # retry se pehle Space ko jagao
                 def _connect():
-                    for kw in ({}, {"token": HF_TOKEN or None}, {"hf_token": HF_TOKEN or None}):
+                    for kw in ({"httpx_kwargs": {"timeout": 60.0}}, {}, {"token": HF_TOKEN or None}, {"hf_token": HF_TOKEN or None}):
                         try:
                             return Client(SPACE_ID, verbose=False, **kw)
                         except TypeError:
@@ -26217,6 +26237,44 @@ _PRODUCT_IMAGE_CACHE_TTL = 6 * 3600
 _PRODUCT_IMAGE_CACHE_MAX_ITEMS = max(16, int(os.environ.get("PRODUCT_IMAGE_CACHE_MAX_ITEMS", "96") or 96))
 _PRODUCT_IMAGE_CACHE_MAX_BYTES = max(4 * 1024 * 1024, int(os.environ.get("PRODUCT_IMAGE_CACHE_MAX_MB", "32") or 32) * 1024 * 1024)
 _PRODUCT_IMAGE_CACHE_BYTES = 0
+# Slow/unreachable image host (e.g. stock.cosanostraa.com read timeout) ko baar-baar
+# 18s tak wait na karna pade — pehli failure ke baad kuch der fail-fast.
+_PRODUCT_IMAGE_FAIL = {}          # image_url -> failed-at timestamp
+_PRODUCT_IMAGE_HOST_FAIL = {}     # host -> [window_start, fail_count]
+_PRODUCT_IMAGE_FAIL_TTL = 120     # same URL ko itni der dobara try nahi
+_PRODUCT_IMAGE_HOST_TRIP = 4      # 60s me itni failures => host ~90s ke liye skip
+_PRODUCT_IMAGE_SEM = threading.BoundedSemaphore(6)   # max parallel upstream fetches
+
+def _product_image_host(u):
+    try:
+        from urllib.parse import urlparse as _up
+        return (_up(u).hostname or "").lower()
+    except Exception:
+        return ""
+
+def _product_image_note_fail(image_url):
+    now = time.time()
+    _PRODUCT_IMAGE_FAIL[image_url] = now
+    if len(_PRODUCT_IMAGE_FAIL) > 2000:
+        for k in [k for k, t in _PRODUCT_IMAGE_FAIL.items() if now - t > _PRODUCT_IMAGE_FAIL_TTL]:
+            _PRODUCT_IMAGE_FAIL.pop(k, None)
+    h = _product_image_host(image_url)
+    if h:
+        w = _PRODUCT_IMAGE_HOST_FAIL.get(h)
+        if not w or now - w[0] > 60:
+            _PRODUCT_IMAGE_HOST_FAIL[h] = [now, 1]
+        else:
+            w[1] += 1
+
+def _product_image_should_skip(image_url):
+    now = time.time()
+    t = _PRODUCT_IMAGE_FAIL.get(image_url)
+    if t and now - t < _PRODUCT_IMAGE_FAIL_TTL:
+        return True
+    w = _PRODUCT_IMAGE_HOST_FAIL.get(_product_image_host(image_url))
+    if w and w[1] >= _PRODUCT_IMAGE_HOST_TRIP and now - w[0] < 90:
+        return True
+    return False
 
 def _product_image_cache_put(image_url, body, ctype, now):
     """Memory-bounded LRU cache; prevents hundreds of photos from OOMing 512 MB."""
@@ -26273,9 +26331,13 @@ def api_product_image(sku):
             resp.headers["Cache-Control"] = "public, max-age=21600, immutable"
             return resp
 
+    if _product_image_should_skip(image_url):
+        return ("", 404)          # recently failed — worker ko block mat karo
+    if not _PRODUCT_IMAGE_SEM.acquire(timeout=3):
+        return ("", 503)          # bahut saari parallel image requests
     try:
         rr = requests.get(
-            image_url, timeout=(6, 18), allow_redirects=True,
+            image_url, timeout=(4, 10), allow_redirects=True,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
                 "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
@@ -26295,8 +26357,14 @@ def api_product_image(sku):
         resp.headers["Cache-Control"] = "public, max-age=21600, immutable"
         return resp
     except Exception as exc:
+        _product_image_note_fail(image_url)
         print("Product image proxy failed:", sku_key, str(exc)[:140])
         return ("", 404)
+    finally:
+        try:
+            _PRODUCT_IMAGE_SEM.release()
+        except Exception:
+            pass
 
 _HTML_RAW_FOR_HASH = HTML.encode("utf-8")
 _HTML_ETAG = hashlib.sha1(_HTML_RAW_FOR_HASH).hexdigest()
