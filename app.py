@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.84 (REPEAT ORDERS EXPORT · LAUNCH DATE = ALL PRODUCT SHEET (ANY FORMAT), NOT FOUND -> COSSA DISPATCH DATE)
+# - Export ka Launch Date ab All Product sheet ki "Launch date" se (date/text/int/Excel serial/Jul-23 jaise formats handle). Sheet me na mile ya blank ho to cossa sheet ki pehli Dispatch Date. Baaki kuch change nahi.
 # Cosa Nostraa — V24.83 (STABILITY: SKU FINDER HF-SPACE TIMEOUT + PRODUCT IMAGE PROXY FAIL-FAST)
 # - HF Space (SKU Finder) so raha ho to ab pehle wake-ping, 3 attempts, lamba httpx timeout, total 105s cap.
 # - Product image proxy: slow host (stock.cosanostraa.com) par 4s/10s timeout, failed URL 2 min skip, host circuit-breaker, max 6 parallel fetch. Baaki kuch change nahi.
@@ -1825,6 +1827,102 @@ def find_col(cols, *cands):
         for nk, orig in norm.items():
             if k and k in nk: return orig
     return None
+
+_MON_MAP = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
+
+def _launch_ymd_iso(y, m, d):
+    """Valid (y, m, d) ko 'YYYY-MM-DD' bana do; invalid ho to ''."""
+    try:
+        y, m, d = int(y), int(m), int(d)
+        if y < 100:
+            y += 2000 if y <= 69 else 1900
+        if not (1990 <= y <= 2100):
+            return ""
+        return date(y, m, d).strftime("%Y-%m-%d")
+    except Exception:
+        return ""
+
+def _launch_from_number(n):
+    """Excel serial / yyyymmdd / unix timestamp (int ya float) -> ISO date ya ''."""
+    try:
+        n = float(n)
+    except Exception:
+        return ""
+    if n != n:                                   # NaN
+        return ""
+    if 19000101 <= n <= 21001231 and n == int(n):                 # 20230724
+        s8 = str(int(n))
+        return _launch_ymd_iso(s8[:4], s8[4:6], s8[6:8])
+    if 1 <= n < 100000:                                           # Excel/Sheets serial
+        try:
+            return (datetime(1899, 12, 30) + timedelta(days=n)).strftime("%Y-%m-%d") if n >= 20000 else ""
+        except Exception:
+            return ""
+    if 5e8 <= n <= 4.2e9:                                         # unix seconds
+        try: return datetime.utcfromtimestamp(n).strftime("%Y-%m-%d")
+        except Exception: return ""
+    if 5e11 <= n <= 4.2e12:                                       # unix milliseconds
+        try: return datetime.utcfromtimestamp(n / 1000.0).strftime("%Y-%m-%d")
+        except Exception: return ""
+    return ""
+
+def parse_launch_date_any(v):
+    """All Product 'Launch date' ko kisi bhi form me padho (date / datetime / text / int / float /
+    Excel serial / '24-Jul-23' / 'Jul-23' / '24/07/2023' / 'Date(2023,6,24)' ...) aur
+    'YYYY-MM-DD' lautao. Samajh na aaye to '' (kabhi galat/guess date nahi)."""
+    if v is None:
+        return ""
+    try:
+        if isinstance(v, (datetime, date, pd.Timestamp)):
+            if pd.isna(v): return ""
+            return _launch_ymd_iso(v.year, v.month, v.day)
+    except Exception:
+        return ""
+    if isinstance(v, (int, float, np.integer, np.floating)) and not isinstance(v, bool):
+        return _launch_from_number(v)
+    s = str(v).strip().strip('"').strip("'").strip()
+    if not s or s.lower() in ("nan", "nat", "na", "n/a", "-", "--", "none", "null", "tbd", "0"):
+        return ""
+    if re.fullmatch(r"-?\d+(\.\d+)?", s.replace(",", "")):
+        return _launch_from_number(s.replace(",", ""))
+    m = re.fullmatch(r"Date\((\d{4}),\s*(\d{1,2}),\s*(\d{1,2})[^)]*\)", s, re.I)   # gviz: month 0-based
+    if m:
+        return _launch_ymd_iso(m.group(1), int(m.group(2)) + 1, m.group(3))
+    s = re.sub(r"(?<=\d)(st|nd|rd|th)\b", "", s, flags=re.I)
+    s = re.sub(r"[T\s]+\d{1,2}:\d{2}(:\d{2})?(\.\d+)?\s*(am|pm)?\s*(Z|[+-]\d{2}:?\d{2})?$", "", s, flags=re.I).strip()
+    s = s.strip(" ,")
+    # 2023-07-24 / 2023/7/24 / 2023.07.24
+    m = re.fullmatch(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})", s)
+    if m:
+        return _launch_ymd_iso(m.group(1), m.group(2), m.group(3))
+    # 24-Jul-23 / 24 July 2023 / 24/Jul/2023
+    m = re.fullmatch(r"(\d{1,2})[-/. ,]+([A-Za-z]{3,9})\.?[-/. ,]+(\d{2,4})", s)
+    if m and m.group(2)[:3].lower() in _MON_MAP:
+        return _launch_ymd_iso(m.group(3), _MON_MAP[m.group(2)[:3].lower()], m.group(1))
+    # Jul 24, 2023 / July 24 2023
+    m = re.fullmatch(r"([A-Za-z]{3,9})\.?[-/. ,]+(\d{1,2})[-/. ,]+(\d{2,4})", s)
+    if m and m.group(1)[:3].lower() in _MON_MAP:
+        return _launch_ymd_iso(m.group(3), _MON_MAP[m.group(1)[:3].lower()], m.group(2))
+    # Jul-23 / July 2023 / Jul'23  (sirf mahina+saal) -> mahine ki 1 tareekh
+    m = re.fullmatch(r"([A-Za-z]{3,9})\.?[-/. ,']*(\d{2,4})", s)
+    if m and m.group(1)[:3].lower() in _MON_MAP:
+        return _launch_ymd_iso(m.group(2), _MON_MAP[m.group(1)[:3].lower()], 1)
+    # 2023-Jul-24
+    m = re.fullmatch(r"(\d{4})[-/. ]([A-Za-z]{3,9})[-/. ](\d{1,2})", s)
+    if m and m.group(2)[:3].lower() in _MON_MAP:
+        return _launch_ymd_iso(m.group(1), _MON_MAP[m.group(2)[:3].lower()], m.group(3))
+    # 24/07/2023, 24-07-23, 24.07.2023 (Indian = din pehle). Din>12 ho to saaf; mahina>12 ho to US order.
+    m = re.fullmatch(r"(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})", s)
+    if m:
+        a, b, y = int(m.group(1)), int(m.group(2)), m.group(3)
+        if b > 12 and a <= 12:
+            a, b = b, a
+        return _launch_ymd_iso(y, b, a)
+    # 07/2023 ya 7-23 (mahina/saal)
+    m = re.fullmatch(r"(\d{1,2})[-/.](\d{4})", s)
+    if m:
+        return _launch_ymd_iso(m.group(2), m.group(1), 1)
+    return ""
 
 def classify_status(item, current_month_key=""):
     # Movement status follows physical SKU demand: standalone sales + quantities
@@ -4438,6 +4536,8 @@ def _refresh_data():
                     launch_iso   = _ld.strftime("%Y-%m-%d")
                     launch_key   = _ld.strftime("%Y-%m")
                     launch_label = _ld.strftime("%B %Y")
+        # Repeat Orders export ke liye alag, robust Launch Date (kisi bhi format me) — purana launch_date/launch_key untouched.
+        launch_sheet_iso = parse_launch_date_any(r.get(I_LNCH, "")) if I_LNCH else ""
         img   = _normalize_inventory_image_url(r.get(I_IMG, "")) if I_IMG else ""
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
         stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
@@ -4541,6 +4641,7 @@ def _refresh_data():
             "launch_date":  _si(launch_iso),
             "launch_key":   _si(launch_key),
             "launch_month": _si(launch_label),
+            "launch_date_sheet": _si(launch_sheet_iso),
             "combo_skus":   stone_details,
             "gift_set_stone_details": gift_set_stone_details,
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
@@ -4662,6 +4763,7 @@ def _refresh_data():
             "launch_date": _src.get("launch_date", "") or "",
             "launch_key": _src.get("launch_key", "") or "",
             "launch_month": _src.get("launch_month", "") or "",
+            "launch_date_sheet": _src.get("launch_date_sheet", "") or "",
             "combo_skus": _src.get("combo_skus", "") or "",
             "gift_set_stone_details": _src.get("gift_set_stone_details", "") or "",
             "pack_details": _src.get("pack_details", "") or "",
@@ -14468,9 +14570,10 @@ function _roExpTypes(ents, typeSel){
   return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
 }
 function _roLaunchDate(item){
-  // Launch Date = All Product sheet ki Launch Date; blank/invalid ho to SKU ki pehli sold (dispatch) date.
+  // Launch Date = All Product (inventory) sheet ki Launch date (kisi bhi format me, backend parse karta hai);
+  // sheet me SKU na mile / date blank ho to cossa sheet ki pehli Dispatch Date.
   if (!item) return '';
-  const ld = _bizIso(item.launch_date);
+  const ld = _bizIso(item.launch_date_sheet);
   if (ld) return ld;
   let first = '';
   const scan = ents => { for (const e of (ents || [])) {
