@@ -3,6 +3,8 @@
 # Cosa Nostraa — V24.83 (STABILITY: SKU FINDER HF-SPACE TIMEOUT + PRODUCT IMAGE PROXY FAIL-FAST)
 # - HF Space (SKU Finder) so raha ho to ab pehle wake-ping, 3 attempts, lamba httpx timeout, total 105s cap.
 # - Product image proxy: slow host (stock.cosanostraa.com) par 4s/10s timeout, failed URL 2 min skip, host circuit-breaker, max 6 parallel fetch. Baaki kuch change nahi.
+# Cosa Nostraa — V24.83 (WIP RECEIVE ORDER SUMMARY: SORTING FIX)
+# - Order Summary ke column headers ab sahi sort karte hain (Delivery Date asli date se, multi-date wale order me sabse pehli date se; blank neeche) aur filter lagane/hatane par sort bana rehta hai. Default = Delivery Date earliest upar. Baaki kuch change nahi.
 # Cosa Nostraa — V24.82 (WIP DELIVERY ALERT POPUP = ORDER SUMMARY TABLE DATA)
 # - Popup ka "Delayed" ab Order Summary table ke Delayed + Slight Delay orders ka Bal Qty hai (same logic, same numbers); filters se popup par asar nahi.
 # Cosa Nostraa — V24.81 (WIP RECEIVE ORDER SUMMARY: MULTI-SELECT FILTERS)
@@ -20919,6 +20921,47 @@ function _woStatusBadge(s){
   if(s==='Upcoming')return '<span style="font-weight:900;color:#1f6b3a;background:#e2f4e8;padding:3px 9px;border-radius:999px;white-space:nowrap">Upcoming</span>';
   return '<span style="color:var(--cn-mid)">—</span>';
 }
+/* Order Summary sorting (V24.83): apna sort state — filters badalne par bhi sort bana rehta hai; date columns real dates se sort hoti hain, blank hamesha neeche */
+let _woSort={key:'dl',dir:'asc'};
+const _woColl=new Intl.Collator('en-IN',{numeric:true,sensitivity:'base'});
+function _woSortVal(o,k){
+  if(k==='od')return {t:'s',v:String(o.od||'')};
+  if(k==='order')return {t:'t',v:String(o.order||'')};
+  if(k==='skus')return {t:'n',v:Number(o.skus)||0};
+  if(k==='ch')return {t:'t',v:o.chs.join(', ')};
+  if(k==='ty')return {t:'t',v:o.tys.map(_wiprShortType).join(', ')};
+  if(k==='oq')return {t:'n',v:Number(o.oq)||0};
+  if(k==='rq')return {t:'n',v:Number(o.rq)||0};
+  if(k==='bal')return o.balKnown?{t:'n',v:Number(o.bal)||0}:{t:'n',v:null};
+  if(k==='dl')return {t:'s',v:String(o.dlMin||'')};
+  if(k==='st'){const r={'Delayed':1,'Slight Delay':2,'Upcoming':3}[o.status];return {t:'n',v:r||null};}
+  return {t:'s',v:''};
+}
+function _woCmp(a,b,st){
+  const x=_woSortVal(a,st.key),y=_woSortVal(b,st.key);
+  const xb=(x.v===null||x.v===''),yb=(y.v===null||y.v==='');
+  let c=0;
+  if(xb!==yb)return xb?1:-1; /* blank hamesha neeche */
+  if(!xb){
+    if(x.t==='n')c=x.v-y.v;else if(x.t==='s')c=x.v<y.v?-1:x.v>y.v?1:0;else c=_woColl.compare(x.v,y.v);
+    if(st.dir==='desc')c=-c;
+  }
+  if(c)return c;
+  /* tie-break (hamesha same): earliest delivery date, phir order date, phir order no. */
+  const ad=a.dlMin||'',bd=b.dlMin||'';
+  if(ad&&!bd)return -1;if(!ad&&bd)return 1;
+  return ad.localeCompare(bd)||String(a.dl||'').localeCompare(String(b.dl||''))||String(a.od||'').localeCompare(String(b.od||''))||_woColl.compare(String(a.order),String(b.order));
+}
+function wipOrdSort(k){
+  if(_woSort.key===k)_woSort={key:k,dir:_woSort.dir==='asc'?'desc':'asc'};
+  else _woSort={key:k,dir:'asc'};
+  wipOrdRender();
+}
+function _woTh(label,k,cls){
+  const on=_woSort.key===k;
+  const ar=on?(_woSort.dir==='asc'?' ▲':' ▼'):' ⇅';
+  return '<th'+(cls?' class="'+cls+'"':'')+' data-sort-disabled="true" style="cursor:pointer;user-select:none;white-space:nowrap" title="Click to sort" onclick="wipOrdSort(\''+k+'\')">'+label+'<span style="color:#b8a06a;font-size:.85em;opacity:'+(on?'1':'.72')+'">'+ar+'</span></th>';
+}
 /* Builds one row per Order No.: first one row per (order, SKU) from the production-matched values, then summed per order */
 function _woBuild(forRows){
   const fa=!!forRows; /* fa = popup mode: same grouping/status logic, default Bal Qty > 0, no table filters */
@@ -20978,7 +21021,7 @@ function _woBuild(forRows){
     if(!mm(o.chs,cs)&&!(sorWanted&&o.tys.some(_wiprIsSorTxt)))return false; /* V24.76: Channel SOR + Type me sor (kisi bhi case me) */
     if(!mm(o.tys,ts))return false;
     return true;
-  }).sort((a,b)=>{ /* Delivery Date ke hisaab se: sabse pehli (earliest) delivery date upar; jinki date nahi hai wo sabse neeche */ const ad=a.dlMin||'',bd=b.dlMin||''; if(ad&&!bd)return -1; if(!ad&&bd)return 1; return ad.localeCompare(bd)||String(a.dl||'').localeCompare(String(b.dl||''))||String(a.od||'').localeCompare(String(b.od||''))||String(a.order).localeCompare(String(b.order),undefined,{numeric:true}); });
+  }).sort(function(a,b){return _woCmp(a,b,fa?{key:'dl',dir:'asc'}:_woSort);});
 }
 /* One date when all SKUs of the order share it, else "earliest to latest" (dates are PPC-WIP sheet dates; calculated only where the sheet is blank) */
 function _woDlText(o,html){
@@ -21012,7 +21055,7 @@ function wipOrdRender(){
   });
   const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
   const foot=rows.length?'<tfoot><tr style="font-weight:900"><td style="'+stick+'">Grand Total</td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(sT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td><td class="ops-num" style="'+stick+'"><b>'+n(oqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(rqT)+'</b></td><td class="ops-num" style="'+stick+'"><b>'+n(balT)+'</b></td><td style="'+stick+'"></td><td style="'+stick+'"></td></tr></tfoot>':'';
-  host.innerHTML='<table class="ops-table wipr-table wipr-sum" style="min-width:0"><thead><tr><th>Order Date</th><th>Order No.</th><th class="ops-num">No. of SKUs</th><th>Channel</th><th>Type</th><th class="ops-num">Order Qty</th><th class="ops-num">Rec Qty</th><th class="ops-num">Bal Qty</th><th>Delivery Date</th><th>Delivery Status</th></tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
+  host.innerHTML='<table class="ops-table wipr-table wipr-sum" style="min-width:0"><thead><tr>'+_woTh('Order Date','od')+_woTh('Order No.','order')+_woTh('No. of SKUs','skus','ops-num')+_woTh('Channel','ch')+_woTh('Type','ty')+_woTh('Order Qty','oq','ops-num')+_woTh('Rec Qty','rq','ops-num')+_woTh('Bal Qty','bal','ops-num')+_woTh('Delivery Date','dl')+_woTh('Delivery Status','st')+'</tr></thead><tbody>'+(body||emptyMsg)+'</tbody>'+foot+'</table>';
 }
 function wipOrdReset(){
   ['woOrderNo','woChannel','woType','woDelivery'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
