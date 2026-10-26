@@ -1,6 +1,3 @@
-# Cosa Nostraa — V24.85 (EXPORT LAUNCH DATE: YEAR-LESS DATES FIX + WIP ORDER SUMMARY DELIVERY DATE SORT)
-# - Repeat Orders export Launch Date: All Product sheet me "5 September" jaisi bina-saal wali date ab pehchani jaati hai (saal na ho to by default 2026). Sheet me na mile/blank ho to cossa sheet ki first Dispatch Date (pehle jaisa).
-# - WIP Receive > Order Summary: Delivery Date (aur Order Date) ab asli date se sort hoti hai (text se nahi), kisi bhi date format me; blank hamesha neeche. Baaki kuch change nahi.
 # Cosa Nostraa — V24.84 (REPEAT ORDERS EXPORT · LAUNCH DATE = ALL PRODUCT SHEET (ANY FORMAT), NOT FOUND -> COSSA DISPATCH DATE)
 # - Export ka Launch Date ab All Product sheet ki "Launch date" se (date/text/int/Excel serial/Jul-23 jaise formats handle). Sheet me na mile ya blank ho to cossa sheet ki pehli Dispatch Date. Baaki kuch change nahi.
 # Cosa Nostraa — V24.83 (STABILITY: SKU FINDER HF-SPACE TIMEOUT + PRODUCT IMAGE PROXY FAIL-FAST)
@@ -1928,30 +1925,6 @@ def parse_launch_date_any(v):
     if m:
         return _launch_ymd_iso(m.group(2), m.group(1), 1)
     return ""
-
-def launch_yearless_md(v):
-    """All Product 'Launch date' me saal ke bina likhi date ('5 September', '5-Sep', '5th Sep', 'September 5th')
-    ko 'MM-DD' me lautao. Saal wali / samajh na aane wali value par ''. (Saal export me first dispatch date se tay hota hai.)"""
-    if v is None or isinstance(v, (datetime, date, pd.Timestamp, bool)):
-        return ""
-    s = str(v).strip().strip('"').strip("'").strip()
-    if not s:
-        return ""
-    s = re.sub(r"(?<=\d)(st|nd|rd|th)\b", "", s, flags=re.I).strip(" ,.")
-    m = re.fullmatch(r"(\d{1,2})[-/. ,]*([A-Za-z]{3,9})\.?", s)
-    mon, day = (m.group(2), m.group(1)) if m else (None, None)
-    if not m:
-        m = re.fullmatch(r"([A-Za-z]{3,9})\.?[ ,]+(\d{1,2})", s)      # 'September 5' (space wala hi; 'Sep-23' month-year hi rahega)
-        if m and re.search(r"\d(st|nd|rd|th)\b", str(v), re.I):
-            mon, day = m.group(1), m.group(2)
-    if not mon or mon[:3].lower() not in _MON_MAP:
-        return ""
-    try:
-        mi, di = _MON_MAP[mon[:3].lower()], int(day)
-        date(2024, mi, di)          # valid month/day (29 Feb allowed)
-        return "%02d-%02d" % (mi, di)
-    except Exception:
-        return ""
 
 def classify_status(item, current_month_key=""):
     # Movement status follows physical SKU demand: standalone sales + quantities
@@ -4567,7 +4540,6 @@ def _refresh_data():
                     launch_label = _ld.strftime("%B %Y")
         # Repeat Orders export ke liye alag, robust Launch Date (kisi bhi format me) — purana launch_date/launch_key untouched.
         launch_sheet_iso = parse_launch_date_any(r.get(I_LNCH, "")) if I_LNCH else ""
-        launch_md_sheet = (launch_yearless_md(r.get(I_LNCH, "")) if (I_LNCH and not launch_sheet_iso) else "")
         img   = _normalize_inventory_image_url(r.get(I_IMG, "")) if I_IMG else ""
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
         stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
@@ -4672,7 +4644,6 @@ def _refresh_data():
             "launch_key":   _si(launch_key),
             "launch_month": _si(launch_label),
             "launch_date_sheet": _si(launch_sheet_iso),
-            "launch_md_sheet": _si(launch_md_sheet),
             "combo_skus":   stone_details,
             "gift_set_stone_details": gift_set_stone_details,
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
@@ -4795,7 +4766,6 @@ def _refresh_data():
             "launch_key": _src.get("launch_key", "") or "",
             "launch_month": _src.get("launch_month", "") or "",
             "launch_date_sheet": _src.get("launch_date_sheet", "") or "",
-            "launch_md_sheet": _src.get("launch_md_sheet", "") or "",
             "combo_skus": _src.get("combo_skus", "") or "",
             "gift_set_stone_details": _src.get("gift_set_stone_details", "") or "",
             "pack_details": _src.get("pack_details", "") or "",
@@ -14601,39 +14571,21 @@ function _roExpTypes(ents, typeSel){
   const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
   return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
 }
-function _roFirstDispatch(item){
-  // cossa sheet ki sabse pehli Dispatch Date (qty > 0), item + uske combo parents ki entries se.
+function _roLaunchDate(item){
+  // Launch Date = All Product (inventory) sheet ki Launch date (kisi bhi format me, backend parse karta hai);
+  // sheet me SKU na mile / date blank ho to cossa sheet ki pehli Dispatch Date.
+  if (!item) return '';
+  const ld = _bizIso(item.launch_date_sheet);
+  if (ld) return ld;
   let first = '';
   const scan = ents => { for (const e of (ents || [])) {
     if ((parseFloat(e && e.qty) || 0) <= 0) continue;
     const dd = _bizIso(e && (e.date || e.dispatch_date));
     if (dd && (!first || dd < first)) first = dd;
   } };
-  scan(item && item.sales_entries);
-  const key = String((item && item.sku) || '').trim().toUpperCase();
+  scan(item.sales_entries);
+  const key = String(item.sku || '').trim().toUpperCase();
   ((key && cnxComboParentIndex().get(key)) || []).forEach(p => scan(p && p.sales_entries));
-  return first;
-}
-function _roYearForMd(md, firstIso){
-  // Sheet me launch date bina saal ke hai ("5 September"): saal by default 2026 maana jata hai.
-  const m = /^(\d{2})-(\d{2})$/.exec(String(md || ''));
-  if (!m) return '';
-  const mo = Number(m[1]), da = Number(m[2]);
-  const t = new Date(Date.UTC(2026, mo - 1, da));
-  return (t.getUTCMonth() === mo - 1 && t.getUTCDate() === da) ? t.toISOString().slice(0, 10) : '';
-}
-function _roLaunchDate(item){
-  // Launch Date = All Product (inventory) sheet ki Launch date (kisi bhi format me, backend parse karta hai;
-  // bina-saal wali date ka saal first dispatch date se tay hota hai);
-  // sheet me SKU na mile / date blank ho to cossa sheet ki pehli Dispatch Date.
-  if (!item) return '';
-  const ld = _bizIso(item.launch_date_sheet);
-  if (ld) return ld;
-  const first = _roFirstDispatch(item);
-  if (item.launch_md_sheet) {
-    const y = _roYearForMd(item.launch_md_sheet, first);
-    if (y) return y;
-  }
   return first;
 }
 
@@ -20972,26 +20924,8 @@ function _woStatusBadge(s){
 /* Order Summary sorting (V24.83): apna sort state — filters badalne par bhi sort bana rehta hai; date columns real dates se sort hoti hain, blank hamesha neeche */
 let _woSort={key:'dl',dir:'asc'};
 const _woColl=new Intl.Collator('en-IN',{numeric:true,sensitivity:'base'});
-/* Kisi bhi date text (ISO / dd-Mon-yyyy / dd/mm/yyyy / dd-mm-yyyy) -> asli date number (ms); samajh na aaye to null */
-function _woDateNum(v){
-  const s=String(v==null?'':v).trim();if(!s)return null;
-  let m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
-  if(m)return Date.UTC(+m[1],+m[2]-1,+m[3]);
-  m=/^(\d{1,2})[-\/. ]([A-Za-z]{3,9})\.?[-\/. ,]*(\d{2,4})$/.exec(s);
-  if(m){const mi=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[2].slice(0,3).toLowerCase());if(mi>=0){let y=+m[3];if(y<100)y+=2000;return Date.UTC(y,mi,+m[1]);}}
-  m=/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})$/.exec(s);
-  if(m){let y=+m[3];if(y<100)y+=2000;return Date.UTC(y,+m[2]-1,+m[1]);}
-  return null;
-}
-/* Order ki sabse pehli (earliest) delivery date, real date number me */
-function _woDlNum(o){
-  let best=null;
-  const eat=function(x){const n=_woDateNum(x);if(n!==null&&(best===null||n<best))best=n;};
-  if(o&&o.dls&&o.dls.size)o.dls.forEach(eat);else if(o)eat(o.dlMin||o.dl);
-  return best;
-}
 function _woSortVal(o,k){
-  if(k==='od')return {t:'n',v:_woDateNum(o.od)};
+  if(k==='od')return {t:'s',v:String(o.od||'')};
   if(k==='order')return {t:'t',v:String(o.order||'')};
   if(k==='skus')return {t:'n',v:Number(o.skus)||0};
   if(k==='ch')return {t:'t',v:o.chs.join(', ')};
@@ -20999,7 +20933,7 @@ function _woSortVal(o,k){
   if(k==='oq')return {t:'n',v:Number(o.oq)||0};
   if(k==='rq')return {t:'n',v:Number(o.rq)||0};
   if(k==='bal')return o.balKnown?{t:'n',v:Number(o.bal)||0}:{t:'n',v:null};
-  if(k==='dl')return {t:'n',v:_woDlNum(o)};
+  if(k==='dl')return {t:'s',v:String(o.dlMin||'')};
   if(k==='st'){const r={'Delayed':1,'Slight Delay':2,'Upcoming':3}[o.status];return {t:'n',v:r||null};}
   return {t:'s',v:''};
 }
@@ -21014,12 +20948,9 @@ function _woCmp(a,b,st){
   }
   if(c)return c;
   /* tie-break (hamesha same): earliest delivery date, phir order date, phir order no. */
-  const ad=_woDlNum(a),bd=_woDlNum(b);
-  if(ad!==null&&bd===null)return -1;if(ad===null&&bd!==null)return 1;
-  if(ad!==null&&bd!==null&&ad!==bd)return ad-bd;
-  const ao=_woDateNum(a.od),bo=_woDateNum(b.od);
-  if(ao!==null&&bo!==null&&ao!==bo)return ao-bo;
-  return _woColl.compare(String(a.order),String(b.order));
+  const ad=a.dlMin||'',bd=b.dlMin||'';
+  if(ad&&!bd)return -1;if(!ad&&bd)return 1;
+  return ad.localeCompare(bd)||String(a.dl||'').localeCompare(String(b.dl||''))||String(a.od||'').localeCompare(String(b.od||''))||_woColl.compare(String(a.order),String(b.order));
 }
 function wipOrdSort(k){
   if(_woSort.key===k)_woSort={key:k,dir:_woSort.dir==='asc'?'desc':'asc'};
@@ -21077,8 +21008,7 @@ function _woBuild(forRows){
     if(p.ty&&!o.tys.includes(p.ty))o.tys.push(p.ty);
     (p.chx||[]).forEach(c=>{if(c&&!o.chs.includes(c))o.chs.push(c);});
     (p.tyx||[]).forEach(t=>{if(t&&!o.tys.includes(t))o.tys.push(t);});
-    if(p.dl){if(!o.dl||p.dl>o.dl)o.dl=p.dl;}
-    {const _pm=p.dlMin||p.dl;if(_pm&&(!o.dlMin||_pm<o.dlMin))o.dlMin=_pm;}
+    if(p.dl){if(!o.dl||p.dl>o.dl)o.dl=p.dl;if(!o.dlMin||p.dl<o.dlMin)o.dlMin=p.dl;}
     p.dls.forEach(function(x){o.dls.add(x);});
     p.pdls.forEach(function(x){o.pdls.add(x);});
     if(p.od&&(!o.od||p.od<o.od))o.od=p.od;
@@ -21113,14 +21043,14 @@ function wipOrdRender(){
   let body='';
   rows.forEach(o=>{
     const dlTip='';
-    body+='<tr><td style="white-space:nowrap" data-sort-value="'+(_woDateNum(o.od)||'')+'">'+(o.od?escHtml(_wiprFmtFull(o.od)):'—')+'</td><td style="font-weight:800">'+escHtml(o.order)+'</td>'
+    body+='<tr><td style="white-space:nowrap">'+(o.od?escHtml(_wiprFmtFull(o.od)):'—')+'</td><td style="font-weight:800">'+escHtml(o.order)+'</td>'
       +'<td class="ops-num"><b>'+n(o.skus)+'</b></td>'
       +'<td class="wipr-ch">'+escHtml(o.chs.join(', ')||'—')+'</td>'
       +'<td class="wipr-ty" title="'+escHtml(o.tys.join(', '))+'">'+escHtml(o.tys.map(_wiprShortType).join(', ')||'—')+'</td>'
       +'<td class="ops-num">'+(o.oq?n(o.oq):'—')+'</td>'
       +'<td class="ops-num">'+n(o.rq)+'</td>'
       +'<td class="ops-num"><b>'+(o.balKnown?n(o.bal):'—')+'</b></td>'
-      +'<td'+dlTip+' data-sort-value="'+(_woDlNum(o)||'')+'">'+_woDlText(o,true)+'</td>'
+      +'<td'+dlTip+'>'+_woDlText(o,true)+'</td>'
       +'<td>'+_woStatusBadge(o.status)+'</td></tr>';
   });
   const emptyMsg='<tr><td colspan="99" class="ops-empty">No orders found for the selected filters.</td></tr>';
