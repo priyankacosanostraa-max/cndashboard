@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.88 (TARGET TAB: DAILY TARGET REPORT HATA KAR NEW LAUNCH DAILY SALES TABLE)
+# - Target tab se Daily Target Report (projection vs actual) table hata di. Uski jagah naya New Launch - Daily Sales table: Bracelet / Bookmark / Photo Frame, pichhle 7 din ka din-wise Final Qty (single + combo), copy-able message, SKU-wise table (Inv Stock All Product se). Sales cosa_orderdate se. Baaki kuch change nahi.
 # Cosa Nostraa — V24.87 (REPEAT ORDERS TRANSACTIONS: SKU CODE + SKU NAME SAAF)
 # - Transactions view ki SKU cell ab SKU code (ek line me) aur neeche SKU name dikhati hai; tedhi/akshar-akshar wali wrapping theek. Baaki kuch change nahi.
 # Cosa Nostraa — V24.86 (LAUNCH DATE: SAAL NAHI LIKHA TO 2026 · NA MILE TO FIRST DISPATCH DATE, KISI BHI FORMAT ME)
@@ -10057,17 +10059,20 @@ select.lg-in option{background:#fff;color:#1a1610}
 
   <div class="insights-head" style="margin-top:26px">
     <div>
-      <div class="insights-title">Daily Target Report</div>
-      <div class="insights-sub">Channel-wise Projected vs Actual for Yesterday and Till Now (19-Sep through today, updates through the day). Actual = cosa_orderdate Net Revenue (col I), channel from Customer Name + Type. Website ₹1.5L/day and Purchase ₹2L/day (19–30 Sep 2026); other channels as per Sept projection sheet. Others = every other marketplace sale (Type = Marketplace/SOR, e.g. Ferns N Petals, Sindhu Siddhartha, Aditya Birla Fashion, AZA Fashions, Mirraw or any new marketplace) not already named above. Exhibition sales are shown in a separate row above TOTAL (no target, but counted in TOTAL actual); other non-marketplace sales (Bulk, etc.) are excluded from this table.</div>
+      <div class="insights-title">New Launch — Daily Sales (Bracelet · Bookmark · Photo Frame)</div>
+      <div class="insights-sub">Pieces sold on each of the last 7 days, single items and combos together (combo sales = child pieces inside the combos). Sales = cosa_orderdate Final Qty (order date); Inv Stock = All Product sheet. Default report date = yesterday. The message below can be copied and shared; the table is made to be screenshotted every morning.</div>
     </div>
     <div class="insight-toolbar-actions">
-      <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">As-of Date<input type="date" id="dtrAsOf" onchange="loadDTR(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadDTR(true)">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportDTR()">Export CSV</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportDTRExcel()">Export Excel</button>
+      <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
+      <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">SKU table category<select id="nlCat" onchange="renderNewLaunch()" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"><option value="">All Categories</option></select></label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--cn-mid)"><input type="checkbox" id="nlHideZero" checked onchange="renderNewLaunch()"> Hide SKUs with no sale</label>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadNewLaunch(true)">Refresh</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="copyNewLaunchMsg()">Copy Message</button>
+      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportNewLaunch()">Export CSV</button>
     </div>
   </div>
-  <div id="dtrContent" class="ro-table-wrap" style="padding:0;overflow-x:auto"></div>
+  <div id="nlMessage"></div>
+  <div id="nlContent" class="ro-table-wrap" style="padding:0;overflow-x:auto;max-height:none"></div>
   </div>
 
 
@@ -16006,11 +16011,11 @@ let _tgtAbort = null;
    Pehli baar: Target + Glimpse turant, baaki do thodi der baad — server par ek saath 4 bhaari request nahi. */
 let _tgtTabStamp = 0;
 function _tgtTabOpen(){
-  const allLoaded = _tgtData && _drgData && _drgMarketplaceData && _dtrData;
+  const allLoaded = _tgtData && _drgData && _drgMarketplaceData && _nlData;
   if (allLoaded && (Date.now() - _tgtTabStamp) < 120000) return;
   _tgtTabStamp = Date.now();
   loadTarget(); loadDRG();
-  setTimeout(()=>{ try{ loadDRGMarketplace(false); loadDTR(false); }catch(e){console.error(e);} }, 500);
+  setTimeout(()=>{ try{ loadDRGMarketplace(false); loadNewLaunch(false); }catch(e){console.error(e);} }, 500);
 }
 function loadTarget(){
   const host = document.getElementById('tgtContent');
@@ -16483,99 +16488,194 @@ window.loadDRGMarketplace = loadDRGMarketplace;
 window.exportDRGMarketplace = exportDRGMarketplace;
 window.exportDRGMarketplaceExcel = exportDRGMarketplaceExcel;
 
-/* ── DAILY TARGET REPORT (Target tab, 4th table) ── */
-let _dtrData = null;
-function _dtrAsOfParam(){
-  const el = document.getElementById('dtrAsOf');
-  return el && el.value ? el.value : '';
+/* ── NEW LAUNCH DAILY SALES (Target tab) — replaces the old Daily Target Report table ──
+   Sales = cosa_orderdate Final Qty (order-date basis); Inv Stock = All Product sheet. Combo sales are shown separately (child pieces). */
+let _nlData = null;
+const _NL_CATS = ['Bracelet','Bookmark','Photo Frame'];
+const _NL_PLURAL = {'Bracelet':'Bracelets','Bookmark':'Bookmarks','Photo Frame':'Photo Frames'};
+function _nlCatOf(it, sku){
+  const s = String(sku || '').trim().toUpperCase();
+  const isCombo = /^CMB[-_ ]?\d/.test(s) || !!(it && Array.isArray(it.combo_details) && it.combo_details.length);
+  if (isCombo) return 'Combo';
+  const tx = String((it && it.taxon) || '').toLowerCase();
+  const nm = (String((it && it.sku_name) || '') + ' ' + String((it && it.cn_name) || '')).toLowerCase();
+  const pick = t => /book\s*-?\s*mark/.test(t) ? 'Bookmark' : /(photo|picture)\s*-?\s*frame|\bframe\b/.test(t) ? 'Photo Frame' : /bracelet/.test(t) ? 'Bracelet' : '';
+  let c = pick(tx);
+  if (c) return c;
+  if (/^BR[-_ ]?\d/.test(s)) return 'Bracelet';
+  if (/^BM[-_ ]?\d/.test(s)) return 'Bookmark';
+  c = pick(nm);
+  if (c) return c;
+  const raw = String((it && it.taxon) || '').trim();
+  return (raw && raw.toLowerCase() !== 'general') ? raw : 'Other';
 }
-function loadDTR(force=false){
-  const host = document.getElementById('dtrContent');
+function _nlDmy(iso){
+  const p = String(iso || '').split('-'); if (p.length !== 3) return iso || '';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return p[2] + '-' + M[(+p[1]) - 1] + '-' + p[0];
+}
+function _nlDay(iso){
+  try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {weekday:'short', day:'2-digit', month:'short', timeZone:'UTC'}).replace(',', ''); } catch (e) { return iso; }
+}
+function _nlN(v){ return Math.round(Number(v) || 0).toLocaleString('en-IN'); }
+function loadNewLaunch(force = false){
+  const host = document.getElementById('nlContent');
   if (!host) return;
-  if (_dtrData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
-  const qs = [];
-  const asof = _dtrAsOfParam();
-  if (asof) qs.push('asof=' + encodeURIComponent(asof));
+  if (_nlData) host.style.opacity = '0.45'; else host.innerHTML = '<div class="home-empty" style="padding:30px">Loading...</div>';
+  const el = document.getElementById('nlAsOf');
+  const qs = ['days=7'];
+  if (el && el.value) qs.push('asof=' + encodeURIComponent(el.value));
   if (force) qs.push('fresh=1');
-  fetch('/api/daily_target_report' + (qs.length ? '?' + qs.join('&') : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+  fetch('/api/new_launch_daily?' + qs.join('&'), {headers:{'ngrok-skip-browser-warning':'true'}})
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
       host.style.opacity = '';
-      if (d.error){ host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
-      _dtrData = d;
-      const el = document.getElementById('dtrAsOf');
+      if (d.error) { host.innerHTML = '<div class="home-empty" style="padding:30px">' + escHtml(d.error) + '</div>'; return; }
+      _nlData = d;
       if (el && !el.value) el.value = d.asof;
-      renderDTRTable();
+      renderNewLaunch();
     })
-    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => { host.style.opacity = ''; host.innerHTML = '<div class="home-empty" style="padding:30px">Failed to load: ' + escHtml(err.message || err) + '</div>'; });
 }
-function _dtrPct(v){
-  if (v === null || v === undefined) return '';
-  const cls = v >= 100 ? 'green' : v >= 70 ? 'orange' : 'red';
-  return '<span class="' + cls + '" style="font-weight:800">' + v + '%</span>';
+function _nlCompute(){
+  const d = _nlData; if (!d) return null;
+  const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
+  const idx = new Map();
+  (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
+  const listed = new Set(skus.map(s => String(s).trim().toUpperCase()));
+  const rows = skus.map(raw => {
+    const sku = String(raw).trim().toUpperCase();
+    const it = idx.get(sku) || null;
+    const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
+    return {sku, it, cat: _nlCatOf(it, sku), daily, total: daily.reduce((a, b) => a + b, 0),
+            stock: it ? (Number(it.inv_stock) || 0) : null, name: it ? String(it.sku_name || '') : ''};
+  });
+  const sum = {};
+  _NL_CATS.forEach(c => { sum[c] = {single: dates.map(() => 0), combo: dates.map(() => 0), stock: 0, skus: 0}; });
+  rows.forEach(r => {
+    if (!sum[r.cat]) return;
+    sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0);
+    r.daily.forEach((q, i) => { sum[r.cat].single[i] += q; });
+  });
+  /* Combo sales: parent CMB sold qty x pieces of each listed child SKU (same rule as In CMBs Sold elsewhere) */
+  (master || []).forEach(p => {
+    const cd = p && p.combo_details;
+    if (!Array.isArray(cd) || !cd.length) return;
+    const ps = String(p.sku || '').trim().toUpperCase();
+    const ds = sales[ps];
+    if (!ds) return;
+    const seen = new Set();
+    cd.forEach(c => {
+      const ck = String(c && c.sku || '').trim().toUpperCase();
+      if (!ck || ck === ps || seen.has(ck) || !listed.has(ck)) return;
+      seen.add(ck);
+      const cat = _nlCatOf(idx.get(ck) || c, ck);
+      if (!sum[cat]) return;
+      const pcs = cnxChildComponentQty(p, ck);
+      dates.forEach((dt, i) => { sum[cat].combo[i] += (Number(ds[dt]) || 0) * pcs; });
+    });
+  });
+  return {dates, rows, sum};
 }
-function _dtrCells(b, bold){
-  const w = bold ? 'font-weight:900' : '';
-  const proj = (b.projected === null || b.projected === undefined) ? 'NA' : fmt(b.projected);
-  let short = '';
-  if (b.short !== null && b.short !== undefined){
-    short = b.short > 0 ? '<span class="red" style="font-weight:800">' + fmt(b.short) + '</span>' : '<span class="green" style="font-weight:800">✓ Met</span>';
+function _nlMessage(c){
+  const d = _nlData, last = c.dates.length - 1;
+  const L = [];
+  L.push('📊 NEW LAUNCH SALES — ' + _nlDay(c.dates[last]) + ' ' + _nlDmy(c.dates[last]).slice(-4));
+  L.push('(cosa_orderdate Final Qty · single items + combos)');
+  L.push('');
+  _NL_CATS.forEach(cat => {
+    const s = c.sum[cat];
+    const t = s.single[last] + s.combo[last];
+    L.push('• ' + _nlDmy(c.dates[last]) + ': ' + _nlN(t) + ' ' + _NL_PLURAL[cat] + ' sold (' + _nlN(s.single[last]) + ' single + ' + _nlN(s.combo[last]) + ' via combos)');
+  });
+  _NL_CATS.forEach(cat => {
+    const s = c.sum[cat];
+    L.push('');
+    L.push(_NL_PLURAL[cat] + ' sold day-wise:');
+    c.dates.forEach((dt, i) => {
+      L.push('  ' + _nlDay(dt) + ': ' + _nlN(s.single[i] + s.combo[i]) + ' pcs  [' + _nlN(s.single[i]) + ' single + ' + _nlN(s.combo[i]) + ' in combos]');
+    });
+    const ts = s.single.reduce((a, b) => a + b, 0), tc = s.combo.reduce((a, b) => a + b, 0);
+    L.push('  Total ' + c.dates.length + ' days: ' + _nlN(ts + tc) + ' pcs  [' + _nlN(ts) + ' single + ' + _nlN(tc) + ' in combos]  |  Inv Stock: ' + _nlN(s.stock));
+  });
+  return L.join('\n');
+}
+function renderNewLaunch(){
+  const host = document.getElementById('nlContent'), msgHost = document.getElementById('nlMessage');
+  if (!host || !_nlData) return;
+  const c = _nlCompute(); if (!c) return;
+  const dates = c.dates, last = dates.length - 1;
+  /* explicit message */
+  const msg = _nlMessage(c);
+  window._nlMsgText = msg;
+  if (msgHost) msgHost.innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;line-height:1.55;margin:0 0 14px;padding:14px 16px;background:#fffaf0;border:1px solid rgba(184,147,63,.35);border-radius:12px;color:#2a2418">' + escHtml(msg) + '</pre>';
+  /* summary table: category x day */
+  const th = dates.map((dt, i) => '<th style="text-align:center;white-space:nowrap' + (i === last ? ';background:#f4e6bd' : '') + '">' + escHtml(_nlDay(dt)) + '</th>').join('');
+  const sRows = _NL_CATS.map(cat => {
+    const s = c.sum[cat];
+    const cells = dates.map((dt, i) => {
+      const t = s.single[i] + s.combo[i];
+      return '<td style="text-align:center' + (i === last ? ';background:#fbf3d9' : '') + '"><b>' + _nlN(t) + '</b>' + (t ? '<div style="font-size:10px;color:#8c7a42;font-weight:700">' + _nlN(s.single[i]) + ' + ' + _nlN(s.combo[i]) + ' cmb</div>' : '') + '</td>';
+    }).join('');
+    const ts = s.single.reduce((a, b) => a + b, 0), tc = s.combo.reduce((a, b) => a + b, 0);
+    return '<tr><td style="font-weight:800">' + escHtml(cat) + '</td>' + cells + '<td style="text-align:center"><b>' + _nlN(ts + tc) + '</b><div style="font-size:10px;color:#8c7a42;font-weight:700">' + _nlN(ts) + ' + ' + _nlN(tc) + ' cmb</div></td><td style="text-align:center;font-weight:800">' + _nlN(s.stock) + '</td></tr>';
+  }).join('');
+  const totCells = dates.map((dt, i) => '<td style="text-align:center;font-weight:900">' + _nlN(_NL_CATS.reduce((a, k) => a + c.sum[k].single[i] + c.sum[k].combo[i], 0)) + '</td>').join('');
+  const grand = _NL_CATS.reduce((a, k) => a + c.sum[k].single.reduce((x, y) => x + y, 0) + c.sum[k].combo.reduce((x, y) => x + y, 0), 0);
+  const stockAll = _NL_CATS.reduce((a, k) => a + c.sum[k].stock, 0);
+  const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 8px;color:#2a2418">New Launch — Pieces sold per day (single + combos) · till ' + escHtml(_nlDmy(dates[last])) + '</div>'
+    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th></tr></thead><tbody>' + sRows
+    + '<tr style="background:#eef7ea"><td style="font-weight:900">TOTAL</td>' + totCells + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td></tr></tbody></table></div>';
+  /* SKU-wise table */
+  const catSel = document.getElementById('nlCat'), hideZero = document.getElementById('nlHideZero');
+  const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
+  const cats = Array.from(new Set(c.rows.map(r => r.cat))).sort((a, b) => ((order[a] ?? 9) - (order[b] ?? 9)) || a.localeCompare(b));
+  if (catSel && catSel.dataset.filled !== cats.join('|')) {
+    const cur = catSel.value;
+    catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(x => '<option value="' + escHtml(x) + '">' + escHtml(x) + '</option>').join('');
+    catSel.value = cats.includes(cur) ? cur : '';
+    catSel.dataset.filled = cats.join('|');
   }
-  return '<td style="' + w + '">' + proj + '</td>'
-       + '<td style="font-weight:800">' + fmt(b.actual) + '</td>'
-       + '<td>' + short + '</td>'
-       + '<td>' + _dtrPct(b.ach) + '</td>';
+  const catQ = catSel ? catSel.value : '';
+  const hz = hideZero ? hideZero.checked : false;
+  let list = c.rows.filter(r => (!catQ || r.cat === catQ));
+  const hiddenZero = hz ? list.filter(r => r.total === 0).length : 0;
+  if (hz) list = list.filter(r => r.total !== 0);
+  list.sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku));
+  const body = list.map(r => '<tr><td><div class="sku-cell">' + roThumb(r.it && r.it.image_url) + '<div style="min-width:130px"><b style="white-space:nowrap">' + escHtml(r.sku) + '</b>' + (r.name && r.name.toUpperCase() !== r.sku ? '<div style="font-size:12px;font-weight:600;color:#4a3f2a;white-space:normal;line-height:1.3">' + escHtml(r.name) + '</div>' : '') + '</div></div></td>'
+    + '<td>' + escHtml(r.cat) + '</td><td style="text-align:center;font-weight:800">' + (r.stock === null ? '—' : _nlN(r.stock)) + '</td>'
+    + r.daily.map((q, i) => '<td style="text-align:center' + (i === last ? ';background:#fbf3d9' : '') + (q ? ';font-weight:800' : ';color:#b5ab93') + '">' + (q ? _nlN(q) : '–') + '</td>').join('')
+    + '<td style="text-align:center;font-weight:900">' + _nlN(r.total) + '</td></tr>').join('');
+  const tr = dates.map((dt, i) => list.reduce((a, r) => a + r.daily[i], 0));
+  const foot = list.length ? '<tr style="background:#eef7ea;font-weight:900"><td>Total (' + list.length + ' SKUs)</td><td></td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.stock || 0), 0)) + '</td>' + tr.map(v => '<td style="text-align:center">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center">' + _nlN(tr.reduce((a, b) => a + b, 0)) + '</td></tr>' : '';
+  const skuTable = '<div style="margin-top:18px"><div style="font-weight:900;font-size:1rem;margin:0 0 4px;color:#2a2418">SKU-wise Final Qty &amp; Inv Stock</div>'
+    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty from cosa_orderdate; Inv Stock = All Product sheet.</div>'
+    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:900px"><thead><tr><th>SKU</th><th>Category</th><th style="text-align:center">Inv Stock</th>' + th + '<th style="text-align:center">Total</th></tr></thead><tbody>' + (body || '<tr><td colspan="99" class="home-empty" style="padding:20px;text-align:center">No SKUs for this filter.</td></tr>') + foot + '</tbody></table></div>';
+  host.innerHTML = summary + skuTable;
 }
-function renderDTRTable(){
-  const host = document.getElementById('dtrContent');
-  const d = _dtrData;
-  if (!host || !d) return;
-  const rowsHtml = (d.rows||[]).map(r => '<tr><td style="font-weight:700">' + escHtml(r.channel) + '</td>'
-    + _dtrCells(r.yesterday, false) + _dtrCells(r.till_now, false) + '</tr>').join('');
-  const t = d.totals || {};
-  const totalRow = '<tr style="background:#eef7ea;font-weight:900"><td>TOTAL</td>'
-    + _dtrCells(t.yesterday, true) + _dtrCells(t.till_now, true) + '</tr>';
-  host.innerHTML = '<p style="color:var(--cn-mid);font-size:.78rem;margin:6px 0 10px">'
-    + 'As of: ' + escHtml(d.asof_label||'') + ' &nbsp;•&nbsp; Yesterday: ' + escHtml(d.yesterday_label||'')
-    + ' &nbsp;•&nbsp; Till Now: ' + escHtml(d.till_now_label||'')
-    + ' &nbsp;•&nbsp; Projection window: 19-Sep to 30-Sep-2026 (NA = no projection for that date)</p>'
-    + '<table class="ro" style="width:100%;min-width:980px"><thead>'
-    + '<tr><th rowspan="2">Channel</th><th colspan="4" style="text-align:center">Yesterday · ' + escHtml(d.yesterday_label||'') + '</th>'
-    + '<th colspan="4" style="text-align:center">Till Now · ' + escHtml(d.till_now_label||'') + '</th></tr>'
-    + '<tr><th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th>'
-    + '<th>Projected</th><th>Actual</th><th>Short</th><th>Achievement %</th></tr>'
-    + '</thead><tbody>' + rowsHtml + totalRow + '</tbody></table>';
+function copyNewLaunchMsg(){
+  const t = window._nlMsgText || '';
+  if (!t) { alert('Table abhi load ho rahi hai.'); return; }
+  const done = () => alert('Message copy ho gaya.');
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => alert('Copy nahi ho paya — message ko select karke copy karein.'));
+  else { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) {} ta.remove(); }
 }
-function _dtrCsvBlock(b){
-  return [
-    (b.projected === null || b.projected === undefined) ? 'NA' : drgFmtNum(b.projected),
-    drgFmtNum(b.actual),
-    (b.short === null || b.short === undefined) ? '' : drgFmtNum(b.short),
-    (b.ach === null || b.ach === undefined) ? '' : b.ach
-  ];
-}
-function exportDTR(){
-  const d = _dtrData;
-  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  const sub = ['Projected','Actual','Short','Achievement %'];
-  const head1 = ['Daily Target Report - ' + d.asof_label, 'Yesterday - ' + d.yesterday_label, '', '', '', 'Till Now - ' + d.till_now_label, '', '', ''];
-  const head2 = ['Channel'].concat(sub, sub);
-  const rows = d.rows.map(r => [r.channel].concat(_dtrCsvBlock(r.yesterday), _dtrCsvBlock(r.till_now)));
-  rows.push(['TOTAL'].concat(_dtrCsvBlock(d.totals.yesterday), _dtrCsvBlock(d.totals.till_now)));
-  const csv = [head1, head2].concat(rows).map(r => r.map(c => {
-    const s = String(c==null?'':c);
-    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
+function exportNewLaunch(){
+  const c = _nlData ? _nlCompute() : null;
+  if (!c || !c.rows.length) { alert('No data to export.'); return; }
+  const head = ['SKU', 'SKU Name', 'Category', 'Inv Stock'].concat(c.dates, ['Total Final Qty']);
+  const rows = c.rows.map(r => [r.sku, r.name, r.cat, r.stock === null ? '' : r.stock].concat(r.daily, [r.total]));
+  _NL_CATS.forEach(cat => {
+    const s = c.sum[cat];
+    rows.push(['', 'SUMMARY — ' + cat + ' (single)', cat, s.stock].concat(s.single, [s.single.reduce((a, b) => a + b, 0)]));
+    rows.push(['', 'SUMMARY — ' + cat + ' (in combos)', cat, ''].concat(s.combo, [s.combo.reduce((a, b) => a + b, 0)]));
+  });
+  const csv = [head].concat(rows).map(r => r.map(x => { const s = String(x == null ? '' : x); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'daily_target_report_' + d.asof + '.csv'; a.click();
+  a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+  a.download = 'new_launch_daily_sales_' + (_nlData.asof || '') + '.csv'; a.click();
 }
-function exportDTRExcel(){
-  const d = _dtrData;
-  if (!d || !d.rows || !d.rows.length){ alert('No data to export.'); return; }
-  window.location.href = '/api/daily_target_report/export.xlsx?asof=' + encodeURIComponent(d.asof || '');
-}
-window.loadDTR = loadDTR; window.exportDTR = exportDTR; window.exportDTRExcel = exportDTRExcel; window.renderDTRTable = renderDTRTable;
+window.loadNewLaunch = loadNewLaunch; window.renderNewLaunch = renderNewLaunch; window.copyNewLaunchMsg = copyNewLaunchMsg; window.exportNewLaunch = exportNewLaunch;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -32007,6 +32107,208 @@ def _build_daily_target_report(asof=None, force=False):
         "source_meta": meta,
     }
 
+
+NEW_LAUNCH_SKUS = [
+    "CMB-1000",
+    "CMB-0992",
+    "CMB-0993",
+    "CMB-0994",
+    "CMB-0995",
+    "CMB-0996",
+    "CMB-0997",
+    "CMB-0998",
+    "CMB-0999",
+    "CMB-1020",
+    "BR-0015",
+    "BR-0016",
+    "SW-0001",
+    "BM-0001",
+    "BH-2616",
+    "BH-2794",
+    "BTC-0048",
+    "BH-2790",
+    "LP-0442",
+    "BH-2780",
+    "BR-0017",
+    "BM-0002",
+    "BH-2782",
+    "LP-0441",
+    "GB-0001",
+    "BR-0018",
+    "BH-2783",
+    "BTC-0055",
+    "BH-2795",
+    "LP-0440",
+    "BR-0019",
+    "BM-0003",
+    "LP-0445",
+    "BH-2479",
+    "BTC-0182",
+    "BR-0020",
+    "BH-2785",
+    "BTC-0172",
+    "LP-0444",
+    "BH-2781",
+    "BR-0021",
+    "BH-2436",
+    "BH-2437",
+    "BH-2438",
+    "BH-2439",
+    "BH-2440",
+    "BH-2441",
+    "BH-2442",
+    "BH-2448",
+    "BH-2449",
+    "BH-2451",
+    "BH-2452",
+    "BH-2453",
+    "BH-2456",
+    "BH-2464",
+    "BH-2465",
+    "BH-2470",
+    "BH-2471",
+    "BH-2472",
+    "BH-2473",
+    "BH-2474",
+    "BH-2475",
+    "BH-2476",
+    "BH-2477",
+    "BH-2480",
+    "BH-2481",
+    "BH-2482",
+    "BH-2483",
+    "BH-2487",
+    "BH-2488",
+    "BH-2489",
+    "BH-2490",
+    "BH-2491",
+    "BH-2492",
+    "BH-2493",
+    "BH-2494",
+    "BH-2495",
+    "BH-2496",
+    "BH-2501",
+    "BH-2503",
+    "BH-2507",
+    "BH-2508",
+    "BH-2509",
+    "BH-2510",
+    "BH-2511",
+    "BH-2519",
+    "BH-2538",
+    "BH-2613",
+    "BH-2614",
+    "BH-2615",
+    "BH-2617",
+    "BH-2618",
+    "BH-2619",
+    "BH-2620",
+    "BH-2621",
+    "BH-2622",
+    "BH-2623",
+    "BH-2624",
+    "BH-2709",
+    "BH-2710",
+    "BH-2711",
+    "BH-2712",
+    "BH-2713",
+    "BH-2714",
+    "BH-2715",
+    "BH-2716",
+    "BH-2717",
+    "BH-2722",
+    "BH-2726",
+    "BH-2727",
+    "BH-2728",
+    "BH-2729",
+    "BH-2786",
+    "CMB-0863",
+    "CMB-1001",
+    "CMB-1002",
+    "CMB-1003",
+    "CMB-1004",
+    "CMB-1005",
+    "CMB-1006",
+    "CMB-1007",
+    "CMB-1008",
+    "CMB-1009",
+    "CMB-1010",
+    "BH-2753",
+    "BH-2754",
+    "BH-2755",
+    "BH-2757",
+    "BH-2758",
+    "BH-2759",
+    "BH-2760",
+    "BH-2761",
+    "BH-2762",
+    "BH-2763",
+    "BH-2764",
+    "BH-2766",
+    "BH-2768",
+    "BH-2769",
+    "BH-2771",
+    "BH-2772",
+    "BH-2773",
+    "BH-2774",
+    "BH-2775",
+    "BH-2776",
+    "BH-2777",
+    "BH-2787",
+]
+
+@app.route("/api/new_launch_daily")
+def api_new_launch_daily():
+    """Target tab > New Launch Daily Sales: cosa_orderdate Final Qty per SKU per Order Date (last N days ending asof).
+    Inv Stock / names / photos / combo mapping frontend me All Product (master) se aate hain."""
+    try:
+        days = max(1, min(31, int(request.args.get("days", "7") or 7)))
+        force = request.args.get("fresh", "") == "1"
+        ist_today = (datetime.utcnow() + timedelta(hours=5, minutes=30)).date()
+        try:
+            end = datetime.strptime(request.args.get("asof", "").strip(), "%Y-%m-%d").date()
+        except Exception:
+            end = ist_today - timedelta(days=1)          # default = yesterday (morning report)
+        dates = [(end - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d") for i in range(days)]
+        dset = set(dates)
+        df = _fetch_cossa_orderdate_shared(force=force)
+        cols = [str(c).strip() for c in df.columns]
+        def _at(i): return cols[i] if len(cols) > i else None
+        C_DATE = find_col(cols, "Order Date", "order date", "orderdate") or _at(0)
+        C_QTY = find_col(cols, "Final Qty", "final quantity", "final_qty") or _at(6)
+        C_SKU = _at(2) or find_col(cols, "SKU", "item code")        # same layout as COSA: C = SKU, G = Final Qty
+        if not (C_DATE and C_QTY and C_SKU):
+            return jsonify({"error": "cosa_orderdate me Order Date / SKU / Final Qty column nahi mila"}), 500
+        def _col(c):
+            return df.iloc[:, cols.index(c)].tolist()
+        out, dmemo, qmemo = {}, {}, {}
+        for dv, sv, qv in zip(_col(C_DATE), _col(C_SKU), _col(C_QTY)):
+            dk = str(dv)
+            iso = dmemo.get(dk, 0)
+            if iso == 0:
+                dt0 = parse_date_any(dv)
+                iso = dmemo[dk] = (dt0.strftime("%Y-%m-%d") if dt0 is not None else None)
+            if iso is None or iso not in dset:
+                continue
+            sku = clean(sv).strip().upper()
+            if not sku:
+                continue
+            qk = str(qv)
+            q = qmemo.get(qk)
+            if q is None:
+                q = qmemo[qk] = to_num(qv)
+            if not q:
+                continue
+            d = out.setdefault(sku, {})
+            d[iso] = d.get(iso, 0) + q
+        for sku, d in out.items():
+            for k in list(d.keys()):
+                v = round(float(d[k]), 2)
+                d[k] = int(v) if v == int(v) else v
+        return jsonify({"asof": end.strftime("%Y-%m-%d"), "dates": dates, "sales": out, "skus": NEW_LAUNCH_SKUS,
+                        "source": "cosa_orderdate Final Qty"})
+    except Exception as e:
+        return jsonify({"error": f"new launch daily sales build failed: {e}"}), 500
 
 @app.route("/api/daily_target_report")
 def api_daily_target_report():
