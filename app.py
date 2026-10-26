@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.89 (TARGET TAB: NEW LAUNCH DAILY SALES — PROFESSIONAL TABLE + CLEAN EXPORT)
+# - New Launch table ab Category > Single / Via Combos / Total rows me (export jaisa), Grand Total ke saath. Export CSV me Excel garbled characters ("â€”") fix (UTF-8 BOM), readable date headers, Category Summary + SKU-wise sections. Baaki kuch change nahi.
 # Cosa Nostraa — V24.88 (TARGET TAB: DAILY TARGET REPORT HATA KAR NEW LAUNCH DAILY SALES TABLE)
 # - Target tab se Daily Target Report (projection vs actual) table hata di. Uski jagah naya New Launch - Daily Sales table: Bracelet / Bookmark / Photo Frame, pichhle 7 din ka din-wise Final Qty (single + combo), copy-able message, SKU-wise table (Inv Stock All Product se). Sales cosa_orderdate se. Baaki kuch change nahi.
 # Cosa Nostraa — V24.87 (REPEAT ORDERS TRANSACTIONS: SKU CODE + SKU NAME SAAF)
@@ -10060,7 +10062,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">New Launch — Daily Sales (Bracelet · Bookmark · Photo Frame)</div>
-      <div class="insights-sub">Pieces sold on each of the last 7 days, single items and combos together (combo sales = child pieces inside the combos). Sales = cosa_orderdate Final Qty (order date); Inv Stock = All Product sheet. Default report date = yesterday. The message below can be copied and shared; the table is made to be screenshotted every morning.</div>
+      <div class="insights-sub">Pieces sold on each of the last 7 days, single items and combos together (combo sales = child pieces inside the combos). Sales are counted by order date; Inv Stock is the current inventory. Default report date = yesterday. The message below can be copied and shared; the table is made to be screenshotted every morning.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -16581,7 +16583,7 @@ function _nlMessage(c){
   const d = _nlData, last = c.dates.length - 1;
   const L = [];
   L.push('📊 NEW LAUNCH SALES — ' + _nlDay(c.dates[last]) + ' ' + _nlDmy(c.dates[last]).slice(-4));
-  L.push('(cosa_orderdate Final Qty · single items + combos)');
+  L.push('(Final Qty by order date · single items + combos)');
   L.push('');
   _NL_CATS.forEach(cat => {
     const s = c.sum[cat];
@@ -16609,23 +16611,28 @@ function renderNewLaunch(){
   const msg = _nlMessage(c);
   window._nlMsgText = msg;
   if (msgHost) msgHost.innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;line-height:1.55;margin:0 0 14px;padding:14px 16px;background:#fffaf0;border:1px solid rgba(184,147,63,.35);border-radius:12px;color:#2a2418">' + escHtml(msg) + '</pre>';
-  /* summary table: category x day */
+  /* summary table: category x day  (Single / Via Combos / Total rows — same layout as the export) */
   const th = dates.map((dt, i) => '<th style="text-align:center;white-space:nowrap' + (i === last ? ';background:#f4e6bd' : '') + '">' + escHtml(_nlDay(dt)) + '</th>').join('');
-  const sRows = _NL_CATS.map(cat => {
+  const _bd = 'border-bottom:1px solid rgba(0,0,0,.08)';
+  const _cell = (v, i, bold, bg) => '<td style="text-align:center;' + _bd + (bold ? ';font-weight:800' : '') + (bg ? ';background:' + bg : (i === last ? ';background:#fbf3d9' : '')) + (!v && !bold ? ';color:#b5ab93' : '') + '">' + ((v || bold) ? _nlN(v) : '–') + '</td>';
+  const sum_ = a => a.reduce((x, y) => x + y, 0);
+  let sRows = '';
+  _NL_CATS.forEach(cat => {
     const s = c.sum[cat];
-    const cells = dates.map((dt, i) => {
-      const t = s.single[i] + s.combo[i];
-      return '<td style="text-align:center' + (i === last ? ';background:#fbf3d9' : '') + '"><b>' + _nlN(t) + '</b>' + (t ? '<div style="font-size:10px;color:#8c7a42;font-weight:700">' + _nlN(s.single[i]) + ' + ' + _nlN(s.combo[i]) + ' cmb</div>' : '') + '</td>';
-    }).join('');
-    const ts = s.single.reduce((a, b) => a + b, 0), tc = s.combo.reduce((a, b) => a + b, 0);
-    return '<tr><td style="font-weight:800">' + escHtml(cat) + '</td>' + cells + '<td style="text-align:center"><b>' + _nlN(ts + tc) + '</b><div style="font-size:10px;color:#8c7a42;font-weight:700">' + _nlN(ts) + ' + ' + _nlN(tc) + ' cmb</div></td><td style="text-align:center;font-weight:800">' + _nlN(s.stock) + '</td></tr>';
-  }).join('');
-  const totCells = dates.map((dt, i) => '<td style="text-align:center;font-weight:900">' + _nlN(_NL_CATS.reduce((a, k) => a + c.sum[k].single[i] + c.sum[k].combo[i], 0)) + '</td>').join('');
-  const grand = _NL_CATS.reduce((a, k) => a + c.sum[k].single.reduce((x, y) => x + y, 0) + c.sum[k].combo.reduce((x, y) => x + y, 0), 0);
+    const tot = s.single.map((v, i) => v + s.combo[i]);
+    sRows += '<tr><td rowspan="3" style="font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + escHtml(cat) + '</td>'
+      + '<td style="' + _bd + ';white-space:nowrap">Single</td>' + s.single.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.single), -1, false, '#faf6ea')
+      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.stock) + '</td></tr>'
+      + '<tr><td style="' + _bd + ';white-space:nowrap">Via Combos</td>' + s.combo.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.combo), -1, false, '#faf6ea') + '</tr>'
+      + '<tr style="background:#f3ecd2"><td style="font-weight:900;border-bottom:2px solid rgba(0,0,0,.18);white-space:nowrap">Total</td>' + tot.map((v, i) => _cell(v, i, true, i === last ? '#f0dfa6' : '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)')).join('') + _cell(sum_(tot), -1, true, '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)') + '</tr>';
+  });
+  const allTot = dates.map((dt, i) => _NL_CATS.reduce((a, k) => a + c.sum[k].single[i] + c.sum[k].combo[i], 0));
+  const grand = sum_(allTot);
   const stockAll = _NL_CATS.reduce((a, k) => a + c.sum[k].stock, 0);
-  const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 8px;color:#2a2418">New Launch — Pieces sold per day (single + combos) · till ' + escHtml(_nlDmy(dates[last])) + '</div>'
-    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th></tr></thead><tbody>' + sRows
-    + '<tr style="background:#eef7ea"><td style="font-weight:900">TOTAL</td>' + totCells + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td></tr></tbody></table></div>';
+  const grandRow = '<tr style="background:#e3f0dd"><td colspan="2" style="font-weight:900">GRAND TOTAL</td>' + allTot.map(v => '<td style="text-align:center;font-weight:900">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td></tr>';
+  const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 2px;color:#2a2418">New Launch — Daily Sales Summary</div>'
+    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock = current inventory</div>'
+    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
   /* SKU-wise table */
   const catSel = document.getElementById('nlCat'), hideZero = document.getElementById('nlHideZero');
   const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
@@ -16649,7 +16656,7 @@ function renderNewLaunch(){
   const tr = dates.map((dt, i) => list.reduce((a, r) => a + r.daily[i], 0));
   const foot = list.length ? '<tr style="background:#eef7ea;font-weight:900"><td>Total (' + list.length + ' SKUs)</td><td></td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.stock || 0), 0)) + '</td>' + tr.map(v => '<td style="text-align:center">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center">' + _nlN(tr.reduce((a, b) => a + b, 0)) + '</td></tr>' : '';
   const skuTable = '<div style="margin-top:18px"><div style="font-weight:900;font-size:1rem;margin:0 0 4px;color:#2a2418">SKU-wise Final Qty &amp; Inv Stock</div>'
-    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty from cosa_orderdate; Inv Stock = All Product sheet.</div>'
+    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty by order date; Inv Stock = current inventory.</div>'
     + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:900px"><thead><tr><th>SKU</th><th>Category</th><th style="text-align:center">Inv Stock</th>' + th + '<th style="text-align:center">Total</th></tr></thead><tbody>' + (body || '<tr><td colspan="99" class="home-empty" style="padding:20px;text-align:center">No SKUs for this filter.</td></tr>') + foot + '</tbody></table></div>';
   host.innerHTML = summary + skuTable;
 }
@@ -16663,16 +16670,36 @@ function copyNewLaunchMsg(){
 function exportNewLaunch(){
   const c = _nlData ? _nlCompute() : null;
   if (!c || !c.rows.length) { alert('No data to export.'); return; }
-  const head = ['SKU', 'SKU Name', 'Category', 'Inv Stock'].concat(c.dates, ['Total Final Qty']);
-  const rows = c.rows.map(r => [r.sku, r.name, r.cat, r.stock === null ? '' : r.stock].concat(r.daily, [r.total]));
+  const dates = c.dates, last = dates.length - 1, dl = dates.map(_nlDay);
+  const add = (a, b) => a.map((v, i) => v + b[i]);
+  const sm = a => a.reduce((x, y) => x + y, 0);
+  const out = [];
+  out.push(['New Launch - Daily Sales Report']);
+  out.push(['Report Date', _nlDmy(dates[last])]);
+  out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
+  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock = current inventory']);
+  out.push([]);
+  out.push(['CATEGORY SUMMARY']);
+  out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock']));
+  const gt = dates.map(() => 0); let gStock = 0;
   _NL_CATS.forEach(cat => {
-    const s = c.sum[cat];
-    rows.push(['', 'SUMMARY — ' + cat + ' (single)', cat, s.stock].concat(s.single, [s.single.reduce((a, b) => a + b, 0)]));
-    rows.push(['', 'SUMMARY — ' + cat + ' (in combos)', cat, ''].concat(s.combo, [s.combo.reduce((a, b) => a + b, 0)]));
+    const s = c.sum[cat], t = add(s.single, s.combo);
+    out.push([cat, 'Single'].concat(s.single, [sm(s.single), '']));
+    out.push([cat, 'Via Combos'].concat(s.combo, [sm(s.combo), '']));
+    out.push([cat, 'Total'].concat(t, [sm(t), s.stock]));
+    t.forEach((v, i) => { gt[i] += v; }); gStock += s.stock;
   });
-  const csv = [head].concat(rows).map(r => r.map(x => { const s = String(x == null ? '' : x); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');
+  out.push(['GRAND TOTAL', ''].concat(gt, [sm(gt), gStock]));
+  out.push([]);
+  out.push(['SKU-WISE DETAIL']);
+  out.push(['SKU', 'SKU Name', 'Category', 'Inv Stock'].concat(dl, ['Total']));
+  const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
+  c.rows.slice().sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku))
+    .forEach(r => out.push([r.sku, r.name, r.cat, r.stock === null ? '' : r.stock].concat(r.daily, [r.total])));
+  const csv = out.map(r => r.map(x => { const t = String(x == null ? '' : x); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(',')).join('\r\n');
+  /* UTF-8 BOM so Excel reads the file correctly (no garbled characters) */
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
+  a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], {type: 'text/csv;charset=utf-8'}));
   a.download = 'new_launch_daily_sales_' + (_nlData.asof || '') + '.csv'; a.click();
 }
 window.loadNewLaunch = loadNewLaunch; window.renderNewLaunch = renderNewLaunch; window.copyNewLaunchMsg = copyNewLaunchMsg; window.exportNewLaunch = exportNewLaunch;
