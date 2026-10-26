@@ -1,3 +1,10 @@
+# Cosa Nostraa — V24.87 (REPEAT ORDERS TRANSACTIONS: SKU CODE + SKU NAME SAAF)
+# - Transactions view ki SKU cell ab SKU code (ek line me) aur neeche SKU name dikhati hai; tedhi/akshar-akshar wali wrapping theek. Baaki kuch change nahi.
+# Cosa Nostraa — V24.86 (LAUNCH DATE: SAAL NAHI LIKHA TO 2026 · NA MILE TO FIRST DISPATCH DATE, KISI BHI FORMAT ME)
+# - All Product Launch Date me sirf din+mahina ho (15-Sep, 15 Sep, 15/09) to saal 2026. Sheet me na ho/blank ho to SKU ki first dispatch date (int/Excel serial/yyyymmdd/text/str sab handle). Baaki kuch change nahi.
+# Cosa Nostraa — V24.85 (REPEAT ORDERS TRANSACTIONS: IN CMB SOLD ROWS · LAUNCH DATE SAB JAGAH SAHI)
+# - Repeat Orders > Transactions view (aur export) me ab SKU paste / date range / filters lagane par jo SKU kisi CMB me bika hai uski rows bhi "SKU (In CMB Sold)" naam se aati hain (In CMBs Sold qty = parent qty x pieces, pivot jaisi).
+# - Launch Date: ab sab jagah (Launch Month filter, New Launch, SKU Details, export) All Product sheet ki date ek hi robust parser se padhi jaati hai ("Jul-23" jaise formats ab galat nahi). Baaki kuch change nahi.
 # Cosa Nostraa — V24.84 (REPEAT ORDERS EXPORT · LAUNCH DATE = ALL PRODUCT SHEET (ANY FORMAT), NOT FOUND -> COSSA DISPATCH DATE)
 # - Export ka Launch Date ab All Product sheet ki "Launch date" se (date/text/int/Excel serial/Jul-23 jaise formats handle). Sheet me na mile ya blank ho to cossa sheet ki pehli Dispatch Date. Baaki kuch change nahi.
 # Cosa Nostraa — V24.83 (STABILITY: SKU FINDER HF-SPACE TIMEOUT + PRODUCT IMAGE PROXY FAIL-FAST)
@@ -1830,6 +1837,7 @@ def find_col(cols, *cands):
             if k and k in nk: return orig
     return None
 
+LAUNCH_DEFAULT_YEAR = 2026   # All Product Launch Date me saal na likha ho to yeh saal lete hain
 _MON_MAP = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"oct":10,"nov":11,"dec":12}
 
 def _launch_ymd_iso(y, m, d):
@@ -1924,6 +1932,16 @@ def parse_launch_date_any(v):
     m = re.fullmatch(r"(\d{1,2})[-/.](\d{4})", s)
     if m:
         return _launch_ymd_iso(m.group(2), m.group(1), 1)
+    # V24.86: SAAL NAHI LIKHA -> default 2026:  15-Sep / 15 Sep / 15 September / 15/09 / 15-09
+    m = re.fullmatch(r"(\d{1,2})[-/. ,]+([A-Za-z]{3,9})\.?", s)
+    if m and m.group(2)[:3].lower() in _MON_MAP:
+        return _launch_ymd_iso(LAUNCH_DEFAULT_YEAR, _MON_MAP[m.group(2)[:3].lower()], m.group(1))
+    m = re.fullmatch(r"(\d{1,2})[-/.](\d{1,2})", s)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        if b > 12 and a <= 12:
+            a, b = b, a
+        return _launch_ymd_iso(LAUNCH_DEFAULT_YEAR, b, a)
     return ""
 
 def classify_status(item, current_month_key=""):
@@ -4521,11 +4539,23 @@ def _refresh_data():
         taxon = norm_taxon(r.get(I_TAX,"General")) if I_TAX else "General"
         plat  = clean(r.get(I_PLT,"N/A"),"N/A")        if I_PLT else "N/A"
         dims  = clean(r.get(I_DIM,""))                  if I_DIM else ""
-        # Launch Date — kisi bhi format mein ho, robust parse
+        # Launch Date — V24.85: ek hi robust parser (parse_launch_date_any) sab jagah: Launch Month filter, New Launch status,
+        # SKU Details aur Repeat Orders export. Purana pandas parser ("Jul-23" ko 23 July samajhta tha) sirf last fallback.
         launch_key, launch_label, launch_iso = "", "", ""
+        launch_sheet_iso = ""
         if I_LNCH:
             _lv = r.get(I_LNCH, "")
-            if _lv is not None and str(_lv).strip() and str(_lv).strip().lower() not in ("nan", "na", "n/a", "-", "none"):
+            if isinstance(_lv, pd.Series):      # duplicate "Launch Date" headers -> pehli non-blank value
+                _vals = [x for x in _lv.tolist() if x is not None and str(x).strip() and str(x).strip().lower() not in ("nan", "nat", "na", "n/a", "-", "none")]
+                _lv = _vals[0] if _vals else ""
+            launch_sheet_iso = parse_launch_date_any(_lv)
+            if launch_sheet_iso:
+                _ld = pd.to_datetime(launch_sheet_iso, errors="coerce")
+                if not pd.isna(_ld):
+                    launch_iso   = _ld.strftime("%Y-%m-%d")
+                    launch_key   = _ld.strftime("%Y-%m")
+                    launch_label = _ld.strftime("%B %Y")
+            elif _lv is not None and str(_lv).strip() and str(_lv).strip().lower() not in ("nan", "na", "n/a", "-", "none"):
                 _sv = str(_lv).strip()
                 _ld = pd.NaT
                 if re.match(r"^\d{4}[-/]\d{1,2}([-/]\d{1,2})?$", _sv):
@@ -4538,8 +4568,6 @@ def _refresh_data():
                     launch_iso   = _ld.strftime("%Y-%m-%d")
                     launch_key   = _ld.strftime("%Y-%m")
                     launch_label = _ld.strftime("%B %Y")
-        # Repeat Orders export ke liye alag, robust Launch Date (kisi bhi format me) — purana launch_date/launch_key untouched.
-        launch_sheet_iso = parse_launch_date_any(r.get(I_LNCH, "")) if I_LNCH else ""
         img   = _normalize_inventory_image_url(r.get(I_IMG, "")) if I_IMG else ""
         stk   = to_int(r.get(I_STK,0))                 if I_STK else 0
         stk_3p = to_int(r.get(I_STK_3P,0))             if I_STK_3P else None
@@ -14146,6 +14174,32 @@ function applyRO(){
       inv_stock: roInvStock(item, roInvCtx), inv_wip: wipOf(item),
       image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
     })));
+    /* V24.85: In CMB Sold transactions — jo SKU kisi parent CMB me bika hai uski rows bhi (SKU + "(In CMB Sold)"), pivot ke In CMBs Sold jaisa hi qty (parent qty x pieces) aur wahi filters (date/type/channel/customer). */
+    if (pastedSkuSet || hasEntryFilter || txt) {
+      const _pIdx = cnxComboParentIndex();
+      filtered.forEach(item => {
+        const ck = String(item.sku || '').trim().toUpperCase();
+        const parents = (ck && _pIdx.get(ck)) || [];
+        if (!parents.length) return;
+        const seenP = new Set();
+        parents.forEach(parent => {
+          const pk = String(parent && parent.sku || '').trim().toUpperCase();
+          if (!pk || seenP.has(pk)) return;
+          seenP.add(pk);
+          const pieces = cnxChildComponentQty(parent, ck);
+          (parent.sales_entries || []).filter(entOk).forEach(pe => {
+            const cq = (parseFloat(pe.qty) || 0) * pieces;
+            if (!cq) return;
+            txns.push({
+              ...pe, sku: item.sku, sku_name: item.sku_name, qty: 0, rev: 0, sp: 0, avg_selling_price: null,
+              _cmb: true, _cmbParent: parent.sku, _cmbQty: cq,
+              inv_stock: roInvStock(item, roInvCtx), inv_wip: wipOf(item),
+              image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
+            });
+          });
+        });
+      });
+    }
     txns.sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
     roTxns = txns;
 
@@ -14188,24 +14242,27 @@ function applyRO(){
       const tsp = parseFloat(t.sp) || (tq ? (parseFloat(t.rev)||0) / tq : 0);
       const tMrp = parseFloat(t.mrp) || 0;
       const tDisc = (tMrp > 0 && tsp > 0 && tsp < tMrp) ? Math.round((tMrp - tsp) / tMrp * 100 * 10) / 10 : 0;
+      const isCmbTx = !!t._cmb, cmbQ = isCmbTx ? (parseFloat(t._cmbQty) || 0) : 0;
+      const cmbTag = isCmbTx ? `<div style="margin-top:3px;color:#b68b00;font-weight:800;font-size:11px">(In CMB Sold)</div><div class="small-note" style="margin-top:2px;white-space:normal">via ${safeText(t._cmbParent)}</div>` : '';
+      const txName = String(t.sku_name || '').trim();
+      const txNameHtml = (txName && txName.toUpperCase() !== String(t.sku || '').trim().toUpperCase()) ? `<div style="margin-top:3px;font-size:12px;font-weight:600;color:#4a3f2a;white-space:normal;line-height:1.35">${safeText(txName)}</div>` : '';
       return `<tr>
         <td style="text-align:center"><input type="checkbox" ${ck} onchange="roToggleTxn('${skuEsc}', this.checked)"></td>
         <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
-        <td><div class="sku-cell">${roThumb(t.image_url)}<button class="sku-link" onclick="openSkuDetails('${skuEsc}')">${skuLabel(t.sku, t.sku_name)}</button></div></td>
+        <td style="min-width:230px"><div class="sku-cell">${roThumb(t.image_url)}<div style="flex:1;min-width:150px"><button class="sku-link" style="white-space:nowrap !important;word-break:normal !important;overflow-wrap:normal !important;text-align:left !important;font-size:13px" onclick="openSkuDetails('${skuEsc}')">${safeText(t.sku)}</button>${txNameHtml}${cmbTag}</div></div></td>
         <td>${safeText(t.dimensions || '—')}</td>
         <td>${safeText(t.cust)}</td>
         <td>${safeText(t.type)}</td>
         <td>${safeText(t.channel)}</td>
         <td>${safeText(saleModeText(t) || '—')}</td>
-        <td class="gold">${tq}</td>
-        <td class="muted">0</td>
-        ${empTx ? '' : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`}
-        ${empTx ? '' : `<td>${tDisc}%</td>`}
-        ${empTx ? '' : `<td class="gold"><b>${fmt(parseFloat(t.rev)||0)}</b></td>`}
+        ${isCmbTx ? `<td class="muted">0</td><td class="gold">${cmbQ}</td>` : `<td class="gold">${tq}</td><td class="muted">0</td>`}
+        ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`)}
+        ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td>${tDisc}%</td>`)}
+        ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td class="gold"><b>${fmt(parseFloat(t.rev)||0)}</b></td>`)}
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
         <td><input type="text" class="ro-remark" value="${(roRemarks[t.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)"></td>
-        <td class="gold"><b>${Math.round(tq)}</b></td>
+        <td class="gold"><b>${Math.round(isCmbTx ? cmbQ : tq)}</b></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
       ? `<tr><td colspan="16" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
@@ -14571,21 +14628,44 @@ function _roExpTypes(ents, typeSel){
   const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
   return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
 }
+function _roAnyDate(v){
+  // Dispatch/launch date kisi bhi form me: Date, Excel serial, yyyymmdd, unix, ISO, dd/mm/yyyy, "24 Jul 2023", "Jul 24, 2023"
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0,10);
+  let n = (typeof v === 'number') ? v : (/^\s*\d+(\.\d+)?\s*$/.test(String(v)) ? Number(v) : NaN);
+  if (Number.isFinite(n)) {
+    if (n >= 19000101 && n <= 21001231 && Number.isInteger(n)) { const t=String(n); return _bizIso(t.slice(0,4)+'-'+t.slice(4,6)+'-'+t.slice(6,8)); }
+    if (n >= 20000 && n < 80000) return new Date(Date.UTC(1899,11,30) + Math.floor(n)*86400000).toISOString().slice(0,10);
+    if (n >= 5e11 && n <= 4.2e12) return new Date(n).toISOString().slice(0,10);
+    if (n >= 5e8 && n <= 4.2e9) return new Date(n*1000).toISOString().slice(0,10);
+    return '';
+  }
+  const iso = _bizIso(v);
+  if (iso) return iso;
+  const raw = String(v).trim().replace(/(\d)(st|nd|rd|th)\b/i,'$1');
+  const MON = {jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+  let m = raw.match(/^(\d{1,2})[-\/. ,]+([A-Za-z]{3,9})\.?[-\/. ,]+(\d{2,4})/);
+  if (m && MON[m[2].slice(0,3).toLowerCase()] != null) { let y=+m[3]; if(y<100) y+=2000; return new Date(Date.UTC(y,MON[m[2].slice(0,3).toLowerCase()],+m[1])).toISOString().slice(0,10); }
+  m = raw.match(/^([A-Za-z]{3,9})\.?[-\/. ,]+(\d{1,2})[-\/. ,]+(\d{2,4})/);
+  if (m && MON[m[1].slice(0,3).toLowerCase()] != null) { let y=+m[3]; if(y<100) y+=2000; return new Date(Date.UTC(y,MON[m[1].slice(0,3).toLowerCase()],+m[2])).toISOString().slice(0,10); }
+  return '';
+}
 function _roLaunchDate(item){
   // Launch Date = All Product (inventory) sheet ki Launch date (kisi bhi format me, backend parse karta hai);
   // sheet me SKU na mile / date blank ho to cossa sheet ki pehli Dispatch Date.
   if (!item) return '';
-  const ld = _bizIso(item.launch_date_sheet);
+  const ld = _bizIso(item.launch_date_sheet) || _bizIso(item.launch_date);
   if (ld) return ld;
   let first = '';
   const scan = ents => { for (const e of (ents || [])) {
     if ((parseFloat(e && e.qty) || 0) <= 0) continue;
-    const dd = _bizIso(e && (e.date || e.dispatch_date));
+    const dd = _roAnyDate(e && (e.date || e.dispatch_date));
     if (dd && (!first || dd < first)) first = dd;
   } };
   scan(item.sales_entries);
   const key = String(item.sku || '').trim().toUpperCase();
   ((key && cnxComboParentIndex().get(key)) || []).forEach(p => scan(p && p.sales_entries));
+  if (!first) first = _roAnyDate(item.first_dispatch_date);
   return first;
 }
 
@@ -14619,6 +14699,36 @@ function exportRO(fmtType){
       const mrp0 = parseFloat(mrpMap[skuKey]) || 0;
       const sp0 = parseFloat(t.sp) || (parseFloat(t.qty) ? (parseFloat(t.rev)||0) / parseFloat(t.qty) : 0);
       const discPct0 = (mrp0 > 0 && sp0 > 0 && sp0 < mrp0) ? Math.round((mrp0 - sp0) / mrp0 * 100 * 10) / 10 : 0;
+      if (t._cmb) { /* V24.85: In CMB Sold transaction row */
+        const cq0 = parseFloat(t._cmbQty) || 0;
+        data.push({
+          'Row Type': 'In CMB Sold',
+          'Dispatch Date': t.date === 'N/A' ? '' : t.date,
+          SKU: t.sku,
+          'CN Name': _roExpCn(t.sku, parentItem.cn_name),
+          'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
+          'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
+          'Set Item Of': t._cmbParent || '',
+          'Stone Color': stoneMap[skuKey] || '',
+          'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
+          'Pack Details': packMap[skuKey] || '',
+          Customer: t.cust,
+          Type: t.type,
+          'Online/Offline': saleModeText(t),
+          'Individual Sold': 0,
+          'In CMBs Sold': cq0,
+          'MRP': mrp0,
+          ...(emp0 ? {} : {'Avg Selling Price':'','Net Revenue':'','Discount %':''}),
+          'Inv Stock': parentStock,
+          'Inv WIP': parentWip,
+          'Remark': 'In CMB Sold (via ' + (t._cmbParent || '') + ')',
+          'Image Link': t.image_url || '',
+          'Total Sold': cq0,
+          'Online Sold': cnxIsOfflineEntry(t) ? 0 : cq0,
+          'Offline Sold': cnxIsOfflineEntry(t) ? cq0 : 0,
+        });
+        return;
+      }
       data.push({
       'Row Type': children.length ? 'Gift Set' : 'Product',
       'Dispatch Date': t.date === 'N/A' ? '' : t.date,
