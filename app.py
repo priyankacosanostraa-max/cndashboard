@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.90 (NEW LAUNCH DAILY SALES: IMAGE LINK + INV WIP, TABLE AUR EXPORT DONO ME)
+# - New Launch SKU table me Image Link (View Image) + Inv WIP; category summary me Inv WIP; export CSV me SKU ke saath Image Link, Inv Stock, Inv WIP. Baaki kuch change nahi.
 # Cosa Nostraa — V24.89 (TARGET TAB: NEW LAUNCH DAILY SALES — PROFESSIONAL TABLE + CLEAN EXPORT)
 # - New Launch table ab Category > Single / Via Combos / Total rows me (export jaisa), Grand Total ke saath. Export CSV me Excel garbled characters ("â€”") fix (UTF-8 BOM), readable date headers, Category Summary + SKU-wise sections. Baaki kuch change nahi.
 # Cosa Nostraa — V24.88 (TARGET TAB: DAILY TARGET REPORT HATA KAR NEW LAUNCH DAILY SALES TABLE)
@@ -16519,6 +16521,7 @@ function _nlDmy(iso){
 function _nlDay(iso){
   try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {weekday:'short', day:'2-digit', month:'short', timeZone:'UTC'}).replace(',', ''); } catch (e) { return iso; }
 }
+function _nlImg(it){ const u = it && it.image_url ? String(it.image_url).trim() : ''; return (u && u.toLowerCase() !== 'nan') ? u : ''; }
 function _nlN(v){ return Math.round(Number(v) || 0).toLocaleString('en-IN'); }
 function loadNewLaunch(force = false){
   const host = document.getElementById('nlContent');
@@ -16550,13 +16553,14 @@ function _nlCompute(){
     const it = idx.get(sku) || null;
     const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
     return {sku, it, cat: _nlCatOf(it, sku), daily, total: daily.reduce((a, b) => a + b, 0),
-            stock: it ? (Number(it.inv_stock) || 0) : null, name: it ? String(it.sku_name || '') : ''};
+            stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null,
+            img: _nlImg(it), name: it ? String(it.sku_name || '') : ''};
   });
   const sum = {};
-  _NL_CATS.forEach(c => { sum[c] = {single: dates.map(() => 0), combo: dates.map(() => 0), stock: 0, skus: 0}; });
+  _NL_CATS.forEach(c => { sum[c] = {single: dates.map(() => 0), combo: dates.map(() => 0), stock: 0, wip: 0, skus: 0}; });
   rows.forEach(r => {
     if (!sum[r.cat]) return;
-    sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0);
+    sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0); sum[r.cat].wip += (r.wip || 0);
     r.daily.forEach((q, i) => { sum[r.cat].single[i] += q; });
   });
   /* Combo sales: parent CMB sold qty x pieces of each listed child SKU (same rule as In CMBs Sold elsewhere) */
@@ -16598,7 +16602,7 @@ function _nlMessage(c){
       L.push('  ' + _nlDay(dt) + ': ' + _nlN(s.single[i] + s.combo[i]) + ' pcs  [' + _nlN(s.single[i]) + ' single + ' + _nlN(s.combo[i]) + ' in combos]');
     });
     const ts = s.single.reduce((a, b) => a + b, 0), tc = s.combo.reduce((a, b) => a + b, 0);
-    L.push('  Total ' + c.dates.length + ' days: ' + _nlN(ts + tc) + ' pcs  [' + _nlN(ts) + ' single + ' + _nlN(tc) + ' in combos]  |  Inv Stock: ' + _nlN(s.stock));
+    L.push('  Total ' + c.dates.length + ' days: ' + _nlN(ts + tc) + ' pcs  [' + _nlN(ts) + ' single + ' + _nlN(tc) + ' in combos]  |  Inv Stock: ' + _nlN(s.stock) + '  |  Inv WIP: ' + _nlN(s.wip));
   });
   return L.join('\n');
 }
@@ -16622,17 +16626,19 @@ function renderNewLaunch(){
     const tot = s.single.map((v, i) => v + s.combo[i]);
     sRows += '<tr><td rowspan="3" style="font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + escHtml(cat) + '</td>'
       + '<td style="' + _bd + ';white-space:nowrap">Single</td>' + s.single.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.single), -1, false, '#faf6ea')
-      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.stock) + '</td></tr>'
+      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.stock) + '</td>'
+      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.wip) + '</td></tr>'
       + '<tr><td style="' + _bd + ';white-space:nowrap">Via Combos</td>' + s.combo.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.combo), -1, false, '#faf6ea') + '</tr>'
       + '<tr style="background:#f3ecd2"><td style="font-weight:900;border-bottom:2px solid rgba(0,0,0,.18);white-space:nowrap">Total</td>' + tot.map((v, i) => _cell(v, i, true, i === last ? '#f0dfa6' : '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)')).join('') + _cell(sum_(tot), -1, true, '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)') + '</tr>';
   });
   const allTot = dates.map((dt, i) => _NL_CATS.reduce((a, k) => a + c.sum[k].single[i] + c.sum[k].combo[i], 0));
   const grand = sum_(allTot);
   const stockAll = _NL_CATS.reduce((a, k) => a + c.sum[k].stock, 0);
-  const grandRow = '<tr style="background:#e3f0dd"><td colspan="2" style="font-weight:900">GRAND TOTAL</td>' + allTot.map(v => '<td style="text-align:center;font-weight:900">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td></tr>';
+  const wipAll = _NL_CATS.reduce((a, k) => a + c.sum[k].wip, 0);
+  const grandRow = '<tr style="background:#e3f0dd"><td colspan="2" style="font-weight:900">GRAND TOTAL</td>' + allTot.map(v => '<td style="text-align:center;font-weight:900">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td><td style="text-align:center;font-weight:900">' + _nlN(wipAll) + '</td></tr>';
   const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 2px;color:#2a2418">New Launch — Daily Sales Summary</div>'
-    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock = current inventory</div>'
-    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
+    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock / Inv WIP = current inventory</div>'
+    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
   /* SKU-wise table */
   const catSel = document.getElementById('nlCat'), hideZero = document.getElementById('nlHideZero');
   const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
@@ -16650,14 +16656,15 @@ function renderNewLaunch(){
   if (hz) list = list.filter(r => r.total !== 0);
   list.sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku));
   const body = list.map(r => '<tr><td><div class="sku-cell">' + roThumb(r.it && r.it.image_url) + '<div style="min-width:130px"><b style="white-space:nowrap">' + escHtml(r.sku) + '</b>' + (r.name && r.name.toUpperCase() !== r.sku ? '<div style="font-size:12px;font-weight:600;color:#4a3f2a;white-space:normal;line-height:1.3">' + escHtml(r.name) + '</div>' : '') + '</div></div></td>'
-    + '<td>' + escHtml(r.cat) + '</td><td style="text-align:center;font-weight:800">' + (r.stock === null ? '—' : _nlN(r.stock)) + '</td>'
+    + '<td>' + escHtml(r.cat) + '</td><td style="text-align:center;white-space:nowrap">' + (r.img ? '<a href="' + escHtml(r.img) + '" target="_blank" rel="noopener noreferrer" style="color:#8a6a1f;font-weight:800;text-decoration:underline">View Image</a>' : '<span style="color:#b5ab93">–</span>') + '</td>'
+    + '<td style="text-align:center;font-weight:800">' + (r.stock === null ? '—' : _nlN(r.stock)) + '</td><td style="text-align:center;font-weight:800">' + (r.wip === null ? '—' : _nlN(r.wip)) + '</td>'
     + r.daily.map((q, i) => '<td style="text-align:center' + (i === last ? ';background:#fbf3d9' : '') + (q ? ';font-weight:800' : ';color:#b5ab93') + '">' + (q ? _nlN(q) : '–') + '</td>').join('')
     + '<td style="text-align:center;font-weight:900">' + _nlN(r.total) + '</td></tr>').join('');
   const tr = dates.map((dt, i) => list.reduce((a, r) => a + r.daily[i], 0));
-  const foot = list.length ? '<tr style="background:#eef7ea;font-weight:900"><td>Total (' + list.length + ' SKUs)</td><td></td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.stock || 0), 0)) + '</td>' + tr.map(v => '<td style="text-align:center">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center">' + _nlN(tr.reduce((a, b) => a + b, 0)) + '</td></tr>' : '';
-  const skuTable = '<div style="margin-top:18px"><div style="font-weight:900;font-size:1rem;margin:0 0 4px;color:#2a2418">SKU-wise Final Qty &amp; Inv Stock</div>'
-    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty by order date; Inv Stock = current inventory.</div>'
-    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:900px"><thead><tr><th>SKU</th><th>Category</th><th style="text-align:center">Inv Stock</th>' + th + '<th style="text-align:center">Total</th></tr></thead><tbody>' + (body || '<tr><td colspan="99" class="home-empty" style="padding:20px;text-align:center">No SKUs for this filter.</td></tr>') + foot + '</tbody></table></div>';
+  const foot = list.length ? '<tr style="background:#eef7ea;font-weight:900"><td>Total (' + list.length + ' SKUs)</td><td></td><td></td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.stock || 0), 0)) + '</td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.wip || 0), 0)) + '</td>' + tr.map(v => '<td style="text-align:center">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center">' + _nlN(tr.reduce((a, b) => a + b, 0)) + '</td></tr>' : '';
+  const skuTable = '<div style="margin-top:18px"><div style="font-weight:900;font-size:1rem;margin:0 0 4px;color:#2a2418">SKU-wise Final Qty, Inv Stock &amp; Inv WIP</div>'
+    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty by order date; Inv Stock / Inv WIP = current inventory.</div>'
+    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:1000px"><thead><tr><th>SKU</th><th>Category</th><th style="text-align:center">Image Link</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th>' + th + '<th style="text-align:center">Total</th></tr></thead><tbody>' + (body || '<tr><td colspan="99" class="home-empty" style="padding:20px;text-align:center">No SKUs for this filter.</td></tr>') + foot + '</tbody></table></div>';
   host.innerHTML = summary + skuTable;
 }
 function copyNewLaunchMsg(){
@@ -16677,25 +16684,25 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock = current inventory']);
+  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock / Inv WIP = current inventory']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
-  out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock']));
-  const gt = dates.map(() => 0); let gStock = 0;
+  out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock', 'Inv WIP']));
+  const gt = dates.map(() => 0); let gStock = 0, gWip = 0;
   _NL_CATS.forEach(cat => {
     const s = c.sum[cat], t = add(s.single, s.combo);
-    out.push([cat, 'Single'].concat(s.single, [sm(s.single), '']));
-    out.push([cat, 'Via Combos'].concat(s.combo, [sm(s.combo), '']));
-    out.push([cat, 'Total'].concat(t, [sm(t), s.stock]));
-    t.forEach((v, i) => { gt[i] += v; }); gStock += s.stock;
+    out.push([cat, 'Single'].concat(s.single, [sm(s.single), '', '']));
+    out.push([cat, 'Via Combos'].concat(s.combo, [sm(s.combo), '', '']));
+    out.push([cat, 'Total'].concat(t, [sm(t), s.stock, s.wip]));
+    t.forEach((v, i) => { gt[i] += v; }); gStock += s.stock; gWip += s.wip;
   });
-  out.push(['GRAND TOTAL', ''].concat(gt, [sm(gt), gStock]));
+  out.push(['GRAND TOTAL', ''].concat(gt, [sm(gt), gStock, gWip]));
   out.push([]);
   out.push(['SKU-WISE DETAIL']);
-  out.push(['SKU', 'SKU Name', 'Category', 'Inv Stock'].concat(dl, ['Total']));
+  out.push(['SKU', 'SKU Name', 'Category', 'Image Link', 'Inv Stock', 'Inv WIP'].concat(dl, ['Total']));
   const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
   c.rows.slice().sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku))
-    .forEach(r => out.push([r.sku, r.name, r.cat, r.stock === null ? '' : r.stock].concat(r.daily, [r.total])));
+    .forEach(r => out.push([r.sku, r.name, r.cat, r.img || '', r.stock === null ? '' : r.stock, r.wip === null ? '' : r.wip].concat(r.daily, [r.total])));
   const csv = out.map(r => r.map(x => { const t = String(x == null ? '' : x); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(',')).join('\r\n');
   /* UTF-8 BOM so Excel reads the file correctly (no garbled characters) */
   const a = document.createElement('a');
