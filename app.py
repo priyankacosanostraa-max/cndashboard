@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.93 (WIP RECEIVE · CALCULATED DELIVERY DATE ME SUNDAY COUNT NAHI)
+# - Sirf WIP Receive ki calculated Delivery Date (jab PPC-WIP sheet col L me date na ho) ab working days se banti hai: Order Date + lead days, Sunday ginti me nahi (12 din = 12 non-Sunday din). Sheet ki likhi hui date jaisi thi waisi hi. Production tab aur baaki sab kuch pehle jaisa.
 # Cosa Nostraa — V24.92 (NEW LAUNCH DAILY SALES: NEW_LAUNCH.XLSX KI POORI LIST · INV STOCK/WIP SIRF SINGLE CHILD SKU · SIRF EK SUMMARY TABLE)
 # - NEW_LAUNCH_SKUS ab new_launch.xlsx ki poori list (CMB + child dono). Code khud pehchanta hai kaun CMB (parent) hai aur kaun child: Inv Stock / Inv WIP sirf listed single child SKU ka, CMB ka kabhi nahi. Single = child ki apni sale; Via Combos = CMB sale x child pieces (listed CMB ke child ya listed child wale combo). Page par ab sirf ek table (Category > Single / Via Combos / Total + Grand Total, screenshot jaisi); SKU-wise table hata di (export CSV me SKU-wise detail rehti hai). Baaki kuch change nahi.
 # Cosa Nostraa — V24.90 (NEW LAUNCH DAILY SALES: IMAGE LINK + INV WIP, TABLE AUR EXPORT DONO ME)
@@ -29409,6 +29411,16 @@ def _production_delivery_days(order_type, order_no="", stone=""):
         days += 10
     return days
 
+def _wipr_add_working_days(start_dt, n_days):
+    """V24.93 — start_dt + n_days, Sundays are not counted (only Mon-Sat count as a day)."""
+    d = start_dt
+    left = int(n_days)
+    while left > 0:
+        d = d + timedelta(days=1)
+        if d.weekday() != 6:      # 6 = Sunday (non-working day)
+            left -= 1
+    return d
+
 def _production_has_balance(value):
     """Column K has a pending/difference value whenever it is not zero.
 
@@ -30446,6 +30458,13 @@ def api_wip_receive():
                         _dl_w = (datetime.strptime(_dl, "%Y-%m-%d") + timedelta(days=_stone_adj)).strftime("%Y-%m-%d")
                     except Exception:
                         _dl_w = _dl
+                try:   # V24.93: calculated date me Sunday count nahi — Order Date + same lead days, sirf working days (Mon-Sat)
+                    _od_w = datetime.strptime(str(pr.get("date") or "")[:10], "%Y-%m-%d")
+                    _n_w = (datetime.strptime(_dl_w, "%Y-%m-%d") - _od_w).days
+                    if _n_w > 0:
+                        _dl_w = _wipr_add_working_days(_od_w, _n_w).strftime("%Y-%m-%d")
+                except Exception:
+                    pass
                 dlv_by_order_sku.setdefault(_k0, _dl_w)
         ty = str(pr.get("order_type") or "").strip()
         ch = str(pr.get("channel") or "").strip()
