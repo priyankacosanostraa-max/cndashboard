@@ -1,5 +1,5 @@
-# Cosa Nostraa — V24.91 (NEW LAUNCH DAILY SALES: SIRF BRACELET/BOOKMARK/PHOTO FRAME CHILD SKU · INV STOCK/WIP SIRF CHILD SKU KA)
-# - New Launch table/export me ab sirf Bracelet, Bookmark aur Photo Frame ke child SKU aate hain (CMB rows nahi). Listed CMB ke andar ke child SKU (Photo Frame samet) automatically judte hain. Inv Stock / Inv WIP sirf child SKU ka, CMB ka bilkul nahi. Baaki kuch change nahi.
+# Cosa Nostraa — V24.92 (NEW LAUNCH DAILY SALES: NEW_LAUNCH.XLSX KI POORI LIST · INV STOCK/WIP SIRF SINGLE CHILD SKU · SIRF EK SUMMARY TABLE)
+# - NEW_LAUNCH_SKUS ab new_launch.xlsx ki poori list (CMB + child dono). Code khud pehchanta hai kaun CMB (parent) hai aur kaun child: Inv Stock / Inv WIP sirf listed single child SKU ka, CMB ka kabhi nahi. Single = child ki apni sale; Via Combos = CMB sale x child pieces (listed CMB ke child ya listed child wale combo). Page par ab sirf ek table (Category > Single / Via Combos / Total + Grand Total, screenshot jaisi); SKU-wise table hata di (export CSV me SKU-wise detail rehti hai). Baaki kuch change nahi.
 # Cosa Nostraa — V24.90 (NEW LAUNCH DAILY SALES: IMAGE LINK + INV WIP, TABLE AUR EXPORT DONO ME)
 # - New Launch SKU table me Image Link (View Image) + Inv WIP; category summary me Inv WIP; export CSV me SKU ke saath Image Link, Inv Stock, Inv WIP. Baaki kuch change nahi.
 # Cosa Nostraa — V24.89 (TARGET TAB: NEW LAUNCH DAILY SALES — PROFESSIONAL TABLE + CLEAN EXPORT)
@@ -10070,8 +10070,6 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
-      <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">SKU table category<select id="nlCat" onchange="renderNewLaunch()" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"><option value="">All Categories</option></select></label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--cn-mid)"><input type="checkbox" id="nlHideZero" checked onchange="renderNewLaunch()"> Hide SKUs with no sale</label>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadNewLaunch(true)">Refresh</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="copyNewLaunchMsg()">Copy Message</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportNewLaunch()">Export CSV</button>
@@ -16549,27 +16547,19 @@ function _nlCompute(){
   const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
   const idx = new Map();
   (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
-  /* V24.91: listed = NEW_LAUNCH_SKUS + child SKUs of the listed CMBs; only Bracelet / Bookmark / Photo Frame CHILD SKUs are kept (CMB never counted in Inv Stock / Inv WIP) */
-  const fb = new Map();   /* fallback record for a child not present in All Product (from combo_details) */
-  const order0 = [], seen0 = new Set();
-  const addSku = (k, rec) => { if (!k) return; if (rec && !fb.has(k)) fb.set(k, rec); if (seen0.has(k)) return; seen0.add(k); order0.push(k); };
+  /* V24.92: list = new_launch.xlsx (CMB + child both). CMB (parent) is detected from All Product combo_details / CMB prefix;
+     Inv Stock / Inv WIP and Single sales come ONLY from listed single child SKUs of Bracelet / Bookmark / Photo Frame. */
+  const listed = new Set(), listedCmb = new Set(), skuList = [];
   skus.forEach(raw => {
-    const sku = String(raw).trim().toUpperCase(); if (!sku) return;
-    addSku(sku, null);
-    const p = idx.get(sku);
-    if (p && Array.isArray(p.combo_details)) p.combo_details.forEach(cd => addSku(String(cd && cd.sku || '').trim().toUpperCase(), cd));
-  });
-  const listed = new Set();
-  const skuList = [];
-  order0.forEach(sku => {
-    const it = idx.get(sku) || fb.get(sku) || null;
+    const sku = String(raw).trim().toUpperCase(); if (!sku || listed.has(sku) || listedCmb.has(sku)) return;
+    const it = idx.get(sku) || null;
     const cat = _nlCatOf(it, sku);
-    if (!_NL_CATS.includes(cat)) return;     /* drops CMBs and any other type */
-    listed.add(sku);
-    skuList.push(sku);
+    if (cat === 'Combo') { listedCmb.add(sku); return; }
+    if (!_NL_CATS.includes(cat)) return;
+    listed.add(sku); skuList.push(sku);
   });
   const rows = skuList.map(sku => {
-    const it = idx.get(sku) || fb.get(sku) || null;
+    const it = idx.get(sku) || null;
     const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
     return {sku, it, cat: _nlCatOf(it, sku), daily, total: daily.reduce((a, b) => a + b, 0),
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null,
@@ -16582,7 +16572,7 @@ function _nlCompute(){
     sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0); sum[r.cat].wip += (r.wip || 0);
     r.daily.forEach((q, i) => { sum[r.cat].single[i] += q; });
   });
-  /* Combo sales: parent CMB sold qty x pieces of each listed child SKU (same rule as In CMBs Sold elsewhere) */
+  /* Combo sales: parent CMB sold qty x pieces of each child SKU (same rule as In CMBs Sold elsewhere); counted when the CMB is listed or the child is listed */
   (master || []).forEach(p => {
     const cd = p && p.combo_details;
     if (!Array.isArray(cd) || !cd.length) return;
@@ -16590,9 +16580,10 @@ function _nlCompute(){
     const ds = sales[ps];
     if (!ds) return;
     const seen = new Set();
+    const parentListed = listedCmb.has(ps);
     cd.forEach(c => {
       const ck = String(c && c.sku || '').trim().toUpperCase();
-      if (!ck || ck === ps || seen.has(ck) || !listed.has(ck)) return;
+      if (!ck || ck === ps || seen.has(ck) || !(parentListed || listed.has(ck))) return;
       seen.add(ck);
       const cat = _nlCatOf(idx.get(ck) || c, ck);
       if (!sum[cat]) return;
@@ -16658,33 +16649,7 @@ function renderNewLaunch(){
   const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 2px;color:#2a2418">New Launch — Daily Sales Summary</div>'
     + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock / Inv WIP = current inventory of child SKUs only (combos not included)</div>'
     + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
-  /* SKU-wise table */
-  const catSel = document.getElementById('nlCat'), hideZero = document.getElementById('nlHideZero');
-  const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
-  const cats = Array.from(new Set(c.rows.map(r => r.cat))).sort((a, b) => ((order[a] ?? 9) - (order[b] ?? 9)) || a.localeCompare(b));
-  if (catSel && catSel.dataset.filled !== cats.join('|')) {
-    const cur = catSel.value;
-    catSel.innerHTML = '<option value="">All Categories</option>' + cats.map(x => '<option value="' + escHtml(x) + '">' + escHtml(x) + '</option>').join('');
-    catSel.value = cats.includes(cur) ? cur : '';
-    catSel.dataset.filled = cats.join('|');
-  }
-  const catQ = catSel ? catSel.value : '';
-  const hz = hideZero ? hideZero.checked : false;
-  let list = c.rows.filter(r => (!catQ || r.cat === catQ));
-  const hiddenZero = hz ? list.filter(r => r.total === 0).length : 0;
-  if (hz) list = list.filter(r => r.total !== 0);
-  list.sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku));
-  const body = list.map(r => '<tr><td><div class="sku-cell">' + roThumb(r.it && r.it.image_url) + '<div style="min-width:130px"><b style="white-space:nowrap">' + escHtml(r.sku) + '</b>' + (r.name && r.name.toUpperCase() !== r.sku ? '<div style="font-size:12px;font-weight:600;color:#4a3f2a;white-space:normal;line-height:1.3">' + escHtml(r.name) + '</div>' : '') + '</div></div></td>'
-    + '<td>' + escHtml(r.cat) + '</td><td style="text-align:center;white-space:nowrap">' + (r.img ? '<a href="' + escHtml(r.img) + '" target="_blank" rel="noopener noreferrer" style="color:#8a6a1f;font-weight:800;text-decoration:underline">View Image</a>' : '<span style="color:#b5ab93">–</span>') + '</td>'
-    + '<td style="text-align:center;font-weight:800">' + (r.stock === null ? '—' : _nlN(r.stock)) + '</td><td style="text-align:center;font-weight:800">' + (r.wip === null ? '—' : _nlN(r.wip)) + '</td>'
-    + r.daily.map((q, i) => '<td style="text-align:center' + (i === last ? ';background:#fbf3d9' : '') + (q ? ';font-weight:800' : ';color:#b5ab93') + '">' + (q ? _nlN(q) : '–') + '</td>').join('')
-    + '<td style="text-align:center;font-weight:900">' + _nlN(r.total) + '</td></tr>').join('');
-  const tr = dates.map((dt, i) => list.reduce((a, r) => a + r.daily[i], 0));
-  const foot = list.length ? '<tr style="background:#eef7ea;font-weight:900"><td>Total (' + list.length + ' SKUs)</td><td></td><td></td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.stock || 0), 0)) + '</td><td style="text-align:center">' + _nlN(list.reduce((a, r) => a + (r.wip || 0), 0)) + '</td>' + tr.map(v => '<td style="text-align:center">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center">' + _nlN(tr.reduce((a, b) => a + b, 0)) + '</td></tr>' : '';
-  const skuTable = '<div style="margin-top:18px"><div style="font-weight:900;font-size:1rem;margin:0 0 4px;color:#2a2418">SKU-wise Final Qty, Inv Stock &amp; Inv WIP</div>'
-    + '<div style="color:var(--cn-mid);font-size:.78rem;margin-bottom:8px">Showing ' + list.length + ' of ' + c.rows.length + ' listed SKUs' + (hiddenZero ? ' (' + hiddenZero + ' with no sale in these days hidden)' : '') + '. Sales = single-SKU Final Qty by order date; Inv Stock / Inv WIP = current inventory.</div>'
-    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:1000px"><thead><tr><th>SKU</th><th>Category</th><th style="text-align:center">Image Link</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th>' + th + '<th style="text-align:center">Total</th></tr></thead><tbody>' + (body || '<tr><td colspan="99" class="home-empty" style="padding:20px;text-align:center">No SKUs for this filter.</td></tr>') + foot + '</tbody></table></div>';
-  host.innerHTML = summary + skuTable;
+  host.innerHTML = summary;
 }
 function copyNewLaunchMsg(){
   const t = window._nlMsgText || '';
