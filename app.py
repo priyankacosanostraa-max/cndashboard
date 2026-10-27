@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.97 (NEW LAUNCH TABLE: LAST 7 DAYS SALES + TOTAL SALES (ALL TIME) DO COLUMN · EXPORT ME BHI)
+# - Table me ab 2 column: Last 7 Days Sales (dikhte 7 din ka total) aur Total Sales (All Time) (in SKUs ki ab tak ki poori sale, report date tak: Single + Via Combos). Export CSV (summary + SKU-wise) me bhi dono column. /api/new_launch_daily ab "alltime" bhi bhejta hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.96 (NEW LAUNCH TABLE: BOOKMARK = BM-0001/2/3 · PHOTO FRAME = BH-2794, BH-2795)
 # - Teeno category ke SKU ab seedhe fixed: Bracelet BR-0015..BR-0019, Bookmark BM-0001, BM-0002, BM-0003, Photo Frame BH-2794, BH-2795. Inv Stock / Inv WIP / Single / Via Combos sirf inhi SKUs ke. CMB ka kuch nahi. Baaki kuch change nahi.
 # Cosa Nostraa — V24.95 (NEW LAUNCH TABLE: BRACELET SIRF BR-0015 SE BR-0019)
@@ -16557,7 +16559,7 @@ function loadNewLaunch(force = false){
 }
 function _nlCompute(){
   const d = _nlData; if (!d) return null;
-  const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
+  const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [], alltime = d.alltime || {};
   const idx = new Map();
   (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
   /* V24.96: list = new_launch.xlsx (CMB + child); only the exact SKUs in _NL_SKU_CAT count.
@@ -16579,15 +16581,15 @@ function _nlCompute(){
   const rows = skuList.map(sku => {
     const it = idx.get(sku) || null;
     const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
-    return {sku, it, cat: qual(sku, it), daily, total: daily.reduce((a, b) => a + b, 0),
+    return {sku, it, cat: qual(sku, it), daily, total: daily.reduce((a, b) => a + b, 0), all: Number(alltime[sku]) || 0,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null,
             img: _nlImg(it), name: it ? String(it.sku_name || '') : ''};
   });
   const sum = {};
-  _NL_CATS.forEach(c => { sum[c] = {single: dates.map(() => 0), combo: dates.map(() => 0), stock: 0, wip: 0, skus: 0}; });
+  _NL_CATS.forEach(c => { sum[c] = {single: dates.map(() => 0), combo: dates.map(() => 0), stock: 0, wip: 0, skus: 0, allS: 0, allC: 0}; });
   rows.forEach(r => {
     if (!sum[r.cat]) return;
-    sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0); sum[r.cat].wip += (r.wip || 0);
+    sum[r.cat].skus++; sum[r.cat].stock += (r.stock || 0); sum[r.cat].wip += (r.wip || 0); sum[r.cat].allS += (r.all || 0);
     r.daily.forEach((q, i) => { sum[r.cat].single[i] += q; });
   });
   /* Combo sales: parent CMB sold qty x pieces of each child SKU (same rule as In CMBs Sold elsewhere); counted when the CMB is listed or the child is listed */
@@ -16595,8 +16597,8 @@ function _nlCompute(){
     const cd = p && p.combo_details;
     if (!Array.isArray(cd) || !cd.length) return;
     const ps = String(p.sku || '').trim().toUpperCase();
-    const ds = sales[ps];
-    if (!ds) return;
+    const ds = sales[ps] || {}, atp = Number(alltime[ps]) || 0;
+    if (!sales[ps] && !atp) return;
     const seen = new Set();
     const parentListed = listedCmb.has(ps);
     cd.forEach(c => {
@@ -16607,6 +16609,7 @@ function _nlCompute(){
       if (!cat || !sum[cat]) return;
       const pcs = cnxChildComponentQty(p, ck);
       dates.forEach((dt, i) => { sum[cat].combo[i] += (Number(ds[dt]) || 0) * pcs; });
+      sum[cat].allC += atp * pcs;
     });
   });
   return {dates, rows, sum};
@@ -16645,19 +16648,19 @@ function renderNewLaunch(){
   const td = (v, o) => '<td style="' + B + ((o && o.bold) ? 'font-weight:700;' : '') + ((o && o.bg) ? 'background:' + o.bg + ';' : '') + '">' + v + '</td>';
   const th = '<th style="' + B + 'font-weight:600;background:#fff">Category</th><th style="' + B + 'font-weight:600;background:#fff">Type</th>'
     + dates.map(dt => '<th style="' + B + 'font-weight:600;background:#fff">' + escHtml(_nlDay(dt)) + '</th>').join('')
-    + '<th style="' + B + 'font-weight:600;background:#fff">Total</th><th style="' + B + 'font-weight:600;background:#fff">Inv Stock</th><th style="' + B + 'font-weight:600;background:#fff">Inv WIP</th>';
+    + '<th style="' + B + 'font-weight:600;background:#fff">Last 7 Days Sales</th><th style="' + B + 'font-weight:600;background:#fff">Total Sales (All Time)</th><th style="' + B + 'font-weight:600;background:#fff">Inv Stock</th><th style="' + B + 'font-weight:600;background:#fff">Inv WIP</th>';
   let body = '';
-  const gt = dates.map(() => 0); let gStock = 0, gWip = 0;
+  const gt = dates.map(() => 0); let gStock = 0, gWip = 0, gAll = 0;
   _NL_CATS.forEach(cat => {
     const s_ = c.sum[cat], t = s_.single.map((v, i) => v + s_.combo[i]);
-    body += '<tr>' + td(escHtml(cat)) + td('Single') + s_.single.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.single))) + td('') + td('') + '</tr>';
-    body += '<tr>' + td(escHtml(cat)) + td('Via Combos') + s_.combo.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.combo))) + td('') + td('') + '</tr>';
-    body += '<tr>' + td(escHtml(cat)) + td('Total') + t.map(v => td(_nlN(v))).join('') + td(_nlN(sm(t))) + td(_nlN(s_.stock)) + td(_nlN(s_.wip)) + '</tr>';
-    t.forEach((v, i) => { gt[i] += v; }); gStock += s_.stock; gWip += s_.wip;
+    body += '<tr>' + td(escHtml(cat)) + td('Single') + s_.single.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.single))) + td(_nlN(s_.allS)) + td('') + td('') + '</tr>';
+    body += '<tr>' + td(escHtml(cat)) + td('Via Combos') + s_.combo.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.combo))) + td(_nlN(s_.allC)) + td('') + td('') + '</tr>';
+    body += '<tr>' + td(escHtml(cat)) + td('Total') + t.map(v => td(_nlN(v))).join('') + td(_nlN(sm(t))) + td(_nlN(s_.allS + s_.allC)) + td(_nlN(s_.stock)) + td(_nlN(s_.wip)) + '</tr>';
+    t.forEach((v, i) => { gt[i] += v; }); gStock += s_.stock; gWip += s_.wip; gAll += s_.allS + s_.allC;
   });
-  body += '<tr>' + td('GRAND TOTAL', {bold: true}) + td('') + gt.map(v => td(_nlN(v), {bold: true})).join('') + td(_nlN(sm(gt)), {bold: true}) + td(_nlN(gStock), {bold: true}) + td(_nlN(gWip), {bold: true}) + '</tr>';
+  body += '<tr>' + td('GRAND TOTAL', {bold: true}) + td('') + gt.map(v => td(_nlN(v), {bold: true})).join('') + td(_nlN(sm(gt)), {bold: true}) + td(_nlN(gAll), {bold: true}) + td(_nlN(gStock), {bold: true}) + td(_nlN(gWip), {bold: true}) + '</tr>';
   host.innerHTML = '<div id="nlShot" style="background:#fff;padding:10px"><table data-sort-disabled="true" style="border-collapse:collapse;font-size:13px;min-width:760px;width:100%"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table>'
-    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795.</div></div>';
+    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Last 7 Days Sales = sum of the 7 days shown; Total Sales (All Time) = all sales of these SKUs (single + via combos) up to the report date. Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795.</div></div>';
 }
 function copyNewLaunchMsg(){
   const t = window._nlMsgText || '';
@@ -16676,25 +16679,25 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795']);
+  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Total Sales (All Time) = all sales up to report date; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
-  out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock', 'Inv WIP']));
-  const gt = dates.map(() => 0); let gStock = 0, gWip = 0;
+  out.push(['Category', 'Type'].concat(dl, ['Last 7 Days Sales', 'Total Sales (All Time)', 'Inv Stock', 'Inv WIP']));
+  const gt = dates.map(() => 0); let gStock = 0, gWip = 0, gAll = 0;
   _NL_CATS.forEach(cat => {
     const s = c.sum[cat], t = add(s.single, s.combo);
-    out.push([cat, 'Single'].concat(s.single, [sm(s.single), '', '']));
-    out.push([cat, 'Via Combos'].concat(s.combo, [sm(s.combo), '', '']));
-    out.push([cat, 'Total'].concat(t, [sm(t), s.stock, s.wip]));
-    t.forEach((v, i) => { gt[i] += v; }); gStock += s.stock; gWip += s.wip;
+    out.push([cat, 'Single'].concat(s.single, [sm(s.single), s.allS, '', '']));
+    out.push([cat, 'Via Combos'].concat(s.combo, [sm(s.combo), s.allC, '', '']));
+    out.push([cat, 'Total'].concat(t, [sm(t), s.allS + s.allC, s.stock, s.wip]));
+    t.forEach((v, i) => { gt[i] += v; }); gStock += s.stock; gWip += s.wip; gAll += s.allS + s.allC;
   });
-  out.push(['GRAND TOTAL', ''].concat(gt, [sm(gt), gStock, gWip]));
+  out.push(['GRAND TOTAL', ''].concat(gt, [sm(gt), gAll, gStock, gWip]));
   out.push([]);
   out.push(['SKU-WISE DETAIL']);
-  out.push(['SKU', 'SKU Name', 'Category', 'Image Link', 'Inv Stock', 'Inv WIP'].concat(dl, ['Total']));
+  out.push(['SKU', 'SKU Name', 'Category', 'Image Link', 'Inv Stock', 'Inv WIP'].concat(dl, ['Last 7 Days Sales', 'Total Sales (All Time, single)']));
   const order = {'Bracelet': 0, 'Bookmark': 1, 'Photo Frame': 2};
   c.rows.slice().sort((a, b) => ((order[a.cat] ?? 9) - (order[b.cat] ?? 9)) || (b.total - a.total) || a.sku.localeCompare(b.sku))
-    .forEach(r => out.push([r.sku, r.name, r.cat, r.img || '', r.stock === null ? '' : r.stock, r.wip === null ? '' : r.wip].concat(r.daily, [r.total])));
+    .forEach(r => out.push([r.sku, r.name, r.cat, r.img || '', r.stock === null ? '' : r.stock, r.wip === null ? '' : r.wip].concat(r.daily, [r.total, r.all])));
   const csv = out.map(r => r.map(x => { const t = String(x == null ? '' : x); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(',')).join('\r\n');
   /* UTF-8 BOM so Excel reads the file correctly (no garbled characters) */
   const a = document.createElement('a');
@@ -32325,13 +32328,15 @@ def api_new_launch_daily():
         def _col(c):
             return df.iloc[:, cols.index(c)].tolist()
         out, dmemo, qmemo = {}, {}, {}
+        alltime = {}                                  # V24.97: SKU -> total Final Qty from the start till report date (end)
+        end_iso = end.strftime("%Y-%m-%d")
         for dv, sv, qv in zip(_col(C_DATE), _col(C_SKU), _col(C_QTY)):
             dk = str(dv)
             iso = dmemo.get(dk, 0)
             if iso == 0:
                 dt0 = parse_date_any(dv)
                 iso = dmemo[dk] = (dt0.strftime("%Y-%m-%d") if dt0 is not None else None)
-            if iso is None or iso not in dset:
+            if iso is None or iso > end_iso:
                 continue
             sku = clean(sv).strip().upper()
             if not sku:
@@ -32342,13 +32347,17 @@ def api_new_launch_daily():
                 q = qmemo[qk] = to_num(qv)
             if not q:
                 continue
+            alltime[sku] = alltime.get(sku, 0) + q
+            if iso not in dset:
+                continue
             d = out.setdefault(sku, {})
             d[iso] = d.get(iso, 0) + q
         for sku, d in out.items():
             for k in list(d.keys()):
                 v = round(float(d[k]), 2)
                 d[k] = int(v) if v == int(v) else v
-        return jsonify({"asof": end.strftime("%Y-%m-%d"), "dates": dates, "sales": out, "skus": NEW_LAUNCH_SKUS,
+        alltime = {k: (int(round(v)) if abs(v - round(v)) < 1e-9 else round(float(v), 2)) for k, v in alltime.items()}
+        return jsonify({"asof": end.strftime("%Y-%m-%d"), "dates": dates, "sales": out, "alltime": alltime, "skus": NEW_LAUNCH_SKUS,
                         "source": "cosa_orderdate Final Qty"})
     except Exception as e:
         return jsonify({"error": f"new launch daily sales build failed: {e}"}), 500
