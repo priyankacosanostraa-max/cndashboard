@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.91 (NEW LAUNCH DAILY SALES: SIRF BRACELET/BOOKMARK/PHOTO FRAME CHILD SKU · INV STOCK/WIP SIRF CHILD SKU KA)
+# - New Launch table/export me ab sirf Bracelet, Bookmark aur Photo Frame ke child SKU aate hain (CMB rows nahi). Listed CMB ke andar ke child SKU (Photo Frame samet) automatically judte hain. Inv Stock / Inv WIP sirf child SKU ka, CMB ka bilkul nahi. Baaki kuch change nahi.
 # Cosa Nostraa — V24.90 (NEW LAUNCH DAILY SALES: IMAGE LINK + INV WIP, TABLE AUR EXPORT DONO ME)
 # - New Launch SKU table me Image Link (View Image) + Inv WIP; category summary me Inv WIP; export CSV me SKU ke saath Image Link, Inv Stock, Inv WIP. Baaki kuch change nahi.
 # Cosa Nostraa — V24.89 (TARGET TAB: NEW LAUNCH DAILY SALES — PROFESSIONAL TABLE + CLEAN EXPORT)
@@ -16547,10 +16549,27 @@ function _nlCompute(){
   const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
   const idx = new Map();
   (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
-  const listed = new Set(skus.map(s => String(s).trim().toUpperCase()));
-  const rows = skus.map(raw => {
-    const sku = String(raw).trim().toUpperCase();
-    const it = idx.get(sku) || null;
+  /* V24.91: listed = NEW_LAUNCH_SKUS + child SKUs of the listed CMBs; only Bracelet / Bookmark / Photo Frame CHILD SKUs are kept (CMB never counted in Inv Stock / Inv WIP) */
+  const fb = new Map();   /* fallback record for a child not present in All Product (from combo_details) */
+  const order0 = [], seen0 = new Set();
+  const addSku = (k, rec) => { if (!k) return; if (rec && !fb.has(k)) fb.set(k, rec); if (seen0.has(k)) return; seen0.add(k); order0.push(k); };
+  skus.forEach(raw => {
+    const sku = String(raw).trim().toUpperCase(); if (!sku) return;
+    addSku(sku, null);
+    const p = idx.get(sku);
+    if (p && Array.isArray(p.combo_details)) p.combo_details.forEach(cd => addSku(String(cd && cd.sku || '').trim().toUpperCase(), cd));
+  });
+  const listed = new Set();
+  const skuList = [];
+  order0.forEach(sku => {
+    const it = idx.get(sku) || fb.get(sku) || null;
+    const cat = _nlCatOf(it, sku);
+    if (!_NL_CATS.includes(cat)) return;     /* drops CMBs and any other type */
+    listed.add(sku);
+    skuList.push(sku);
+  });
+  const rows = skuList.map(sku => {
+    const it = idx.get(sku) || fb.get(sku) || null;
     const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
     return {sku, it, cat: _nlCatOf(it, sku), daily, total: daily.reduce((a, b) => a + b, 0),
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null,
@@ -16637,7 +16656,7 @@ function renderNewLaunch(){
   const wipAll = _NL_CATS.reduce((a, k) => a + c.sum[k].wip, 0);
   const grandRow = '<tr style="background:#e3f0dd"><td colspan="2" style="font-weight:900">GRAND TOTAL</td>' + allTot.map(v => '<td style="text-align:center;font-weight:900">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td><td style="text-align:center;font-weight:900">' + _nlN(wipAll) + '</td></tr>';
   const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 2px;color:#2a2418">New Launch — Daily Sales Summary</div>'
-    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock / Inv WIP = current inventory</div>'
+    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock / Inv WIP = current inventory of child SKUs only (combos not included)</div>'
     + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
   /* SKU-wise table */
   const catSel = document.getElementById('nlCat'), hideZero = document.getElementById('nlHideZero');
@@ -16684,7 +16703,7 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock / Inv WIP = current inventory']);
+  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock / Inv WIP = child SKUs only (combos not included)']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
   out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock', 'Inv WIP']));
