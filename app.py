@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.94 (TARGET TAB: NEW LAUNCH TABLE NAYE SCREENSHOT FORMAT ME · BRACELET SIRF BR-0013 SE AAGE · INV STOCK/WIP SIRF SINGLE CHILD)
+# - Target tab ki New Launch table naye sire se: Category > Single / Via Combos / Total + Grand Total (screenshot jaisi plain table), Export CSV option. Bracelet me sirf BR-0012 ke baad wale (BR-0013, BR-0014 ... jo bhi All Product / list me hain). Inv Stock / Inv WIP sirf single child SKU ka, kisi CMB ka nahi. Message box aur SKU-wise on-screen table hata diye (export me SKU-wise detail rehti hai). Baaki kuch change nahi.
 # Cosa Nostraa — V24.93 (WIP RECEIVE · CALCULATED DELIVERY DATE ME SUNDAY COUNT NAHI)
 # - Sirf WIP Receive ki calculated Delivery Date (jab PPC-WIP sheet col L me date na ho) ab working days se banti hai: Order Date + lead days, Sunday ginti me nahi (12 din = 12 non-Sunday din). Sheet ki likhi hui date jaisi thi waisi hi. Production tab aur baaki sab kuch pehle jaisa.
 # Cosa Nostraa — V24.92 (NEW LAUNCH DAILY SALES: NEW_LAUNCH.XLSX KI POORI LIST · INV STOCK/WIP SIRF SINGLE CHILD SKU · SIRF EK SUMMARY TABLE)
@@ -10068,12 +10070,11 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">New Launch — Daily Sales (Bracelet · Bookmark · Photo Frame)</div>
-      <div class="insights-sub">Pieces sold on each of the last 7 days, single items and combos together (combo sales = child pieces inside the combos). Sales are counted by order date; Inv Stock is the current inventory. Default report date = yesterday. The message below can be copied and shared; the table is made to be screenshotted every morning.</div>
+      <div class="insights-sub">Pieces sold on each of the last 7 days: Single (child SKU sold on its own) and Via Combos (child pieces inside combos sold). Counted by order date. Inv Stock / Inv WIP = single child SKUs only, never CMBs. Bracelet = BR-0013 and above. Default report date = yesterday. Use Export CSV to download.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="loadNewLaunch(true)">Refresh</button>
-      <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="copyNewLaunchMsg()">Copy Message</button>
       <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#1d6f42" onclick="exportNewLaunch()">Export CSV</button>
     </div>
   </div>
@@ -16549,15 +16550,25 @@ function _nlCompute(){
   const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
   const idx = new Map();
   (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
-  /* V24.92: list = new_launch.xlsx (CMB + child both). CMB (parent) is detected from All Product combo_details / CMB prefix;
-     Inv Stock / Inv WIP and Single sales come ONLY from listed single child SKUs of Bracelet / Bookmark / Photo Frame. */
+  /* V24.94: list = new_launch.xlsx (CMB + child) + every Bracelet BR-0013 and above found in All Product.
+     CMB (parent) is detected from All Product combo_details / CMB prefix. Inv Stock / Inv WIP and Single sales come ONLY from single child SKUs
+     of Bracelet (BR-0012 ke baad wale only) / Bookmark / Photo Frame — never from a CMB. */
   const listed = new Set(), listedCmb = new Set(), skuList = [];
-  skus.forEach(raw => {
-    const sku = String(raw).trim().toUpperCase(); if (!sku || listed.has(sku) || listedCmb.has(sku)) return;
-    const it = idx.get(sku) || null;
+  const qual = (sku, it) => {
     const cat = _nlCatOf(it, sku);
-    if (cat === 'Combo') { listedCmb.add(sku); return; }
-    if (!_NL_CATS.includes(cat)) return;
+    if (!_NL_CATS.includes(cat)) return '';
+    if (cat === 'Bracelet') { const m = /^BR[-_ ]?0*(\d+)/.exec(sku); if (!m || (+m[1]) <= 12) return ''; }
+    return cat;
+  };
+  window._nlQual = qual;
+  const cand = [];
+  skus.forEach(raw => cand.push(String(raw).trim().toUpperCase()));
+  idx.forEach((it, k) => { if (/^BR[-_ ]?\d/.test(k)) cand.push(k); });
+  cand.forEach(sku => {
+    if (!sku || listed.has(sku) || listedCmb.has(sku)) return;
+    const it = idx.get(sku) || null;
+    if (_nlCatOf(it, sku) === 'Combo') { listedCmb.add(sku); return; }
+    if (!qual(sku, it)) return;
     listed.add(sku); skuList.push(sku);
   });
   const rows = skuList.map(sku => {
@@ -16587,8 +16598,8 @@ function _nlCompute(){
       const ck = String(c && c.sku || '').trim().toUpperCase();
       if (!ck || ck === ps || seen.has(ck) || !(parentListed || listed.has(ck))) return;
       seen.add(ck);
-      const cat = _nlCatOf(idx.get(ck) || c, ck);
-      if (!sum[cat]) return;
+      const cat = qual(ck, idx.get(ck) || c);
+      if (!cat || !sum[cat]) return;
       const pcs = cnxChildComponentQty(p, ck);
       dates.forEach((dt, i) => { sum[cat].combo[i] += (Number(ds[dt]) || 0) * pcs; });
     });
@@ -16622,36 +16633,26 @@ function renderNewLaunch(){
   const host = document.getElementById('nlContent'), msgHost = document.getElementById('nlMessage');
   if (!host || !_nlData) return;
   const c = _nlCompute(); if (!c) return;
+  if (msgHost) msgHost.innerHTML = '';
   const dates = c.dates, last = dates.length - 1;
-  /* explicit message */
-  const msg = _nlMessage(c);
-  window._nlMsgText = msg;
-  if (msgHost) msgHost.innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;line-height:1.55;margin:0 0 14px;padding:14px 16px;background:#fffaf0;border:1px solid rgba(184,147,63,.35);border-radius:12px;color:#2a2418">' + escHtml(msg) + '</pre>';
-  /* summary table: category x day  (Single / Via Combos / Total rows — same layout as the export) */
-  const th = dates.map((dt, i) => '<th style="text-align:center;white-space:nowrap' + (i === last ? ';background:#f4e6bd' : '') + '">' + escHtml(_nlDay(dt)) + '</th>').join('');
-  const _bd = 'border-bottom:1px solid rgba(0,0,0,.08)';
-  const _cell = (v, i, bold, bg) => '<td style="text-align:center;' + _bd + (bold ? ';font-weight:800' : '') + (bg ? ';background:' + bg : (i === last ? ';background:#fbf3d9' : '')) + (!v && !bold ? ';color:#b5ab93' : '') + '">' + ((v || bold) ? _nlN(v) : '–') + '</td>';
-  const sum_ = a => a.reduce((x, y) => x + y, 0);
-  let sRows = '';
+  const sm = a => a.reduce((x, y) => x + y, 0);
+  const B = 'border:1px solid #d0d0d0;padding:5px 10px;text-align:center;white-space:nowrap;';
+  const td = (v, o) => '<td style="' + B + ((o && o.bold) ? 'font-weight:700;' : '') + ((o && o.bg) ? 'background:' + o.bg + ';' : '') + '">' + v + '</td>';
+  const th = '<th style="' + B + 'font-weight:600;background:#fff">Category</th><th style="' + B + 'font-weight:600;background:#fff">Type</th>'
+    + dates.map(dt => '<th style="' + B + 'font-weight:600;background:#fff">' + escHtml(_nlDay(dt)) + '</th>').join('')
+    + '<th style="' + B + 'font-weight:600;background:#fff">Total</th><th style="' + B + 'font-weight:600;background:#fff">Inv Stock</th><th style="' + B + 'font-weight:600;background:#fff">Inv WIP</th>';
+  let body = '';
+  const gt = dates.map(() => 0); let gStock = 0, gWip = 0;
   _NL_CATS.forEach(cat => {
-    const s = c.sum[cat];
-    const tot = s.single.map((v, i) => v + s.combo[i]);
-    sRows += '<tr><td rowspan="3" style="font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + escHtml(cat) + '</td>'
-      + '<td style="' + _bd + ';white-space:nowrap">Single</td>' + s.single.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.single), -1, false, '#faf6ea')
-      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.stock) + '</td>'
-      + '<td rowspan="3" style="text-align:center;font-weight:900;vertical-align:middle;border-bottom:2px solid rgba(0,0,0,.18);background:#faf6ea">' + _nlN(s.wip) + '</td></tr>'
-      + '<tr><td style="' + _bd + ';white-space:nowrap">Via Combos</td>' + s.combo.map((v, i) => _cell(v, i)).join('') + _cell(sum_(s.combo), -1, false, '#faf6ea') + '</tr>'
-      + '<tr style="background:#f3ecd2"><td style="font-weight:900;border-bottom:2px solid rgba(0,0,0,.18);white-space:nowrap">Total</td>' + tot.map((v, i) => _cell(v, i, true, i === last ? '#f0dfa6' : '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)')).join('') + _cell(sum_(tot), -1, true, '#f3ecd2').replace(_bd, 'border-bottom:2px solid rgba(0,0,0,.18)') + '</tr>';
+    const s_ = c.sum[cat], t = s_.single.map((v, i) => v + s_.combo[i]);
+    body += '<tr>' + td(escHtml(cat)) + td('Single') + s_.single.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.single))) + td('') + td('') + '</tr>';
+    body += '<tr>' + td(escHtml(cat)) + td('Via Combos') + s_.combo.map(v => td(_nlN(v))).join('') + td(_nlN(sm(s_.combo))) + td('') + td('') + '</tr>';
+    body += '<tr>' + td(escHtml(cat)) + td('Total') + t.map(v => td(_nlN(v))).join('') + td(_nlN(sm(t))) + td(_nlN(s_.stock)) + td(_nlN(s_.wip)) + '</tr>';
+    t.forEach((v, i) => { gt[i] += v; }); gStock += s_.stock; gWip += s_.wip;
   });
-  const allTot = dates.map((dt, i) => _NL_CATS.reduce((a, k) => a + c.sum[k].single[i] + c.sum[k].combo[i], 0));
-  const grand = sum_(allTot);
-  const stockAll = _NL_CATS.reduce((a, k) => a + c.sum[k].stock, 0);
-  const wipAll = _NL_CATS.reduce((a, k) => a + c.sum[k].wip, 0);
-  const grandRow = '<tr style="background:#e3f0dd"><td colspan="2" style="font-weight:900">GRAND TOTAL</td>' + allTot.map(v => '<td style="text-align:center;font-weight:900">' + _nlN(v) + '</td>').join('') + '<td style="text-align:center;font-weight:900">' + _nlN(grand) + '</td><td style="text-align:center;font-weight:900">' + _nlN(stockAll) + '</td><td style="text-align:center;font-weight:900">' + _nlN(wipAll) + '</td></tr>';
-  const summary = '<div id="nlShot" style="background:#fff;padding:12px 12px 6px;border-radius:12px"><div style="font-weight:900;font-size:1rem;margin:0 0 2px;color:#2a2418">New Launch — Daily Sales Summary</div>'
-    + '<div style="font-size:.78rem;color:var(--cn-mid);margin:0 0 8px">' + escHtml(_nlDmy(dates[0])) + ' to ' + escHtml(_nlDmy(dates[last])) + ' · pieces sold (single + via combos) · Inv Stock / Inv WIP = current inventory of child SKUs only (combos not included)</div>'
-    + '<table class="ro" data-sort-disabled="true" style="width:100%;min-width:760px"><thead><tr><th>Category</th><th>Type</th>' + th + '<th style="text-align:center">Total</th><th style="text-align:center">Inv Stock</th><th style="text-align:center">Inv WIP</th></tr></thead><tbody>' + sRows + grandRow + '</tbody></table></div>';
-  host.innerHTML = summary;
+  body += '<tr>' + td('GRAND TOTAL', {bold: true}) + td('') + gt.map(v => td(_nlN(v), {bold: true})).join('') + td(_nlN(sm(gt)), {bold: true}) + td(_nlN(gStock), {bold: true}) + td(_nlN(gWip), {bold: true}) + '</tr>';
+  host.innerHTML = '<div id="nlShot" style="background:#fff;padding:10px"><table data-sort-disabled="true" style="border-collapse:collapse;font-size:13px;min-width:760px;width:100%"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table>'
+    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0013 and above.</div></div>';
 }
 function copyNewLaunchMsg(){
   const t = window._nlMsgText || '';
@@ -16670,7 +16671,7 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; single items + combos; Inv Stock / Inv WIP = child SKUs only (combos not included)']);
+  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0013 and above']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
   out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock', 'Inv WIP']));
