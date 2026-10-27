@@ -1,3 +1,7 @@
+# Cosa Nostraa — V24.96 (NEW LAUNCH TABLE: BOOKMARK = BM-0001/2/3 · PHOTO FRAME = BH-2794, BH-2795)
+# - Teeno category ke SKU ab seedhe fixed: Bracelet BR-0015..BR-0019, Bookmark BM-0001, BM-0002, BM-0003, Photo Frame BH-2794, BH-2795. Inv Stock / Inv WIP / Single / Via Combos sirf inhi SKUs ke. CMB ka kuch nahi. Baaki kuch change nahi.
+# Cosa Nostraa — V24.95 (NEW LAUNCH TABLE: BRACELET SIRF BR-0015 SE BR-0019)
+# - Bracelet me ab sirf BR-0015, BR-0016, BR-0017, BR-0018, BR-0019 — inki hi sales, Inv Stock aur Inv WIP (child SKU), koi aur bracelet ya CMB nahi. Baaki kuch change nahi.
 # Cosa Nostraa — V24.94 (TARGET TAB: NEW LAUNCH TABLE NAYE SCREENSHOT FORMAT ME · BRACELET SIRF BR-0013 SE AAGE · INV STOCK/WIP SIRF SINGLE CHILD)
 # - Target tab ki New Launch table naye sire se: Category > Single / Via Combos / Total + Grand Total (screenshot jaisi plain table), Export CSV option. Bracelet me sirf BR-0012 ke baad wale (BR-0013, BR-0014 ... jo bhi All Product / list me hain). Inv Stock / Inv WIP sirf single child SKU ka, kisi CMB ka nahi. Message box aur SKU-wise on-screen table hata diye (export me SKU-wise detail rehti hai). Baaki kuch change nahi.
 # Cosa Nostraa — V24.93 (WIP RECEIVE · CALCULATED DELIVERY DATE ME SUNDAY COUNT NAHI)
@@ -10070,7 +10074,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">New Launch — Daily Sales (Bracelet · Bookmark · Photo Frame)</div>
-      <div class="insights-sub">Pieces sold on each of the last 7 days: Single (child SKU sold on its own) and Via Combos (child pieces inside combos sold). Counted by order date. Inv Stock / Inv WIP = single child SKUs only, never CMBs. Bracelet = BR-0013 and above. Default report date = yesterday. Use Export CSV to download.</div>
+      <div class="insights-sub">Pieces sold on each of the last 7 days: Single (child SKU sold on its own) and Via Combos (child pieces inside combos sold). Counted by order date. Inv Stock / Inv WIP = single child SKUs only, never CMBs. Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795. Default report date = yesterday. Use Export CSV to download.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -16499,6 +16503,12 @@ window.exportDRGMarketplaceExcel = exportDRGMarketplaceExcel;
    Sales = cosa_orderdate Final Qty (order-date basis); Inv Stock = All Product sheet. Combo sales are shown separately (child pieces). */
 let _nlData = null;
 const _NL_CATS = ['Bracelet','Bookmark','Photo Frame'];
+/* V24.96: exact SKU -> category. Only these single child SKUs count (Sales, Inv Stock, Inv WIP); CMBs never. */
+const _NL_SKU_CAT = {
+  'BR-0015':'Bracelet','BR-0016':'Bracelet','BR-0017':'Bracelet','BR-0018':'Bracelet','BR-0019':'Bracelet',
+  'BM-0001':'Bookmark','BM-0002':'Bookmark','BM-0003':'Bookmark',
+  'BH-2794':'Photo Frame','BH-2795':'Photo Frame'
+};
 const _NL_PLURAL = {'Bracelet':'Bracelets','Bookmark':'Bookmarks','Photo Frame':'Photo Frames'};
 function _nlCatOf(it, sku){
   const s = String(sku || '').trim().toUpperCase();
@@ -16550,20 +16560,15 @@ function _nlCompute(){
   const dates = d.dates || [], sales = d.sales || {}, skus = d.skus || [];
   const idx = new Map();
   (master || []).forEach(it => { const k = String(it.sku || '').trim().toUpperCase(); if (k) idx.set(k, it); });
-  /* V24.94: list = new_launch.xlsx (CMB + child) + every Bracelet BR-0013 and above found in All Product.
+  /* V24.96: list = new_launch.xlsx (CMB + child); only the exact SKUs in _NL_SKU_CAT count.
      CMB (parent) is detected from All Product combo_details / CMB prefix. Inv Stock / Inv WIP and Single sales come ONLY from single child SKUs
-     of Bracelet (BR-0012 ke baad wale only) / Bookmark / Photo Frame — never from a CMB. */
+     of Bracelet (BR-0015..0019) / Bookmark (BM-0001..0003) / Photo Frame (BH-2794, BH-2795) — never from a CMB. */
   const listed = new Set(), listedCmb = new Set(), skuList = [];
-  const qual = (sku, it) => {
-    const cat = _nlCatOf(it, sku);
-    if (!_NL_CATS.includes(cat)) return '';
-    if (cat === 'Bracelet') { const m = /^BR[-_ ]?0*(\d+)/.exec(sku); if (!m || (+m[1]) <= 12) return ''; }
-    return cat;
-  };
+  const qual = (sku, it) => _NL_SKU_CAT[String(sku || '').trim().toUpperCase()] || '';
   window._nlQual = qual;
   const cand = [];
   skus.forEach(raw => cand.push(String(raw).trim().toUpperCase()));
-  idx.forEach((it, k) => { if (/^BR[-_ ]?\d/.test(k)) cand.push(k); });
+  Object.keys(_NL_SKU_CAT).forEach(k => cand.push(k));
   cand.forEach(sku => {
     if (!sku || listed.has(sku) || listedCmb.has(sku)) return;
     const it = idx.get(sku) || null;
@@ -16574,7 +16579,7 @@ function _nlCompute(){
   const rows = skuList.map(sku => {
     const it = idx.get(sku) || null;
     const daily = dates.map(dt => Number((sales[sku] || {})[dt]) || 0);
-    return {sku, it, cat: _nlCatOf(it, sku), daily, total: daily.reduce((a, b) => a + b, 0),
+    return {sku, it, cat: qual(sku, it), daily, total: daily.reduce((a, b) => a + b, 0),
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null,
             img: _nlImg(it), name: it ? String(it.sku_name || '') : ''};
   });
@@ -16652,7 +16657,7 @@ function renderNewLaunch(){
   });
   body += '<tr>' + td('GRAND TOTAL', {bold: true}) + td('') + gt.map(v => td(_nlN(v), {bold: true})).join('') + td(_nlN(sm(gt)), {bold: true}) + td(_nlN(gStock), {bold: true}) + td(_nlN(gWip), {bold: true}) + '</tr>';
   host.innerHTML = '<div id="nlShot" style="background:#fff;padding:10px"><table data-sort-disabled="true" style="border-collapse:collapse;font-size:13px;min-width:760px;width:100%"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table>'
-    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0013 and above.</div></div>';
+    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795.</div></div>';
 }
 function copyNewLaunchMsg(){
   const t = window._nlMsgText || '';
@@ -16671,7 +16676,7 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0013 and above']);
+  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
   out.push(['Category', 'Type'].concat(dl, ['Total', 'Inv Stock', 'Inv WIP']));
