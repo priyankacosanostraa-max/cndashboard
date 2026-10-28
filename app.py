@@ -1,8 +1,7 @@
-# Cosa Nostraa — V24.99 (N M FASHION / MOHANLAL SONS / TAJ TRADE: COSSA SHEET KE TYPE SE SOR / PURCHASE (B2B) / BULK)
-# - In 3 customers ka Type cossa sheet se dekha jaata hai (dono channels se sale jaati hai, customer name akela decide nahi karta):
-#     Type = SOR / SIS / Marketplace -> SOR  |  Type = Purchase -> Purchase (B2B)  |  Type = Bulk -> Bulk (Bulk hi rahega)  |  Type = Online -> Bulk
-#     blank / Regular / baaki -> SOR (pehle jaisa).  Website / Store consumer sales ka rule same. Har month (last / this / future) ke liye same.
-# - Taj Trade and Transport SOR list / SOR filter / Target_26-27 SOR row (target 0) me bhi hai. Target_26-27 ke numbers (Purchase / Marketplace / Website / Store / Bulk / SOR) image wali Actual SP Target sheet se match karte hain — change nahi.
+# Cosa Nostraa — V24.99 (N M FASHION / MOHANLAL SONS / TAJ TRADE: SIRF SOR YA PURCHASE (B2B) · ONLINE -> BULK ROW)
+# - In 3 customers ki sale sirf 2 jagah: cossa sheet Type = Purchase -> Purchase (B2B); baaki sab Type (SOR / SIS / Marketplace / Bulk / Online / blank) -> SOR. Ye kabhi Bulk me nahi jaate. Website / Store consumer sales ka rule same. Har month (last / this month / future) ke liye same.
+# - Cossa sheet Type = Online ab poore app me Bulk maana jaata hai (data load ke time Type Online -> Bulk, isliye Matrix / Home / Repeat / Target_26-27 sab jagah Bulk me); Type = Bulk Bulk me hi rehta hai. Sirf N M Fashion / Mohanlal / Taj Trade ka Online SOR me jaata hai.
+# - Taj Trade and Transport SOR list / SOR filter / Target_26-27 SOR row (target 0) me hai. Target_26-27 ke numbers image wali Actual SP Target sheet se match karte hain — change nahi.
 # Cosa Nostraa — V24.98 (REPEAT ORDERS: REL/NON-REL + PRODUCT TYPE FILTER HATAYE · COLLECTION STORY FILTER ADD)
 # - Repeat Orders tab se "Rel / Non-Rel (CN Name)" aur "Product Type" filter hata diye. Unki jagah "Collection Story" dropdown (multi-select + andar search box, Select Visible / Clear) — values All Product sheet ke Collection Story column (column S) se. Reset button se clear hota hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.97 (NEW LAUNCH TABLE: LAST 7 DAYS SALES + TOTAL SALES (ALL TIME) DO COLUMN · EXPORT ME BHI)
@@ -1504,17 +1503,18 @@ def _is_purchase_vendor(customer, typ=None):
     return re.sub(r"[^a-z0-9]", "", str(typ or "").casefold()) == "purchase"
 
 def _split_vendor_override(customer, typ):
-    """N M Fashion / Mohanlal Sons / Taj Trade: cossa sheet Type se channel.
-    Type Purchase -> "Purchase" (B2B) | Type Bulk or Online -> "Bulk" | baaki -> None (SOR rules chalte hain)."""
+    """N M Fashion / Mohanlal Sons / Taj Trade: sirf SOR ya Purchase (B2B) — kabhi Bulk nahi.
+    cossa sheet Type = Purchase -> "Purchase" | Website / Store consumer sale -> None (consumer rule) |
+    baaki sab Type (SOR / SIS / Marketplace / Bulk / Online / blank) -> "SOR"."""
     c = re.sub(r"[^a-z0-9]", "", str(customer or "").casefold())
     if not c or not any(k in c for k in _PURCHASE_VENDOR_KEYS):
         return None
     t = re.sub(r"[^a-z0-9]", "", str(typ or "").casefold())
     if t == "purchase":
         return "Purchase"
-    if t in ("bulk", "online"):
-        return "Bulk"
-    return None
+    if t in ("website", "d2c", "store"):
+        return None
+    return "SOR"
 _SOR_KEYS_BY_LABEL = dict(_SOR_CHANNEL_KEYS)
 _ECOM_SUB_PRESET = [k[0] for k in _ECOM_CHANNEL_KEYS]
 # PSL Retail = Target me EK hi row ("SOR - PSL Retail", Online + Offline dono add — _SOR_CHANNEL_KEYS / _t26_bucket
@@ -1820,6 +1820,9 @@ def _merge_amazon_identity(customer, typ):
     _ov = _split_vendor_override(customer, typ)
     if _ov:
         return customer, _ov
+    # Type = Online -> Bulk (poore app me; data load ke time hi Type badal jaata hai)
+    if re.sub(r"[^a-z0-9]", "", str(typ or "").casefold()) == "online":
+        return customer, "Bulk"
     # Sheet Type Marketplace / SOR / ECom -> customer name se: named SOR customers = SOR,
     # baaki sab marketplaces = ECom.
     if _is_marketplace_type(typ):
@@ -1841,7 +1844,7 @@ def calc_channel(customer, typ):
     if t in ("sor", "sis"): return "SOR"
     if _is_marketplace_type(t): return "Ecom"
     if t == "website":    return "D2C"
-    if t == "online":     return "D2C"
+    if t == "online":     return "Bulk"
     if t == "purchase":   return "B2B"
     if t == "exhibition": return "Exhibition"
     if t == "bulk":       return "Bulk"
@@ -32052,13 +32055,13 @@ def _dtr_bucket(customer, typ):
     _ov = _split_vendor_override(customer, typ)
     if _ov == "Purchase":
         return "Purchase"       # N M Fashion / Mohanlal / Taj Trade with Type = Purchase
-    if _ov == "Bulk":
-        return None             # Bulk / Online type of these vendors = Bulk, not a marketplace channel
+    if _ov == "SOR":
+        return "Others"         # SOR-type (or Bulk / Online / blank) sale of these vendors = SOR vendor -> Others
     # SOR vendor (Customer Name se; Type Purchase/Bulk/kuch bhi ho) = marketplace-type sale -> Others,
     # Purchase me nahi. Website/Online/Store consumer sales is rule se bahar.
     if not _is_consumer_type(typ) and _match_channel_keys(customer, _SOR_CHANNEL_KEYS):
         return "Others"
-    if t in ("website", "online"): return "Website"
+    if t == "website": return "Website"
     if t == "purchase":  return "Purchase"
     if "blinkit" in t:   return "Blinkit"
     if "instamart" in t or "swiggy" in t: return "Instamart"
@@ -32651,7 +32654,7 @@ for _t, _ch, _v in _TARGET_26_27:
     _T26_CUSTOMER_KEYS.append((_t26_label(_t, _ch), _k))
 
 _T26_ROW_ORDER = [_t26_label(_t, _ch) for _t, _ch, _v in _TARGET_26_27]
-_T26_TYPE_BUCKETS = {"website": _T26_LABEL_WEBSITE, "online": _T26_LABEL_WEBSITE, "d2c": _T26_LABEL_WEBSITE,
+_T26_TYPE_BUCKETS = {"website": _T26_LABEL_WEBSITE, "online": "Bulk", "d2c": _T26_LABEL_WEBSITE,
                      "purchase": "Purchase", "exhibition": "Exhibition", "store": "Store", "bulk": "Bulk"}
 _T26_MARKETPLACE_TYPES = {"marketplace", "sor", "sis", "ecom", "ecommerce", "regular", "other", "unknown", ""}
 
@@ -32773,9 +32776,13 @@ def _is_qcom_customer(customer):
 
 @lru_cache(maxsize=100000)
 def _t26_bucket_cached(customer, typ):
-    _ov = _split_vendor_override(customer, typ)   # N M Fashion / Mohanlal / Taj Trade: Type Purchase -> Purchase, Bulk/Online -> Bulk
-    if _ov:
-        return _ov
+    _ov = _split_vendor_override(customer, typ)   # N M Fashion / Mohanlal / Taj Trade: Type Purchase -> Purchase, baaki -> SOR row (kabhi Bulk nahi)
+    if _ov == "Purchase":
+        return "Purchase"
+    if _ov == "SOR":
+        _sv_lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS)
+        if _sv_lab:
+            return "SOR - " + _sv_lab
     # Qcom = Blinkit + Instamart (Customer Name se). Sheet Type Purchase/Bulk/Marketplace/kuch bhi ho,
     # customer naam Qcom ka ho to Qcom row me hi jaayega (pehle Type column Purchase/Bulk ho to wahan chala jaata tha).
     if not _is_consumer_type(typ) and _is_qcom_customer(customer):
