@@ -1,5 +1,5 @@
 # Cosa Nostraa — V24.98 (REPEAT ORDERS: REL/NON-REL + PRODUCT TYPE FILTER HATAYE · COLLECTION STORY FILTER ADD)
-# - Repeat Orders tab se "Rel / Non-Rel (CN Name)" aur "Product Type" filter hata diye. Unki jagah "Collection Story" filter (tick one or more) — values All Product sheet ke Collection Story column (column S) se. Reset button se clear hota hai. Baaki kuch change nahi.
+# - Repeat Orders tab se "Rel / Non-Rel (CN Name)" aur "Product Type" filter hata diye. Unki jagah "Collection Story" dropdown (multi-select + andar search box, Select Visible / Clear) — values All Product sheet ke Collection Story column (column S) se. Reset button se clear hota hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.97 (NEW LAUNCH TABLE: LAST 7 DAYS SALES + TOTAL SALES (ALL TIME) DO COLUMN · EXPORT ME BHI)
 # - Table me ab 2 column: Last 7 Days Sales (dikhte 7 din ka total) aur Total Sales (All Time) (in SKUs ki ab tak ki poori sale, report date tak: Single + Via Combos). Export CSV (summary + SKU-wise) me bhi dono column. /api/new_launch_daily ab "alltime" bhi bhejta hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.96 (NEW LAUNCH TABLE: BOOKMARK = BM-0001/2/3 · PHOTO FRAME = BH-2794, BH-2795)
@@ -5653,6 +5653,13 @@ table.ro td.red{color:#dc2626}
 .sku-opt:hover{background:#f8fafc}
 .sku-opt input{accent-color:#b8860b}
 
+.cs-dd{position:relative}
+.cs-dd-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left;cursor:pointer}
+.cs-dd-btn span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-dd-panel{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:60;min-width:240px;background:#fffefb;border:1px solid rgba(123,91,33,.22);border-radius:14px;box-shadow:0 18px 44px rgba(55,38,12,.22);padding:10px}
+.cs-dd-actions{display:flex;gap:8px;margin:8px 0}
+.cs-dd-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto}
+.cs-dd-list .type-opt{width:100%;box-sizing:border-box}
 .type-checks{display:flex;flex-wrap:wrap;gap:8px;max-height:120px;overflow:auto;padding:8px;background:#ffffff;border:1px solid #d8dee9;border-radius:8px}
 .type-opt{display:flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid #eef2f7;border-radius:8px;background:#fbfdff;font-size:11px;color:#111827;cursor:pointer;font-weight:600}
 .type-opt:hover{background:#f3f6fb}
@@ -8374,8 +8381,18 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rSorChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
-        <div class="fc"><label class="fl">Collection Story (tick one or more)</label>
-          <div id="rCollChecks" class="type-checks"></div></div>
+        <div class="fc"><label class="fl">Collection Story (select one or more)</label>
+          <div class="cs-dd" id="rCollDD">
+            <button type="button" class="fs cs-dd-btn" id="rCollBtn" onclick="toggleCollDD(event)"><span id="rCollLabel">All Collection Stories</span><span class="cs-dd-caret">&#9662;</span></button>
+            <div class="cs-dd-panel" id="rCollPanel" style="display:none">
+              <input class="fi" id="rCollSearch" placeholder="Search collection story…" oninput="filterCollChecks()" autocomplete="off">
+              <div class="cs-dd-actions">
+                <button type="button" class="mini-btn" onclick="selectVisibleColl()">Select Visible</button>
+                <button type="button" class="mini-btn" onclick="clearColl()">Clear</button>
+              </div>
+              <div id="rCollChecks" class="cs-dd-list"></div>
+            </div>
+          </div></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
           <div id="rPackChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Customer Name</label>
@@ -11322,9 +11339,44 @@ function renderCollChecks(){
   const list = Array.from(set).sort((a,b) => a.localeCompare(b));
   box.innerHTML = list.length ? list.map(p => {
     const safe = String(p).replace(/"/g, '&quot;');
-    return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="applyRO()"><span>${escHtml(p)}</span></label>`;
+    return `<label class="type-opt" data-t="${escHtml(p).toLowerCase()}"><input type="checkbox" value="${safe}" onchange="collChanged()"><span>${escHtml(p)}</span></label>`;
   }).join('') : '<span class="small-note">No collection story</span>';
+  updateCollLabel();
 }
+function updateCollLabel(){
+  const lb = document.getElementById('rCollLabel'); if (!lb) return;
+  const sel = getSelectedCollections();
+  lb.textContent = sel.length === 0 ? 'All Collection Stories' : (sel.length === 1 ? sel[0] : sel.length + ' selected');
+}
+function collChanged(){ updateCollLabel(); applyRO(); }
+function toggleCollDD(ev){
+  if (ev) ev.stopPropagation();
+  const pn = document.getElementById('rCollPanel'); if (!pn) return;
+  const open = pn.style.display === 'none';
+  pn.style.display = open ? 'block' : 'none';
+  if (open) { const q = document.getElementById('rCollSearch'); if (q) { q.focus(); } }
+}
+function filterCollChecks(){
+  const q = (document.getElementById('rCollSearch')?.value || '').trim().toLowerCase();
+  document.querySelectorAll('#rCollChecks label').forEach(l => {
+    l.style.display = (!q || (l.getAttribute('data-t') || '').includes(q)) ? '' : 'none';
+  });
+}
+function selectVisibleColl(){
+  document.querySelectorAll('#rCollChecks label').forEach(l => {
+    if (l.style.display === 'none') return;
+    const c = l.querySelector('input'); if (c) c.checked = true;
+  });
+  collChanged();
+}
+function clearColl(){
+  document.querySelectorAll('#rCollChecks input:checked').forEach(c => c.checked = false);
+  collChanged();
+}
+document.addEventListener('click', function(ev){
+  const dd = document.getElementById('rCollDD'), pn = document.getElementById('rCollPanel');
+  if (dd && pn && pn.style.display !== 'none' && !dd.contains(ev.target)) pn.style.display = 'none';
+});
 
 function sCls(v){ return v === 0 ? 'z' : v < 5 ? 'l' : 'g'; }
 
@@ -14605,6 +14657,8 @@ function resetRO(){
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   cnxResetCategorySelection('rTaxon');
   document.querySelectorAll('#rCollChecks input:checked').forEach(c => c.checked = false);
+  const rcs = document.getElementById('rCollSearch'); if (rcs) rcs.value = '';
+  filterCollChecks(); updateCollLabel();
   const rsm = document.getElementById('rSaleMode'); if (rsm) rsm.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
