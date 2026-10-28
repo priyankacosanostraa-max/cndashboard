@@ -1,3 +1,5 @@
+# Cosa Nostraa — V24.98 (REPEAT ORDERS: REL/NON-REL + PRODUCT TYPE FILTER HATAYE · COLLECTION STORY FILTER ADD)
+# - Repeat Orders tab se "Rel / Non-Rel (CN Name)" aur "Product Type" filter hata diye. Unki jagah "Collection Story" filter (tick one or more) — values All Product sheet ke Collection Story column (column S) se. Reset button se clear hota hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.97 (NEW LAUNCH TABLE: LAST 7 DAYS SALES + TOTAL SALES (ALL TIME) DO COLUMN · EXPORT ME BHI)
 # - Table me ab 2 column: Last 7 Days Sales (dikhte 7 din ka total) aur Total Sales (All Time) (in SKUs ki ab tak ki poori sale, report date tak: Single + Via Combos). Export CSV (summary + SKU-wise) me bhi dono column. /api/new_launch_daily ab "alltime" bhi bhejta hai. Baaki kuch change nahi.
 # Cosa Nostraa — V24.96 (NEW LAUNCH TABLE: BOOKMARK = BM-0001/2/3 · PHOTO FRAME = BH-2794, BH-2795)
@@ -3280,6 +3282,10 @@ def _refresh_data():
     I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
+    # Collection Story = All Product physical column S (zero-based 18). Header match preferred, column S fallback.
+    I_COLL_STORY = find_col(inv.columns, "Collection Story", "CollectionStory")
+    if I_COLL_STORY is None and len(inv.columns) > 18:
+        I_COLL_STORY = inv.columns[18]
     # AF (zero-based index 31) = internal CN Name. Exact header match is
     # preferred; positional fallback protects against harmless header edits.
     I_CN_NAME = find_col(inv.columns, "CN Name", "Name")
@@ -4540,6 +4546,19 @@ def _refresh_data():
             "ncust":len(custs),"first":first_d or "N/A","last":last_d or "N/A",
         }
 
+    def _coll_story_of(_r):
+        if not I_COLL_STORY:
+            return ""
+        try:
+            _v = _r.get(I_COLL_STORY, "")
+            if isinstance(_v, pd.Series):   # duplicate headers -> first non-blank value
+                _vals = [x for x in _v.tolist() if x is not None and str(x).strip() and str(x).strip().lower() not in ("nan", "nat", "none")]
+                _v = _vals[0] if _vals else ""
+            _v = str(_v).strip() if _v is not None else ""
+            return "" if _v.lower() in ("nan", "nat", "none") else _v
+        except Exception:
+            return ""
+
     seen_skus = set()
     _n_inv = len(inv)
     for _ii, r in enumerate(_df_chunks(inv, 2500)):
@@ -4693,6 +4712,7 @@ def _refresh_data():
             "combo_skus":   stone_details,
             "gift_set_stone_details": gift_set_stone_details,
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
+            "collection_story": _coll_story_of(r),
             "stone_color":  clean(r.get(I_STONE_COLOR,"")) if I_STONE_COLOR else "",
             "sales_entries": ent,
             "orderdate_sales_entries": od_ent,
@@ -4815,6 +4835,7 @@ def _refresh_data():
             "combo_skus": _src.get("combo_skus", "") or "",
             "gift_set_stone_details": _src.get("gift_set_stone_details", "") or "",
             "pack_details": _src.get("pack_details", "") or "",
+            "collection_story": _src.get("collection_story", "") or "",
             "stone_color": _src.get("stone_color", "") or "",
             "inventory_source_sku": _inv_source_key or "",
             "inventory_suffix_fallback": _suffix_fallback,
@@ -8353,17 +8374,8 @@ select.lg-in option{background:#fff;color:#1a1610}
           <div id="rSorChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Taxon / Category (select one or more)</label>
           <select class="fs" id="rTaxon" onchange="applyRO()"></select></div>
-        <div class="fc"><label class="fl">Rel / Non-Rel (CN Name)</label>
-          <select class="fs" id="rRelClass" onchange="applyRO()">
-            <option value="All">All</option>
-            <option value="Rel">Rel</option>
-            <option value="Non-Rel">Non-Rel</option>
-          </select></div>
-        <div class="fc"><label class="fl">Product Type</label>
-          <select class="fs" id="rCnTag" onchange="applyRO()">
-            <option value="All">All</option>
-            <option value="Religious">🕉️ Religious</option>
-          </select></div>
+        <div class="fc"><label class="fl">Collection Story (tick one or more)</label>
+          <div id="rCollChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Pack Details (tick one or more)</label>
           <div id="rPackChecks" class="type-checks"></div></div>
         <div class="fc"><label class="fl">Customer Name</label>
@@ -11296,6 +11308,24 @@ function renderPackChecks(){
   }).join('') : '<span class="small-note">No pack details</span>';
 }
 
+function getSelectedCollections(){
+  const box = document.getElementById('rCollChecks');
+  if (!box) return [];
+  return Array.from(box.querySelectorAll('input[type=checkbox]:checked')).map(c => c.value);
+}
+function renderCollChecks(){
+  const box = document.getElementById('rCollChecks');
+  if (!box) return;
+  // Collection Story ki unique values All Product (column S) se.
+  const set = new Set();
+  (master || []).forEach(i => { const p = String(i.collection_story || '').trim(); if (p) set.add(p); });
+  const list = Array.from(set).sort((a,b) => a.localeCompare(b));
+  box.innerHTML = list.length ? list.map(p => {
+    const safe = String(p).replace(/"/g, '&quot;');
+    return `<label class="type-opt"><input type="checkbox" value="${safe}" onchange="applyRO()"><span>${escHtml(p)}</span></label>`;
+  }).join('') : '<span class="small-note">No collection story</span>';
+}
+
 function sCls(v){ return v === 0 ? 'z' : v < 5 ? 'l' : 'g'; }
 
 function toggleDbg(){
@@ -13010,6 +13040,7 @@ function loadData(force){
       renderChannelChecks();
       renderSubChannelChecks();
       renderPackChecks();
+      renderCollChecks();
       ['fTaxon','rTaxon','iTaxon'].forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = taxHtml; cnxResetCategorySelection(id); cnxEnableCategoryMultiSelect(id); } });
       const p = document.getElementById('fPlat'); if (p) p.innerHTML = platHtml;
       // Launch Month options — month-wise (Month + Year combined), ascending
@@ -13990,8 +14021,7 @@ function applyRO(){
   const subChanSel = getSelectedSubChannels('rSubChan');
   const roInvCtx = roInvContext(typeSel, chanSel, subChanSel);
   const taxSel = cnxSelectedCategoryValues('rTaxon');
-  const relClassQ = document.getElementById('rRelClass')?.value || 'All';
-  const cnTagQ = document.getElementById('rCnTag')?.value || 'All';
+  const collSel = getSelectedCollections();
   const custQ = (document.getElementById('rCust')?.value || '').trim().toLowerCase();
   const saleModeQ = cnxSaleModeState('rSaleMode', custQ, chanSel, subChanSel);
   const d1 = document.getElementById('rD1')?.value || '';
@@ -14025,10 +14055,7 @@ function applyRO(){
     if (txt && !`${item.sku||''} ${item.sku_name||''} ${item.cn_name||''}`.toLowerCase().includes(txt)) return false;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return false;
     if (!cnxCategoryMatches(taxSel, item.taxon)) return false;
-    // Exact CN Name marker class: Non-Rel wins before Rel.
-    if (relClassQ !== 'All' && cnClassOf(item) !== relClassQ) return false;
-    if (cnTagQ === 'Religious' && !item.is_religious) return false;
-    if (cnTagQ === 'Seasonal' && !item.is_seasonal) return false;
+    if (collSel.length > 0 && !collSel.includes(String(item.collection_story || '').trim())) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
     // Hide SKUs where Stone Details/Remarks (combo_skus) contains the word "customer"
     if ((item._comboLower || String(item.combo_skus||'').toLowerCase()).includes('customer')) return false;
@@ -14080,7 +14107,7 @@ function applyRO(){
 
   // SORT: jo value screen par dikhti hai (channel-aware jab single type filter ho)
   // uska use karke sort karo — warna galat lagta hai.
-  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilterSort = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || collSel.length>0 || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const _winStart = (n) => todayISO ? new Date(new Date(todayISO) - Math.max(0,n-1)*86400000).toISOString().slice(0,10) : '';
   const _S7 = _winStart(7), _S15 = _winStart(15), _S30 = _winStart(30);
   function _roSortVal(it, key){
@@ -14123,7 +14150,7 @@ function applyRO(){
   });
   _setSkuRevenueShareContext('repeat', roRevenueShareMap, roRevenueShareTotal);
 
-  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || relClassQ!=='All' || cnTagQ!=='All' || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
+  const roNoFilter = !(txt || cnQ || typeSel.length>0 || chanSel.length>0 || subChanSel.length>0 || taxSel.length>0 || collSel.length>0 || custQ || saleModeQ || d1 || d2 || pastedSkuSet || packSel.length>0);
   const qtySum = roNoFilter
     ? grandFinalQty
     : filtered.reduce((s,i) => s + (Number(i._fQty ?? i.final_qty ?? 0) || 0), 0);
@@ -14498,7 +14525,7 @@ function applyColFilters(){
     chanSelCF.length > 0 ||
     subChanSelCF.length > 0 ||
     cnxSelectedCategoryValues('rTaxon').length > 0 ||
-    (document.getElementById('rRelClass')?.value || 'All') !== 'All' ||
+    getSelectedCollections().length > 0 ||
     (document.getElementById('rCust')?.value  || '').trim() ||
     (document.getElementById('rD1')?.value    || '') ||
     (document.getElementById('rD2')?.value    || '') ||
@@ -14577,8 +14604,7 @@ function resetRO(){
   roAnuWipMap = {}; roAnuLastQuery = null;
   document.querySelectorAll('#rPackChecks input:checked').forEach(c => c.checked = false);
   cnxResetCategorySelection('rTaxon');
-  const rct = document.getElementById('rCnTag'); if (rct) rct.value='All';
-  const rrc = document.getElementById('rRelClass'); if (rrc) rrc.value='All';
+  document.querySelectorAll('#rCollChecks input:checked').forEach(c => c.checked = false);
   const rsm = document.getElementById('rSaleMode'); if (rsm) rsm.value='All';
   pastedSkuSet = null;
   const ta = document.getElementById('rPasteSkus'); if (ta) ta.value = '';
