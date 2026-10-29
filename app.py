@@ -1,3 +1,5 @@
+# Cosa Nostraa — V25.00 (NEW TAB: RAMYANA — SKU, IMAGE, INDIVIDUAL / IN CMB / TOTAL SOLD, INV STOCK, INV WIP · INV STOCK <= 50 RED FLAG · EXPORT EXCEL)
+# - Naya "Ramyana" tab (menu me WIP Receive ke neeche). Table: SKU, Image, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Individual Sold = SKU ki apni sale; In CMB Sold = parent CMB ki sale x us CMB me child ke pieces; Total = dono. Inv Stock / Inv WIP sirf child SKU ka (CMB ka nahi). Inv Stock 50 ya usse kam ho to row red flag. Export Excel (proper formatted table, red flag ke saath). Baaki kuch change nahi.
 # Cosa Nostraa — V24.99 (N M FASHION / MOHANLAL SONS / TAJ TRADE: SIRF SOR YA PURCHASE (B2B) · ONLINE -> BULK ROW)
 # - In 3 customers ki sale sirf 2 jagah: cossa sheet Type = Purchase -> Purchase (B2B); baaki sab Type (SOR / SIS / Marketplace / Bulk / Online / blank) -> SOR. Ye kabhi Bulk me nahi jaate. Website / Store consumer sales ka rule same. Har month (last / this month / future) ke liye same.
 # - Cossa sheet Type = Online ab poore app me Bulk maana jaata hai (data load ke time Type Online -> Bulk, isliye Matrix / Home / Repeat / Target_26-27 sab jagah Bulk me); Type = Bulk Bulk me hi rehta hai. Sirf N M Fashion / Mohanlal / Taj Trade ka Online SOR me jaata hai.
@@ -8207,6 +8209,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m12" onclick="showTab('discount')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="m4 20 16-16M7 4h.01M17 20h.01"/><circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/></svg></span><span>Discount Leakage</span></button>
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
   <button class="menu-item" id="m38" onclick="showTab('wipreceive')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM4 8l2-4h12l2 4"/><path d="M12 11v5M9.5 13.5 12 16l2.5-2.5"/></svg></span><span>WIP Receive</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m39" onclick="showTab('ramyana')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 10h16M9 5v14"/></svg></span><span>Ramyana</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
@@ -9837,6 +9840,28 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
 
 
+  <div id="vRamyana" class="ops-page" style="display:none">
+    <div class="ops-head">
+      <div>
+        <div class="ops-title">Ramyana</div>
+        <div class="ops-sub">Ramyana SKUs ki sale aur stock. Individual Sold = SKU ki apni sale, In CMB Sold = jis CMB (parent SKU) me yeh child gaya uski sale x pieces, Total Sold = dono. Inv Stock / Inv WIP sirf child SKU ka hai (CMB ka nahi). Inv Stock 50 ya kam ho to red flag.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetRamyanaFilters()">Reset Filters</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRamyana()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRamyanaExcel()">Export Excel</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Sold From Date</label><input class="fi" type="date" id="ryFrom" onchange="renderRamyana()"></div>
+      <div class="fc"><label class="fl">Sold To Date</label><input class="fi" type="date" id="ryTo" onchange="renderRamyana()"></div>
+      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="rySearch" placeholder="Search SKU..." oninput="renderRamyana_d()"></div>
+      <div class="fc"><label class="fl">Inv Stock</label><select class="fs" id="ryStockF" onchange="renderRamyana()"><option value="">All</option><option value="low">Low (50 or less) - Red flag</option><option value="ok">Above 50</option></select></div>
+    </div>
+    <div id="ryInfo" class="small-note" style="margin:0 2px 10px"></div>
+    <div id="rySummary" class="ops-kpis"></div>
+    <div id="ryContent" class="ops-table-wrap"></div>
+  </div>
   <div id="vWipReceive" class="ops-page" style="display:none">
     <div class="ops-head">
       <div>
@@ -16811,6 +16836,274 @@ function exportNewLaunch(){
   a.download = 'new_launch_daily_sales_' + (_nlData.asof || '') + '.csv'; a.click();
 }
 window.loadNewLaunch = loadNewLaunch; window.renderNewLaunch = renderNewLaunch; window.copyNewLaunchMsg = copyNewLaunchMsg; window.exportNewLaunch = exportNewLaunch;
+
+/* ── RAMYANA TAB ──
+   List = ramyana.xlsx. Sales use the same dashboard logic as Repeat Orders / SKU Details (cnxSoldSplit):
+   Individual = child SKU's own sale, In CMB = parent CMB sale x child pieces in that CMB. Inv Stock / Inv WIP = single child SKU only (never a CMB). */
+const _RAMYANA_SKUS = [
+  'BR-0015',
+  'BR-0016',
+  'SW-0001',
+  'BM-0001',
+  'BH-2616',
+  'BH-2794',
+  'BTC-0048',
+  'BH-2790',
+  'LP-0442',
+  'BH-2780',
+  'BR-0017',
+  'BM-0002',
+  'BH-2782',
+  'LP-0441',
+  'GB-0001',
+  'BR-0018',
+  'BH-2783',
+  'BTC-0055',
+  'BH-2795',
+  'LP-0440',
+  'BR-0019',
+  'BM-0003',
+  'LP-0445',
+  'BH-2479',
+  'BTC-0182',
+  'BR-0020',
+  'BH-2785',
+  'BTC-0172',
+  'LP-0444',
+  'BH-2781',
+  'CMB-1020',
+  'BR-0021',
+  'BH-2436',
+  'BH-2437',
+  'BH-2438',
+  'BH-2439',
+  'BH-2440',
+  'BH-2441',
+  'BH-2442',
+  'BH-2448',
+  'BH-2449',
+  'BH-2451',
+  'BH-2452',
+  'BH-2453',
+  'BH-2456',
+  'BH-2464',
+  'BH-2465',
+  'BH-2470',
+  'BH-2471',
+  'BH-2472',
+  'BH-2473',
+  'BH-2474',
+  'BH-2475',
+  'BH-2476',
+  'BH-2477',
+  'BH-2480',
+  'BH-2481',
+  'BH-2482',
+  'BH-2483',
+  'BH-2487',
+  'BH-2488',
+  'BH-2489',
+  'BH-2490',
+  'BH-2491',
+  'BH-2492',
+  'BH-2493',
+  'BH-2494',
+  'BH-2495',
+  'BH-2496',
+  'BH-2501',
+  'BH-2503',
+  'BH-2507',
+  'BH-2508',
+  'BH-2509',
+  'BH-2510',
+  'BH-2511',
+  'BH-2519',
+  'BH-2538',
+  'BH-2613',
+  'BH-2614',
+  'BH-2615',
+  'BH-2617',
+  'BH-2618',
+  'BH-2619',
+  'BH-2620',
+  'BH-2621',
+  'BH-2622',
+  'BH-2623',
+  'BH-2624',
+  'BH-2709',
+  'BH-2710',
+  'BH-2711',
+  'BH-2712',
+  'BH-2713',
+  'BH-2714',
+  'BH-2715',
+  'BH-2716',
+  'BH-2717',
+  'BH-2722',
+  'BH-2726',
+  'BH-2727',
+  'BH-2728',
+  'BH-2729',
+  'BH-2786',
+  'CMB-0863',
+  'CMB-1001',
+  'CMB-1002',
+  'CMB-1003',
+  'CMB-1004',
+  'CMB-1005',
+  'CMB-1006',
+  'CMB-1007',
+  'CMB-1008',
+  'CMB-1009',
+  'CMB-1010',
+  'BH-2753',
+  'BH-2754',
+  'BH-2755',
+  'BH-2757',
+  'BH-2758',
+  'BH-2759',
+  'BH-2760',
+  'BH-2761',
+  'BH-2762',
+  'BH-2763',
+  'BH-2764',
+  'BH-2766',
+  'BH-2768',
+  'BH-2769',
+  'BH-2771',
+  'BH-2772',
+  'BH-2773',
+  'BH-2774',
+  'BH-2775',
+  'BH-2776',
+  'BH-2777',
+  'BH-2787',
+  'CMB-1000',
+  'CMB-0992',
+  'CMB-0993',
+  'CMB-0994',
+  'CMB-0995',
+  'CMB-0996',
+  'CMB-0997',
+  'CMB-0998',
+  'CMB-0999'
+];
+const _RY_LOW_STOCK = 50;
+let _ryRows = [], _ryRetry = 0, _ryTimer = null;
+function _ryKey(s){ return String(s == null ? '' : s).trim().toUpperCase(); }
+function _ryIsCmb(it, sku){ return /^CMB[-_ ]?\d/.test(sku) || !!(it && Array.isArray(it.combo_details) && it.combo_details.length); }
+function _ryNum(v){ return Math.round(Number(v) || 0).toLocaleString('en-IN'); }
+function _ryImg(it){ const u = it && it.image_url ? String(it.image_url).trim() : ''; return (u && u.toLowerCase() !== 'nan') ? u : ''; }
+function _ryBuild(){
+  const idx = new Map();
+  (master || []).forEach(it => { const k = _ryKey(it && it.sku); if (k) idx.set(k, it); });
+  const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
+  const ctx = (d1 || d2) ? {d1: d1, d2: d2} : {};
+  const order = [], seen = new Set(), kids = [];
+  const add = sku => {
+    if (!sku || seen.has(sku)) return;
+    const it = idx.get(sku) || null;
+    if (_ryIsCmb(it, sku)) return;
+    seen.add(sku); order.push(sku);
+  };
+  _RAMYANA_SKUS.forEach(raw => {
+    const sku = _ryKey(raw), it = idx.get(sku) || null;
+    if (_ryIsCmb(it, sku)) { (it && Array.isArray(it.combo_details) ? it.combo_details : []).forEach(c => kids.push(_ryKey(c && c.sku))); return; }
+    add(sku);
+  });
+  kids.forEach(add);   /* children of the listed CMBs (if not already listed) */
+  return order.map(sku => {
+    const it = idx.get(sku) || null;
+    let ind = 0, inc = 0;
+    try { const sp = cnxSoldSplit(it || {sku: sku}, ctx); ind = Number(sp.individual.sold) || 0; inc = Number(sp.inCmb.sold) || 0; } catch (e) { console.error(e); }
+    return {sku: sku, img: _ryImg(it), ind: ind, inc: inc, tot: ind + inc,
+            stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
+  });
+}
+function _ryFiltered(){
+  const q = ((document.getElementById('rySearch') || {}).value || '').trim().toLowerCase();
+  const sf = (document.getElementById('ryStockF') || {}).value || '';
+  return _ryRows.filter(r => {
+    if (q && r.sku.toLowerCase().indexOf(q) < 0) return false;
+    const low = r.stock !== null && r.stock <= _RY_LOW_STOCK;
+    if (sf === 'low' && !low) return false;
+    if (sf === 'ok' && (low || r.stock === null)) return false;
+    return true;
+  });
+}
+function renderRamyana(){
+  const host = document.getElementById('ryContent'); if (!host) return;
+  if (!master || !master.length) {
+    host.innerHTML = '<div class="ops-empty">Loading data...</div>';
+    if (_ryRetry < 40) { _ryRetry++; clearTimeout(_ryTimer); _ryTimer = setTimeout(() => { if (currentTab === 'ramyana') renderRamyana(); }, 1500); }
+    return;
+  }
+  _ryRetry = 0;
+  _ryRows = _ryBuild();
+  const rows = _ryFiltered();
+  const sm = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const lowCnt = rows.filter(r => r.stock !== null && r.stock <= _RY_LOW_STOCK).length;
+  const kpi = (l, v, s) => '<div class="ops-kpi"><div class="ops-kpi-label">' + l + '</div><div class="ops-kpi-value">' + v + '</div><div class="ops-kpi-sub">' + s + '</div></div>';
+  const sumHost = document.getElementById('rySummary');
+  if (sumHost) sumHost.innerHTML = kpi('SKUs', _ryNum(rows.length), 'Child SKUs shown')
+    + kpi('Individual Sold', _ryNum(sm('ind')), 'SKU ki apni sale')
+    + kpi('In CMB Sold', _ryNum(sm('inc')), 'CMB ke through (pieces)')
+    + kpi('Total Sold', _ryNum(sm('tot')), 'Individual + In CMB')
+    + kpi('Low Stock (50 or less)', _ryNum(lowCnt), 'Red flag SKUs');
+  const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
+  const info = document.getElementById('ryInfo');
+  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
+  if (!rows.length) { host.innerHTML = '<div class="ops-empty">No SKU found for the selected filters.</div>'; return; }
+  const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
+  let body = '';
+  rows.forEach(r => {
+    const low = r.stock !== null && r.stock <= _RY_LOW_STOCK;
+    const rowBg = low ? ' style="background:#fee2e2 !important"' : '';
+    const cellBg = low ? 'background:#fee2e2 !important;' : '';
+    const photo = r.img ? '<img class="ops-photo" src="' + escHtml(r.img) + '" loading="lazy" decoding="async" onerror="this.outerHTML=\'<div class=&quot;ops-photo-ph&quot;>💎</div>\'">' : '<div class="ops-photo-ph">💎</div>';
+    body += '<tr>'
+      + '<td data-sort-value="' + escHtml(r.sku) + '" style="' + cellBg + 'font-weight:800;white-space:nowrap">' + escHtml(r.sku) + (r.found ? '' : ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
+      + '<td data-sort-value="' + (r.img ? 1 : 0) + '" style="' + cellBg + '">' + photo + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.ind + '" style="' + cellBg + '">' + _ryNum(r.ind) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.inc + '" style="' + cellBg + '">' + _ryNum(r.inc) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.tot + '" style="' + cellBg + 'font-weight:900">' + _ryNum(r.tot) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.stock === null ? -1 : r.stock) + '" style="' + (low ? 'background:#fecaca !important;color:#991b1b;font-weight:900' : '') + '">' + (r.stock === null ? '—' : _ryNum(r.stock)) + (low ? ' 🚩' : '') + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.wip === null ? -1 : r.wip) + '" style="' + cellBg + '">' + (r.wip === null ? '—' : _ryNum(r.wip)) + '</td>'
+      + '</tr>';
+  });
+  const tf = '<tfoot><tr style="background:#f2e5cf">'
+    + '<td style="font-weight:900">TOTAL</td><td></td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('ind')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('inc')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('tot')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('stock')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('wip')) + '</td></tr></tfoot>';
+  host.innerHTML = '<table class="ops-table" style="min-width:820px"><thead><tr>'
+    + th('SKU') + th('Image') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+    + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
+}
+const renderRamyana_d = _debounce(() => renderRamyana(), 160);
+function resetRamyanaFilters(){
+  ['ryFrom', 'ryTo', 'rySearch', 'ryStockF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderRamyana();
+}
+async function exportRamyanaExcel(){
+  if (!_ryRows.length) renderRamyana();
+  const rows = _ryFiltered();
+  if (!rows.length) { alert('No data to export.'); return; }
+  const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
+  try {
+    const resp = await fetch('/api/ramyana/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
+      body: JSON.stringify({low_stock: _RY_LOW_STOCK, period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
+        rows: rows.map(r => ({sku: r.sku, image: r.img, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
+    if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
+    const blob = await resp.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'ramyana_sku_report.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  } catch (e) { alert('Excel export failed: ' + ((e && e.message) || e)); }
+}
+window.renderRamyana = renderRamyana; window.renderRamyana_d = renderRamyana_d; window.resetRamyanaFilters = resetRamyanaFilters; window.exportRamyanaExcel = exportRamyanaExcel;
 
 /* ── DISCOUNT LEAKAGE (admin) ── */
 let _discData = null;
@@ -25271,6 +25564,7 @@ showTab = function(t){
     discount: {id: 'vDiscount', btn: 'm12'},
     production: {id: 'vProduction', btn: 'm13'},
     wipreceive: {id: 'vWipReceive', btn: 'm38'},
+    ramyana: {id: 'vRamyana', btn: 'm39'},
     profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
@@ -25330,6 +25624,7 @@ showTab = function(t){
       discount: 'DISCOUNTS',
       production: 'PRODUCTION',
       wipreceive: 'WIP RECEIVE',
+      ramyana: 'RAMYANA',
       profit: 'PROFIT',
       atrisk: 'CUSTOMER RISK',
       taxon: 'CATEGORIES',
@@ -25373,6 +25668,7 @@ showTab = function(t){
   if (t === 'discount') setTimeout(()=>{ try{ loadDiscount(); }catch(e){console.error(e);} }, 0);
   if (t === 'production') setTimeout(()=>{ try{ loadProduction(); }catch(e){console.error(e);} }, 0);
   if (t === 'wipreceive') setTimeout(()=>{ try{ loadWipReceive(false); }catch(e){console.error(e);} }, 0);
+  if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyana(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
@@ -32470,6 +32766,119 @@ def api_new_launch_daily():
                         "source": "cosa_orderdate Final Qty"})
     except Exception as e:
         return jsonify({"error": f"new launch daily sales build failed: {e}"}), 500
+
+@app.route("/api/ramyana/export.xlsx", methods=["POST"])
+def api_ramyana_export_xlsx():
+    """Ramyana tab export: properly formatted Excel table (rows come from the on-screen table; Inv Stock <= low_stock is flagged red)."""
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        body = request.get_json(silent=True) or {}
+        low = to_int(body.get("low_stock", 50))
+        period = clean(body.get("period", "")) or "All time"
+        rows = []
+        for r in (body.get("rows") or []):
+            sku = clean((r or {}).get("sku", ""))
+            if not sku:
+                continue
+            def _n(v):
+                return None if v is None or v == "" else to_int(v)
+            rows.append({"sku": sku, "image": clean((r or {}).get("image", "")),
+                         "ind": to_int((r or {}).get("individual", 0)), "inc": to_int((r or {}).get("in_cmb", 0)),
+                         "tot": to_int((r or {}).get("total", 0)),
+                         "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip"))})
+        if not rows:
+            return jsonify({"error": "No Ramyana rows to export."}), 404
+
+        headers = ["SKU", "Image", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
+        ncol = len(headers)
+        last_col = get_column_letter(ncol)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Ramyana"
+        ws.merge_cells(f"A1:{last_col}1")
+        ws["A1"] = "Ramyana - SKU Sales & Stock"
+        ws["A1"].font = Font(bold=True, size=15, color="7A1C16")
+        ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[1].height = 27
+        ws.merge_cells(f"A2:{last_col}2")
+        ws["A2"] = (f"Sales period: {period} | Inv Stock and Inv WIP = child SKU only (no CMB) | "
+                    f"Red = Inv Stock {low} or less | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+        ws["A2"].font = Font(italic=True, size=9, color="6B6258")
+
+        thin = Side(style="thin", color="DDD5C5")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        hr = 4
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(hr, c, h)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="8C6A24")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        ws.row_dimensions[hr].height = 24
+
+        red_fill = PatternFill("solid", fgColor="FEE2E2")
+        red_stock = PatternFill("solid", fgColor="FECACA")
+        for i, r in enumerate(rows, hr + 1):
+            is_low = r["stock"] is not None and r["stock"] <= low
+            vals = [r["sku"], "View Image" if r["image"] else "", r["ind"], r["inc"], r["tot"],
+                    r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else ""]
+            for c, v in enumerate(vals, 1):
+                cell = ws.cell(i, c, v)
+                cell.border = border
+                cell.alignment = Alignment(horizontal=("left" if c <= 2 else "right"), vertical="center")
+                if c >= 3:
+                    cell.number_format = "#,##0"
+                if is_low:
+                    cell.fill = red_fill
+            if r["image"].startswith(("http://", "https://")):
+                ic = ws.cell(i, 2)
+                ic.hyperlink = r["image"]
+                ic.style = "Hyperlink"
+                ic.border = border
+                ic.alignment = Alignment(horizontal="left", vertical="center")
+                if is_low:
+                    ic.fill = red_fill
+            ws.cell(i, 1).font = Font(bold=True, color=("991B1B" if is_low else "000000"))
+            ws.cell(i, 5).font = Font(bold=True)
+            if is_low:
+                sc = ws.cell(i, 6)
+                sc.fill = red_stock
+                sc.font = Font(bold=True, color="991B1B")
+
+        tr = hr + len(rows) + 1
+        first, lastr = hr + 1, hr + len(rows)
+        ws.cell(tr, 1, "TOTAL")
+        for c in range(3, ncol + 1):
+            L = get_column_letter(c)
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = "#,##0"
+        for c in range(1, ncol + 1):
+            cell = ws.cell(tr, c)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="F2E5CF")
+            cell.border = border
+            if c >= 3:
+                cell.alignment = Alignment(horizontal="right")
+
+        ws.freeze_panes = f"A{hr + 1}"
+        ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
+        for i, w in enumerate([18, 14, 17, 15, 14, 14, 14], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"Ramyana_SKU_Report_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+        return resp
+    except Exception as e:
+        return jsonify({"error": "Ramyana Excel export failed: " + str(e)[:400]}), 500
 
 @app.route("/api/daily_target_report")
 def api_daily_target_report():
