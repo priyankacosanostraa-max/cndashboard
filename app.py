@@ -1,3 +1,5 @@
+# Cosa Nostraa — V25.03 (RAMYANA TAB: MRP COLUMN + FULL IMAGE LINK IN EXPORT)
+# - Ramyana table and Excel export now include MRP (from All Product); the export shows the full Image Link (clickable). Everything else is unchanged.
 # Cosa Nostraa — V25.02 (RAMYANA TAB: SKU MATCHED FROM ALL PRODUCT COLUMN B · BRACELET / BOOKMARK TOTAL SOLD KPIs · PROFESSIONAL ENGLISH UI)
 # - New "Ramyana" tab (menu, below WIP Receive). Table: SKU, Image, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Individual Sold = the SKU's own sales; In CMB Sold = parent CMB sales x pieces of the child in that CMB; Total = both. Inv Stock / Inv WIP are taken from the child SKU only (never a CMB). Inv Stock of 50 or less is flagged red. Export to Excel as a formatted table (red flags included).
 # - Every All Product item now carries sku_b (physical column B). The Ramyana tab matches list / CMB child SKUs against column B first, then falls back to column C and the _<number> helper alias. KPIs added: Bracelet Total Sold (BR SKUs) and Bookmark Total Sold (BM SKUs). Everything else is unchanged; the rest of the dashboard still reads SKU from column C.
@@ -17051,7 +17053,7 @@ function _ryBuild(){
         inc += (Number(cnxSaleTotalsForItem(p, ctx).sold) || 0) * cnxChildComponentQty(p, k);
       }));
     } catch (e) { console.error(e); }
-    return {sku: sku, img: _ryImg(it), ind: ind, inc: inc, tot: ind + inc,
+    return {sku: sku, img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, ind: ind, inc: inc, tot: ind + inc,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
@@ -17101,6 +17103,7 @@ function renderRamyana(){
     body += '<tr>'
       + '<td data-sort-value="' + escHtml(r.sku) + '" style="' + cellBg + 'font-weight:800;white-space:nowrap">' + escHtml(r.sku) + (r.found ? '' : ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
       + '<td data-sort-value="' + (r.img ? 1 : 0) + '" style="' + cellBg + '">' + photo + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.mrp === null ? -1 : r.mrp) + '" style="' + cellBg + '">' + (r.mrp === null ? '—' : '₹' + _ryNum(r.mrp)) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.ind + '" style="' + cellBg + '">' + _ryNum(r.ind) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.inc + '" style="' + cellBg + '">' + _ryNum(r.inc) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.tot + '" style="' + cellBg + 'font-weight:900">' + _ryNum(r.tot) + '</td>'
@@ -17109,14 +17112,14 @@ function renderRamyana(){
       + '</tr>';
   });
   const tf = '<tfoot><tr style="background:#f2e5cf">'
-    + '<td style="font-weight:900">TOTAL</td><td></td>'
+    + '<td style="font-weight:900">TOTAL</td><td></td><td></td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('ind')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('inc')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('tot')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('stock')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('wip')) + '</td></tr></tfoot>';
   host.innerHTML = '<table class="ops-table" style="min-width:820px"><thead><tr>'
-    + th('SKU') + th('Image') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+    + th('SKU') + th('Image') + th('MRP', 'right') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
     + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
 }
 const renderRamyana_d = _debounce(() => renderRamyana(), 160);
@@ -17132,7 +17135,7 @@ async function exportRamyanaExcel(){
   try {
     const resp = await fetch('/api/ramyana/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
       body: JSON.stringify({low_stock: _RY_LOW_STOCK, period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
-        rows: rows.map(r => ({sku: r.sku, image: r.img, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
+        rows: rows.map(r => ({sku: r.sku, image: r.img, mrp: r.mrp, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -32825,14 +32828,14 @@ def api_ramyana_export_xlsx():
                 continue
             def _n(v):
                 return None if v is None or v == "" else to_int(v)
-            rows.append({"sku": sku, "image": clean((r or {}).get("image", "")),
+            rows.append({"sku": sku, "image": clean((r or {}).get("image", "")), "mrp": _n((r or {}).get("mrp")),
                          "ind": to_int((r or {}).get("individual", 0)), "inc": to_int((r or {}).get("in_cmb", 0)),
                          "tot": to_int((r or {}).get("total", 0)),
                          "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip"))})
         if not rows:
             return jsonify({"error": "No Ramyana rows to export."}), 404
 
-        headers = ["SKU", "Image", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
+        headers = ["SKU", "Image Link", "MRP", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -32863,7 +32866,7 @@ def api_ramyana_export_xlsx():
         red_stock = PatternFill("solid", fgColor="FECACA")
         for i, r in enumerate(rows, hr + 1):
             is_low = r["stock"] is not None and r["stock"] <= low
-            vals = [r["sku"], "View Image" if r["image"] else "", r["ind"], r["inc"], r["tot"],
+            vals = [r["sku"], r["image"], r["mrp"] if r["mrp"] is not None else "", r["ind"], r["inc"], r["tot"],
                     r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else ""]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
@@ -32882,16 +32885,16 @@ def api_ramyana_export_xlsx():
                 if is_low:
                     ic.fill = red_fill
             ws.cell(i, 1).font = Font(bold=True, color=("991B1B" if is_low else "000000"))
-            ws.cell(i, 5).font = Font(bold=True)
+            ws.cell(i, 6).font = Font(bold=True)
             if is_low:
-                sc = ws.cell(i, 6)
+                sc = ws.cell(i, 7)
                 sc.fill = red_stock
                 sc.font = Font(bold=True, color="991B1B")
 
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 1, "TOTAL")
-        for c in range(3, ncol + 1):
+        for c in range(4, ncol + 1):      # MRP (column 3) is not summed
             L = get_column_letter(c)
             ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = "#,##0"
         for c in range(1, ncol + 1):
@@ -32904,7 +32907,7 @@ def api_ramyana_export_xlsx():
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([18, 14, 17, 15, 14, 14, 14], 1):
+        for i, w in enumerate([18, 48, 12, 17, 15, 14, 14, 14], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         bio = io.BytesIO()
