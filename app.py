@@ -1,3 +1,7 @@
+# Cosa Nostraa — V25.02 (RAMYANA TAB: SKU ALL PRODUCT COLUMN B SE MATCH — baaki dashboard me SKU column C hi rehta hai)
+# - All Product ke har item me naya field sku_b (physical column B). Ramyana tab list / CMB child SKU ko pehle column B se match karta hai (BTC-0057), na mile to purana column C / _1 alias match. Baaki kuch change nahi.
+# Cosa Nostraa — V25.01 (RAMYANA: SKU_1 ALIAS MATCH FIX (BTC-0057 vs BTC-0057_1) · BRACELET / BOOKMARK TOTAL SOLD KPI)
+# - Ramyana tab: All Product me helper suffix wale SKU (BTC-0057_1) ab list / Combo Details ke SKU (BTC-0057) se match hote hain. Naye KPI: Bracelet Total Sold (BR SKUs) aur Bookmark Total Sold (BM SKUs). Baaki kuch change nahi.
 # Cosa Nostraa — V25.00 (NEW TAB: RAMYANA — SKU, IMAGE, INDIVIDUAL / IN CMB / TOTAL SOLD, INV STOCK, INV WIP · INV STOCK <= 50 RED FLAG · EXPORT EXCEL)
 # - Naya "Ramyana" tab (menu me WIP Receive ke neeche). Table: SKU, Image, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Individual Sold = SKU ki apni sale; In CMB Sold = parent CMB ki sale x us CMB me child ke pieces; Total = dono. Inv Stock / Inv WIP sirf child SKU ka (CMB ka nahi). Inv Stock 50 ya usse kam ho to row red flag. Export Excel (proper formatted table, red flag ke saath). Baaki kuch change nahi.
 # Cosa Nostraa — V24.99 (N M FASHION / MOHANLAL SONS / TAJ TRADE: SIRF SOR YA PURCHASE (B2B) · ONLINE -> BULK ROW)
@@ -3286,6 +3290,7 @@ def _refresh_data():
     # Header-name search is only a fallback for when column C is missing
     # entirely (e.g. sheet re-shuffled with fewer columns).
     I_SKU = (inv.columns[2] if len(inv.columns) > 2 else None) or find_col(inv.columns, "SKU") or inv.columns[0]
+    I_SKU_B = inv.columns[1] if len(inv.columns) > 1 else None   # V25.02: physical column B (used only by the Ramyana tab)
     # Image Link is authoritative in physical column E. Prefer an exact
     # Image-Link header, then E, and only then a generic image-looking field.
     # This prevents column D (often just named "Image") from being selected
@@ -4700,8 +4705,16 @@ def _refresh_data():
             re.match(r"^\s*cmb", raw or "", re.I) and stone_details.strip()
         ) else ""
 
+        _skub = ""
+        if I_SKU_B:
+            _bv = r.get(I_SKU_B, "")
+            if isinstance(_bv, pd.Series):
+                _bl = [x for x in _bv.tolist() if x is not None and str(x).strip() and str(x).strip().lower() not in ("nan", "none")]
+                _bv = _bl[0] if _bl else ""
+            _skub = clean(_bv).strip()
         item = {
             "sku":         raw,
+            "sku_b":       _skub,
             "sku_name":    cn_sku_label(raw),
             "cn_name":     cn_name,
             "religion_class": _rel_class_for_item,
@@ -16995,27 +17008,52 @@ function _ryIsCmb(it, sku){ return /^CMB[-_ ]?\d/.test(sku) || !!(it && Array.is
 function _ryNum(v){ return Math.round(Number(v) || 0).toLocaleString('en-IN'); }
 function _ryImg(it){ const u = it && it.image_url ? String(it.image_url).trim() : ''; return (u && u.toLowerCase() !== 'nan') ? u : ''; }
 function _ryBuild(){
-  const idx = new Map();
-  (master || []).forEach(it => { const k = _ryKey(it && it.sku); if (k) idx.set(k, it); });
+  const idx = new Map(), alias = new Map(), idxB = new Map();
+  (master || []).forEach(it => {
+    const k = _ryKey(it && it.sku);
+    const kb = _ryKey(it && it.sku_b);          /* V25.02: Ramyana SKU = All Product column B */
+    if (kb && !idxB.has(kb)) idxB.set(kb, it);
+    if (!k) return;
+    idx.set(k, it);
+    /* All Product can hold helper-suffixed codes (BTC-0057_1) while lists / Combo Details use BTC-0057: also index the code without a trailing _<number> */
+    const b = k.replace(/[_-]\d{1,2}$/, '');
+    if (b !== k && !alias.has(b)) alias.set(b, it);
+  });
+  const findIt = sku => {
+    if (idxB.has(sku)) return idxB.get(sku);
+    if (idx.has(sku)) return idx.get(sku);
+    const c = sku.replace(/[^A-Z0-9]/g, '');
+    if (c && typeof _roExactSkuLookup !== 'undefined' && _roExactSkuLookup[c]) return _roExactSkuLookup[c];
+    return alias.get(sku) || null;
+  };
+  const pidx = cnxComboParentIndex();
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
   const ctx = (d1 || d2) ? {d1: d1, d2: d2} : {};
   const order = [], seen = new Set(), kids = [];
   const add = sku => {
     if (!sku || seen.has(sku)) return;
-    const it = idx.get(sku) || null;
+    const it = findIt(sku);
     if (_ryIsCmb(it, sku)) return;
     seen.add(sku); order.push(sku);
   };
   _RAMYANA_SKUS.forEach(raw => {
-    const sku = _ryKey(raw), it = idx.get(sku) || null;
+    const sku = _ryKey(raw), it = findIt(sku);
     if (_ryIsCmb(it, sku)) { (it && Array.isArray(it.combo_details) ? it.combo_details : []).forEach(c => kids.push(_ryKey(c && c.sku))); return; }
     add(sku);
   });
   kids.forEach(add);   /* children of the listed CMBs (if not already listed) */
   return order.map(sku => {
-    const it = idx.get(sku) || null;
+    const it = findIt(sku);
     let ind = 0, inc = 0;
-    try { const sp = cnxSoldSplit(it || {sku: sku}, ctx); ind = Number(sp.individual.sold) || 0; inc = Number(sp.inCmb.sold) || 0; } catch (e) { console.error(e); }
+    try {
+      ind = Number(cnxSaleTotalsForItem(it || {sku: sku}, ctx).sold) || 0;
+      const keys = [sku]; const ik = _ryKey(it && it.sku); if (ik && ik !== sku) keys.push(ik);
+      const seenP = new Set();
+      keys.forEach(k => (pidx.get(k) || []).forEach(p => {
+        const pk = _ryKey(p && p.sku); if (!pk || seenP.has(pk)) return; seenP.add(pk);
+        inc += (Number(cnxSaleTotalsForItem(p, ctx).sold) || 0) * cnxChildComponentQty(p, k);
+      }));
+    } catch (e) { console.error(e); }
     return {sku: sku, img: _ryImg(it), ind: ind, inc: inc, tot: ind + inc,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
@@ -17049,6 +17087,8 @@ function renderRamyana(){
     + kpi('Individual Sold', _ryNum(sm('ind')), 'SKU ki apni sale')
     + kpi('In CMB Sold', _ryNum(sm('inc')), 'CMB ke through (pieces)')
     + kpi('Total Sold', _ryNum(sm('tot')), 'Individual + In CMB')
+    + kpi('Bracelet Total Sold', _ryNum(rows.filter(r => /^BR[-_ ]?\d/.test(r.sku)).reduce((a, r) => a + r.tot, 0)), 'BR SKUs (Individual + In CMB)')
+    + kpi('Bookmark Total Sold', _ryNum(rows.filter(r => /^BM[-_ ]?\d/.test(r.sku)).reduce((a, r) => a + r.tot, 0)), 'BM SKUs (Individual + In CMB)')
     + kpi('Low Stock (50 or less)', _ryNum(lowCnt), 'Red flag SKUs');
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
   const info = document.getElementById('ryInfo');
