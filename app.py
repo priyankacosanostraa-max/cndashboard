@@ -1,9 +1,6 @@
-# Cosa Nostraa — V25.02 (RAMYANA TAB: SKU ALL PRODUCT COLUMN B SE MATCH — baaki dashboard me SKU column C hi rehta hai)
-# - All Product ke har item me naya field sku_b (physical column B). Ramyana tab list / CMB child SKU ko pehle column B se match karta hai (BTC-0057), na mile to purana column C / _1 alias match. Baaki kuch change nahi.
-# Cosa Nostraa — V25.01 (RAMYANA: SKU_1 ALIAS MATCH FIX (BTC-0057 vs BTC-0057_1) · BRACELET / BOOKMARK TOTAL SOLD KPI)
-# - Ramyana tab: All Product me helper suffix wale SKU (BTC-0057_1) ab list / Combo Details ke SKU (BTC-0057) se match hote hain. Naye KPI: Bracelet Total Sold (BR SKUs) aur Bookmark Total Sold (BM SKUs). Baaki kuch change nahi.
-# Cosa Nostraa — V25.00 (NEW TAB: RAMYANA — SKU, IMAGE, INDIVIDUAL / IN CMB / TOTAL SOLD, INV STOCK, INV WIP · INV STOCK <= 50 RED FLAG · EXPORT EXCEL)
-# - Naya "Ramyana" tab (menu me WIP Receive ke neeche). Table: SKU, Image, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Individual Sold = SKU ki apni sale; In CMB Sold = parent CMB ki sale x us CMB me child ke pieces; Total = dono. Inv Stock / Inv WIP sirf child SKU ka (CMB ka nahi). Inv Stock 50 ya usse kam ho to row red flag. Export Excel (proper formatted table, red flag ke saath). Baaki kuch change nahi.
+# Cosa Nostraa — V25.02 (RAMYANA TAB: SKU MATCHED FROM ALL PRODUCT COLUMN B · BRACELET / BOOKMARK TOTAL SOLD KPIs · PROFESSIONAL ENGLISH UI)
+# - New "Ramyana" tab (menu, below WIP Receive). Table: SKU, Image, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Individual Sold = the SKU's own sales; In CMB Sold = parent CMB sales x pieces of the child in that CMB; Total = both. Inv Stock / Inv WIP are taken from the child SKU only (never a CMB). Inv Stock of 50 or less is flagged red. Export to Excel as a formatted table (red flags included).
+# - Every All Product item now carries sku_b (physical column B). The Ramyana tab matches list / CMB child SKUs against column B first, then falls back to column C and the _<number> helper alias. KPIs added: Bracelet Total Sold (BR SKUs) and Bookmark Total Sold (BM SKUs). Everything else is unchanged; the rest of the dashboard still reads SKU from column C.
 # Cosa Nostraa — V24.99 (N M FASHION / MOHANLAL SONS / TAJ TRADE: SIRF SOR YA PURCHASE (B2B) · ONLINE -> BULK ROW)
 # - In 3 customers ki sale sirf 2 jagah: cossa sheet Type = Purchase -> Purchase (B2B); baaki sab Type (SOR / SIS / Marketplace / Bulk / Online / blank) -> SOR. Ye kabhi Bulk me nahi jaate. Website / Store consumer sales ka rule same. Har month (last / this month / future) ke liye same.
 # - Cossa sheet Type = Online ab poore app me Bulk maana jaata hai (data load ke time Type Online -> Bulk, isliye Matrix / Home / Repeat / Target_26-27 sab jagah Bulk me); Type = Bulk Bulk me hi rehta hai. Sirf N M Fashion / Mohanlal / Taj Trade ka Online SOR me jaata hai.
@@ -9857,7 +9854,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">Ramyana</div>
-        <div class="ops-sub">Ramyana SKUs ki sale aur stock. Individual Sold = SKU ki apni sale, In CMB Sold = jis CMB (parent SKU) me yeh child gaya uski sale x pieces, Total Sold = dono. Inv Stock / Inv WIP sirf child SKU ka hai (CMB ka nahi). Inv Stock 50 ya kam ho to red flag.</div>
+        <div class="ops-sub">Sales and stock for Ramyana SKUs. Individual Sold = units sold under the SKU itself. In CMB Sold = units sold through parent CMBs that contain this SKU (CMB quantity x pieces of this SKU in the CMB). Total Sold = Individual + In CMB. Inv Stock and Inv WIP are taken from the child SKU only, never from a CMB. SKUs with Inv Stock of 50 or less are flagged in red.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetRamyanaFilters()">Reset Filters</button>
@@ -17083,13 +17080,13 @@ function renderRamyana(){
   const lowCnt = rows.filter(r => r.stock !== null && r.stock <= _RY_LOW_STOCK).length;
   const kpi = (l, v, s) => '<div class="ops-kpi"><div class="ops-kpi-label">' + l + '</div><div class="ops-kpi-value">' + v + '</div><div class="ops-kpi-sub">' + s + '</div></div>';
   const sumHost = document.getElementById('rySummary');
-  if (sumHost) sumHost.innerHTML = kpi('SKUs', _ryNum(rows.length), 'Child SKUs shown')
-    + kpi('Individual Sold', _ryNum(sm('ind')), 'SKU ki apni sale')
-    + kpi('In CMB Sold', _ryNum(sm('inc')), 'CMB ke through (pieces)')
+  if (sumHost) sumHost.innerHTML = kpi('SKUs', _ryNum(rows.length), 'Child SKUs listed')
+    + kpi('Individual Sold', _ryNum(sm('ind')), 'Units sold under the SKU itself')
+    + kpi('In CMB Sold', _ryNum(sm('inc')), 'Units sold through CMBs')
     + kpi('Total Sold', _ryNum(sm('tot')), 'Individual + In CMB')
     + kpi('Bracelet Total Sold', _ryNum(rows.filter(r => /^BR[-_ ]?\d/.test(r.sku)).reduce((a, r) => a + r.tot, 0)), 'BR SKUs (Individual + In CMB)')
     + kpi('Bookmark Total Sold', _ryNum(rows.filter(r => /^BM[-_ ]?\d/.test(r.sku)).reduce((a, r) => a + r.tot, 0)), 'BM SKUs (Individual + In CMB)')
-    + kpi('Low Stock (50 or less)', _ryNum(lowCnt), 'Red flag SKUs');
+    + kpi('Low Stock (50 or Less)', _ryNum(lowCnt), 'SKUs flagged in red');
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
   const info = document.getElementById('ryInfo');
   if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
