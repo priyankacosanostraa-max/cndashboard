@@ -1,7 +1,9 @@
+# Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
+# - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
 # Cosa Nostraa — V25.05 (WEBSITE TOP 50: CMB NAMES COLUMN IN TABLE AND EXPORT)
-# - Website Top 50 now has a "CMB Names" column after Image (table and Excel export): the CMBs through which the SKU sold in the selected period, with CMB quantity sold in brackets. Everything else is unchanged.
-# Cosa Nostraa — V25.04 (NEW TAB: WEBSITE TOP 50 — TOP 50 WEBSITE (D2C) SKUs BY TOTAL SOLD)
-# - New "Website Top 50" tab (menu, below Ramyana). Ranks child SKUs by Total Sold on the Website (D2C) channel only. Columns: Rank, SKU, Image, MRP, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Filters: Sold From / To date (top 50 is recalculated for the selected range) and SKU search. KPI cards and Excel export (with full Image Link). Everything else is unchanged.
+# - Website Best Sellers now has a "CMB Names" column after Image (table and Excel export): the CMBs through which the SKU sold in the selected period, with CMB quantity sold in brackets. Everything else is unchanged.
+# Cosa Nostraa — V25.04 (NEW TAB: WEBSITE BEST SELLERS — WEBSITE (D2C) SKUs BY TOTAL SOLD)
+# - New "Website Best Sellers" tab (menu, below Ramyana). Ranks child SKUs by Total Sold on the Website (D2C) channel only. Columns: Rank, SKU, Image, MRP, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Filters: Sold From / To date (top 50 is recalculated for the selected range) and SKU search. KPI cards and Excel export (with full Image Link). Everything else is unchanged.
 # Cosa Nostraa — V25.03 (RAMYANA TAB: MRP COLUMN + FULL IMAGE LINK IN EXPORT)
 # - Ramyana table and Excel export now include MRP (from All Product); the export shows the full Image Link (clickable). Everything else is unchanged.
 # Cosa Nostraa — V25.02 (RAMYANA TAB: SKU MATCHED FROM ALL PRODUCT COLUMN B · BRACELET / BOOKMARK TOTAL SOLD KPIs · PROFESSIONAL ENGLISH UI)
@@ -8226,7 +8228,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m13" onclick="showTab('production')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M3 20V9l6 3V8l6 4V6l6 4v10Z"/><path d="M7 20v-3h3v3M15 16h2M15 19h2"/></svg></span><span>Production</span></button>
   <button class="menu-item" id="m38" onclick="showTab('wipreceive')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM4 8l2-4h12l2 4"/><path d="M12 11v5M9.5 13.5 12 16l2.5-2.5"/></svg></span><span>WIP Receive</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m39" onclick="showTab('ramyana')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 10h16M9 5v14"/></svg></span><span>Ramyana</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
-  <button class="menu-item" id="m40" onclick="showTab('webtop50')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>Website Top 50</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
+  <button class="menu-item" id="m40" onclick="showTab('webtop50')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>Website Best Sellers</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
@@ -9860,8 +9862,8 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div id="vWebTop50" class="ops-page" style="display:none">
     <div class="ops-head">
       <div>
-        <div class="ops-title">Website Top 50</div>
-        <div class="ops-sub">Top 50 child SKUs by Total Sold on the Website (D2C) channel. Individual Sold = units sold under the SKU itself. In CMB Sold = units sold through parent CMBs that contain this SKU (CMB quantity x pieces of this SKU in the CMB). CMB Names lists the CMBs through which the SKU sold, with the CMB quantity sold in brackets. Total Sold = Individual + In CMB, and the ranking is based on it. Select a Sold From / To date to recalculate the Top 50 for that period. Inv Stock and Inv WIP are taken from the child SKU only, never from a CMB.</div>
+        <div class="ops-title">Website Best Sellers</div>
+        <div class="ops-sub">All child SKUs with a Total Sold of 5 or more on the Website (D2C) channel in the last 30 days. Change the Sold From / To dates to analyse another period. Individual Sold = units sold under the SKU itself. In CMB Sold = units sold through parent CMBs that contain this SKU (CMB quantity x pieces of this SKU in the CMB). CMB Names lists the CMBs through which the SKU sold, with the CMB quantity sold in brackets. Total Sold = Individual + In CMB, and the list is ranked by it. Inv Stock and Inv WIP are taken from the child SKU only, never from a CMB.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebTop50Filters()">Reset Filters</button>
@@ -17171,10 +17173,17 @@ async function exportRamyanaExcel(){
 }
 window.renderRamyana = renderRamyana; window.renderRamyana_d = renderRamyana_d; window.resetRamyanaFilters = resetRamyanaFilters; window.exportRamyanaExcel = exportRamyanaExcel;
 
-/* ── WEBSITE TOP 50 TAB ──
+/* ── WEBSITE BEST SELLERS TAB (SKUs with 5+ units sold on Website in the last 30 days; dates can be changed) ──
    Website = D2C business channel (same definition as the Overall Details channel filter). Ranking = Total Sold = Individual + In CMB.
    Individual = child SKU's own sale; In CMB = parent CMB sale x child pieces in that CMB (same date range and channel). Inv Stock / Inv WIP = child SKU only. */
-let _wtRows = [], _wtRetry = 0, _wtTimer = null;
+let _wtRows = [], _wtRetry = 0, _wtTimer = null, _wtInit = false;
+const _WT_MIN_SOLD = 5;   /* SKUs with Total Sold below this are not listed */
+function _wtIso(dt){ return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0'); }
+function _wtSetDefaultDates(){   /* last 30 days, today included */
+  const to = new Date(), from = new Date(); from.setDate(from.getDate() - 29);
+  const a = document.getElementById('wtFrom'), b = document.getElementById('wtTo');
+  if (a) a.value = _wtIso(from); if (b) b.value = _wtIso(to);
+}
 function _wtKey(s){ return String(s == null ? '' : s).trim().toUpperCase(); }
 function _wtNum(v){ return Math.round(Number(v) || 0).toLocaleString('en-IN'); }
 function _wtImg(it){ const u = it && it.image_url ? String(it.image_url).trim() : ''; return (u && u.toLowerCase() !== 'nan') ? u : ''; }
@@ -17213,7 +17222,7 @@ function _wtBuild(){
     keys.forEach(k => (inCmbs.get(k) || []).forEach(x => cm.set(x.name, x.qty)));
     const cmbs = Array.from(cm.entries()).sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0])).map(e => e[0] + ' (' + _wtNum(e[1]) + ')');
     const tot = ind + inc;
-    if (tot <= 0) return;
+    if (tot < _WT_MIN_SOLD) return;
     seenSku.add(disp);
     rows.push({sku: disp, img: _wtImg(it), cmbs: cmbs, mrp: Number(it.mrp) || 0, ind: ind, inc: inc, tot: tot, stock: Number(it.inv_stock) || 0, wip: Number(it.inv_wip) || 0});
   });
@@ -17224,7 +17233,7 @@ function _wtBuild(){
 function _wtShown(){
   const q = ((document.getElementById('wtSearch') || {}).value || '').trim().toLowerCase();
   const list = q ? _wtRows.filter(r => r.sku.toLowerCase().indexOf(q) >= 0) : _wtRows;
-  return list.slice(0, 50);
+  return list;
 }
 function renderWebTop50(){
   const host = document.getElementById('wtContent'); if (!host) return;
@@ -17234,6 +17243,7 @@ function renderWebTop50(){
     return;
   }
   _wtRetry = 0;
+  if (!_wtInit) { _wtInit = true; _wtSetDefaultDates(); }
   _wtRows = _wtBuild();
   const rows = _wtShown();
   const sm = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
@@ -17241,7 +17251,7 @@ function renderWebTop50(){
   const d1 = (document.getElementById('wtFrom') || {}).value || '', d2 = (document.getElementById('wtTo') || {}).value || '';
   const q = ((document.getElementById('wtSearch') || {}).value || '').trim();
   const sumHost = document.getElementById('wtSummary');
-  if (sumHost) sumHost.innerHTML = kpi('SKUs Shown', _wtNum(rows.length), q ? 'Matching SKUs (max 50)' : 'Top 50 Website SKUs')
+  if (sumHost) sumHost.innerHTML = kpi('SKUs Shown', _wtNum(rows.length), q ? 'Matching SKUs' : 'SKUs with 5 or more units sold')
     + kpi('Individual Sold', _wtNum(sm('ind')), 'Units sold under the SKU itself')
     + kpi('In CMB Sold', _wtNum(sm('inc')), 'Units sold through CMBs')
     + kpi('Total Sold', _wtNum(sm('tot')), 'Individual + In CMB')
@@ -17249,8 +17259,8 @@ function renderWebTop50(){
     + kpi('Inv Stock', _wtNum(sm('stock')), 'Child SKUs shown')
     + kpi('Inv WIP', _wtNum(sm('wip')), 'Child SKUs shown');
   const info = document.getElementById('wtInfo');
-  if (info) info.textContent = 'Channel: Website (D2C)  |  Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + _wtRows.length + ' SKUs with Website sales in this period' + (q ? '  |  Rank shown is the overall Website rank' : '');
-  if (!rows.length) { host.innerHTML = '<div class="ops-empty">No Website sales found for the selected filters.</div>'; return; }
+  if (info) info.textContent = 'Channel: Website (D2C)  |  Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + _wtRows.length + ' SKUs with 5 or more units sold on the Website in this period' + (q ? '  |  Rank shown is the overall Website rank' : '');
+  if (!rows.length) { host.innerHTML = '<div class="ops-empty">No SKU with 5 or more units sold on the Website for the selected filters.</div>'; return; }
   const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
   let body = '';
   rows.forEach(r => {
@@ -17280,7 +17290,8 @@ function renderWebTop50(){
 }
 const renderWebTop50_d = _debounce(() => renderWebTop50(), 160);
 function resetWebTop50Filters(){
-  ['wtFrom', 'wtTo', 'wtSearch'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const s = document.getElementById('wtSearch'); if (s) s.value = '';
+  _wtSetDefaultDates();   /* back to the last 30 days */
   renderWebTop50();
 }
 async function exportWebTop50Excel(){
@@ -17295,7 +17306,7 @@ async function exportWebTop50Excel(){
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
-    a.download = 'website_top_50_report.xlsx';
+    a.download = 'website_best_sellers_report.xlsx';
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
   } catch (e) { alert('Excel export failed: ' + ((e && e.message) || e)); }
 }
@@ -25822,7 +25833,7 @@ showTab = function(t){
       production: 'PRODUCTION',
       wipreceive: 'WIP RECEIVE',
       ramyana: 'RAMYANA',
-      webtop50: 'WEBSITE TOP 50',
+      webtop50: 'WEBSITE BEST SELLERS',
       profit: 'PROFIT',
       atrisk: 'CUSTOMER RISK',
       taxon: 'CATEGORIES',
@@ -33081,7 +33092,7 @@ def api_ramyana_export_xlsx():
 
 @app.route("/api/web_top50/export.xlsx", methods=["POST"])
 def api_web_top50_export_xlsx():
-    """Website Top 50 tab export: formatted Excel table with the full Image Link (rows come from the on-screen table)."""
+    """Website Best Sellers tab export: formatted Excel table with the full Image Link (rows come from the on-screen table)."""
     if session.get("role") not in ("admin", "employee"):
         return jsonify({"error": "login required"}), 401
     try:
@@ -33103,21 +33114,21 @@ def api_web_top50_export_xlsx():
                          "inc": to_int((r or {}).get("in_cmb", 0)), "tot": to_int((r or {}).get("total", 0)),
                          "stock": to_int((r or {}).get("inv_stock", 0)), "wip": to_int((r or {}).get("inv_wip", 0))})
         if not rows:
-            return jsonify({"error": "No Website Top 50 rows to export."}), 404
+            return jsonify({"error": "No Website Best Sellers rows to export."}), 404
 
         headers = ["Rank", "SKU", "Image Link", "CMB Names", "MRP", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Website Top 50"
+        ws.title = "Website Best Sellers"
         ws.merge_cells(f"A1:{last_col}1")
-        ws["A1"] = "Website Top 50 - SKU Sales & Stock"
+        ws["A1"] = "Website Best Sellers - SKU Sales & Stock"
         ws["A1"].font = Font(bold=True, size=15, color="7A1C16")
         ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
         ws.row_dimensions[1].height = 27
         ws.merge_cells(f"A2:{last_col}2")
-        ws["A2"] = (f"Channel: Website (D2C) | Sales period: {period} | Ranked by Total Sold (Individual + In CMB) | "
+        ws["A2"] = (f"Channel: Website (D2C) | Sales period: {period} | Minimum Total Sold: 5 | Ranked by Total Sold (Individual + In CMB) | "
                     f"Inv Stock and Inv WIP = child SKU only (no CMB) | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
         ws["A2"].font = Font(italic=True, size=9, color="6B6258")
 
@@ -33171,12 +33182,12 @@ def api_web_top50_export_xlsx():
         bio = io.BytesIO()
         wb.save(bio)
         bio.seek(0)
-        fname = f"Website_Top_50_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
+        fname = f"Website_Best_Sellers_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
         resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
         return resp
     except Exception as e:
-        return jsonify({"error": "Website Top 50 Excel export failed: " + str(e)[:400]}), 500
+        return jsonify({"error": "Website Best Sellers Excel export failed: " + str(e)[:400]}), 500
 
 @app.route("/api/daily_target_report")
 def api_daily_target_report():
