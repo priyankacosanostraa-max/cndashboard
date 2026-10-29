@@ -1,3 +1,5 @@
+# Cosa Nostraa — V25.05 (WEBSITE TOP 50: CMB NAMES COLUMN IN TABLE AND EXPORT)
+# - Website Top 50 now has a "CMB Names" column after Image (table and Excel export): the CMBs through which the SKU sold in the selected period, with CMB quantity sold in brackets. Everything else is unchanged.
 # Cosa Nostraa — V25.04 (NEW TAB: WEBSITE TOP 50 — TOP 50 WEBSITE (D2C) SKUs BY TOTAL SOLD)
 # - New "Website Top 50" tab (menu, below Ramyana). Ranks child SKUs by Total Sold on the Website (D2C) channel only. Columns: Rank, SKU, Image, MRP, Individual Sold, In CMB Sold, Total Sold, Inv Stock, Inv WIP. Filters: Sold From / To date (top 50 is recalculated for the selected range) and SKU search. KPI cards and Excel export (with full Image Link). Everything else is unchanged.
 # Cosa Nostraa — V25.03 (RAMYANA TAB: MRP COLUMN + FULL IMAGE LINK IN EXPORT)
@@ -9859,7 +9861,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-head">
       <div>
         <div class="ops-title">Website Top 50</div>
-        <div class="ops-sub">Top 50 child SKUs by Total Sold on the Website (D2C) channel. Individual Sold = units sold under the SKU itself. In CMB Sold = units sold through parent CMBs that contain this SKU (CMB quantity x pieces of this SKU in the CMB). Total Sold = Individual + In CMB, and the ranking is based on it. Select a Sold From / To date to recalculate the Top 50 for that period. Inv Stock and Inv WIP are taken from the child SKU only, never from a CMB.</div>
+        <div class="ops-sub">Top 50 child SKUs by Total Sold on the Website (D2C) channel. Individual Sold = units sold under the SKU itself. In CMB Sold = units sold through parent CMBs that contain this SKU (CMB quantity x pieces of this SKU in the CMB). CMB Names lists the CMBs through which the SKU sold, with the CMB quantity sold in brackets. Total Sold = Individual + In CMB, and the ranking is based on it. Select a Sold From / To date to recalculate the Top 50 for that period. Inv Stock and Inv WIP are taken from the child SKU only, never from a CMB.</div>
       </div>
       <div class="ops-actions">
         <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetWebTop50Filters()">Reset Filters</button>
@@ -17179,18 +17181,20 @@ function _wtImg(it){ const u = it && it.image_url ? String(it.image_url).trim() 
 function _wtBuild(){
   const d1 = (document.getElementById('wtFrom') || {}).value || '', d2 = (document.getElementById('wtTo') || {}).value || '';
   const ctx = {channels: ['D2C'], businessChannel: true, d1: d1, d2: d2};
-  const inMap = new Map();
+  const inMap = new Map(), inCmbs = new Map();
   (master || []).forEach(p => {
     const cd = p && p.combo_details;
     if (!Array.isArray(cd) || !cd.length) return;
     const sold = Number(cnxSaleTotalsForItem(p, ctx).sold) || 0;
     if (!sold) return;
     const pk = _wtKey(p.sku), seen = new Set();
+    const pname = _wtKey(p.sku_b) || pk;
     cd.forEach(c => {
       const ck = _wtKey(c && c.sku);
       if (!ck || ck === pk || seen.has(ck)) return;
       seen.add(ck);
       inMap.set(ck, (inMap.get(ck) || 0) + sold * cnxChildComponentQty(p, ck));
+      const lst = inCmbs.get(ck) || []; lst.push({name: pname, qty: sold}); inCmbs.set(ck, lst);
     });
   });
   const rows = [], seenSku = new Set();
@@ -17205,10 +17209,13 @@ function _wtBuild(){
     if (kb) keys.add(kb);
     if (/_\d{1,2}$/.test(sku)) keys.add(sku.replace(/_\d{1,2}$/, ''));
     let inc = 0; keys.forEach(k => { inc += inMap.get(k) || 0; });
+    const cm = new Map();   /* CMB names through which this SKU sold (CMB qty sold in brackets) */
+    keys.forEach(k => (inCmbs.get(k) || []).forEach(x => cm.set(x.name, x.qty)));
+    const cmbs = Array.from(cm.entries()).sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0])).map(e => e[0] + ' (' + _wtNum(e[1]) + ')');
     const tot = ind + inc;
     if (tot <= 0) return;
     seenSku.add(disp);
-    rows.push({sku: disp, img: _wtImg(it), mrp: Number(it.mrp) || 0, ind: ind, inc: inc, tot: tot, stock: Number(it.inv_stock) || 0, wip: Number(it.inv_wip) || 0});
+    rows.push({sku: disp, img: _wtImg(it), cmbs: cmbs, mrp: Number(it.mrp) || 0, ind: ind, inc: inc, tot: tot, stock: Number(it.inv_stock) || 0, wip: Number(it.inv_wip) || 0});
   });
   rows.sort((a, b) => (b.tot - a.tot) || (b.ind - a.ind) || a.sku.localeCompare(b.sku));
   rows.forEach((r, i) => { r.rank = i + 1; });
@@ -17252,6 +17259,7 @@ function renderWebTop50(){
       + '<td class="ops-num" data-sort-value="' + r.rank + '" style="font-weight:900">' + r.rank + '</td>'
       + '<td data-sort-value="' + escHtml(r.sku) + '" style="font-weight:800;white-space:nowrap">' + escHtml(r.sku) + '</td>'
       + '<td data-sort-value="' + (r.img ? 1 : 0) + '">' + photo + '</td>'
+      + '<td class="ops-list" data-sort-value="' + escHtml(r.cmbs.join(', ')) + '">' + (r.cmbs.length ? escHtml(r.cmbs.join(', ')) : '—') + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.mrp + '">₹' + _wtNum(r.mrp) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.ind + '">' + _wtNum(r.ind) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.inc + '">' + _wtNum(r.inc) + '</td>'
@@ -17260,14 +17268,14 @@ function renderWebTop50(){
       + '<td class="ops-num" data-sort-value="' + r.wip + '">' + _wtNum(r.wip) + '</td>'
       + '</tr>';
   });
-  const tf = '<tfoot><tr style="background:#f2e5cf"><td></td><td style="font-weight:900">TOTAL</td><td></td><td></td>'
+  const tf = '<tfoot><tr style="background:#f2e5cf"><td></td><td style="font-weight:900">TOTAL</td><td></td><td></td><td></td>'
     + '<td class="ops-num" style="font-weight:900">' + _wtNum(sm('ind')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _wtNum(sm('inc')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _wtNum(sm('tot')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _wtNum(sm('stock')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _wtNum(sm('wip')) + '</td></tr></tfoot>';
-  host.innerHTML = '<table class="ops-table" style="min-width:900px"><thead><tr>'
-    + th('Rank', 'right') + th('SKU') + th('Image') + th('MRP', 'right') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+  host.innerHTML = '<table class="ops-table" style="min-width:1100px"><thead><tr>'
+    + th('Rank', 'right') + th('SKU') + th('Image') + th('CMB Names') + th('MRP', 'right') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
     + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
 }
 const renderWebTop50_d = _debounce(() => renderWebTop50(), 160);
@@ -17283,7 +17291,7 @@ async function exportWebTop50Excel(){
   try {
     const resp = await fetch('/api/web_top50/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
       body: JSON.stringify({period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
-        rows: rows.map(r => ({rank: r.rank, sku: r.sku, image: r.img, mrp: r.mrp, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
+        rows: rows.map(r => ({rank: r.rank, sku: r.sku, image: r.img, cmb_names: r.cmbs.join(', '), mrp: r.mrp, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -33090,13 +33098,14 @@ def api_web_top50_export_xlsx():
             if not sku:
                 continue
             rows.append({"rank": to_int((r or {}).get("rank", 0)), "sku": sku, "image": clean((r or {}).get("image", "")),
+                         "cmbs": clean((r or {}).get("cmb_names", "")),
                          "mrp": to_int((r or {}).get("mrp", 0)), "ind": to_int((r or {}).get("individual", 0)),
                          "inc": to_int((r or {}).get("in_cmb", 0)), "tot": to_int((r or {}).get("total", 0)),
                          "stock": to_int((r or {}).get("inv_stock", 0)), "wip": to_int((r or {}).get("inv_wip", 0))})
         if not rows:
             return jsonify({"error": "No Website Top 50 rows to export."}), 404
 
-        headers = ["Rank", "SKU", "Image Link", "MRP", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
+        headers = ["Rank", "SKU", "Image Link", "CMB Names", "MRP", "Individual Sold", "In CMB Sold", "Total Sold", "Inv Stock", "Inv WIP"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -33124,12 +33133,12 @@ def api_web_top50_export_xlsx():
         ws.row_dimensions[hr].height = 24
 
         for i, r in enumerate(rows, hr + 1):
-            vals = [r["rank"], r["sku"], r["image"], r["mrp"], r["ind"], r["inc"], r["tot"], r["stock"], r["wip"]]
+            vals = [r["rank"], r["sku"], r["image"], r["cmbs"], r["mrp"], r["ind"], r["inc"], r["tot"], r["stock"], r["wip"]]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
                 cell.border = border
-                cell.alignment = Alignment(horizontal=("left" if c in (2, 3) else "right"), vertical="center")
-                if c >= 4:
+                cell.alignment = Alignment(horizontal=("left" if c in (2, 3, 4) else "right"), vertical="center", wrap_text=(c == 4))
+                if c >= 5:
                     cell.number_format = "#,##0"
             if r["image"].startswith(("http://", "https://")):
                 ic = ws.cell(i, 3)
@@ -33138,12 +33147,12 @@ def api_web_top50_export_xlsx():
                 ic.border = border
                 ic.alignment = Alignment(horizontal="left", vertical="center")
             ws.cell(i, 2).font = Font(bold=True)
-            ws.cell(i, 7).font = Font(bold=True)
+            ws.cell(i, 8).font = Font(bold=True)
 
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 2, "TOTAL")
-        for c in range(5, ncol + 1):
+        for c in range(6, ncol + 1):
             L = get_column_letter(c)
             ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = "#,##0"
         for c in range(1, ncol + 1):
@@ -33151,12 +33160,12 @@ def api_web_top50_export_xlsx():
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="F2E5CF")
             cell.border = border
-            if c >= 4:
+            if c >= 5:
                 cell.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([8, 18, 48, 12, 17, 15, 14, 14, 14], 1):
+        for i, w in enumerate([8, 18, 48, 42, 12, 17, 15, 14, 14, 14], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         bio = io.BytesIO()
