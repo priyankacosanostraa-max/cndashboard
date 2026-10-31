@@ -1,5 +1,5 @@
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
-# V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
+# V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramyana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
 # Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
 # - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
@@ -17207,10 +17207,35 @@ function _rcFind(sku){
   return null;
 }
 /* "Bracelet Adjustable, Brooch-50X65 MM, Bookmark-40X25 MM" -> "Set of 3: Bracelet Adjustable, Brooch, Bookmark" (sizes removed) */
+function _rcNameParts(txt){
+  return String(txt || '').split(',').map(p => p.trim().replace(/[\s\-–]*[\d.]+(\s*[x×X]\s*[\d.]*)*\s*(mm|cm|inch|in)?\s*$/i, '').replace(/[\s\-–]*(mm|cm)\s*$/i, '').replace(/[\s\-–]+$/, '').trim()).filter(Boolean);
+}
 function _rcDimNames(txt){
-  const parts = String(txt || '').split(',').map(p => p.trim().replace(/[\s\-–]*[\d.]+(\s*[x×X]\s*[\d.]*)*\s*(mm|cm|inch|in)?\s*$/i, '').replace(/[\s\-–]*(mm|cm)\s*$/i, '').replace(/[\s\-–]+$/, '').trim()).filter(Boolean);
+  const parts = _rcNameParts(txt);
   if (!parts.length) return '';
   return (parts.length > 1 ? 'Set of ' + parts.length + ': ' : '') + parts.join(', ');
+}
+/* Item type name by SKU prefix (matches the CMB Product Dimensions wording). Unknown prefixes fall back to the child's own dimensions / taxon. */
+const _RC_PREFIX_NAME = {BR: 'Bracelet Adjustable', BH: 'Brooch', BM: 'Bookmark', LP: 'Lapel Pin', GB: 'Car Decror', BTC: 'Button Cover'};
+function _rcChildName(tok){
+  const m = tok.match(/^([A-Z]+)/); const pre = m ? m[1] : '';
+  if (_RC_PREFIX_NAME[pre]) return _RC_PREFIX_NAME[pre];
+  const it = _rcFind(tok.replace(/_.*$/, '')) || _rcFind(tok);
+  if (it) {
+    const n = _rcNameParts(it.dimensions);
+    if (n.length) return n[0];
+    const tx = it.taxon ? String(it.taxon).trim() : '';
+    if (tx && tx.toLowerCase() !== 'nan') return tx;
+  }
+  return pre || tok;
+}
+/* Set size = number of SKUs in Combo Details (a SKU listed twice counts twice); names are grouped with x<count> when repeated. */
+function _rcSetText(combo, dimsRaw){
+  const toks = String(combo || '').split(/[,\s;]+/).map(t => t.trim().toUpperCase()).filter(Boolean);
+  if (!toks.length) return _rcDimNames(dimsRaw);
+  const order = [], cnt = {};
+  toks.forEach(t => { const n = _rcChildName(t); if (!(n in cnt)) { cnt[n] = 0; order.push(n); } cnt[n]++; });
+  return (toks.length > 1 ? 'Set of ' + toks.length + ': ' : '') + order.map(n => n + (cnt[n] > 1 ? ' x' + cnt[n] : '')).join(', ');
 }
 function _rcBuild(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
@@ -17220,10 +17245,11 @@ function _rcBuild(){
     let sold = 0;
     try { sold = Number(cnxSaleTotalsForItem(it || {sku: sku}, ctx).sold) || 0; } catch (e) { console.error(e); }
     let dim = it && it.dimensions ? String(it.dimensions).trim() : '';
-    dim = (dim.toLowerCase() === 'nan') ? '' : _rcDimNames(dim);
+    if (dim.toLowerCase() === 'nan') dim = '';
     let combo = it && it.combo_skus ? String(it.combo_skus).trim() : '';
     if (!combo && it && Array.isArray(it.combo_details)) combo = it.combo_details.map(c => (c && c.sku) || '').filter(Boolean).join(',');
     if (combo.toLowerCase() === 'nan') combo = '';
+    dim = _rcSetText(combo, dim);
     return {sku: sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
