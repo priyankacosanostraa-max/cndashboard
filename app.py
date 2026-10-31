@@ -1,5 +1,5 @@
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
-# V25.10: Ramyana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
+# V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramyana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramyana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramyana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramyana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramyana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
 # Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
 # - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
@@ -9898,8 +9898,11 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Sold From Date</label><input class="fi" type="date" id="ryFrom" onchange="renderRamyana()"></div>
       <div class="fc"><label class="fl">Sold To Date</label><input class="fi" type="date" id="ryTo" onchange="renderRamyana()"></div>
-      <div class="fc"><label class="fl">Search SKU</label><input class="fi" id="rySearch" placeholder="Search SKU..." oninput="renderRamyana_d()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="rySearch" placeholder="Search SKU / name (many: comma)..." oninput="renderRamyana_d()"></div>
       <div class="fc"><label class="fl">Inv Stock</label><select class="fs" id="ryStockF" onchange="renderRamyana()"><option value="">All</option><option value="low">Low (50 or less) - Red flag</option><option value="ok">Above 50</option></select></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="ryTypeF" onchange="renderRamyana()"><option value="">All Types</option></select></div>
+      <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="ryCustF" list="ryCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyana_d()"><datalist id="ryCustF_dl"></datalist></div>
+      <div class="fc"><label class="fl">Theme</label><select class="fs" id="ryThemeF" onchange="renderRamyana()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
     </div>
     <div id="ryInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="rySummary" class="ops-kpis"></div>
@@ -9918,10 +9921,36 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-filters">
       <div class="fc"><label class="fl">Sold From Date</label><input class="fi" type="date" id="rcFrom" onchange="renderRamyanaCmb()"></div>
       <div class="fc"><label class="fl">Sold To Date</label><input class="fi" type="date" id="rcTo" onchange="renderRamyanaCmb()"></div>
-      <div class="fc"><label class="fl">Search CMB SKU</label><input class="fi" id="rcSearch" placeholder="Search CMB SKU..." oninput="renderRamyanaCmb_d()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="rcSearch" placeholder="Search SKU / name (many: comma)..." oninput="renderRamyanaCmb_d()"></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="rcTypeF" onchange="renderRamyanaCmb()"><option value="">All Types</option></select></div>
+      <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="rcCustF" list="rcCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyanaCmb_d()"><datalist id="rcCustF_dl"></datalist></div>
+      <div class="fc"><label class="fl">Theme</label><select class="fs" id="rcThemeF" onchange="renderRamyanaCmb()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
     </div>
     <div id="rcInfo" class="small-note" style="margin:0 2px 10px"></div>
+    <div id="rcSummary" class="ops-kpis"></div>
     <div id="rcContent" class="ops-table-wrap"></div>
+    <div class="ops-head" style="margin-top:26px">
+      <div>
+        <div class="ops-title" style="font-size:20px">Ramayana Overall</div>
+        <div class="ops-sub">All Ramyana SKUs including CMBs. Sold Qty = units sold under that SKU's own sales only: a CMB shows its own sales, a child SKU shows only what sold as the child itself (units sold inside CMBs are not added). Excel export includes the full Image Link.</div>
+      </div>
+      <div class="ops-actions">
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetRamyanaOverallFilters()">Reset Filters</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px" onclick="renderRamyanaOverall()">Refresh</button>
+        <button class="go-btn" style="width:auto;padding:10px 14px;letter-spacing:2px;background:#2f6f3e" onclick="exportRamyanaOverallExcel()">Export Excel</button>
+      </div>
+    </div>
+    <div class="ops-filters">
+      <div class="fc"><label class="fl">Sold From Date</label><input class="fi" type="date" id="ryoFrom" onchange="renderRamyanaOverall()"></div>
+      <div class="fc"><label class="fl">Sold To Date</label><input class="fi" type="date" id="ryoTo" onchange="renderRamyanaOverall()"></div>
+      <div class="fc"><label class="fl">Search SKU / Name</label><input class="fi" id="ryoSearch" placeholder="Search SKU / name (many: comma)..." oninput="renderRamyanaOverall_d()"></div>
+      <div class="fc"><label class="fl">Type</label><select class="fs" id="ryoTypeF" onchange="renderRamyanaOverall()"><option value="">All Types</option></select></div>
+      <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="ryoCustF" list="ryoCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyanaOverall_d()"><datalist id="ryoCustF_dl"></datalist></div>
+      <div class="fc"><label class="fl">Theme</label><select class="fs" id="ryoThemeF" onchange="renderRamyanaOverall()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
+    </div>
+    <div id="ryoInfo" class="small-note" style="margin:0 2px 10px"></div>
+    <div id="ryoSummary" class="ops-kpis"></div>
+    <div id="ryoContent" class="ops-table-wrap"></div>
   </div>
   <div id="vWipReceive" class="ops-page" style="display:none">
     <div class="ops-head">
@@ -17076,7 +17105,8 @@ function _ryBuild(){
   };
   const pidx = cnxComboParentIndex();
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
-  const ctx = (d1 || d2) ? {d1: d1, d2: d2} : {};
+  const st = (document.getElementById('ryTypeF') || {}).value || '';      /* Type = sales type (Marketplace / Website / SOR ...) */
+  const cu = (document.getElementById('ryCustF') || {}).value || '';      /* Customer Name */
   const order = [], seen = new Set(), kids = [];
   const add = sku => {
     if (!sku || seen.has(sku)) return;
@@ -17094,15 +17124,15 @@ function _ryBuild(){
     const it = findIt(sku);
     let ind = 0, inc = 0;
     try {
-      ind = Number(cnxSaleTotalsForItem(it || {sku: sku}, ctx).sold) || 0;
+      ind = _rySalesOf(it || {sku: sku}, sku, d1, d2, cu, st).sold;
       const keys = [sku]; const ik = _ryKey(it && it.sku); if (ik && ik !== sku) keys.push(ik);
       const seenP = new Set();
       keys.forEach(k => (pidx.get(k) || []).forEach(p => {
         const pk = _ryKey(p && p.sku); if (!pk || seenP.has(pk)) return; seenP.add(pk);
-        inc += (Number(cnxSaleTotalsForItem(p, ctx).sold) || 0) * cnxChildComponentQty(p, k);
+        inc += _rySalesOf(p, pk, d1, d2, cu, st).sold * cnxChildComponentQty(p, k);
       }));
     } catch (e) { console.error(e); }
-    return {sku: sku, open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, ind: ind, inc: inc, tot: ind + inc,
+    return {sku: sku, name: _rySkuName(it), type: _rcChildName(sku), open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, ind: ind, inc: inc, tot: ind + inc,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
@@ -17110,7 +17140,8 @@ function _ryFiltered(){
   const q = ((document.getElementById('rySearch') || {}).value || '').trim().toLowerCase();
   const sf = (document.getElementById('ryStockF') || {}).value || '';
   return _ryRows.filter(r => {
-    if (q && r.sku.toLowerCase().indexOf(q) < 0) return false;
+    if (!_rySearchOk(q, r.sku, r.name)) return false;
+    if (!_ryThemeOk((document.getElementById('ryThemeF') || {}).value || '', r.sku)) return false;
     const low = r.stock !== null && r.stock <= _RY_LOW_STOCK;
     if (sf === 'low' && !low) return false;
     if (sf === 'ok' && (low || r.stock === null)) return false;
@@ -17126,6 +17157,8 @@ function renderRamyana(){
   }
   _ryRetry = 0;
   _ryRows = _ryBuild();
+  _rcFillTypeSel('ryTypeF', _rySaleTypeList());
+  _ryFillCustSel('ryCustF');
   const rows = _ryFiltered();
   const sm = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
   const lowCnt = rows.filter(r => r.stock !== null && r.stock <= _RY_LOW_STOCK).length;
@@ -17140,7 +17173,8 @@ function renderRamyana(){
     + kpi('Low Stock (50 or Less)', _ryNum(lowCnt), 'SKUs flagged in red');
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
   const info = document.getElementById('ryInfo');
-  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
+  const stSel = (document.getElementById('ryTypeF') || {}).value || '', cuSel = (document.getElementById('ryCustF') || {}).value || '';
+  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + (stSel ? '  |  Type: ' + stSel : '') + (_ryThemeLabel('ryThemeF') ? '  |  Theme: ' + _ryThemeLabel('ryThemeF') : '') + (cuSel ? '  |  Customer: ' + cuSel : '') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
   if (!rows.length) { host.innerHTML = '<div class="ops-empty">No SKU found for the selected filters.</div>'; return; }
   const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
   let body = '';
@@ -17173,7 +17207,7 @@ function renderRamyana(){
 }
 const renderRamyana_d = _debounce(() => renderRamyana(), 160);
 function resetRamyanaFilters(){
-  ['ryFrom', 'ryTo', 'rySearch', 'ryStockF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['ryFrom', 'ryTo', 'rySearch', 'ryStockF', 'ryTypeF', 'ryCustF', 'ryThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   renderRamyana();
 }
 async function exportRamyanaExcel(){
@@ -17183,7 +17217,7 @@ async function exportRamyanaExcel(){
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
   try {
     const resp = await fetch('/api/ramyana/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
-      body: JSON.stringify({low_stock: _RY_LOW_STOCK, period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
+      body: JSON.stringify({low_stock: _RY_LOW_STOCK, period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + (((document.getElementById('ryTypeF') || {}).value) ? ' | Type: ' + document.getElementById('ryTypeF').value : '') + (_ryThemeLabel('ryThemeF') ? ' | Theme: ' + _ryThemeLabel('ryThemeF') : '') + (((document.getElementById('ryCustF') || {}).value) ? ' | Customer: ' + document.getElementById('ryCustF').value : ''),
         rows: rows.map(r => ({sku: r.sku, image: r.img, mrp: r.mrp, individual: r.ind, in_cmb: r.inc, total: r.tot, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
@@ -17237,26 +17271,61 @@ function _rcSetText(combo, dimsRaw){
   toks.forEach(t => { const n = _rcChildName(t); if (!(n in cnt)) { cnt[n] = 0; order.push(n); } cnt[n]++; });
   return (toks.length > 1 ? 'Set of ' + toks.length + ': ' : '') + order.map(n => n + (cnt[n] > 1 ? ' x' + cnt[n] : '')).join(', ');
 }
+/* Type dropdown (product type = SKU prefix name, e.g. Bracelet Adjustable / Brooch / Bookmark); keeps the current selection */
+function _rcFillTypeSel(id, names){
+  const el = document.getElementById(id); if (!el) return;
+  const cur = el.value, list = Array.from(new Set(names.filter(Boolean))).sort();
+  el.innerHTML = '<option value="">All Types</option>' + list.map(n => '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>').join('');
+  el.value = list.indexOf(cur) >= 0 ? cur : '';
+}
+/* Sales types (Marketplace / Website / SOR / Blinkit ...) found in the sales entries of all Ramyana SKUs and CMBs; built once per data load */
+let _rySTCache = null, _rySTLen = -1;
+function _rySaleTypeList(){
+  if (_rySTCache && _rySTLen === (master || []).length) return _rySTCache;
+  const set = new Set();
+  try { _ryoItems().forEach(o => { const item = roExactSkuItem(o.it || {sku: o.sku}); (Array.isArray(item && item.sales_entries) ? item.sales_entries : []).forEach(e => { const t = String(e && e.type || '').trim(); if (t) set.add(t); }); }); } catch (e) { console.error(e); }
+  _rySTCache = Array.from(set).sort((a, b) => a.localeCompare(b)); _rySTLen = (master || []).length;
+  return _rySTCache;
+}
+/* SKU search: matches SKU code or SKU name; several SKUs can be searched at once, separated by comma / space / new line */
+function _rySkuName(it){ const n = it && it.sku_name ? String(it.sku_name).trim() : ''; return n.toLowerCase() === 'nan' ? '' : n; }
+function _rySearchOk(q, sku, name){
+  const terms = String(q || '').toLowerCase().split(/[,;\n]+/).map(t => t.trim()).filter(Boolean);
+  if (!terms.length) return true;
+  const a = String(sku || '').toLowerCase(), b = String(name || '').toLowerCase();
+  return terms.some(t => a.indexOf(t) >= 0 || b.indexOf(t) >= 0 || t.split(/\s+/).filter(Boolean).some(w => w.length > 3 && a === w));
+}
+/* Theme of each Ramyana SKU (from ramayana_skus.xlsx): Ram = Maryada, Hanuman = Bhakti, Ravan/Ravaan = Maya, blank stays blank */
+const _RY_THEME = {"BR-0015":"Maryada","BR-0016":"Maryada","SW-0001":"Maryada","BM-0001":"Maryada","BH-2616":"Maryada","BH-2794":"Maryada","BTC-0048":"Maryada","BH-2790":"Maryada","LP-0442":"Maryada","BH-2780":"Maryada","BR-0017":"Bhakti","BM-0002":"Bhakti","BH-2782":"Bhakti","LP-0441":"Bhakti","GB-0001":"Bhakti","BR-0018":"Bhakti","BH-2783":"Bhakti","BTC-0055":"Bhakti","BH-2795":"Bhakti","LP-0440":"Bhakti","BR-0019":"Maya","BM-0003":"Maya","LP-0445":"Maya","BH-2479":"Maya","BTC-0182":"Maya","BR-0020":"Maya","BH-2785":"Maya","BTC-0172":"Maya","LP-0444":"Maya","BH-2781":"Maya","CMB-1020":"Maryada","BR-0021":"Maryada","BH-2436":"Maya","BH-2437":"Maryada","BH-2438":"Maya","BH-2439":"Maryada","BH-2440":"Maryada","BH-2441":"Maryada","BH-2442":"Maryada","BH-2448":"Maya","BH-2449":"Maya","BH-2451":"Maryada","BH-2452":"Maryada","BH-2453":"Maya","BH-2456":"Maryada","BH-2464":"Maya","BH-2465":"Maryada","BH-2470":"Maryada","BH-2471":"Maryada","BH-2472":"Maryada","BH-2473":"Maryada","BH-2474":"Maya","BH-2475":"Maryada","BH-2476":"Maryada","BH-2477":"Maya","BH-2480":"Maryada","BH-2481":"Maryada","BH-2482":"Maryada","BH-2483":"Bhakti","BH-2487":"Bhakti","BH-2488":"Bhakti","BH-2489":"Bhakti","BH-2490":"Bhakti","BH-2491":"Bhakti","BH-2492":"Maryada","BH-2493":"Maryada","BH-2494":"Bhakti","BH-2495":"Maryada","BH-2496":"Maryada","BH-2501":"Bhakti","BH-2503":"Maryada","BH-2507":"Bhakti","BH-2508":"Maryada","BH-2509":"Maryada","BH-2510":"Maryada","BH-2511":"Bhakti","BH-2519":"Maryada","BH-2538":"Maryada","BH-2613":"Maryada","BH-2614":"Maryada","BH-2615":"Maryada","BH-2617":"Maryada","BH-2618":"Maryada","BH-2619":"Maryada","BH-2620":"Maryada","BH-2621":"Maryada","BH-2622":"Maryada","BH-2623":"Maryada","BH-2624":"Maryada","BH-2709":"Bhakti","BH-2710":"Bhakti","BH-2711":"Maryada","BH-2712":"Bhakti","BH-2713":"Bhakti","BH-2714":"Bhakti","BH-2715":"Bhakti","BH-2716":"Bhakti","BH-2717":"Bhakti","BH-2722":"Bhakti","BH-2726":"Maryada","BH-2727":"Bhakti","BH-2728":"Bhakti","BH-2729":"Bhakti","BH-2786":"Maryada","CMB-0863":"Maryada","CMB-1001":"Bhakti","CMB-1002":"Bhakti","CMB-1003":"Bhakti","CMB-1004":"Bhakti","CMB-1005":"Maryada","CMB-1006":"Maryada","CMB-1007":"Bhakti","CMB-1008":"Bhakti","CMB-1009":"Maya","CMB-1010":"Maya","BH-2754":"Maryada","BH-2755":"Maryada","BH-2757":"Bhakti","BH-2760":"Maryada","BH-2761":"Bhakti","BH-2762":"Bhakti","BH-2764":"Bhakti","BH-2766":"Maryada","BH-2769":"Maryada","BH-2771":"Bhakti","BH-2772":"Bhakti","BH-2774":"Maryada","BH-2776":"Maryada","BH-2777":"Maryada","BH-2787":"Bhakti","CMB-1000":"Maryada","CMB-0992":"Maryada","CMB-0993":"Maryada","CMB-0994":"Bhakti","CMB-0995":"Bhakti","CMB-0996":"Bhakti","CMB-0997":"Maya","CMB-0998":"Maya","CMB-0999":"Maya"};
+function _ryThemeOk(sel, sku){
+  if (!sel) return true;
+  const t = _RY_THEME[_ryKey(sku)] || '';
+  return sel === '__blank__' ? !t : t === sel;
+}
+function _ryThemeLabel(id){ const v = (document.getElementById(id) || {}).value || ''; return v === '__blank__' ? 'Blank' : v; }
 function _rcBuild(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
-  const ctx = (d1 || d2) ? {d1: d1, d2: d2} : {};
+  const st = (document.getElementById('rcTypeF') || {}).value || '';      /* Type = sales type */
+  const cu = (document.getElementById('rcCustF') || {}).value || '';      /* Customer Name */
   return _RAMYANA_CMB_SKUS.map(raw => {
     const sku = _ryKey(raw), it = _rcFind(sku);
     let sold = 0;
-    try { sold = Number(cnxSaleTotalsForItem(it || {sku: sku}, ctx).sold) || 0; } catch (e) { console.error(e); }
+    try { sold = _rySalesOf(it || {sku: sku}, sku, d1, d2, cu, st).sold; } catch (e) { console.error(e); }
     let dim = it && it.dimensions ? String(it.dimensions).trim() : '';
     if (dim.toLowerCase() === 'nan') dim = '';
     let combo = it && it.combo_skus ? String(it.combo_skus).trim() : '';
     if (!combo && it && Array.isArray(it.combo_details)) combo = it.combo_details.map(c => (c && c.sku) || '').filter(Boolean).join(',');
     if (combo.toLowerCase() === 'nan') combo = '';
     dim = _rcSetText(combo, dim);
-    return {sku: sku, open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo,
+    const types = Array.from(new Set(String(combo || '').split(/[,\s;]+/).map(t => t.trim().toUpperCase()).filter(Boolean).map(_rcChildName)));
+    return {sku: sku, name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo, types: types,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
 function _rcFiltered(){
   const q = ((document.getElementById('rcSearch') || {}).value || '').trim().toLowerCase();
-  return _rcRows.filter(r => !q || r.sku.toLowerCase().indexOf(q) >= 0);
+  const th = (document.getElementById('rcThemeF') || {}).value || '';
+  return _rcRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku));
 }
 function renderRamyanaCmb(){
   const host = document.getElementById('rcContent'); if (!host) return;
@@ -17267,11 +17336,20 @@ function renderRamyanaCmb(){
   }
   _rcRetry = 0;
   _rcRows = _rcBuild();
+  _rcFillTypeSel('rcTypeF', _rySaleTypeList());
+  _ryFillCustSel('rcCustF');
   const rows = _rcFiltered();
   const sm = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const kpi = (l, v, s) => '<div class="ops-kpi"><div class="ops-kpi-label">' + l + '</div><div class="ops-kpi-value">' + v + '</div><div class="ops-kpi-sub">' + s + '</div></div>';
+  const sumHost = document.getElementById('rcSummary');
+  if (sumHost) sumHost.innerHTML = kpi('CMBs', _ryNum(rows.length), 'CMBs listed')
+    + kpi('Total Sold', _ryNum(sm('sold')), 'CMB units sold in the selected dates')
+    + kpi('Inv Stock', _ryNum(sm('stock')), 'CMB stock')
+    + kpi('Inv WIP', _ryNum(sm('wip')), 'CMB WIP');
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
   const info = document.getElementById('rcInfo');
-  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + '  |  ' + rows.length + ' CMB' + (rows.length === 1 ? '' : 's') + ' shown';
+  const stSel = (document.getElementById('rcTypeF') || {}).value || '', cuSel = (document.getElementById('rcCustF') || {}).value || '';
+  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + (stSel ? '  |  Type: ' + stSel : '') + (_ryThemeLabel('rcThemeF') ? '  |  Theme: ' + _ryThemeLabel('rcThemeF') : '') + (cuSel ? '  |  Customer: ' + cuSel : '') + '  |  ' + rows.length + ' CMB' + (rows.length === 1 ? '' : 's') + ' shown';
   if (!rows.length) { host.innerHTML = '<div class="ops-empty">No CMB found for the selected filters.</div>'; return; }
   const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
   let body = '';
@@ -17297,7 +17375,7 @@ function renderRamyanaCmb(){
 }
 const renderRamyanaCmb_d = _debounce(() => renderRamyanaCmb(), 160);
 function resetRamyanaCmbFilters(){
-  ['rcFrom', 'rcTo', 'rcSearch'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['rcFrom', 'rcTo', 'rcSearch', 'rcTypeF', 'rcCustF', 'rcThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   renderRamyanaCmb();
 }
 async function exportRamyanaCmbExcel(){
@@ -17307,7 +17385,7 @@ async function exportRamyanaCmbExcel(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
   try {
     const resp = await fetch('/api/ramyana_cmb/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
-      body: JSON.stringify({period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
+      body: JSON.stringify({period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + (((document.getElementById('rcTypeF') || {}).value) ? ' | Type: ' + document.getElementById('rcTypeF').value : '') + (_ryThemeLabel('rcThemeF') ? ' | Theme: ' + _ryThemeLabel('rcThemeF') : '') + (((document.getElementById('rcCustF') || {}).value) ? ' | Customer: ' + document.getElementById('rcCustF').value : ''),
         rows: rows.map(r => ({sku: r.sku, image: r.img, total: r.sold, dimensions: r.dim, combo_details: r.combo, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
@@ -17317,6 +17395,167 @@ async function exportRamyanaCmbExcel(){
   } catch (e) { alert('Excel export failed: ' + ((e && e.message) || e)); }
 }
 window.renderRamyanaCmb = renderRamyanaCmb; window.renderRamyanaCmb_d = renderRamyanaCmb_d; window.resetRamyanaCmbFilters = resetRamyanaCmbFilters; window.exportRamyanaCmbExcel = exportRamyanaCmbExcel;
+
+/* ── RAMAYANA OVERALL TABLE (all Ramyana SKUs incl. CMBs; Sold Qty = the SKU's OWN sales only, nothing from parent CMBs is added to a child) ── */
+let _ryoRows = [], _ryoRetry = 0, _ryoTimer = null;
+function _ryoItems(){
+  const idx = new Map(), alias = new Map(), idxB = new Map();
+  (master || []).forEach(it => {
+    const k = _ryKey(it && it.sku), kb = _ryKey(it && it.sku_b);
+    if (kb && !idxB.has(kb)) idxB.set(kb, it);
+    if (!k) return;
+    idx.set(k, it);
+    const b = k.replace(/[_-]\d{1,2}$/, '');
+    if (b !== k && !alias.has(b)) alias.set(b, it);
+  });
+  const findIt = sku => {
+    if (idxB.has(sku)) return idxB.get(sku);
+    if (idx.has(sku)) return idx.get(sku);
+    const c = sku.replace(/[^A-Z0-9]/g, '');
+    if (c && typeof _roExactSkuLookup !== 'undefined' && _roExactSkuLookup[c]) return _roExactSkuLookup[c];
+    return alias.get(sku) || null;
+  };
+  const order = [], seen = new Set(), kids = [], cmbs = [];
+  const addKid = sku => { if (!sku || seen.has(sku)) return; const it = findIt(sku); if (_ryIsCmb(it, sku)) return; seen.add(sku); order.push({sku: sku, it: it, cmb: false}); };
+  const addCmb = sku => { if (!sku || seen.has(sku)) return; seen.add(sku); cmbs.push({sku: sku, it: findIt(sku), cmb: true}); };
+  _RAMYANA_SKUS.forEach(raw => {
+    const sku = _ryKey(raw), it = findIt(sku);
+    if (_ryIsCmb(it, sku)) { (it && Array.isArray(it.combo_details) ? it.combo_details : []).forEach(c => kids.push(_ryKey(c && c.sku))); return; }
+    addKid(sku);
+  });
+  kids.forEach(addKid);
+  _RAMYANA_SKUS.concat(_RAMYANA_CMB_SKUS).forEach(raw => { const sku = _ryKey(raw); if (_ryIsCmb(findIt(sku), sku)) addCmb(sku); });
+  return order.concat(cmbs);
+}
+/* the SKU's own sales in the date range; with a customer picked, only that customer's entries (exact name) */
+function _rySalesOf(it, sku, d1, d2, cust, stype){
+  const base = it || {sku: sku};
+  cust = String(cust || '').trim();      /* customer search: any customer whose name contains the typed text (case-insensitive) */
+  if (!cust) { const c = {}; if (d1) c.d1 = d1; if (d2) c.d2 = d2; if (stype) c.types = [stype]; const t = cnxSaleTotalsForItem(base, c); return {sold: Number(t.sold) || 0, rev: Number(t.rev) || 0}; }
+  const item = roExactSkuItem(base), rows = Array.isArray(item && item.sales_entries) ? item.sales_entries : [];
+  const out = {sold: 0, rev: 0};
+  rows.forEach(e => {
+    if (String(e && e.cust || '').toLowerCase().indexOf(cust.toLowerCase()) < 0) return;
+    if (stype && String(e && e.type || '').trim() !== stype) return;
+    const d = cnxSaleEntryDate(e, {});
+    if ((d1 || d2) && (!d || (d1 && d < d1) || (d2 && d > d2))) return;
+    out.sold += Number(e && e.qty) || 0; out.rev += Number(e && e.rev) || 0;
+  });
+  return out;
+}
+function _ryoSold(it, sku, d1, d2, cust, stype){ return _rySalesOf(it, sku, d1, d2, cust, stype).sold; }
+/* customer dropdown (exact customer names found in the sales entries of the Ramyana SKUs / CMBs); built once per dropdown, keeps the selection */
+let _ryCustCache = null, _ryCustLen = -1;
+function _ryCustList(){
+  if (_ryCustCache && _ryCustLen === (master || []).length) return _ryCustCache;
+  _ryCustCache = _ryoCustomers(); _ryCustLen = (master || []).length; return _ryCustCache;
+}
+function _ryFillCustSel(id){
+  const dl = document.getElementById(id + '_dl'); if (!dl) return;
+  const names = _ryCustList();
+  if (dl.options.length === names.length) return;
+  dl.innerHTML = names.map(n => '<option value="' + escHtml(n) + '"></option>').join('');
+}
+function _ryoBuild(){
+  const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
+  const cust = (document.getElementById('ryoCustF') || {}).value || '';
+  const stype = (document.getElementById('ryoTypeF') || {}).value || '';      /* Type = sales type */
+  return _ryoItems().map(o => {
+    const it = o.it; let sold = 0, rev = 0;
+    try { const t = _rySalesOf(it, o.sku, d1, d2, cust, stype); sold = t.sold; rev = t.rev; } catch (e) { console.error(e); }
+    return {sku: o.sku, name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : o.sku, type: o.cmb ? 'CMB' : _rcChildName(o.sku), img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, sold: sold, rev: rev,
+            stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it, cmb: o.cmb};
+  });
+}
+function _ryoCustomers(){
+  const set = new Set();
+  _ryoItems().forEach(o => { try { const item = roExactSkuItem(o.it || {sku: o.sku}); (Array.isArray(item && item.sales_entries) ? item.sales_entries : []).forEach(e => { const c = String(e && e.cust || '').trim(); if (c) set.add(c); }); } catch (_e) {} });
+  return Array.from(set).sort((a, b) => a.localeCompare(b));
+}
+function _ryoFiltered(){
+  const q = ((document.getElementById('ryoSearch') || {}).value || '').trim().toLowerCase();
+  const th = (document.getElementById('ryoThemeF') || {}).value || '';
+  return _ryoRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku));
+}
+function renderRamyanaOverall(){
+  const host = document.getElementById('ryoContent'); if (!host) return;
+  if (!master || !master.length) {
+    host.innerHTML = '<div class="ops-empty">Loading data...</div>';
+    if (_ryoRetry < 40) { _ryoRetry++; clearTimeout(_ryoTimer); _ryoTimer = setTimeout(() => { if (currentTab === 'ramyana') renderRamyanaOverall(); }, 1500); }
+    return;
+  }
+  _ryoRetry = 0;
+  const custEl = document.getElementById('ryoCustF');
+  _ryFillCustSel('ryoCustF');
+  _ryoRows = _ryoBuild();
+  _rcFillTypeSel('ryoTypeF', _rySaleTypeList());
+  const rows = _ryoFiltered();
+  const sm = (k, f) => rows.filter(f || (() => true)).reduce((a, r) => a + (r[k] || 0), 0);
+  const kpi = (l, v, s) => '<div class="ops-kpi"><div class="ops-kpi-label">' + l + '</div><div class="ops-kpi-value">' + v + '</div><div class="ops-kpi-sub">' + s + '</div></div>';
+  const sumHost = document.getElementById('ryoSummary');
+  if (sumHost) sumHost.innerHTML = kpi('SKUs', _ryNum(rows.length), _ryNum(rows.filter(r => r.cmb).length) + ' CMBs + ' + _ryNum(rows.filter(r => !r.cmb).length) + ' child SKUs')
+    + kpi('Total Sold', _ryNum(sm('sold')), 'CMB sold + child sold')
+    + kpi('Net Revenue', '₹' + _ryNum(sm('rev')), 'CMB + child net revenue')
+    + kpi('CMB Sold', _ryNum(sm('sold', r => r.cmb)), 'Units sold under CMB SKUs')
+    + kpi('CMB Net Revenue', '₹' + _ryNum(sm('rev', r => r.cmb)), 'Net revenue of CMB SKUs')
+    + kpi('Child Sold', _ryNum(sm('sold', r => !r.cmb)), 'Units sold under the child SKUs themselves')
+    + kpi('Child Net Revenue', '₹' + _ryNum(sm('rev', r => !r.cmb)), 'Net revenue of child SKUs')
+    + kpi('Inv Stock', _ryNum(sm('stock')), 'Stock of the listed SKUs')
+    + kpi('Inv WIP', _ryNum(sm('wip')), 'WIP of the listed SKUs');
+  const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
+  const cust = (custEl || {}).value || '';
+  const stSel = (document.getElementById('ryoTypeF') || {}).value || '';
+  const info = document.getElementById('ryoInfo');
+  if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + (stSel ? '  |  Type: ' + stSel : '') + (_ryThemeLabel('ryoThemeF') ? '  |  Theme: ' + _ryThemeLabel('ryoThemeF') : '') + (cust ? '  |  Customer: ' + cust : '') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
+  if (!rows.length) { host.innerHTML = '<div class="ops-empty">No SKU found for the selected filters.</div>'; return; }
+  const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
+  let body = '';
+  rows.forEach(r => {
+    const photo = r.img ? '<img class="ops-photo" src="' + escHtml(r.img) + '" loading="lazy" decoding="async" onerror="this.outerHTML=\'<div class=&quot;ops-photo-ph&quot;>💎</div>\'">' : '<div class="ops-photo-ph">💎</div>';
+    body += '<tr>'
+      + '<td data-sort-value="' + escHtml(r.sku) + '" style="font-weight:800;white-space:nowrap">' + (r.found ? '<button class="sku-link" data-sku="' + escHtml(r.open) + '" onclick="openSkuDetails(this.dataset.sku)" title="View full SKU details">' + escHtml(r.sku) + '</button>' : escHtml(r.sku) + ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
+      + '<td data-sort-value="' + (r.img ? 1 : 0) + '">' + photo + '</td>'
+      + '<td data-sort-value="' + escHtml(r.name) + '">' + (r.name ? escHtml(r.name) : '—') + '</td>'
+      + '<td data-sort-value="' + escHtml(r.type) + '">' + escHtml(r.type) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.mrp === null ? -1 : r.mrp) + '">' + (r.mrp === null ? '—' : '₹' + _ryNum(r.mrp)) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.sold + '" style="font-weight:900">' + _ryNum(r.sold) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.rev + '">₹' + _ryNum(r.rev) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.stock === null ? -1 : r.stock) + '">' + (r.stock === null ? '—' : _ryNum(r.stock)) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (r.wip === null ? -1 : r.wip) + '">' + (r.wip === null ? '—' : _ryNum(r.wip)) + '</td>'
+      + '</tr>';
+  });
+  const tf = '<tfoot><tr style="background:#f2e5cf"><td style="font-weight:900">TOTAL</td><td></td><td></td><td></td><td></td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('sold')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">₹' + _ryNum(sm('rev')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('stock')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('wip')) + '</td></tr></tfoot>';
+  host.innerHTML = '<table class="ops-table" style="min-width:960px"><thead><tr>'
+    + th('SKU') + th('Image') + th('SKU Name') + th('Product Type') + th('MRP', 'right') + th('Sold Qty', 'right') + th('Net Revenue', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+    + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
+}
+const renderRamyanaOverall_d = _debounce(() => renderRamyanaOverall(), 160);
+function resetRamyanaOverallFilters(){
+  ['ryoFrom', 'ryoTo', 'ryoSearch', 'ryoTypeF', 'ryoCustF', 'ryoThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  renderRamyanaOverall();
+}
+async function exportRamyanaOverallExcel(){
+  if (!_ryoRows.length) renderRamyanaOverall();
+  const rows = _ryoFiltered();
+  if (!rows.length) { alert('No data to export.'); return; }
+  const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
+  const cust = (document.getElementById('ryoCustF') || {}).value || '';
+  try {
+    const resp = await fetch('/api/ramyana_overall/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
+      body: JSON.stringify({period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + (((document.getElementById('ryoTypeF') || {}).value) ? ' | Type: ' + document.getElementById('ryoTypeF').value : '') + (_ryThemeLabel('ryoThemeF') ? ' | Theme: ' + _ryThemeLabel('ryoThemeF') : ''), customer: cust,
+        rows: rows.map(r => ({sku: r.sku, sku_name: r.name, type: r.type, mrp: r.mrp, image: r.img, sold: r.sold, net_revenue: r.rev, inv_stock: r.stock, inv_wip: r.wip}))})});
+    if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
+    const blob = await resp.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'ramayana_overall_report.xlsx';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  } catch (e) { alert('Excel export failed: ' + ((e && e.message) || e)); }
+}
+window.renderRamyanaOverall = renderRamyanaOverall; window.renderRamyanaOverall_d = renderRamyanaOverall_d; window.resetRamyanaOverallFilters = resetRamyanaOverallFilters; window.exportRamyanaOverallExcel = exportRamyanaOverallExcel;
 
 /* ── WEBSITE BEST SELLERS TAB (SKUs with 5+ units sold on Website in the last 30 days; dates can be changed) ──
    Website = D2C business channel (same definition as the Overall Details channel filter). Ranking = Total Sold = Individual + In CMB.
@@ -26024,6 +26263,7 @@ showTab = function(t){
   if (t === 'wipreceive') setTimeout(()=>{ try{ loadWipReceive(false); }catch(e){console.error(e);} }, 0);
   if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyana(); }catch(e){console.error(e);} }, 0);
   if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyanaCmb(); }catch(e){console.error(e);} }, 0);
+  if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyanaOverall(); }catch(e){console.error(e);} }, 0);
   if (t === 'webtop50') setTimeout(()=>{ try{ renderWebTop50(); }catch(e){console.error(e);} }, 0);
   if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
@@ -33235,6 +33475,109 @@ def api_ramyana_export_xlsx():
         return resp
     except Exception as e:
         return jsonify({"error": "Ramyana Excel export failed: " + str(e)[:400]}), 500
+
+@app.route("/api/ramyana_overall/export.xlsx", methods=["POST"])
+def api_ramyana_overall_export_xlsx():
+    """Ramyana tab > Ramayana Overall export: SKU, Type, full Image Link, Sold Qty, Inv Stock, Inv WIP."""
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        body = request.get_json(silent=True) or {}
+        period = clean(body.get("period", "")) or "All time"
+        customer = clean(body.get("customer", ""))
+        rows = []
+        for r in (body.get("rows") or []):
+            sku = clean((r or {}).get("sku", ""))
+            if not sku:
+                continue
+            def _n(v):
+                return None if v is None or v == "" else to_int(v)
+            rows.append({"sku": sku, "name": clean((r or {}).get("sku_name", "")), "type": clean((r or {}).get("type", "")), "image": clean((r or {}).get("image", "")),
+                         "mrp": _n((r or {}).get("mrp")),
+                         "sold": to_int((r or {}).get("sold", 0)), "rev": to_num((r or {}).get("net_revenue", 0)),
+                         "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip"))})
+        if not rows:
+            return jsonify({"error": "No Ramayana Overall rows to export."}), 404
+
+        headers = ["SKU", "SKU Name", "Product Type", "MRP", "Image Link", "Sold Qty", "Net Revenue", "Inv Stock", "Inv WIP"]
+        ncol = len(headers)
+        last_col = get_column_letter(ncol)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Ramayana Overall"
+        ws.merge_cells(f"A1:{last_col}1")
+        ws["A1"] = "Ramayana Overall - Sales & Stock"
+        ws["A1"].font = Font(bold=True, size=15, color="7A1C16")
+        ws.row_dimensions[1].height = 27
+        ws.merge_cells(f"A2:{last_col}2")
+        ws["A2"] = (f"Sales period: {period}" + (f" | Customer: {customer}" if customer else "")
+                    + f" | Sold Qty = the SKU's own sales only | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+        ws["A2"].font = Font(italic=True, size=9, color="6B6258")
+
+        thin = Side(style="thin", color="DDD5C5")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        hr = 4
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(hr, c, h)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="8C6A24")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        ws.row_dimensions[hr].height = 24
+
+        for i, r in enumerate(rows, hr + 1):
+            vals = [r["sku"], r["name"], r["type"], r["mrp"] if r["mrp"] is not None else "", r["image"], r["sold"], round(r["rev"], 2),
+                    r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else ""]
+            for c, v in enumerate(vals, 1):
+                cell = ws.cell(i, c, v)
+                cell.border = border
+                cell.alignment = Alignment(horizontal=("right" if c in (4, 6, 7, 8, 9) else "left"), vertical="center")
+                if c in (4, 6, 8, 9):
+                    cell.number_format = "#,##0"
+                elif c == 7:
+                    cell.number_format = "#,##0.00"
+            if r["image"].startswith(("http://", "https://")):
+                ic = ws.cell(i, 5)
+                ic.hyperlink = r["image"]
+                ic.style = "Hyperlink"
+                ic.border = border
+                ic.alignment = Alignment(horizontal="left", vertical="center")
+            ws.cell(i, 1).font = Font(bold=True)
+            ws.cell(i, 6).font = Font(bold=True)
+
+        tr = hr + len(rows) + 1
+        first, lastr = hr + 1, hr + len(rows)
+        ws.cell(tr, 1, "TOTAL")
+        for c in (6, 7, 8, 9):
+            L = get_column_letter(c)
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 7 else "#,##0")
+        for c in range(1, ncol + 1):
+            cell = ws.cell(tr, c)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="F2E5CF")
+            cell.border = border
+            if c in (4, 6, 7, 8, 9):
+                cell.alignment = Alignment(horizontal="right")
+
+        ws.freeze_panes = f"A{hr + 1}"
+        ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
+        for i, w in enumerate([18, 34, 22, 12, 52, 14, 16, 14, 14], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"Ramayana_Overall_Report_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+        return resp
+    except Exception as e:
+        return jsonify({"error": "Ramayana Overall Excel export failed: " + str(e)[:400]}), 500
 
 @app.route("/api/ramyana_cmb/export.xlsx", methods=["POST"])
 def api_ramyana_cmb_export_xlsx():
