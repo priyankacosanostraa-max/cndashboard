@@ -1,4 +1,5 @@
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
+# V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramyana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
 # Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
 # - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
@@ -17205,6 +17206,12 @@ function _rcFind(sku){
   if (c && typeof _roExactSkuLookup !== 'undefined' && _roExactSkuLookup[c]) return _roExactSkuLookup[c];
   return null;
 }
+/* "Bracelet Adjustable, Brooch-50X65 MM, Bookmark-40X25 MM" -> "Set of 3: Bracelet Adjustable, Brooch, Bookmark" (sizes removed) */
+function _rcDimNames(txt){
+  const parts = String(txt || '').split(',').map(p => p.trim().replace(/[\s\-–]*[\d.]+(\s*[x×X]\s*[\d.]*)*\s*(mm|cm|inch|in)?\s*$/i, '').replace(/[\s\-–]*(mm|cm)\s*$/i, '').replace(/[\s\-–]+$/, '').trim()).filter(Boolean);
+  if (!parts.length) return '';
+  return (parts.length > 1 ? 'Set of ' + parts.length + ': ' : '') + parts.join(', ');
+}
 function _rcBuild(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
   const ctx = (d1 || d2) ? {d1: d1, d2: d2} : {};
@@ -17212,8 +17219,12 @@ function _rcBuild(){
     const sku = _ryKey(raw), it = _rcFind(sku);
     let sold = 0;
     try { sold = Number(cnxSaleTotalsForItem(it || {sku: sku}, ctx).sold) || 0; } catch (e) { console.error(e); }
-    const dim = it && it.dimensions ? String(it.dimensions).trim() : '';
-    return {sku: sku, img: _ryImg(it), sold: sold, dim: (dim.toLowerCase() === 'nan' ? '' : dim),
+    let dim = it && it.dimensions ? String(it.dimensions).trim() : '';
+    dim = (dim.toLowerCase() === 'nan') ? '' : _rcDimNames(dim);
+    let combo = it && it.combo_skus ? String(it.combo_skus).trim() : '';
+    if (!combo && it && Array.isArray(it.combo_details)) combo = it.combo_details.map(c => (c && c.sku) || '').filter(Boolean).join(',');
+    if (combo.toLowerCase() === 'nan') combo = '';
+    return {sku: sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
@@ -17245,16 +17256,17 @@ function renderRamyanaCmb(){
       + '<td data-sort-value="' + (r.img ? 1 : 0) + '">' + photo + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.sold + '" style="font-weight:900">' + _ryNum(r.sold) + '</td>'
       + '<td data-sort-value="' + escHtml(r.dim) + '">' + (r.dim ? escHtml(r.dim) : '—') + '</td>'
+      + '<td data-sort-value="' + escHtml(r.combo) + '">' + (r.combo ? escHtml(r.combo) : '—') + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.stock === null ? -1 : r.stock) + '">' + (r.stock === null ? '—' : _ryNum(r.stock)) + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.wip === null ? -1 : r.wip) + '">' + (r.wip === null ? '—' : _ryNum(r.wip)) + '</td>'
       + '</tr>';
   });
   const tf = '<tfoot><tr style="background:#f2e5cf"><td style="font-weight:900">TOTAL</td><td></td>'
-    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('sold')) + '</td><td></td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('sold')) + '</td><td></td><td></td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('stock')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('wip')) + '</td></tr></tfoot>';
   host.innerHTML = '<table class="ops-table" style="min-width:700px"><thead><tr>'
-    + th('SKU') + th('Image') + th('Total Sold', 'right') + th('Product Dimensions') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+    + th('SKU') + th('Image') + th('Total Sold', 'right') + th('Product Dimensions') + th('Combo Details') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
     + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
 }
 const renderRamyanaCmb_d = _debounce(() => renderRamyanaCmb(), 160);
@@ -17270,7 +17282,7 @@ async function exportRamyanaCmbExcel(){
   try {
     const resp = await fetch('/api/ramyana_cmb/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
       body: JSON.stringify({period: (d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time',
-        rows: rows.map(r => ({sku: r.sku, image: r.img, total: r.sold, dimensions: r.dim, inv_stock: r.stock, inv_wip: r.wip}))})});
+        rows: rows.map(r => ({sku: r.sku, image: r.img, total: r.sold, dimensions: r.dim, combo_details: r.combo, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -33219,12 +33231,12 @@ def api_ramyana_cmb_export_xlsx():
             def _n(v):
                 return None if v is None or v == "" else to_int(v)
             rows.append({"sku": sku, "image": clean((r or {}).get("image", "")), "tot": to_int((r or {}).get("total", 0)),
-                         "dim": clean((r or {}).get("dimensions", "")),
+                         "dim": clean((r or {}).get("dimensions", "")), "combo": clean((r or {}).get("combo_details", "")),
                          "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip"))})
         if not rows:
             return jsonify({"error": "No Ramyana CMB rows to export."}), 404
 
-        headers = ["SKU", "Image Link", "Total Sold", "Product Dimensions", "Inv Stock", "Inv WIP"]
+        headers = ["SKU", "Image Link", "Total Sold", "Product Dimensions", "Combo Details", "Inv Stock", "Inv WIP"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -33252,13 +33264,13 @@ def api_ramyana_cmb_export_xlsx():
         ws.row_dimensions[hr].height = 24
 
         for i, r in enumerate(rows, hr + 1):
-            vals = [r["sku"], r["image"], r["tot"], r["dim"],
+            vals = [r["sku"], r["image"], r["tot"], r["dim"], r["combo"],
                     r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else ""]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
                 cell.border = border
-                cell.alignment = Alignment(horizontal=("right" if c in (3, 5, 6) else "left"), vertical="center", wrap_text=(c == 4))
-                if c in (3, 5, 6):
+                cell.alignment = Alignment(horizontal=("right" if c in (3, 6, 7) else "left"), vertical="center", wrap_text=(c in (4, 5)))
+                if c in (3, 6, 7):
                     cell.number_format = "#,##0"
             if r["image"].startswith(("http://", "https://")):
                 ic = ws.cell(i, 2)
@@ -33272,7 +33284,7 @@ def api_ramyana_cmb_export_xlsx():
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 1, "TOTAL")
-        for c in (3, 5, 6):
+        for c in (3, 6, 7):
             L = get_column_letter(c)
             ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = "#,##0"
         for c in range(1, ncol + 1):
@@ -33280,12 +33292,12 @@ def api_ramyana_cmb_export_xlsx():
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="F2E5CF")
             cell.border = border
-            if c in (3, 5, 6):
+            if c in (3, 6, 7):
                 cell.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([18, 52, 14, 38, 14, 14], 1):
+        for i, w in enumerate([18, 52, 14, 42, 34, 14, 14], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         bio = io.BytesIO()
