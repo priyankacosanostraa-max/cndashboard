@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
+# Cosa Nostraa — V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramayana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
@@ -17093,6 +17093,8 @@ const _RAMYANA_SKUS = [
   'CMB-0999'
 ];
 const _RY_LOW_STOCK = 50;
+/* V25.27: these SKUs are excluded from every table of the Ramayana tab */
+const _RY_EXCLUDE = new Set(['BH-2753','BH-2758','BH-2759','BH-2763','BH-2768','BH-2773','BH-2775']);
 let _ryRows = [], _ryRetry = 0, _ryTimer = null;
 function _ryKey(s){ return String(s == null ? '' : s).trim().toUpperCase(); }
 function _ryIsCmb(it, sku){ return /^CMB[-_ ]?\d/.test(sku) || !!(it && Array.isArray(it.combo_details) && it.combo_details.length); }
@@ -17121,7 +17123,7 @@ function _ryBuild(){
   const ctx = _ryCtx('ry');      /* same filters as Repeat Order */
   const order = [], seen = new Set(), kids = [];
   const add = sku => {
-    if (!sku || seen.has(sku)) return;
+    if (!sku || seen.has(sku) || _RY_EXCLUDE.has(sku)) return;
     const it = findIt(sku);
     if (_ryIsCmb(it, sku)) return;
     seen.add(sku); order.push(sku);
@@ -17396,7 +17398,7 @@ function _ryPct(part, total){ return (total > 0 ? (part / total * 100) : 0).toFi
 function _rcBuild(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
   const ctx = _ryCtx('rc');      /* same filters as Repeat Order */
-  return _RAMYANA_CMB_SKUS.map(raw => {
+  return _RAMYANA_CMB_SKUS.filter(raw => !_RY_EXCLUDE.has(_ryKey(raw))).map(raw => {
     const sku = _ryKey(raw), it = _rcFind(sku);
     let sold = 0;
     try { sold = _rySalesOf(it || {sku: sku}, sku, ctx).sold; } catch (e) { console.error(e); }
@@ -17508,8 +17510,8 @@ function _ryoItems(){
     return alias.get(sku) || null;
   };
   const order = [], seen = new Set(), kids = [], cmbs = [];
-  const addKid = sku => { if (!sku || seen.has(sku)) return; const it = findIt(sku); if (_ryIsCmb(it, sku)) return; seen.add(sku); order.push({sku: sku, it: it, cmb: false}); };
-  const addCmb = sku => { if (!sku || seen.has(sku)) return; seen.add(sku); cmbs.push({sku: sku, it: findIt(sku), cmb: true}); };
+  const addKid = sku => { if (!sku || seen.has(sku) || _RY_EXCLUDE.has(sku)) return; const it = findIt(sku); if (_ryIsCmb(it, sku)) return; seen.add(sku); order.push({sku: sku, it: it, cmb: false}); };
+  const addCmb = sku => { if (!sku || seen.has(sku) || _RY_EXCLUDE.has(sku)) return; seen.add(sku); cmbs.push({sku: sku, it: findIt(sku), cmb: true}); };
   _RAMYANA_SKUS.forEach(raw => {
     const sku = _ryKey(raw), it = findIt(sku);
     if (_ryIsCmb(it, sku)) { (it && Array.isArray(it.combo_details) ? it.combo_details : []).forEach(c => kids.push(_ryKey(c && c.sku))); return; }
