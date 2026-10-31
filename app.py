@@ -1,5 +1,5 @@
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
-# V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
+# V25.10: Ramyana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramyana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
 # Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
 # - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
@@ -17102,7 +17102,7 @@ function _ryBuild(){
         inc += (Number(cnxSaleTotalsForItem(p, ctx).sold) || 0) * cnxChildComponentQty(p, k);
       }));
     } catch (e) { console.error(e); }
-    return {sku: sku, img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, ind: ind, inc: inc, tot: ind + inc,
+    return {sku: sku, open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, ind: ind, inc: inc, tot: ind + inc,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
@@ -17150,7 +17150,7 @@ function renderRamyana(){
     const cellBg = low ? 'background:#fee2e2 !important;' : '';
     const photo = r.img ? '<img class="ops-photo" src="' + escHtml(r.img) + '" loading="lazy" decoding="async" onerror="this.outerHTML=\'<div class=&quot;ops-photo-ph&quot;>💎</div>\'">' : '<div class="ops-photo-ph">💎</div>';
     body += '<tr>'
-      + '<td data-sort-value="' + escHtml(r.sku) + '" style="' + cellBg + 'font-weight:800;white-space:nowrap">' + escHtml(r.sku) + (r.found ? '' : ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
+      + '<td data-sort-value="' + escHtml(r.sku) + '" style="' + cellBg + 'font-weight:800;white-space:nowrap">' + (r.found ? '<button class="sku-link" data-sku="' + escHtml(r.open) + '" onclick="openSkuDetails(this.dataset.sku)" title="View full SKU details">' + escHtml(r.sku) + '</button>' : escHtml(r.sku) + ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
       + '<td data-sort-value="' + (r.img ? 1 : 0) + '" style="' + cellBg + '">' + photo + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.mrp === null ? -1 : r.mrp) + '" style="' + cellBg + '">' + (r.mrp === null ? '—' : '₹' + _ryNum(r.mrp)) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.ind + '" style="' + cellBg + '">' + _ryNum(r.ind) + '</td>'
@@ -17250,7 +17250,7 @@ function _rcBuild(){
     if (!combo && it && Array.isArray(it.combo_details)) combo = it.combo_details.map(c => (c && c.sku) || '').filter(Boolean).join(',');
     if (combo.toLowerCase() === 'nan') combo = '';
     dim = _rcSetText(combo, dim);
-    return {sku: sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo,
+    return {sku: sku, open: (it && it.sku) ? String(it.sku) : sku, img: _ryImg(it), sold: sold, dim: dim, combo: combo,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it};
   });
 }
@@ -17278,7 +17278,7 @@ function renderRamyanaCmb(){
   rows.forEach(r => {
     const photo = r.img ? '<img class="ops-photo" src="' + escHtml(r.img) + '" loading="lazy" decoding="async" onerror="this.outerHTML=\'<div class=&quot;ops-photo-ph&quot;>💎</div>\'">' : '<div class="ops-photo-ph">💎</div>';
     body += '<tr>'
-      + '<td data-sort-value="' + escHtml(r.sku) + '" style="font-weight:800;white-space:nowrap">' + escHtml(r.sku) + (r.found ? '' : ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
+      + '<td data-sort-value="' + escHtml(r.sku) + '" style="font-weight:800;white-space:nowrap">' + (r.found ? '<button class="sku-link" data-sku="' + escHtml(r.open) + '" onclick="openSkuDetails(this.dataset.sku)" title="View full SKU details">' + escHtml(r.sku) + '</button>' : escHtml(r.sku) + ' <span style="color:#92400e;font-size:9px">(not in All Product)</span>') + '</td>'
       + '<td data-sort-value="' + (r.img ? 1 : 0) + '">' + photo + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.sold + '" style="font-weight:900">' + _ryNum(r.sold) + '</td>'
       + '<td data-sort-value="' + escHtml(r.dim) + '">' + (r.dim ? escHtml(r.dim) : '—') + '</td>'
