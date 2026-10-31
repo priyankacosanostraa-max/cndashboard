@@ -1,5 +1,5 @@
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
-# V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramyana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramyana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramyana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramyana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
+# V25.24: 'SKU Group' filter teeno tables me (Ramyana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramyana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramyana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramyana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramyana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramyana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
 # Cosa Nostraa — V25.06 (WEBSITE TOP 50 TAB RENAMED "WEBSITE BEST SELLERS" · ALL SKUs WITH 5+ TOTAL SOLD IN LAST 30 DAYS, NO TOP-50 LIMIT)
 # - The Website tab now lists every child SKU with Total Sold of 5 or more on the Website (D2C) channel. The date range defaults to the last 30 days (today included) and can still be changed; Reset returns to the last 30 days. Search, KPIs, CMB Names and Excel export work as before. Everything else is unchanged.
@@ -9908,6 +9908,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc ry-chk"><label class="fl">SOR (tick one or more)</label><div id="rySorChecks" class="type-checks"></div></div>
       <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="ryCustF" list="ryCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyana_d()"><datalist id="ryCustF_dl"></datalist></div>
       <div class="fc"><label class="fl">Theme</label><select class="fs" id="ryThemeF" onchange="renderRamyana()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
+      <div class="fc"><label class="fl">SKU Group</label><select class="fs" id="ryGrpF" onchange="renderRamyana()"><option value="">All SKUs</option><option value="rcmb">Ramyana CMB</option><option value="btc">BTC CMB</option><option value="other">Other SKUs</option></select></div>
     </div>
     <div id="ryInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="rySummary" class="ops-kpis"></div>
@@ -9933,6 +9934,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc ry-chk"><label class="fl">SOR (tick one or more)</label><div id="rcSorChecks" class="type-checks"></div></div>
       <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="rcCustF" list="rcCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyanaCmb_d()"><datalist id="rcCustF_dl"></datalist></div>
       <div class="fc"><label class="fl">Theme</label><select class="fs" id="rcThemeF" onchange="renderRamyanaCmb()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
+      <div class="fc"><label class="fl">SKU Group</label><select class="fs" id="rcGrpF" onchange="renderRamyanaCmb()"><option value="">All SKUs</option><option value="rcmb">Ramyana CMB</option><option value="btc">BTC CMB</option><option value="other">Other SKUs</option></select></div>
     </div>
     <div id="rcInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="rcSummary" class="ops-kpis"></div>
@@ -9958,6 +9960,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc ry-chk"><label class="fl">SOR (tick one or more)</label><div id="ryoSorChecks" class="type-checks"></div></div>
       <div class="fc"><label class="fl">Customer Name</label><input class="fi" id="ryoCustF" list="ryoCustF_dl" placeholder="Search customer..." autocomplete="off" oninput="renderRamyanaOverall_d()"><datalist id="ryoCustF_dl"></datalist></div>
       <div class="fc"><label class="fl">Theme</label><select class="fs" id="ryoThemeF" onchange="renderRamyanaOverall()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
+      <div class="fc"><label class="fl">SKU Group</label><select class="fs" id="ryoGrpF" onchange="renderRamyanaOverall()"><option value="">All SKUs</option><option value="rcmb">Ramyana CMB</option><option value="btc">BTC CMB</option><option value="other">Other SKUs</option></select></div>
     </div>
     <div id="ryoInfo" class="small-note" style="margin:0 2px 10px"></div>
     <div id="ryoSummary" class="ops-kpis"></div>
@@ -17132,12 +17135,14 @@ function _ryBuild(){
   return order.map(sku => {
     const it = findIt(sku);
     let ind = 0, inc = 0;
+    const gsel = _ryGrpSel('ry');
     try {
-      ind = _rySalesOf(it || {sku: sku}, sku, ctx).sold;
+      ind = (!gsel || gsel === 'other') ? _rySalesOf(it || {sku: sku}, sku, ctx).sold : 0;
       const keys = [sku]; const ik = _ryKey(it && it.sku); if (ik && ik !== sku) keys.push(ik);
       const seenP = new Set();
       keys.forEach(k => (pidx.get(k) || []).forEach(p => {
         const pk = _ryKey(p && p.sku); if (!pk || seenP.has(pk)) return; seenP.add(pk);
+        if (gsel === 'other' || (gsel === 'rcmb' && !_ryIsRcmb(pk)) || (gsel === 'btc' && _ryIsRcmb(pk))) return;
         inc += _rySalesOf(p, pk, ctx).sold * cnxChildComponentQty(p, k);
       }));
     } catch (e) { console.error(e); }
@@ -17217,7 +17222,7 @@ function renderRamyana(){
 }
 const renderRamyana_d = _debounce(() => renderRamyana(), 160);
 function resetRamyanaFilters(){
-  ['ryFrom', 'ryTo', 'rySearch', 'ryStockF', 'ryCustF', 'ryThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['ryFrom', 'ryTo', 'rySearch', 'ryStockF', 'ryCustF', 'ryThemeF', 'ryGrpF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   _ryClearChecks('ry');
   renderRamyana();
 }
@@ -17331,7 +17336,7 @@ function _ryFillChanSel(id){
 }
 /* any sales filter (date range / type / customer / theme) picked -> show only SKUs that actually sold; with no filter the full list stays */
 function _ryAnyFilter(pre){
-  return ['From', 'To', 'CustF', 'ThemeF'].some(k => String((document.getElementById(pre + k) || {}).value || '').trim()) || _RY_GROUPS.some(g => _rySelChecks(pre, g[0]).length > 0);
+  return ['From', 'To', 'CustF', 'ThemeF', 'GrpF'].some(k => String((document.getElementById(pre + k) || {}).value || '').trim()) || _RY_GROUPS.some(g => _rySelChecks(pre, g[0]).length > 0);
 }
 /* ── Repeat Order style filters: Type / Channel / ECom / SOR (tick one or more), Customer (contains), date range ── */
 const _RY_GROUPS = [['Type', 'types'], ['Chan', 'channels'], ['Ecom', 'subChannels'], ['Sor', 'subChannels']];
@@ -17366,9 +17371,17 @@ function _ryCtx(pre){
   return ctx;
 }
 function _ryFilterText(pre){
+  const gs = _ryGrpSel(pre);
   const parts = [['Type', 'Type'], ['Chan', 'Channel'], ['Ecom', 'ECom'], ['Sor', 'SOR']].map(g => { const a = _rySelChecks(pre, g[0]).map(x => g[0] === 'Chan' ? _ryChanLabel(x) : x); return a.length ? '  |  ' + g[1] + ': ' + a.join(', ') : ''; });
-  return parts.join('');
+  return parts.join('') + (gs ? '  |  Group: ' + (_RY_GRP_LABEL[gs] || gs) : '');
 }
+/* SKU Group: the 10 Ramyana CMBs / every other CMB (BTC CMB) / all remaining SKUs (Other SKUs) */
+const _RY_GRP_LABEL = {rcmb: 'Ramyana CMB', btc: 'BTC CMB', other: 'Other SKUs'};
+let _ryRcmbSet = null;
+function _ryIsRcmb(sku){ if (!_ryRcmbSet) _ryRcmbSet = new Set(_RAMYANA_CMB_SKUS.map(_ryKey)); return _ryRcmbSet.has(_ryKey(sku)); }
+function _ryRowGroup(sku, isCmb){ return isCmb ? (_ryIsRcmb(sku) ? 'rcmb' : 'btc') : 'other'; }
+function _ryGrpSel(pre){ return String((document.getElementById(pre + 'GrpF') || {}).value || ''); }
+function _ryPct(part, total){ return (total > 0 ? (part / total * 100) : 0).toFixed(1) + '%'; }
 function _rcBuild(){
   const d1 = (document.getElementById('rcFrom') || {}).value || '', d2 = (document.getElementById('rcTo') || {}).value || '';
   const ctx = _ryCtx('rc');      /* same filters as Repeat Order */
@@ -17391,7 +17404,8 @@ function _rcFiltered(){
   const q = ((document.getElementById('rcSearch') || {}).value || '').trim().toLowerCase();
   const th = (document.getElementById('rcThemeF') || {}).value || '';
   const cu = _ryAnyFilter('rc');      /* filter picked: only CMBs that actually sold */
-  return _rcRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!cu || r.sold > 0));
+  const gs = _ryGrpSel('rc');      /* this table lists only the Ramyana CMBs */
+  return _rcRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!gs || gs === 'rcmb') && (!cu || r.sold > 0));
 }
 function renderRamyanaCmb(){
   const host = document.getElementById('rcContent'); if (!host) return;
@@ -17441,7 +17455,7 @@ function renderRamyanaCmb(){
 }
 const renderRamyanaCmb_d = _debounce(() => renderRamyanaCmb(), 160);
 function resetRamyanaCmbFilters(){
-  ['rcFrom', 'rcTo', 'rcSearch', 'rcCustF', 'rcThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['rcFrom', 'rcTo', 'rcSearch', 'rcCustF', 'rcThemeF', 'rcGrpF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   _ryClearChecks('rc');
   renderRamyanaCmb();
 }
@@ -17518,7 +17532,7 @@ function _ryoBuild(){
   return _ryoItems().map(o => {
     const it = o.it; let sold = 0, rev = 0;
     try { const t = _rySalesOf(it, o.sku, ctx); sold = t.sold; rev = t.rev; } catch (e) { console.error(e); }
-    return {sku: o.sku, name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : o.sku, type: o.cmb ? 'CMB' : _rcChildName(o.sku), img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, sold: sold, rev: rev,
+    return {sku: o.sku, grp: _ryRowGroup(o.sku, o.cmb), name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : o.sku, type: o.cmb ? 'CMB' : _rcChildName(o.sku), img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, sold: sold, rev: rev,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it, cmb: o.cmb};
   });
 }
@@ -17531,7 +17545,8 @@ function _ryoFiltered(){
   const q = ((document.getElementById('ryoSearch') || {}).value || '').trim().toLowerCase();
   const th = (document.getElementById('ryoThemeF') || {}).value || '';
   const cu = _ryAnyFilter('ryo');     /* filter picked: only SKUs / CMBs that actually sold */
-  return _ryoRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!cu || r.sold > 0));
+  const gs = _ryGrpSel('ryo');
+  return _ryoRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!gs || r.grp === gs) && (!cu || r.sold > 0));
 }
 function renderRamyanaOverall(){
   const host = document.getElementById('ryoContent'); if (!host) return;
@@ -17551,11 +17566,11 @@ function renderRamyanaOverall(){
   const sumHost = document.getElementById('ryoSummary');
   if (sumHost) sumHost.innerHTML = kpi('SKUs', _ryNum(rows.length), _ryNum(rows.filter(r => r.cmb).length) + ' CMBs + ' + _ryNum(rows.filter(r => !r.cmb).length) + ' child SKUs')
     + kpi('Total Sold', _ryNum(sm('sold')), 'CMB sold + child sold')
-    + kpi('Net Revenue', '₹' + _ryNum(sm('rev')), 'CMB + child net revenue')
+    + kpi('Total Net Revenue', '₹' + _ryNum(sm('rev')), 'CMB + child net revenue (100%)')
     + kpi('CMB Sold', _ryNum(sm('sold', r => r.cmb)), 'Units sold under CMB SKUs')
-    + kpi('CMB Net Revenue', '₹' + _ryNum(sm('rev', r => r.cmb)), 'Net revenue of CMB SKUs')
+    + kpi('CMB Net Revenue', '₹' + _ryNum(sm('rev', r => r.cmb)), _ryPct(sm('rev', r => r.cmb), sm('rev')) + ' of total net revenue (CMB SKUs)')
     + kpi('Child Sold', _ryNum(sm('sold', r => !r.cmb)), 'Units sold under the child SKUs themselves')
-    + kpi('Child Net Revenue', '₹' + _ryNum(sm('rev', r => !r.cmb)), 'Net revenue of child SKUs')
+    + kpi('Child Net Revenue', '₹' + _ryNum(sm('rev', r => !r.cmb)), _ryPct(sm('rev', r => !r.cmb), sm('rev')) + ' of total net revenue (child SKUs)')
     + kpi('Inv Stock', _ryNum(sm('stock')), 'Stock of the listed SKUs')
     + kpi('Inv WIP', _ryNum(sm('wip')), 'WIP of the listed SKUs');
   const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
@@ -17591,7 +17606,7 @@ function renderRamyanaOverall(){
 }
 const renderRamyanaOverall_d = _debounce(() => renderRamyanaOverall(), 160);
 function resetRamyanaOverallFilters(){
-  ['ryoFrom', 'ryoTo', 'ryoSearch', 'ryoCustF', 'ryoThemeF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['ryoFrom', 'ryoTo', 'ryoSearch', 'ryoCustF', 'ryoThemeF', 'ryoGrpF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   _ryClearChecks('ryo');
   renderRamyanaOverall();
 }
