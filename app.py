@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
+# Cosa Nostraa — V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramayana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
@@ -17214,7 +17214,7 @@ function renderRamyana(){
     + kpi('Individual Sold', _ryNum(sm('ind')), 'Units sold under the SKU itself')
     + kpi('In CMB Sold', _ryNum(sm('inc')), 'Units sold through CMBs')
     + kpi('Total Sold', _ryNum(sm('tot')), 'Individual + In CMB')
-    + kpi('Bracelet Total Sold', _ryNum(rows.filter(_ryIsBracelet).reduce((a, r) => a + r.tot, 0)), 'BR-0015 to BR-0021 (Single + Via Combos)')
+    + _ryBraceletKpi(rows, kpi)
     + kpi('Steering Charm Total Sold', _ryNum(rows.filter(r => _ryKey(r.sku) === 'SW-0001').reduce((a, r) => a + r.tot, 0)), 'SW-0001 (Individual + In CMB)')
     + kpi('Low Stock (50 or Less)', _ryNum(lowCnt), 'SKUs flagged in red') + _ryThemeKpis(rows, 'tot', kpi);
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
@@ -17354,6 +17354,53 @@ function _ryThemeOk(sel, sku){
    Counted as Single (own sales) + Via Combos (parent CMB sold x pieces) = the row's Total Sold. */
 const _RY_BRACELET = new Set(['BR-0015', 'BR-0016', 'BR-0017', 'BR-0018', 'BR-0019', 'BR-0020', 'BR-0021']);
 function _ryIsBracelet(r){ return _RY_BRACELET.has(_ryKey(r.sku)); }
+/* V25.32: Bracelet Total Sold uses the SAME numbers as Target > New Launch Daily Sales (cosa_orderdate Final Qty till the report date):
+   Single = own sales of BR-0015..BR-0021, Via Combos = parent CMB sales x pieces of that bracelet. With a date / channel / customer filter
+   active those all-time numbers cannot be filtered, so the KPI falls back to the filtered table totals. */
+let _ryNlCache = null, _ryNlTried = false, _ryNlLoading = false, _ryBrMemo = {};
+function _ryNlLoad(cb){
+  if (_ryNlCache || _ryNlLoading || _ryNlTried) return;
+  if (typeof _nlData !== 'undefined' && _nlData && _nlData.alltime) { _ryNlCache = _nlData; return; }
+  _ryNlLoading = true;
+  fetch('/api/new_launch_daily?days=1', {headers: {'ngrok-skip-browser-warning': 'true'}})
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(d => { if (d && !d.error && d.alltime) { _ryNlCache = d; _ryBrMemo = {}; } })
+    .catch(e => console.error(e))
+    .then(() => { _ryNlLoading = false; _ryNlTried = true; if (cb) cb(); });
+}
+function _ryBraceletTarget(rows){
+  const d = _ryNlCache; if (!d) return null;
+  const alltime = d.alltime || {};
+  const keys = new Set(rows.filter(_ryIsBracelet).map(r => _ryKey(r.sku)));
+  const mk = Array.from(keys).sort().join('|');
+  if (_ryBrMemo[mk]) return _ryBrMemo[mk];
+  let single = 0, combo = 0;
+  keys.forEach(k => { single += Number(alltime[k]) || 0; });
+  (master || []).forEach(p => {
+    const cd = p && p.combo_details;
+    if (!Array.isArray(cd) || !cd.length) return;
+    const ps = _ryKey(p.sku), atp = Number(alltime[ps]) || 0;
+    if (!atp) return;
+    const seen = new Set();
+    cd.forEach(c => {
+      const ck = _ryKey(c && c.sku);
+      if (!ck || ck === ps || seen.has(ck) || !keys.has(ck)) return;
+      seen.add(ck);
+      combo += atp * cnxChildComponentQty(p, ck);
+    });
+  });
+  return (_ryBrMemo[mk] = {single: single, combo: combo, asof: d.asof});
+}
+function _ryBraceletKpi(rows, kpi){
+  const salesFilter = Object.keys(_ryCtx('ry')).length > 0;
+  let val = rows.filter(_ryIsBracelet).reduce((a, r) => a + r.tot, 0), sub = 'BR-0015 to BR-0021 (Single + Via Combos)';
+  if (!salesFilter) {
+    const t = _ryBraceletTarget(rows);
+    if (t) { val = t.single + t.combo; sub = 'Single ' + _ryNum(t.single) + ' + Via Combos ' + _ryNum(t.combo) + ' &middot; same as Target' + (t.asof && typeof _nlDmy === 'function' ? ', till ' + _nlDmy(t.asof) : ''); }
+    else _ryNlLoad(() => { if (currentTab === 'ramyana') renderRamyana(); });
+  }
+  return kpi('Bracelet Total Sold', _ryNum(val), sub);
+}
 function _ryThemeKpis(rows, key, kpi){
   const t = {Maryada: 0, Bhakti: 0, Maya: 0};
   let all = 0;
@@ -17425,7 +17472,9 @@ function _ryMsSync(box){
   _RY_MS[box.getAttribute('data-key')] = Array.from(box.querySelectorAll('.ry-ms-opt input:checked')).map(c => c.value);
   _ryMsLabel(box);
 }
-function _ryMsFire(box){ const fn = window[box.getAttribute('data-fn')]; if (typeof fn === 'function') fn(); }
+const _ryMsTimers = {};
+/* V25.32: ticking several options re-renders the table only once (debounced) - the heavy rebuild no longer runs per tick */
+function _ryMsFire(box){ const name = box.getAttribute('data-fn'); clearTimeout(_ryMsTimers[name]); _ryMsTimers[name] = setTimeout(() => { const fn = window[name]; if (typeof fn === 'function') fn(); }, 350); }
 function _ryMsChange(el){ const box = el.closest('.ry-ms'); _ryMsSync(box); _ryMsFire(box); }
 function _ryMsToggle(btn){
   const box = btn.closest('.ry-ms'), p = box.querySelector('.ry-ms-panel'), open = p.style.display === 'none';
