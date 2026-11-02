@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
+# Cosa Nostraa — V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
 # - Ramayana tab me existing table ke neeche nayi table: CMB-1000, 0992-0999, CMB-1020. Columns: SKU, Image, Total Sold (CMB ki apni sale), Product Dimensions, Inv Stock, Inv WIP. Apna Sold From / To date filter + SKU search + Reset. Export Excel me full Image Link (clickable). Baaki kuch change nahi.
@@ -10283,7 +10283,7 @@ select.lg-in option{background:#fff;color:#1a1610}
   <div class="insights-head" style="margin-top:26px">
     <div>
       <div class="insights-title">New Launch — Daily Sales (Bracelet · Bookmark · Photo Frame)</div>
-      <div class="insights-sub">Pieces sold on each of the last 7 days: Single (child SKU sold on its own) and Via Combos (child pieces inside combos sold). Counted by order date. Inv Stock / Inv WIP = single child SKUs only, never CMBs. Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795. Default report date = yesterday. Use Export CSV to download.</div>
+      <div class="insights-sub">Pieces sold on each of the last 7 days: Single (child SKU sold on its own) and Via Combos (child pieces inside combos sold). Counted by order date. Inv Stock / Inv WIP = single child SKUs only, never CMBs. Bracelet = BR-0015 to BR-0021, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795. Default report date = yesterday. Use Export CSV to download.</div>
     </div>
     <div class="insight-toolbar-actions">
       <label style="display:flex;flex-direction:column;font-size:8px;letter-spacing:1.4px;text-transform:uppercase;color:var(--cn-mid);font-weight:800">Report Date<input type="date" id="nlAsOf" onchange="loadNewLaunch(false)" style="margin-top:3px;padding:7px 8px;border:1px solid rgba(0,0,0,.18);border-radius:8px;font-size:12px"></label>
@@ -16765,7 +16765,7 @@ let _nlData = null;
 const _NL_CATS = ['Bracelet','Bookmark','Photo Frame'];
 /* V24.96: exact SKU -> category. Only these single child SKUs count (Sales, Inv Stock, Inv WIP); CMBs never. */
 const _NL_SKU_CAT = {
-  'BR-0015':'Bracelet','BR-0016':'Bracelet','BR-0017':'Bracelet','BR-0018':'Bracelet','BR-0019':'Bracelet',
+  'BR-0015':'Bracelet','BR-0016':'Bracelet','BR-0017':'Bracelet','BR-0018':'Bracelet','BR-0019':'Bracelet','BR-0020':'Bracelet','BR-0021':'Bracelet',
   'BM-0001':'Bookmark','BM-0002':'Bookmark','BM-0003':'Bookmark',
   'BH-2794':'Photo Frame','BH-2795':'Photo Frame'
 };
@@ -16918,7 +16918,7 @@ function renderNewLaunch(){
   });
   body += '<tr>' + td('GRAND TOTAL', {bold: true}) + td('') + gt.map(v => td(_nlN(v), {bold: true})).join('') + td(_nlN(sm(gt)), {bold: true}) + td(_nlN(gAll), {bold: true}) + td(_nlN(gStock), {bold: true}) + td(_nlN(gWip), {bold: true}) + '</tr>';
   host.innerHTML = '<div id="nlShot" style="background:#fff;padding:10px"><table data-sort-disabled="true" style="border-collapse:collapse;font-size:13px;min-width:760px;width:100%"><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table>'
-    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Last 7 Days Sales = sum of the 7 days shown; Total Sales (All Time) = all sales of these SKUs (single + via combos) up to the report date. Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795.</div></div>';
+    + '<div style="font-size:11px;color:var(--cn-mid);margin-top:6px">Sales = Final Qty by order date (Single = child SKU sold on its own, Via Combos = pieces inside CMBs sold). Last 7 Days Sales = sum of the 7 days shown; Total Sales (All Time) = all sales of these SKUs (single + via combos) up to the report date. Inv Stock / Inv WIP = single child SKUs only (no CMB). Bracelet = BR-0015 to BR-0021, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795.</div></div>';
 }
 function copyNewLaunchMsg(){
   const t = window._nlMsgText || '';
@@ -16937,7 +16937,7 @@ function exportNewLaunch(){
   out.push(['New Launch - Daily Sales Report']);
   out.push(['Report Date', _nlDmy(dates[last])]);
   out.push(['Period', _nlDmy(dates[0]) + ' to ' + _nlDmy(dates[last])]);
-  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Total Sales (All Time) = all sales up to report date; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0015 to BR-0019, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795']);
+  out.push(['Note', 'Final Qty by order date; Single + Via Combos; Total Sales (All Time) = all sales up to report date; Inv Stock / Inv WIP = single child SKUs only (no CMB); Bracelet = BR-0015 to BR-0021, Bookmark = BM-0001 to BM-0003, Photo Frame = BH-2794 and BH-2795']);
   out.push([]);
   out.push(['CATEGORY SUMMARY']);
   out.push(['Category', 'Type'].concat(dl, ['Last 7 Days Sales', 'Total Sales (All Time)', 'Inv Stock', 'Inv WIP']));
@@ -17214,7 +17214,7 @@ function renderRamyana(){
     + kpi('Individual Sold', _ryNum(sm('ind')), 'Units sold under the SKU itself')
     + kpi('In CMB Sold', _ryNum(sm('inc')), 'Units sold through CMBs')
     + kpi('Total Sold', _ryNum(sm('tot')), 'Individual + In CMB')
-    + kpi('Bracelet Total Sold', _ryNum(rows.filter(_ryIsBracelet).reduce((a, r) => a + r.tot, 0)), rows.filter(_ryIsBracelet).length + ' bracelet SKUs (Individual + In CMB)')
+    + kpi('Bracelet Total Sold', _ryNum(rows.filter(_ryIsBracelet).reduce((a, r) => a + r.tot, 0)), 'BR-0015 to BR-0021 (Single + Via Combos)')
     + kpi('Steering Charm Total Sold', _ryNum(rows.filter(r => _ryKey(r.sku) === 'SW-0001').reduce((a, r) => a + r.tot, 0)), 'SW-0001 (Individual + In CMB)')
     + kpi('Low Stock (50 or Less)', _ryNum(lowCnt), 'SKUs flagged in red') + _ryThemeKpis(rows, 'tot', kpi);
   const d1 = (document.getElementById('ryFrom') || {}).value || '', d2 = (document.getElementById('ryTo') || {}).value || '';
@@ -17350,10 +17350,10 @@ function _ryThemeOk(sel, sku){
   return sel === '__blank__' ? !t : t === sel;
 }
 /* V25.25: Maryada / Bhakti / Maya Total Sold KPIs (theme from ramayana_skus.xlsx), summed over the rows currently shown */
-/* V25.29: bracelet = BR-code (column B or C), or taxon / name says bracelet */
-function _ryIsBracelet(r){
-  return /^BR[-_ ]?\\d/.test(_ryKey(r.sku)) || /^BR[-_ ]?\\d/.test(_ryKey(r.open)) || /bracelet/i.test(String(r.taxon || '')) || /bracelet/i.test(String(r.name || ''));
-}
+/* V25.30: Bracelet = same SKUs as Target tab > New Launch Daily Sales: BR-0015 to BR-0021 (same list as New Launch).
+   Counted as Single (own sales) + Via Combos (parent CMB sold x pieces) = the row's Total Sold. */
+const _RY_BRACELET = new Set(['BR-0015', 'BR-0016', 'BR-0017', 'BR-0018', 'BR-0019', 'BR-0020', 'BR-0021']);
+function _ryIsBracelet(r){ return _RY_BRACELET.has(_ryKey(r.sku)); }
 function _ryThemeKpis(rows, key, kpi){
   const t = {Maryada: 0, Bhakti: 0, Maya: 0};
   let all = 0;
