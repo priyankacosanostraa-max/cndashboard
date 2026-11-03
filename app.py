@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -9810,11 +9810,11 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="ops-filters">
       <div class="fc"><label class="fl">Search Child / CMB</label><input class="fi" id="crSearch" placeholder="RKH-… / CMB-…" oninput="renderComboRisk_d()"></div>
-      <div class="fc"><label class="fl">Parent CMB → Child SKUs (select one or more CMB)</label>
+      <div class="fc"><label class="fl">Child SKU → Parent CMBs (search / select, blank = all)</label>
         <div class="cs-dd" id="crChildDD">
-          <button type="button" class="fs cs-dd-btn" id="crChildBtn" onclick="crToggleChildDD(event)"><span id="crChildLabel">Select CMB</span><span class="cs-dd-caret">&#9662;</span></button>
+          <button type="button" class="fs cs-dd-btn" id="crChildBtn" onclick="crToggleChildDD(event)"><span id="crChildLabel">All child SKUs</span><span class="cs-dd-caret">&#9662;</span></button>
           <div class="cs-dd-panel" id="crChildPanel" style="display:none">
-            <input class="fi" id="crChildSearch" placeholder="Search CMB SKU / name…" oninput="crFilterChildChecks()" autocomplete="off">
+            <input class="fi" id="crChildSearch" placeholder="Search child SKU / name…" oninput="crFilterChildChecks()" autocomplete="off">
             <div class="cs-dd-actions">
               <button type="button" class="mini-btn" onclick="crSelectVisibleChild()">Select Visible</button>
               <button type="button" class="mini-btn" onclick="crClearChild()">Clear</button>
@@ -21028,8 +21028,7 @@ window.exportOOS = exportOOS;
 let _rpRows = [];
 let _crRows = [];
 let _crChildInfo = {};            // child SKU -> {sku, skuName, image, parents:[all parent CMB SKUs]}
-let _crPickedChildren = new Set(); // parent CMB SKUs ticked in the Combo Risk "Parent CMB" filter
-let _crCmbInfo = {};              // parent CMB -> {sku, skuName, children:[child SKUs]}
+let _crPickedChildren = new Set(); // child SKUs ticked in the Combo Risk "Child SKU" filter (none ticked = all child SKUs)
 let _opsSupport = {production_pending:[], latest_receipts:[], target_rows:[], target_totals:{}, today:''};
 let _opsSupportPromise = null;
 let _inventoryAgeRows = [];
@@ -21174,8 +21173,6 @@ function _buildComboRiskRows(){
   _bizSetSelect('crCmb',_crRows.map(r=>r.cmb),'All CMBs');
   _crChildInfo={};
   Object.keys(childMap).forEach(k=>{const r=childMap[k]; _crChildInfo[k]={sku:r.sku,skuName:r.skuName,image:r.image,parents:Array.from(new Set(r.parents.map(p=>p.sku))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}))};});
-  _crCmbInfo={};
-  Object.keys(childMap).forEach(k=>{ childMap[k].parents.forEach(p=>{ const c=_crCmbInfo[p.sku]||(_crCmbInfo[p.sku]={sku:p.sku,skuName:p.skuName,children:[]}); if(!c.children.includes(k)) c.children.push(k); }); });
   try{ crFillChildDD(); renderComboRiskPick(); }catch(e){ console.error(e); }
   return _crRows;
 }
@@ -21201,24 +21198,25 @@ function exportComboRisk(){
   _dlCsv(['Child SKU','Child SKU Name','Parent CMB','Parent CMB Name','Image Link','Combo Group','Child Category','CMBs Using This Child','Child Stock','Child WIP','CMB Sales in 30 Days','CMB Daily Sales Rate','Expected CMB Sales','Total Expected Child Use','Qty That May Be Blocked','Risk'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.cmb,exportSkuName(r.cmb,r.cmbName),r.image,r.group,r.taxon,r.parentCount,Math.round(r.stock),Math.round(r.wip),Math.round(r.comboSoldQty),Number(r.comboDrr.toFixed(3)),Math.ceil(r.comboDemand),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_stock_risk');
 }
 
-/* V25.39: Combo Risk - "Parent CMB → Child SKUs" filter. Tick one or more parent CMBs: every child SKU of those CMBs is listed (Image, Child SKU)
-   and in front of each child ALL CMBs that use it (comma separated). Does not change the existing table / KPIs / export. */
+/* V25.40: Combo Risk - "Child SKU → Parent CMBs" table. One row per child SKU (child SKUs come from All Product column I, Combo Details);
+   in front of it ALL parent CMB SKUs (All Product column B) using that child, comma separated. Filter: tick child SKUs to narrow, none ticked = all.
+   Does not change the existing table / KPIs / export. */
 const _crNumSort=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true,sensitivity:'base'});
-function crCmbSorted(){ return Object.values(_crCmbInfo||{}).sort((a,b)=>_crNumSort(a.sku,b.sku)); }
+function crChildSorted(){ return Object.values(_crChildInfo||{}).sort((a,b)=>_crNumSort(a.sku,b.sku)); }
 function crFillChildDD(){
   const box=document.getElementById('crChildChecks'); if(!box) return;
-  Array.from(_crPickedChildren).forEach(k=>{ if(!_crCmbInfo[k]) _crPickedChildren.delete(k); });
-  const list=crCmbSorted();
+  Array.from(_crPickedChildren).forEach(k=>{ if(!_crChildInfo[k]) _crPickedChildren.delete(k); });
+  const list=crChildSorted();
   box.innerHTML=list.length?list.map(c=>{
     const label=c.skuName?`${c.sku} · ${c.skuName}`:c.sku;
     return `<label class="type-opt" data-t="${escHtml(label).toLowerCase()}"><input type="checkbox" value="${escHtml(c.sku)}" ${_crPickedChildren.has(c.sku)?'checked':''} onchange="crChildChanged(this)"><span>${escHtml(label)}</span></label>`;
-  }).join(''):'<span class="small-note">No CMBs found</span>';
+  }).join(''):'<span class="small-note">No child SKUs found</span>';
   crUpdateChildLabel(); crFilterChildChecks();
 }
 function crUpdateChildLabel(){
   const lb=document.getElementById('crChildLabel'); if(!lb) return;
   const n=_crPickedChildren.size;
-  lb.textContent=n===0?'Select CMB':(n===1?Array.from(_crPickedChildren)[0]:n+' selected');
+  lb.textContent=n===0?'All child SKUs':(n===1?Array.from(_crPickedChildren)[0]:n+' selected');
 }
 function crChildChanged(cb){
   const k=String(cb&&cb.value||'').trim().toUpperCase(); if(!k) return;
@@ -21252,29 +21250,20 @@ function crClearChild(){
   crUpdateChildLabel(); renderComboRiskPick();
 }
 function _crPickRows(){
-  /* one row per child SKU of the selected CMBs (a child shared by several selected CMBs appears once) */
-  const map={};
-  Array.from(_crPickedChildren).filter(k=>_crCmbInfo[k]).sort(_crNumSort).forEach(cmb=>{
-    (_crCmbInfo[cmb].children||[]).forEach(ck=>{
-      const info=_crChildInfo[ck]; if(!info) return;
-      const r=map[ck]||(map[ck]={sku:info.sku,skuName:info.skuName,image:info.image,selected:[],parents:info.parents});
-      r.selected.push(cmb);
-    });
-  });
-  return Object.values(map).sort((a,b)=>_crNumSort(a.sku,b.sku));
+  const all=crChildSorted();
+  return _crPickedChildren.size?all.filter(c=>_crPickedChildren.has(c.sku)):all;
 }
 function renderComboRiskPick(){
   const wrap=document.getElementById('crPickWrap'); if(!wrap) return;
   const rows=_crPickRows();
-  if(!_crPickedChildren.size){ wrap.style.display='none'; wrap.innerHTML=''; return; }
-  const multi=_crPickedChildren.size>1;
-  const body=rows.map((c,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(c.image)}</td><td><button class="sku-link" data-sku="${escHtml(c.sku)}" onclick="openSkuDetails(this.dataset.sku)">${escHtml(skuLabel(c.sku,c.skuName))}</button></td>${multi?`<td style="white-space:normal;word-break:break-word">${escHtml(c.selected.join(', '))}</td>`:''}<td style="white-space:normal;word-break:break-word;user-select:text">${escHtml(c.parents.join(', '))}</td><td class="ops-num">${c.parents.length.toLocaleString('en-IN')}</td></tr>`).join('');
+  if(!Object.keys(_crChildInfo||{}).length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+  const body=rows.map((c,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(c.image)}</td><td><button class="sku-link" data-sku="${escHtml(c.sku)}" onclick="openSkuDetails(this.dataset.sku)">${escHtml(c.sku)}</button></td><td style="white-space:normal;word-break:break-word;user-select:text">${escHtml(c.parents.join(', '))}</td><td class="ops-num">${c.parents.length.toLocaleString('en-IN')}</td></tr>`).join('');
   wrap.style.display='';
-  wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px"><div class="ops-title" style="font-size:15px">Parent CMB → Child SKUs (${_crPickedChildren.size.toLocaleString('en-IN')} CMB selected, ${rows.length.toLocaleString('en-IN')} child SKUs)</div><div style="display:flex;gap:8px"><button type="button" class="mini-btn" onclick="exportComboRiskPick()">Export CSV</button><button type="button" class="mini-btn" onclick="crClearChild()">Clear</button></div></div><table class="ops-table"><thead><tr><th>#</th><th>Image</th><th>Child SKU</th>${multi?'<th>In Selected CMB</th>':''}<th>All CMBs using this child</th><th>CMB Count</th></tr></thead><tbody>${body||'<tr><td colspan="6" class="ops-empty">No child SKUs found for the selected CMB.</td></tr>'}</tbody></table>`;
+  wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px"><div class="ops-title" style="font-size:15px">Child SKU → Parent CMBs (${rows.length.toLocaleString('en-IN')} child SKUs)</div><div style="display:flex;gap:8px"><button type="button" class="mini-btn" onclick="exportComboRiskPick()">Export CSV</button><button type="button" class="mini-btn" onclick="crClearChild()">Clear</button></div></div><div style="max-height:460px;overflow:auto"><table class="ops-table"><thead><tr><th>#</th><th>Image</th><th>Child SKU</th><th>Parent CMB SKUs</th><th>CMB Count</th></tr></thead><tbody>${body||'<tr><td colspan="5" class="ops-empty">No child SKUs found.</td></tr>'}</tbody></table></div>`;
 }
 function exportComboRiskPick(){
-  const rows=_crPickRows(); if(!rows.length){ alert('Select at least one CMB'); return; }
-  _dlCsv(['Child SKU','Image Link','Selected CMB','All Parent CMBs','CMB Count'],rows.map(c=>[c.sku,c.image||'',c.selected.join(', '),c.parents.join(', '),c.parents.length]),'combo_cmb_children');
+  const rows=_crPickRows(); if(!rows.length){ alert('No child SKUs to export'); return; }
+  _dlCsv(['Child SKU','Image Link','Parent CMB SKUs','CMB Count'],rows.map(c=>[c.sku,c.image||'',c.parents.join(', '),c.parents.length]),'combo_child_parents');
 }
 document.addEventListener('click',function(ev){
   const dd=document.getElementById('crChildDD'),pn=document.getElementById('crChildPanel');
