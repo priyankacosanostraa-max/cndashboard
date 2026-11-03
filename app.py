@@ -3298,7 +3298,7 @@ def _refresh_data():
     # "BT-1046_(X)_1") that must never be picked up as the SKU value.
     # Header-name search is only a fallback for when column C is missing
     # entirely (e.g. sheet re-shuffled with fewer columns).
-    I_SKU = (inv.columns[2] if len(inv.columns) > 2 else None) or find_col(inv.columns, "SKU") or inv.columns[0]
+    I_SKU = (inv.columns[1] if len(inv.columns) > 1 else None) or find_col(inv.columns, "SKU") or inv.columns[0]   # V25.36: All Product SKU = physical column B
     I_SKU_B = inv.columns[1] if len(inv.columns) > 1 else None   # V25.02: physical column B (used only by the Ramayana tab)
     # Image Link is authoritative in physical column E. Prefer an exact
     # Image-Link header, then E, and only then a generic image-looking field.
@@ -31486,7 +31486,7 @@ def _build_operations_inventory(force=False):
         cols = list(inv.columns)
         # V24.71: All Product SKU = physical column C (index 2), same as the
         # main dashboard data. Header match is only a fallback if C is missing.
-        sku_col = (cols[2] if len(cols) > 2 else None) or find_col(cols, "SKU") or (cols[0] if cols else None)
+        sku_col = (cols[1] if len(cols) > 1 else None) or find_col(cols, "SKU") or (cols[0] if cols else None)   # V25.36: column B
 
         stock_candidates = [
             c for c in cols
@@ -36758,7 +36758,7 @@ def _build_sku_costs():
             def _at(i): return cols[i] if len(cols) > i else None
             # Live All Product: C=SKU, E=Image Link, M=Cost, N=MRP. V24.71: SKU
             # physical column C primary; header match only as fallback.
-            C_SKU  = _at(2) or find_col(df.columns, "SKU", "sku code", "item code")
+            C_SKU  = _at(1) or find_col(df.columns, "SKU", "sku code", "item code")   # V25.36: All Product SKU = column B
             C_COST = find_col(df.columns, "Cost", "cost", "product cost", "hi cost", "item cost") or _at(12)
             C_MRP  = find_col(df.columns, "MRP", "mrp", "m.r.p") or _at(13)
             C_IMG2 = find_col(df.columns, "Image Link", "imagelink", "image", "img") or _at(4)
