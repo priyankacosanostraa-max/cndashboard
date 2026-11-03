@@ -1,3 +1,4 @@
+# Cosa Nostraa — V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -3321,7 +3322,10 @@ def _refresh_data():
     I_DIM = find_col(inv.columns, "Product Dimensions","Dimensions","Dimension","Size")
     I_LNCH = find_col(inv.columns, "Launch Date","Launching Date","Launch","Launched")
     I_STONE = find_col(inv.columns, "Stone Details","Stone Detail","Remarks","Remark","combo","combo sku","combo skus","combo_skus","stone")
-    I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail","Combo")
+    # V25.37: Combo Details = All Product column I. Header name first; if no such header, physical column I.
+    I_COMBO_DETAILS = find_col(inv.columns, "Combo Details","Combo Detail","Set Details","Set Detail")
+    if I_COMBO_DETAILS is None and len(inv.columns) > 8:
+        I_COMBO_DETAILS = inv.columns[8]
     I_STONE_COLOR = find_col(inv.columns, "Stone Color","stone colour","stonecolor")
     I_PACK  = find_col(inv.columns, "Pack Details","Pack Detail","Packing Details","Packing","Pack")
     # Collection Story = All Product physical column S (zero-based 18). Header match preferred, column S fallback.
@@ -3419,7 +3423,7 @@ def _refresh_data():
         "image_column": str(I_IMG or ""),
     }
     dbg["resolved"] = {
-        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"blocked":I_BLOCKED,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"cn_name":I_CN_NAME},
+        "inv":   {"sku":I_SKU,"stock":I_STK,"wip":I_WIP,"blocked":I_BLOCKED,"wh_wip":I_WH_WIP,"mrp":I_MRP,"img":I_IMG,"tax":I_TAX,"plt":I_PLT,"combo":I_STONE,"combo_details":I_COMBO_DETAILS,"cn_name":I_CN_NAME},
         "cosa": {"sku":C_SKU,"qty":C_QTY,"revenue":C_REV,"date":C_DATE,"fy":C_FY,"cust":C_CUST,"type":C_TYPE},
     }
 
@@ -4759,7 +4763,8 @@ def _refresh_data():
             "launch_key":   _si(launch_key),
             "launch_month": _si(launch_label),
             "launch_date_sheet": _si(launch_sheet_iso),
-            "combo_skus":   stone_details,
+            "combo_skus":   combo_details_raw,   # V25.38: child SKUs ONLY from All Product column I (Combo Details) - never from Stone Details/Remarks (column J)
+            "stone_remarks": stone_details_raw,   # V25.38: column J text kept only for search + the "customer" hide rule
             "gift_set_stone_details": gift_set_stone_details,
             "pack_details": clean(r.get(I_PACK,""))  if I_PACK  else "",
             "collection_story": _coll_story_of(r),
@@ -4883,6 +4888,7 @@ def _refresh_data():
             "launch_month": _src.get("launch_month", "") or "",
             "launch_date_sheet": _src.get("launch_date_sheet", "") or "",
             "combo_skus": _src.get("combo_skus", "") or "",
+            "stone_remarks": _src.get("stone_remarks", "") or "",
             "gift_set_stone_details": _src.get("gift_set_stone_details", "") or "",
             "pack_details": _src.get("pack_details", "") or "",
             "collection_story": _src.get("collection_story", "") or "",
@@ -9804,6 +9810,18 @@ select.lg-in option{background:#fff;color:#1a1610}
     </div>
     <div class="ops-filters">
       <div class="fc"><label class="fl">Search Child / CMB</label><input class="fi" id="crSearch" placeholder="RKH-… / CMB-…" oninput="renderComboRisk_d()"></div>
+      <div class="fc"><label class="fl">Child SKU → Parent CMBs (select one or more)</label>
+        <div class="cs-dd" id="crChildDD">
+          <button type="button" class="fs cs-dd-btn" id="crChildBtn" onclick="crToggleChildDD(event)"><span id="crChildLabel">Select child SKU</span><span class="cs-dd-caret">&#9662;</span></button>
+          <div class="cs-dd-panel" id="crChildPanel" style="display:none">
+            <input class="fi" id="crChildSearch" placeholder="Search child SKU / name…" oninput="crFilterChildChecks()" autocomplete="off">
+            <div class="cs-dd-actions">
+              <button type="button" class="mini-btn" onclick="crSelectVisibleChild()">Select Visible</button>
+              <button type="button" class="mini-btn" onclick="crClearChild()">Clear</button>
+            </div>
+            <div id="crChildChecks" class="cs-dd-list"></div>
+          </div>
+        </div></div>
       <div class="fc"><label class="fl">CMB Filter</label><select class="fs" id="crCmb" onchange="renderComboRisk()"><option value="All">All CMBs</option></select></div>
       <div class="fc"><label class="fl">Child SKU Use</label><select class="fs" id="crRelation" onchange="renderComboRisk()"><option value="all">All Child SKUs &amp; Combos</option><option value="shared">Child in Multiple CMBs</option><option value="single">Child in One CMB</option></select></div>
       <div class="fc"><label class="fl">Combo Group</label><select class="fs" id="crGroup" onchange="renderComboRisk()"><option value="All">All Combos</option><option value="Rakhi">Rakhi Combos</option><option value="Others">Other Combos</option></select></div>
@@ -9812,6 +9830,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Products to Show</label><select class="fs" id="crRiskOnly" onchange="renderComboRisk()"><option value="all" selected>All Child SKUs</option><option value="yes">Only Shortage Risk</option></select></div>
       <div class="fc"><label class="fl">Include WIP in Support</label><select class="fs" id="crIncludeWip" onchange="renderComboRisk()"><option value="no">No — Stock Only</option><option value="yes">Yes — Stock + WIP</option></select></div>
     </div>
+    <div id="crPickWrap" class="ops-table-wrap" style="display:none;margin-bottom:14px"></div>
     <div id="crSummary" class="ops-kpis"></div>
     <div id="crContent" class="ops-table-wrap"></div>
     <div class="ops-note">One unit of each unique child SKU is assumed per CMB unit. Potential blocked quantity is a planning estimate based on the selected demand horizon and parent CMB sales velocity.</div>
@@ -13214,8 +13233,8 @@ function loadData(force){
           it._skuLower = String(it.sku||'').toLowerCase();
           it._cnNameLower = String(it.cn_name||'').toLowerCase();
           it._relClass = ['Rel','Non-Rel'].includes(String(it.religion_class||'')) ? String(it.religion_class) : 'Unclassified';
-          it._comboLower = String(it.combo_skus||'').toLowerCase();
-          it._searchText = `${it.sku||''} ${it.sku_name||''} ${it.cn_name||''} ${it.taxon||''} ${it.plating||''} ${it.status||''} ${it.combo_skus||''} ${it.tags||''}`.toLowerCase();
+          it._comboLower = (String(it.combo_skus||'')+' '+String(it.stone_remarks||'')).toLowerCase();
+          it._searchText = `${it.sku||''} ${it.sku_name||''} ${it.cn_name||''} ${it.taxon||''} ${it.plating||''} ${it.status||''} ${it.combo_skus||''} ${it.stone_remarks||''} ${it.tags||''}`.toLowerCase();
           _masterSkuMap[skuKey] = it;
           const compactKey = skuKey.replace(/[^A-Z0-9]/g, '');
           const baseKey = String(skuKey.split('_')[0] || '').replace(/[^A-Z0-9]/g, '');
@@ -13572,7 +13591,7 @@ function applyF(){
   const matrixEligibleItems = new Map();
 
   master.forEach(item => {
-    const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.cn_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.tags || '')}`.toLowerCase();
+    const hay = item._searchText || `${item.sku} ${item.sku_name || ''} ${item.cn_name || ''} ${item.taxon || ''} ${item.plating || ''} ${item.status || ''} ${(item.combo_skus || '')} ${(item.stone_remarks || '')} ${(item.tags || '')}`.toLowerCase();
     if (txt && !hay.includes(txt)) return;
     if (cnQ && !cnxItemMatchesGlobalCn(item)) return;
     // Pasted SKUs take priority while the paste box is active. This keeps the
@@ -14288,7 +14307,7 @@ function applyRO(){
     if (collSel.length > 0 && !collSel.includes(String(item.collection_story || '').trim())) return false;
     if (packSel.length > 0 && !packSel.includes((item.pack_details || '').trim())) return false;
     // Hide SKUs where Stone Details/Remarks (combo_skus) contains the word "customer"
-    if ((item._comboLower || String(item.combo_skus||'').toLowerCase()).includes('customer')) return false;
+    if ((item._comboLower || (String(item.combo_skus||'')+' '+String(item.stone_remarks||'')).toLowerCase()).includes('customer')) return false;
     // NOTE: ticked SKUs ko yahan filter NAHI karte — select karne par baaki
     // rows bhi dikhte rehte hain. Ticked sirf export ke liye use hote hain.
     return true;
@@ -18079,7 +18098,7 @@ function _rkhIsComboSku(sku){
   return /^\s*cmb/i.test(String(sku == null ? '' : sku));
 }
 function _rkhComboHasRakhi(item){
-  const stone = String((item && (item.combo_skus || item.gift_set_stone_details)) || '');
+  const stone = String((item && item.combo_skus) || '');
   return /rkh/i.test(stone);
 }
 /* Exact Rakhi children of a CMB. A child is treated as Rakhi when its
@@ -20831,7 +20850,7 @@ function _oosProductGroup(it){
     return (_rkhInWhitelist(it && it.sku) || _rkhMatchItem(it)) ? 'Rakhi' : 'Others';
   } catch(e) {
     const sku = String((it && it.sku) || '').trim().toUpperCase();
-    return (/^RKH/.test(sku) || /^CMB/.test(sku) && /RKH/i.test(String((it && (it.combo_skus || it.gift_set_stone_details)) || ''))) ? 'Rakhi' : 'Others';
+    return (/^RKH/.test(sku) || /^CMB/.test(sku) && /RKH/i.test(String((it && it.combo_skus) || ''))) ? 'Rakhi' : 'Others';
   }
 }
 
@@ -21008,6 +21027,8 @@ window.exportOOS = exportOOS;
 /* ── PLANNING INTELLIGENCE ───────────────────────────────── */
 let _rpRows = [];
 let _crRows = [];
+let _crChildInfo = {};            // child SKU -> {sku, skuName, image, parents:[all parent CMB SKUs]}
+let _crPickedChildren = new Set(); // child SKUs ticked in the Combo Risk "Child SKU" filter
 let _opsSupport = {production_pending:[], latest_receipts:[], target_rows:[], target_totals:{}, today:''};
 let _opsSupportPromise = null;
 let _inventoryAgeRows = [];
@@ -21150,6 +21171,9 @@ function _buildComboRiskRows(){
   _crRows.sort((a,b)=>b.blocked-a.blocked||b.parentCount-a.parentCount||b.comboSoldQty-a.comboSoldQty||a.sku.localeCompare(b.sku)||a.cmb.localeCompare(b.cmb));
   _opsFillTaxon('crTaxon',_crRows,r=>r.taxon);
   _bizSetSelect('crCmb',_crRows.map(r=>r.cmb),'All CMBs');
+  _crChildInfo={};
+  Object.keys(childMap).forEach(k=>{const r=childMap[k]; _crChildInfo[k]={sku:r.sku,skuName:r.skuName,image:r.image,parents:Array.from(new Set(r.parents.map(p=>p.sku))).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'}))};});
+  try{ crFillChildDD(); renderComboRiskPick(); }catch(e){ console.error(e); }
   return _crRows;
 }
 function _comboRiskFiltered(){
@@ -21173,6 +21197,75 @@ function exportComboRisk(){
   const rows=_comboRiskFiltered(); if(!rows.length){alert('No combo-risk rows to export');return;}
   _dlCsv(['Child SKU','Child SKU Name','Parent CMB','Parent CMB Name','Image Link','Combo Group','Child Category','CMBs Using This Child','Child Stock','Child WIP','CMB Sales in 30 Days','CMB Daily Sales Rate','Expected CMB Sales','Total Expected Child Use','Qty That May Be Blocked','Risk'],rows.map(r=>[r.sku,exportSkuName(r.sku,r.skuName),r.cmb,exportSkuName(r.cmb,r.cmbName),r.image,r.group,r.taxon,r.parentCount,Math.round(r.stock),Math.round(r.wip),Math.round(r.comboSoldQty),Number(r.comboDrr.toFixed(3)),Math.ceil(r.comboDemand),Math.ceil(r.demand),r.blocked,r.risk.label]),'combo_stock_risk');
 }
+
+/* V25.37: Combo Risk - "Child SKU → Parent CMBs" filter. Tick one or more child SKUs: Child SKU, Image and ALL parent CMB SKUs (comma separated) appear above the table.
+   Does not change the existing table / KPIs / export. */
+function crChildSorted(){ return Object.values(_crChildInfo||{}).sort((a,b)=>a.sku.localeCompare(b.sku,undefined,{numeric:true,sensitivity:'base'})); }
+function crFillChildDD(){
+  const box=document.getElementById('crChildChecks'); if(!box) return;
+  Array.from(_crPickedChildren).forEach(k=>{ if(!_crChildInfo[k]) _crPickedChildren.delete(k); });
+  const list=crChildSorted();
+  box.innerHTML=list.length?list.map(c=>{
+    const label=c.skuName?`${c.sku} · ${c.skuName}`:c.sku;
+    return `<label class="type-opt" data-t="${escHtml(label).toLowerCase()}"><input type="checkbox" value="${escHtml(c.sku)}" ${_crPickedChildren.has(c.sku)?'checked':''} onchange="crChildChanged(this)"><span>${escHtml(label)}</span></label>`;
+  }).join(''):'<span class="small-note">No child SKUs found</span>';
+  crUpdateChildLabel(); crFilterChildChecks();
+}
+function crUpdateChildLabel(){
+  const lb=document.getElementById('crChildLabel'); if(!lb) return;
+  const n=_crPickedChildren.size;
+  lb.textContent=n===0?'Select child SKU':(n===1?Array.from(_crPickedChildren)[0]:n+' selected');
+}
+function crChildChanged(cb){
+  const k=String(cb&&cb.value||'').trim().toUpperCase(); if(!k) return;
+  if(cb.checked) _crPickedChildren.add(k); else _crPickedChildren.delete(k);
+  crUpdateChildLabel(); renderComboRiskPick();
+}
+function crToggleChildDD(ev){
+  if(ev) ev.stopPropagation();
+  const pn=document.getElementById('crChildPanel'); if(!pn) return;
+  const open=pn.style.display==='none';
+  pn.style.display=open?'block':'none';
+  if(open){ const q=document.getElementById('crChildSearch'); if(q) q.focus(); }
+}
+function crFilterChildChecks(){
+  const q=(document.getElementById('crChildSearch')?.value||'').trim().toLowerCase();
+  document.querySelectorAll('#crChildChecks label').forEach(l=>{
+    l.style.display=(!q||(l.getAttribute('data-t')||'').includes(q))?'':'none';
+  });
+}
+function crSelectVisibleChild(){
+  document.querySelectorAll('#crChildChecks label').forEach(l=>{
+    if(l.style.display==='none') return;
+    const c=l.querySelector('input'); if(!c) return;
+    c.checked=true; _crPickedChildren.add(String(c.value||'').trim().toUpperCase());
+  });
+  crUpdateChildLabel(); renderComboRiskPick();
+}
+function crClearChild(){
+  _crPickedChildren.clear();
+  document.querySelectorAll('#crChildChecks input:checked').forEach(c=>{c.checked=false;});
+  crUpdateChildLabel(); renderComboRiskPick();
+}
+function _crPickRows(){
+  return Array.from(_crPickedChildren).filter(k=>_crChildInfo[k]).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})).map(k=>_crChildInfo[k]);
+}
+function renderComboRiskPick(){
+  const wrap=document.getElementById('crPickWrap'); if(!wrap) return;
+  const rows=_crPickRows();
+  if(!rows.length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
+  const body=rows.map((c,i)=>`<tr><td class="ops-num">${i+1}</td><td>${_opsPhoto(c.image)}</td><td><button class="sku-link" data-sku="${escHtml(c.sku)}" onclick="openSkuDetails(this.dataset.sku)">${escHtml(skuLabel(c.sku,c.skuName))}</button></td><td style="white-space:normal;word-break:break-word;user-select:text">${escHtml(c.parents.join(', '))}</td><td class="ops-num">${c.parents.length.toLocaleString('en-IN')}</td></tr>`).join('');
+  wrap.style.display='';
+  wrap.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px"><div class="ops-title" style="font-size:15px">Child SKU → Parent CMBs (${rows.length.toLocaleString('en-IN')} selected)</div><div style="display:flex;gap:8px"><button type="button" class="mini-btn" onclick="exportComboRiskPick()">Export CSV</button><button type="button" class="mini-btn" onclick="crClearChild()">Clear</button></div></div><table class="ops-table"><thead><tr><th>#</th><th>Image</th><th>Child SKU</th><th>Parent SKUs (all CMBs using this child)</th><th>Parent Count</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+function exportComboRiskPick(){
+  const rows=_crPickRows(); if(!rows.length){ alert('Select at least one child SKU'); return; }
+  _dlCsv(['Child SKU','Image Link','Parent SKUs','Parent Count'],rows.map(c=>[c.sku,c.image||'',c.parents.join(', '),c.parents.length]),'combo_child_parents');
+}
+document.addEventListener('click',function(ev){
+  const dd=document.getElementById('crChildDD'),pn=document.getElementById('crChildPanel');
+  if(dd&&pn&&pn.style.display!=='none'&&!dd.contains(ev.target)) pn.style.display='none';
+});
 
 /* Operations: inventory-constrained CMB availability. Shared child inventory
    is allocated once across parent CMBs; it is never independently reused for
@@ -22760,6 +22853,7 @@ window.loadWipReceive=loadWipReceive;window.renderWipReceive=renderWipReceive;wi
 
 window.loadRepeatPlanner=loadRepeatPlanner;window.renderRepeatPlanner=renderRepeatPlanner;window.exportRepeatPlanner=exportRepeatPlanner;
 window.loadComboRisk=loadComboRisk;window.renderComboRisk=renderComboRisk;window.exportComboRisk=exportComboRisk;
+window.crToggleChildDD=crToggleChildDD;window.crFilterChildChecks=crFilterChildChecks;window.crSelectVisibleChild=crSelectVisibleChild;window.crClearChild=crClearChild;window.crChildChanged=crChildChanged;window.exportComboRiskPick=exportComboRiskPick;window.renderComboRiskPick=renderComboRiskPick;
 window.loadSmartOps=loadSmartOps;window.renderStockSales=renderStockSales;window.exportStockSales=exportStockSales;window.renderInventoryAgeing=renderInventoryAgeing;window.exportInventoryAgeing=exportInventoryAgeing;
 
 
@@ -25236,7 +25330,7 @@ function renderInsights(){
       <div class="insight-row"><div><div class="name">Total Returns (Qty)</div><div class="sub">COSA Return Qty (col F)</div></div><div class="insight-val">${Math.round(totRetQty).toLocaleString('en-IN')}</div></div>
       ${isEmp ? '' : `<div class="insight-row"><div><div class="name">Return Amount</div><div class="sub">Return qty × selling price</div></div><div class="insight-val">${fmt(totRetAmt)}</div></div>`}
       <div class="insight-row"><div><div class="name">Filtered items</div><div class="sub">After type / taxon / date filters</div></div><div class="insight-val">${insightRows.length.toLocaleString('en-IN')}</div></div>
-      <div class="insight-row"><div><div class="name">Combo SKUs</div><div class="sub">Rows carrying stone details / remarks</div></div><div class="insight-val">${insightRows.filter(i => (i.combo_skus || '').trim()).length.toLocaleString('en-IN')}</div></div>`;
+      <div class="insight-row"><div><div class="name">Combo SKUs</div><div class="sub">Rows carrying Combo Details (column I)</div></div><div class="insight-val">${insightRows.filter(i => (i.combo_skus || '').trim()).length.toLocaleString('en-IN')}</div></div>`;
   }
 }
 
