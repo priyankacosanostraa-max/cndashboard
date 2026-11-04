@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -5391,7 +5391,7 @@ def get_embedding(path):
         return emb.squeeze().numpy()
     except Exception: return None
 
-def vision_search(img_bytes, inventory, top_k=10):
+def vision_search(img_bytes, inventory, top_k=10, more_k=0):
     if not AI_READY or db_data is None: return None
     # BUGFIX: a fixed "/tmp/query.jpg" was shared by every request, so two users searching
     # at the same moment overwrote each other's image (wrong results) -> unique temp file.
@@ -5404,7 +5404,8 @@ def vision_search(img_bytes, inventory, top_k=10):
         except OSError: pass
     if q is None: return None
     sims   = db_data["embeddings"] @ q
-    top    = np.argsort(sims)[::-1][:top_k]
+    order  = np.argsort(sims)[::-1]
+    top    = order[:top_k]
     top_skus   = [db_data["skus"][i] for i in top]
     top_scores = [float(sims[i]) for i in top]
     if top_scores and top_scores[0] < 0.92 and client is not None:
@@ -5419,10 +5420,26 @@ def vision_search(img_bytes, inventory, top_k=10):
             )
             top_skus[0] = resp.text.strip()
         except Exception: pass
+    # V25.44: SKU Finder "Show more" -> next best similar SKUs (never repeating a SKU already listed).
+    if more_k and more_k > 0:
+        _seen = {str(x).upper() for x in top_skus}
+        _added = 0
+        for _i in order[top_k:top_k + 400]:
+            _sk = db_data["skus"][_i]
+            _key = str(_sk).upper()
+            if _key in _seen: continue
+            _seen.add(_key)
+            top_skus.append(_sk); top_scores.append(float(sims[_i]))
+            _added += 1
+            if _added >= more_k: break
     out = []
-    for sku, score in zip(top_skus, top_scores):
+    _shown = set()
+    for _n, (sku, score) in enumerate(zip(top_skus, top_scores)):
         m = next((i for i in inventory if i["sku"].upper()==str(sku).upper()), None)
         if not m: m = next((i for i in inventory if base_sku(i["sku"])==base_sku(sku)), None)
+        _rk = str(m["sku"] if m else sku).upper()
+        if _n >= top_k and _rk in _shown: continue   # extra (Show more) results only: skip duplicates
+        _shown.add(_rk)
         if m:
             it = m.copy(); it["confidence"] = round(score*100,1)
         else:
@@ -8723,6 +8740,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" id="goBtn" onclick="doVision()" disabled>Scan &amp; Find SKU</button>
     </div>
     <div class="grid" id="gFinder"></div>
+    <div id="finderMoreWrap" style="text-align:center;margin:18px 0 28px"></div>
   </div>
 
   <div id="vSkudetails" style="display:none">
@@ -12099,9 +12117,11 @@ function _sdBuildRevenueShareContext(){
   }
   const map=new Map(); let total=0;
   if (LOGIN_ROLE !== 'employee'){
+    const _st=_sdReadFilterState();
+    const _cnQ=(typeof cnxGlobalCnQuery==='function')?cnxGlobalCnQuery():'';
     (master||[]).forEach(it=>{
-      if (typeof cnxItemMatchesGlobalCn==='function' && !cnxItemMatchesGlobalCn(it)) return;
-      const rev=_sdFilteredEntries(it).reduce((sum,e)=>sum+(Number(e?.rev)||0),0);
+      if (_cnQ && !cnxNormSearch(it&&it.cn_name).includes(_cnQ)) return;
+      const rev=_sdFilterEntriesWith(it?.sales_entries||[], _st).reduce((sum,e)=>sum+(Number(e?.rev)||0),0);
       map.set(_skuRevenueKey(it?.sku),rev); total+=rev;
     });
   }
@@ -12661,11 +12681,22 @@ function renderSdTable(){
 }
 
 /* ── Shared: date + type + marketplace filtered entries ── */
+/* V25.44: filter state is read from the DOM ONCE and reused. Earlier it was re-read
+   (5 DOM queries) for every SKU of the whole catalogue while building the revenue-share
+   context, which froze / crashed the browser when opening SKU Details. */
+function _sdReadFilterState(){
+  return {
+    d1: document.getElementById('sdD1')?.value || '',
+    d2: document.getElementById('sdD2')?.value || '',
+    typesPicked: Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value),
+    marketplacesPicked: Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c => c.value)
+  };
+}
 function _sdFilterEntries(rows){
-  const d1 = document.getElementById('sdD1')?.value || '';
-  const d2 = document.getElementById('sdD2')?.value || '';
-  const typesPicked = Array.from(document.querySelectorAll('#sdTypeChecks input:checked')).map(c => c.value);
-  const marketplacesPicked = Array.from(document.querySelectorAll('#sdEcomChecks input:checked, #sdSorChecks input:checked')).map(c => c.value);
+  return _sdFilterEntriesWith(rows, _sdReadFilterState());
+}
+function _sdFilterEntriesWith(rows, st){
+  const d1 = st.d1, d2 = st.d2, typesPicked = st.typesPicked, marketplacesPicked = st.marketplacesPicked;
   let ents = Array.isArray(rows) ? rows : [];
   if (typesPicked.length) ents = ents.filter(e => typesPicked.includes(e.type || 'Regular'));
   if (marketplacesPicked.length) ents = ents.filter(e => marketplacesPicked.includes(_sdSorMarketplace(e)));
@@ -15248,21 +15279,52 @@ function handleRepeatUpload(inp){
     .finally(() => { inp.value = ''; });
 }
 
+/* V25.44: SKU Finder shows 10 results, then a "Show more" button reveals 10 more similar SKUs. */
+let _finderAll = [], _finderShown = 0;
+const FINDER_PAGE = 10;
+function _finderCardsHtml(list){
+  return (list || []).map(m => mkCard(m, m.total_net_revenue, m.confidence, false)).join('');
+}
+function finderUpdateMoreBtn(){
+  const wrap = document.getElementById('finderMoreWrap');
+  if (!wrap) return;
+  const left = _finderAll.length - _finderShown;
+  wrap.innerHTML = left > 0
+    ? `<button class="go-btn" style="width:auto;padding:12px 30px" onclick="finderShowMore()">Show more similar results</button>`
+    : '';
+}
+function finderRenderResults(){
+  const out = document.getElementById('gFinder');
+  if (out) out.innerHTML = _finderCardsHtml(_finderAll.slice(0, _finderShown)) || '<div class="no-data">No match found</div>';
+  finderUpdateMoreBtn();
+}
+function finderShowMore(){
+  const out = document.getElementById('gFinder');
+  const from = _finderShown;
+  _finderShown = Math.min(from + FINDER_PAGE, _finderAll.length);
+  if (out) out.insertAdjacentHTML('beforeend', _finderCardsHtml(_finderAll.slice(from, _finderShown)));
+  finderUpdateMoreBtn();
+}
+window.finderShowMore = finderShowMore;
+
 function doVision(){
   if (!imgB64) return;
   const L = document.getElementById('loader');
   if (L) { L.innerHTML = '<div class="spin"></div>Scanning AI vision model…'; L.style.display='block'; }
   const btn = document.getElementById('goBtn'); if (btn) btn.disabled = true;
   const out = document.getElementById('gFinder'); if (out) out.innerHTML = '';
+  _finderAll = []; _finderShown = 0; finderUpdateMoreBtn();
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 75000); // backend ab khud 25-45s me fail-fast hota hai, 75s safety margin
 
-  fetch('/search', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'}, body: JSON.stringify({image:imgB64}), signal: ctrl.signal})
+  fetch('/search', {method:'POST', headers:{'Content-Type':'application/json','ngrok-skip-browser-warning':'true'}, body: JSON.stringify({image:imgB64, more:true}), signal: ctrl.signal})
     .then(r => r.json())
     .then(d => {
       if (d.error) throw new Error(d.error);
-      if (out) out.innerHTML = (d.results || []).map(m => mkCard(m, m.total_net_revenue, m.confidence, false)).join('') || '<div class="no-data">No match found</div>';
+      _finderAll = d.results || [];
+      _finderShown = Math.min(FINDER_PAGE, _finderAll.length);
+      finderRenderResults();
     })
     .catch(e => {
       const msg = (e && e.name === 'AbortError')
@@ -38360,7 +38422,8 @@ def search():
         image_data = request.json["image"]
         img_bytes  = base64.b64decode(image_data.split(",")[1])
         comp       = get_data()[0]
-        results    = vision_search(img_bytes, comp, top_k=10)
+        _want_more = bool((request.json or {}).get("more"))   # SKU Finder tab asks for 10 extra similar results
+        results    = vision_search(img_bytes, comp, top_k=10, more_k=(10 if _want_more else 0))
         if results is not None and _role == "employee":
             results, _ = _employee_view(results, {})   # employees never receive revenue/price data
         if results is None:
