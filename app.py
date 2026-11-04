@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -10023,6 +10023,10 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fc"><label class="fl">Theme</label><select class="fs" id="ryoThemeF" onchange="renderRamyanaOverall()"><option value="">All Themes</option><option value="Maryada">Maryada</option><option value="Bhakti">Bhakti</option><option value="Maya">Maya</option><option value="__blank__">Blank</option></select></div>
           </div>
     <div id="ryoInfo" class="small-note" style="margin:0 2px 10px"></div>
+    <div id="ryoViewToggle" style="display:flex;gap:8px;margin:0 0 12px">
+      <button class="mini-btn active" id="ryoViewPivot" onclick="setRyoView('pivot')">SKU PIVOT</button>
+      <button class="mini-btn" id="ryoViewTxns" onclick="setRyoView('txns')">TRANSACTIONS (ORDER DATE WISE)</button>
+    </div>
     <div id="ryoSummary" class="ops-kpis"></div>
     <div id="ryoContent" class="ops-table-wrap"></div>
   </div>
@@ -17753,6 +17757,7 @@ window.renderRamyanaCmb = renderRamyanaCmb; window.renderRamyanaCmb_d = renderRa
 
 /* ── RAMAYANA OVERALL TABLE (all Ramayana SKUs incl. CMBs; Sold Qty = the SKU's OWN sales only, nothing from parent CMBs is added to a child) ── */
 let _ryoRows = [], _ryoRetry = 0, _ryoTimer = null;
+let _ryoView = 'pivot';   /* V25.45: 'pivot' (SKU-wise) | 'txns' (order-date-wise transactions, like Repeat Orders) */
 function _ryoItems(){
   const idx = new Map(), alias = new Map(), idxB = new Map();
   (master || []).forEach(it => {
@@ -17803,10 +17808,20 @@ function _ryFillCustSel(id){
 function _ryoBuild(){
   const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
   const ctx = _ryCtx('ryo');      /* same filters as Repeat Order */
+  const pidx = cnxComboParentIndex();
   return _ryoItems().map(o => {
-    const it = o.it; let sold = 0, rev = 0;
+    const it = o.it; let sold = 0, rev = 0, inc = 0;
     try { const t = _rySalesOf(it, o.sku, ctx); sold = t.sold; rev = t.rev; } catch (e) { console.error(e); }
-    return {sku: o.sku, grp: _ryRowGroup(o.sku, o.cmb), name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : o.sku, type: o.cmb ? 'CMB' : _rcChildName(o.sku), img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, sold: sold, rev: rev,
+    try {   /* V25.45: In CMB Sold = parent CMB sold x pieces (same rule as table 1) */
+      const keys = [o.sku]; const ik = _ryKey(it && it.sku); if (ik && ik !== o.sku) keys.push(ik);
+      const seenP = new Set();
+      keys.forEach(k => (pidx.get(k) || []).forEach(p => {
+        const pk = _ryKey(p && p.sku); if (!pk || seenP.has(pk)) return; seenP.add(pk);
+        if (_RY_INCMB_ONLY_RCMB && !_ryIsRcmb(pk)) return;
+        inc += _rySalesOf(p, pk, ctx).sold * cnxChildComponentQty(p, k);
+      }));
+    } catch (e) { console.error(e); }
+    return {it: it, inc: inc, tot: sold + inc, sku: o.sku, grp: _ryRowGroup(o.sku, o.cmb), name: _rySkuName(it), open: (it && it.sku) ? String(it.sku) : o.sku, type: o.cmb ? 'CMB' : _rcChildName(o.sku), img: _ryImg(it), mrp: it ? (Number(it.mrp) || 0) : null, sold: sold, rev: rev,
             stock: it ? (Number(it.inv_stock) || 0) : null, wip: it ? (Number(it.inv_wip) || 0) : null, found: !!it, cmb: o.cmb};
   });
 }
@@ -17820,7 +17835,7 @@ function _ryoFiltered(){
   const th = (document.getElementById('ryoThemeF') || {}).value || '';
   const cu = _ryAnyFilter('ryo');     /* filter picked: only SKUs / CMBs that actually sold */
   const gs = _ryGrpSel('ryo');
-  return _ryoRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!gs || r.grp === gs) && (!cu || r.sold > 0));
+  return _ryoRows.filter(r => _rySearchOk(q, r.sku, r.name) && _ryThemeOk(th, r.sku) && (!gs || r.grp === gs) && (!cu || r.tot > 0));
 }
 function renderRamyanaOverall(){
   const host = document.getElementById('ryoContent'); if (!host) return;
@@ -17853,6 +17868,7 @@ function renderRamyanaOverall(){
   const info = document.getElementById('ryoInfo');
   if (info) info.textContent = 'Sales: ' + ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'all time') + _ryFilterText('ryo') + (_ryThemeLabel('ryoThemeF') ? '  |  Theme: ' + _ryThemeLabel('ryoThemeF') : '') + (cust ? '  |  Customer: ' + cust : '') + '  |  ' + rows.length + ' SKU' + (rows.length === 1 ? '' : 's') + ' shown';
   if (!rows.length) { host.innerHTML = '<div class="ops-empty">No SKU found for the selected filters.</div>'; return; }
+  if (_ryoView === 'txns') { _ryoRenderTxns(host, rows); return; }
   const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
   let body = '';
   rows.forEach(r => {
@@ -17864,6 +17880,8 @@ function renderRamyanaOverall(){
       + '<td data-sort-value="' + escHtml(r.type) + '">' + escHtml(r.type) + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.mrp === null ? -1 : r.mrp) + '">' + (r.mrp === null ? '—' : '₹' + _ryNum(r.mrp)) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.sold + '" style="font-weight:900">' + _ryNum(r.sold) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.inc + '" style="font-weight:900">' + _ryNum(r.inc) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + r.tot + '" style="font-weight:900">' + _ryNum(r.tot) + '</td>'
       + '<td class="ops-num" data-sort-value="' + r.rev + '">₹' + _ryNum(r.rev) + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.stock === null ? -1 : r.stock) + '">' + (r.stock === null ? '—' : _ryNum(r.stock)) + '</td>'
       + '<td class="ops-num" data-sort-value="' + (r.wip === null ? -1 : r.wip) + '">' + (r.wip === null ? '—' : _ryNum(r.wip)) + '</td>'
@@ -17871,13 +17889,106 @@ function renderRamyanaOverall(){
   });
   const tf = '<tfoot><tr style="background:#f2e5cf"><td style="font-weight:900">GRAND TOTAL</td><td></td><td></td><td></td><td></td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('sold')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('inc')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('tot')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">₹' + _ryNum(sm('rev')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('stock')) + '</td>'
     + '<td class="ops-num" style="font-weight:900">' + _ryNum(sm('wip')) + '</td></tr></tfoot>';
-  host.innerHTML = '<table class="ops-table" style="min-width:960px"><thead><tr>'
-    + th('SKU') + th('Image') + th('SKU Name') + th('Product Type') + th('MRP', 'right') + th('Sold Qty', 'right') + th('Net Revenue', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
+  host.innerHTML = '<table class="ops-table" style="min-width:1100px"><thead><tr>'
+    + th('SKU') + th('Image') + th('SKU Name') + th('Product Type') + th('MRP', 'right') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Total Sold', 'right') + th('Net Revenue', 'right') + th('Inv Stock', 'right') + th('Inv WIP', 'right')
     + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>';
 }
+/* V25.45: TRANSACTIONS view (order-date wise, like Repeat Orders). A SKU's own order lines = Individual Sold; lines of the Ramayana CMBs it sits in = In CMB Sold
+   (qty = CMB qty x pieces) and are tagged "(Via CMB Sold)". Same filters as the pivot (date / channel / ECom / SOR / customer / search / theme). */
+function _ryoEntryOk(e, ctx){
+  const chs = ctx.channels || [], subs = ctx.subChannels || [], cu = String(ctx.customer || '').toLowerCase(), d1 = ctx.d1 || '', d2 = ctx.d2 || '';
+  if (chs.length && chs.indexOf(String(e && e.channel || '').trim()) < 0) return false;
+  if (subs.length && subs.indexOf(e && e.sub_channel) < 0) return false;
+  if (cu && String(e && e.cust || '').toLowerCase().indexOf(cu) < 0) return false;
+  if (d1 || d2) { const d = cnxSaleEntryDate(e, ctx); if (!d || (d1 && d < d1) || (d2 && d > d2)) return false; }
+  return true;
+}
+function _ryoTxns(rows){
+  const ctx = _ryCtx('ryo'), pidx = cnxComboParentIndex(), out = [];
+  const entsOf = x => { const i = roExactSkuItem(x || {}); return Array.isArray(i && i.orderdate_sales_entries) ? i.orderdate_sales_entries : []; };
+  rows.forEach(r => {
+    const base = {sku: r.sku, open: r.open, found: r.found, name: r.name, img: r.img, ptype: r.type};
+    if (r.it) entsOf(r.it).forEach(e => { if (!_ryoEntryOk(e, ctx)) return; const q = Number(e.qty) || 0; if (!q) return;
+      out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: q, inc: 0, via: '', rev: Number(e.rev) || 0})); });
+    const keys = [r.sku]; const ik = _ryKey(r.it && r.it.sku); if (ik && ik !== r.sku) keys.push(ik);
+    const seenP = new Set();
+    keys.forEach(k => (pidx.get(k) || []).forEach(p => {
+      const pk = _ryKey(p && p.sku); if (!pk || seenP.has(pk)) return; seenP.add(pk);
+      if (_RY_INCMB_ONLY_RCMB && !_ryIsRcmb(pk)) return;
+      const pcs = cnxChildComponentQty(p, k);
+      entsOf(p).forEach(e => { if (!_ryoEntryOk(e, ctx)) return; const q = (Number(e.qty) || 0) * pcs; if (!q) return;
+        out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: 0, inc: q, via: String(p.sku || pk), rev: 0})); });
+    }));
+  });
+  out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0)));
+  return out;
+}
+const _RYO_TX_CAP = 500;
+function _ryoRenderTxns(host, rows){
+  const tx = _ryoTxns(rows);
+  if (!tx.length) { host.innerHTML = '<div class="ops-empty">No transactions found for the selected filters.</div>'; return; }
+  const th = (t, a) => '<th' + (a ? ' style="text-align:' + a + '"' : '') + '>' + t + '</th>';
+  let body = '';
+  tx.slice(0, _RYO_TX_CAP).forEach(t => {
+    const photo = t.img ? '<img class="ops-photo" src="' + escHtml(t.img) + '" loading="lazy" decoding="async" onerror="this.outerHTML=\'<div class=&quot;ops-photo-ph&quot;>💎</div>\'">' : '<div class="ops-photo-ph">💎</div>';
+    const tag = t.via ? '<div style="margin-top:3px;color:#b68b00;font-weight:800;font-size:11px">(Via CMB Sold)</div><div class="small-note" style="margin-top:2px;white-space:normal">via ' + escHtml(t.via) + '</div>' : '';
+    body += '<tr>'
+      + '<td data-sort-value="' + escHtml(t.date) + '" style="white-space:nowrap">' + (t.date && t.date !== 'N/A' ? escHtml(t.date) : '—') + '</td>'
+      + '<td data-sort-value="' + escHtml(t.sku) + '" style="font-weight:800;white-space:nowrap">' + (t.found ? '<button class="sku-link" data-sku="' + escHtml(t.open) + '" onclick="openSkuDetails(this.dataset.sku)" title="View full SKU details">' + escHtml(t.sku) + '</button>' : escHtml(t.sku)) + tag + '</td>'
+      + '<td>' + photo + '</td>'
+      + '<td>' + (t.name ? escHtml(t.name) : '—') + '</td>'
+      + '<td>' + escHtml(t.ptype) + '</td>'
+      + '<td>' + (t.cust ? escHtml(t.cust) : '—') + '</td>'
+      + '<td>' + (t.type ? escHtml(t.type) : '—') + '</td>'
+      + '<td>' + (t.channel ? escHtml(t.channel) : '—') + '</td>'
+      + '<td class="ops-num" data-sort-value="' + t.ind + '" style="font-weight:900' + (t.ind ? '' : ';color:#9ca3af') + '">' + _ryNum(t.ind) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + t.inc + '" style="font-weight:900' + (t.inc ? '' : ';color:#9ca3af') + '">' + _ryNum(t.inc) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + t.rev + '">' + (t.via ? '—' : '₹' + _ryNum(t.rev)) + '</td>'
+      + '<td class="ops-num" data-sort-value="' + (t.ind + t.inc) + '" style="font-weight:900">' + _ryNum(t.ind + t.inc) + '</td>'
+      + '</tr>';
+  });
+  const sum = k => tx.reduce((a, t) => a + (t[k] || 0), 0);
+  const tf = '<tfoot><tr style="background:#f2e5cf"><td style="font-weight:900">GRAND TOTAL</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>'
+    + '<td class="ops-num" style="font-weight:900">' + _ryNum(sum('ind')) + '</td><td class="ops-num" style="font-weight:900">' + _ryNum(sum('inc')) + '</td>'
+    + '<td class="ops-num" style="font-weight:900">₹' + _ryNum(sum('rev')) + '</td><td class="ops-num" style="font-weight:900">' + _ryNum(sum('ind') + sum('inc')) + '</td></tr></tfoot>';
+  const note = tx.length > _RYO_TX_CAP ? '<div class="small-note" style="margin:8px 2px;font-weight:700">Showing first ' + _ryNum(_RYO_TX_CAP) + ' of ' + _ryNum(tx.length) + ' transactions — narrow with filters. (Export includes all.)</div>' : '';
+  host.innerHTML = '<table class="ops-table" style="min-width:1250px"><thead><tr>'
+    + th('Order Date') + th('SKU') + th('Image') + th('SKU Name') + th('Product Type') + th('Customer') + th('Type') + th('Channel') + th('Individual Sold', 'right') + th('In CMB Sold', 'right') + th('Net Revenue', 'right') + th('Total Sold', 'right')
+    + '</tr></thead><tbody>' + body + '</tbody>' + tf + '</table>' + note;
+}
+function setRyoView(v){
+  _ryoView = (v === 'txns') ? 'txns' : 'pivot';
+  const a = document.getElementById('ryoViewPivot'), b = document.getElementById('ryoViewTxns');
+  if (a) a.classList.toggle('active', _ryoView === 'pivot');
+  if (b) b.classList.toggle('active', _ryoView === 'txns');
+  renderRamyanaOverall();
+}
+window.setRyoView = setRyoView;
+async function _ryoDownload(url, payload, fname){
+  const resp = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'}, body: JSON.stringify(payload)});
+  if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
+  const blob = await resp.blob();
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = fname;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+async function exportRamyanaOverallTxnsExcel(){
+  if (!_ryoRows.length) renderRamyanaOverall();
+  const tx = _ryoTxns(_ryoFiltered());
+  if (!tx.length) { alert('No transactions to export.'); return; }
+  const d1 = (document.getElementById('ryoFrom') || {}).value || '', d2 = (document.getElementById('ryoTo') || {}).value || '';
+  const cust = (document.getElementById('ryoCustF') || {}).value || '';
+  try {
+    await _ryoDownload('/api/ramyana_overall_txns/export.xlsx', {period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + _ryFilterText('ryo') + (_ryThemeLabel('ryoThemeF') ? ' | Theme: ' + _ryThemeLabel('ryoThemeF') : ''), customer: cust,
+      rows: tx.map(t => ({date: t.date, sku: t.sku, sku_name: t.name, product_type: t.ptype, image: t.img, customer: t.cust, type: t.type, channel: t.channel, individual: t.ind, in_cmb: t.inc, via_cmb: t.via, net_revenue: t.rev}))}, 'ramayana_overall_transactions.xlsx');
+  } catch (e) { alert('Excel export failed: ' + ((e && e.message) || e)); }
+}
+window.exportRamyanaOverallTxnsExcel = exportRamyanaOverallTxnsExcel;
 const renderRamyanaOverall_d = _debounce(() => renderRamyanaOverall(), 160);
 function resetRamyanaOverallFilters(){
   ['ryoFrom', 'ryoTo', 'ryoSearch', 'ryoCustF', 'ryoThemeF', 'ryoGrpF'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
@@ -17885,6 +17996,7 @@ function resetRamyanaOverallFilters(){
   renderRamyanaOverall();
 }
 async function exportRamyanaOverallExcel(){
+  if (_ryoView === 'txns') return exportRamyanaOverallTxnsExcel();
   if (!_ryoRows.length) renderRamyanaOverall();
   const rows = _ryoFiltered();
   if (!rows.length) { alert('No data to export.'); return; }
@@ -17893,7 +18005,7 @@ async function exportRamyanaOverallExcel(){
   try {
     const resp = await fetch('/api/ramyana_overall/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
       body: JSON.stringify({period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + _ryFilterText('ryo') + (_ryThemeLabel('ryoThemeF') ? ' | Theme: ' + _ryThemeLabel('ryoThemeF') : ''), customer: cust,
-        rows: rows.map(r => ({sku: r.sku, sku_name: r.name, type: r.type, mrp: r.mrp, image: r.img, sold: r.sold, net_revenue: r.rev, inv_stock: r.stock, inv_wip: r.wip}))})});
+        rows: rows.map(r => ({sku: r.sku, sku_name: r.name, type: r.type, mrp: r.mrp, image: r.img, sold: r.sold, in_cmb: r.inc, total: r.tot, net_revenue: r.rev, inv_stock: r.stock, inv_wip: r.wip}))})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -33923,12 +34035,13 @@ def api_ramyana_overall_export_xlsx():
                 return None if v is None or v == "" else to_int(v)
             rows.append({"sku": sku, "name": clean((r or {}).get("sku_name", "")), "type": clean((r or {}).get("type", "")), "image": clean((r or {}).get("image", "")),
                          "mrp": _n((r or {}).get("mrp")),
-                         "sold": to_int((r or {}).get("sold", 0)), "rev": to_num((r or {}).get("net_revenue", 0)),
+                         "sold": to_int((r or {}).get("sold", 0)), "inc": to_int((r or {}).get("in_cmb", 0)), "tot": to_int((r or {}).get("total", to_int((r or {}).get("sold", 0)) + to_int((r or {}).get("in_cmb", 0)))),
+                         "rev": to_num((r or {}).get("net_revenue", 0)),
                          "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip"))})
         if not rows:
             return jsonify({"error": "No Ramayana Overall rows to export."}), 404
 
-        headers = ["SKU", "SKU Name", "Product Type", "MRP", "Image Link", "Sold Qty", "Net Revenue", "Inv Stock", "Inv WIP"]
+        headers = ["SKU", "SKU Name", "Product Type", "MRP", "Image Link", "Individual Sold", "In CMB Sold", "Total Sold", "Net Revenue", "Inv Stock", "Inv WIP"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -33940,7 +34053,7 @@ def api_ramyana_overall_export_xlsx():
         ws.row_dimensions[1].height = 27
         ws.merge_cells(f"A2:{last_col}2")
         ws["A2"] = (f"Sales period: {period}" + (f" | Customer: {customer}" if customer else "")
-                    + f" | Sold Qty = the SKU's own sales only | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+                    + f" | Individual Sold = the SKU's own sales, In CMB Sold = sold through the Ramayana CMBs | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
         ws["A2"].font = Font(italic=True, size=9, color="6B6258")
 
         thin = Side(style="thin", color="DDD5C5")
@@ -33955,15 +34068,15 @@ def api_ramyana_overall_export_xlsx():
         ws.row_dimensions[hr].height = 24
 
         for i, r in enumerate(rows, hr + 1):
-            vals = [r["sku"], r["name"], r["type"], r["mrp"] if r["mrp"] is not None else "", r["image"], r["sold"], round(r["rev"], 2),
+            vals = [r["sku"], r["name"], r["type"], r["mrp"] if r["mrp"] is not None else "", r["image"], r["sold"], r["inc"], r["tot"], round(r["rev"], 2),
                     r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else ""]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
                 cell.border = border
-                cell.alignment = Alignment(horizontal=("right" if c in (4, 6, 7, 8, 9) else "left"), vertical="center")
-                if c in (4, 6, 8, 9):
+                cell.alignment = Alignment(horizontal=("right" if c in (4, 6, 7, 8, 9, 10, 11) else "left"), vertical="center")
+                if c in (4, 6, 7, 8, 10, 11):
                     cell.number_format = "#,##0"
-                elif c == 7:
+                elif c == 9:
                     cell.number_format = "#,##0.00"
             if r["image"].startswith(("http://", "https://")):
                 ic = ws.cell(i, 5)
@@ -33973,24 +34086,26 @@ def api_ramyana_overall_export_xlsx():
                 ic.alignment = Alignment(horizontal="left", vertical="center")
             ws.cell(i, 1).font = Font(bold=True)
             ws.cell(i, 6).font = Font(bold=True)
+            ws.cell(i, 7).font = Font(bold=True)
+            ws.cell(i, 8).font = Font(bold=True)
 
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 1, "TOTAL")
-        for c in (6, 7, 8, 9):
+        for c in (6, 7, 8, 9, 10, 11):
             L = get_column_letter(c)
-            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 7 else "#,##0")
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 9 else "#,##0")
         for c in range(1, ncol + 1):
             cell = ws.cell(tr, c)
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="F2E5CF")
             cell.border = border
-            if c in (4, 6, 7, 8, 9):
+            if c in (4, 6, 7, 8, 9, 10, 11):
                 cell.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([18, 34, 22, 12, 52, 14, 16, 14, 14], 1):
+        for i, w in enumerate([18, 34, 22, 12, 52, 15, 14, 14, 16, 14, 14], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         bio = io.BytesIO()
@@ -34002,6 +34117,110 @@ def api_ramyana_overall_export_xlsx():
         return resp
     except Exception as e:
         return jsonify({"error": "Ramayana Overall Excel export failed: " + str(e)[:400]}), 500
+
+@app.route("/api/ramyana_overall_txns/export.xlsx", methods=["POST"])
+def api_ramyana_overall_txns_export_xlsx():
+    """Ramayana tab > Ramayana Overall > Transactions (order-date wise) export."""
+    if session.get("role") not in ("admin", "employee"):
+        return jsonify({"error": "login required"}), 401
+    try:
+        import io
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+
+        body = request.get_json(silent=True) or {}
+        period = clean(body.get("period", "")) or "All time"
+        customer = clean(body.get("customer", ""))
+        rows = []
+        for r in (body.get("rows") or []):
+            r = r or {}
+            sku = clean(r.get("sku", ""))
+            if not sku:
+                continue
+            via = clean(r.get("via_cmb", ""))
+            rows.append({"date": clean(r.get("date", "")), "sku": sku, "name": clean(r.get("sku_name", "")), "ptype": clean(r.get("product_type", "")),
+                         "image": clean(r.get("image", "")), "cust": clean(r.get("customer", "")), "type": clean(r.get("type", "")), "channel": clean(r.get("channel", "")),
+                         "ind": to_int(r.get("individual", 0)), "inc": to_int(r.get("in_cmb", 0)), "via": via,
+                         "rev": to_num(r.get("net_revenue", 0))})
+        if not rows:
+            return jsonify({"error": "No Ramayana Overall transactions to export."}), 404
+
+        headers = ["Order Date", "SKU", "SKU Name", "Product Type", "Image Link", "Customer", "Type", "Channel", "Sold As", "Individual Sold", "In CMB Sold", "Net Revenue", "Total Sold"]
+        ncol = len(headers)
+        last_col = get_column_letter(ncol)
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Overall Transactions"
+        ws.merge_cells(f"A1:{last_col}1")
+        ws["A1"] = "Ramayana Overall - Transactions (Order Date wise)"
+        ws["A1"].font = Font(bold=True, size=15, color="7A1C16")
+        ws.row_dimensions[1].height = 27
+        ws.merge_cells(f"A2:{last_col}2")
+        ws["A2"] = (f"Sales period: {period}" + (f" | Customer: {customer}" if customer else "")
+                    + f" | In CMB Sold = CMB qty x pieces of this SKU in that CMB | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+        ws["A2"].font = Font(italic=True, size=9, color="6B6258")
+
+        thin = Side(style="thin", color="DDD5C5")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        hr = 4
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(hr, c, h)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="8C6A24")
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = border
+        ws.row_dimensions[hr].height = 24
+
+        for i, r in enumerate(rows, hr + 1):
+            sold_as = (f"Via CMB Sold ({r['via']})" if r["via"] else "Individual Sold")
+            vals = [r["date"], r["sku"], r["name"], r["ptype"], r["image"], r["cust"], r["type"], r["channel"], sold_as,
+                    r["ind"], r["inc"], ("" if r["via"] else round(r["rev"], 2)), r["ind"] + r["inc"]]
+            for c, v in enumerate(vals, 1):
+                cell = ws.cell(i, c, v)
+                cell.border = border
+                cell.alignment = Alignment(horizontal=("right" if c in (10, 11, 12, 13) else "left"), vertical="center")
+                if c in (10, 11, 13):
+                    cell.number_format = "#,##0"
+                elif c == 12:
+                    cell.number_format = "#,##0.00"
+            if r["image"].startswith(("http://", "https://")):
+                ic = ws.cell(i, 5)
+                ic.hyperlink = r["image"]
+                ic.style = "Hyperlink"
+                ic.border = border
+                ic.alignment = Alignment(horizontal="left", vertical="center")
+            ws.cell(i, 2).font = Font(bold=True)
+            ws.cell(i, 13).font = Font(bold=True)
+
+        tr = hr + len(rows) + 1
+        first, lastr = hr + 1, hr + len(rows)
+        ws.cell(tr, 1, "TOTAL")
+        for c in (10, 11, 12, 13):
+            L = get_column_letter(c)
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 12 else "#,##0")
+        for c in range(1, ncol + 1):
+            cell = ws.cell(tr, c)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill("solid", fgColor="F2E5CF")
+            cell.border = border
+            if c in (10, 11, 12, 13):
+                cell.alignment = Alignment(horizontal="right")
+
+        ws.freeze_panes = f"A{hr + 1}"
+        ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
+        for i, w in enumerate([13, 18, 34, 20, 40, 28, 16, 16, 30, 15, 14, 16, 12], 1):
+            ws.column_dimensions[get_column_letter(i)].width = w
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"Ramayana_Overall_Transactions_{datetime.now(TZ).strftime('%Y-%m-%d')}.xlsx"
+        resp = app.response_class(bio.read(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        resp.headers["Content-Disposition"] = f'attachment; filename="{fname}"'
+        return resp
+    except Exception as e:
+        return jsonify({"error": "Ramayana Overall transactions Excel export failed: " + str(e)[:400]}), 500
 
 @app.route("/api/ramyana_cmb/export.xlsx", methods=["POST"])
 def api_ramyana_cmb_export_xlsx():
