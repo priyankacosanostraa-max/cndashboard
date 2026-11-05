@@ -13068,7 +13068,10 @@ function downloadTable(headers, data, baseName, fmtType, opts){
   ({headers, data} = augmentWithDailySTR(headers, data));
   { const aug=augmentExportWithCnName(headers,data); headers=aug.headers; data=aug.rows; }
   /* opts.dropCols: columns used for calculation but not written to the file · opts.textCols: kept as text in Excel (e.g. Nov-26) */
-  const _txtCols = (opts && opts.textCols) || [];
+  const _dateCols = (opts && opts.dateCols) || {};
+  const _MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  /* ISO (yyyy-mm-dd) -> csv text: Dispatch/Launch = 04-Nov-2026, Month-Year = Nov-26 */
+  const _csvDate = (h, v) => { const m = String(v == null ? '' : v).match(/^(\d{4})-(\d{2})-(\d{2})/); if (!m) return v; return h === 'Month-Year' ? (_MON[+m[2]-1] + '-' + m[1].slice(2)) : (m[3] + '-' + _MON[+m[2]-1] + '-' + m[1]); };
   if (opts && opts.dropCols && opts.dropCols.length) headers = headers.filter(h => opts.dropCols.indexOf(h) < 0);
   function downloadBlob(content, mime, filename){
     const blob = new Blob([content], {type: mime});
@@ -13079,10 +13082,10 @@ function downloadTable(headers, data, baseName, fmtType, opts){
   }
   if (fmtType === 'csv') {
     const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
-    const csv = [headers.map(esc).join(',')].concat(data.map(r => headers.map(h => esc(r[h] ?? '')).join(','))).join('\n');
+    const csv = [headers.map(esc).join(',')].concat(data.map(r => headers.map(h => esc(_dateCols[h] ? _csvDate(h, r[h]) : (r[h] ?? ''))).join(','))).join('\n');
     downloadBlob(csv, 'text/csv;charset=utf-8', baseName + '.csv');
   } else {
-    const rowsHtml = data.map(r => `<tr>${headers.map(h => `<td${_txtCols.indexOf(h) >= 0 ? ' style="mso-number-format:\'\\@\'"' : ''}>${String(r[h] ?? '').replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
+    const rowsHtml = data.map(r => `<tr>${headers.map(h => `<td${(_dateCols[h] && /^\d{4}-\d{2}-\d{2}/.test(String(r[h] ?? ''))) ? ' style="mso-number-format:\'' + _dateCols[h] + '\';text-align:right"' : ''}>${String(r[h] ?? '').replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><table border="1"><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>${rowsHtml}</table></body></html>`;
     downloadBlob(html, 'application/vnd.ms-excel;charset=utf-8', baseName + '.xls');
   }
@@ -15010,11 +15013,11 @@ function exportRO(fmtType){
         const cq0 = parseFloat(t._cmbQty) || 0;
         data.push({
           'Row Type': 'In CMB Sold',
-          'Dispatch Date': t.date === 'N/A' ? '' : _roFmtDate(t.date),
+          'Dispatch Date': t.date === 'N/A' ? '' : _roAnyDate(t.date),
           SKU: t.sku,
           'CN Name': _roExpCn(t.sku, parentItem.cn_name),
           'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
-          'Launch Date': _roFmtDate(_roLaunchDate(itemMap[skuKey] || parentItem)),
+          'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
           'Set Item Of': t._cmbParent || '',
           'Stone Color': stoneMap[skuKey] || '',
           'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
@@ -15038,11 +15041,11 @@ function exportRO(fmtType){
       }
       data.push({
       'Row Type': children.length ? 'Gift Set' : 'Product',
-      'Dispatch Date': t.date === 'N/A' ? '' : _roFmtDate(t.date),
+      'Dispatch Date': t.date === 'N/A' ? '' : _roAnyDate(t.date),
       SKU: t.sku,
       'CN Name': _roExpCn(t.sku, parentItem.cn_name),
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
-      'Launch Date': _roFmtDate(_roLaunchDate(itemMap[skuKey] || parentItem)),
+      'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
       'Set Item Of': '',
       'Stone Color': stoneMap[skuKey] || '',
       'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
@@ -15070,11 +15073,11 @@ function exportRO(fmtType){
         const childWip=childInv.wip;
         data.push({
           'Row Type':'— Set Item',
-          'Dispatch Date':t.date==='N/A'?'':_roFmtDate(t.date),
+          'Dispatch Date':t.date==='N/A'?'':_roAnyDate(t.date),
           SKU:c.sku||'',
           'CN Name':_roExpCn(c.sku, (childItem && childItem.cn_name) || c.cn_name),
           'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
-          'Launch Date':_roFmtDate(_roLaunchDate(itemMap[childKey] || childItem)),
+          'Launch Date':_roLaunchDate(itemMap[childKey] || childItem),
           'Set Item Of':t.sku,
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
           'Product Dimensions':c.dimensions||dimMap[childKey]||'',
@@ -15094,8 +15097,8 @@ function exportRO(fmtType){
         });
       });
     });
-    data.forEach(r => { r['Month-Year'] = _roMonthYear(r['Dispatch Date']); });
-    downloadTable(headers, data, 'repeat_orders_transactions', fmtType, {textCols:['Month-Year']});
+    data.forEach(r => { const d0 = _roAnyDate(r['Dispatch Date']); r['Month-Year'] = d0 ? d0.slice(0,7) + '-01' : ''; });
+    downloadTable(headers, data, 'repeat_orders_transactions', fmtType, {dateCols:{'Dispatch Date':'dd\\-mmm\\-yyyy','Launch Date':'dd\\-mmm\\-yyyy','Month-Year':'mmm\\-yy'}});
     return;
   }
 
@@ -15163,7 +15166,7 @@ function exportRO(fmtType){
       SKU: item.sku,
       'CN Name': _roExpCn(item.sku, item.cn_name),
       'SKU Name': exportSkuName(item.sku, item.sku_name),
-      'Launch Date': _roFmtDate(_roLaunchDate(item)),
+      'Launch Date': _roLaunchDate(item),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
@@ -15196,7 +15199,7 @@ function exportRO(fmtType){
     // SKU row's "In CMBs Sold" column, so child rows are intentionally not
     // appended here.
   });
-  downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType, {dropCols:['7D Sale','15D Sale','30D Sale']});
+  downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType, {dropCols:['7D Sale','15D Sale','30D Sale'], dateCols:{'Launch Date':'dd\\-mmm\\-yyyy'}});
 }
 
 function setFinderImage(dataUrl){
