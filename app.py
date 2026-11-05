@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -8536,36 +8536,6 @@ select.lg-in option{background:#fff;color:#1a1610}
             <input type="text" id="cfSku" placeholder="Filter SKU…" oninput="applyColFilters()">
           </div>
           <div class="cf-group">
-            <label>7D Sale</label>
-            <select id="cfQty7d" onchange="applyColFilters()">
-              <option value="">All</option>
-              <option value="gt0">&gt; 0</option>
-              <option value="gt5">&gt; 5</option>
-              <option value="gt10">&gt; 10</option>
-              <option value="0">= 0</option>
-            </select>
-          </div>
-          <div class="cf-group">
-            <label>15D Sale</label>
-            <select id="cfQty15d" onchange="applyColFilters()">
-              <option value="">All</option>
-              <option value="gt0">&gt; 0</option>
-              <option value="gt5">&gt; 5</option>
-              <option value="gt10">&gt; 10</option>
-              <option value="0">= 0</option>
-            </select>
-          </div>
-          <div class="cf-group">
-            <label>30D Sale</label>
-            <select id="cfQty30d" onchange="applyColFilters()">
-              <option value="">All</option>
-              <option value="gt0">&gt; 0</option>
-              <option value="gt5">&gt; 5</option>
-              <option value="gt10">&gt; 10</option>
-              <option value="0">= 0</option>
-            </select>
-          </div>
-          <div class="cf-group">
             <label>Individual Sold</label>
             <select id="cfSoldQty" onchange="applyColFilters()">
               <option value="">All</option>
@@ -8626,9 +8596,6 @@ select.lg-in option{background:#fff;color:#1a1610}
           <thead><tr>
             <th style="width:46px;text-align:center"><input type="checkbox" id="roSelectAll" onclick="roToggleAll(this.checked)" title="Select all"></th>
             <th>SKU</th>
-            <th class="sort-arrow" onclick="sortRO('qty_7d',this)">7D Sale</th>
-            <th class="sort-arrow" onclick="sortRO('qty_15d',this)">15D Sale</th>
-            <th class="sort-arrow" onclick="sortRO('qty_1m',this)">30D Sale</th>
             <th class="sort-arrow" onclick="sortRO('final_qty',this)">Individual Sold</th>
             <th>In CMBs Sold</th>
             <th class="sort-arrow" onclick="sortRO('inv_stock',this)">Inv Stock</th>
@@ -13097,9 +13064,12 @@ function augmentWithDailySTR(headers, data){
   return {headers: newHeaders, data: outData};
 }
 
-function downloadTable(headers, data, baseName, fmtType){
+function downloadTable(headers, data, baseName, fmtType, opts){
   ({headers, data} = augmentWithDailySTR(headers, data));
   { const aug=augmentExportWithCnName(headers,data); headers=aug.headers; data=aug.rows; }
+  /* opts.dropCols: columns used for calculation but not written to the file · opts.textCols: kept as text in Excel (e.g. Nov-26) */
+  const _txtCols = (opts && opts.textCols) || [];
+  if (opts && opts.dropCols && opts.dropCols.length) headers = headers.filter(h => opts.dropCols.indexOf(h) < 0);
   function downloadBlob(content, mime, filename){
     const blob = new Blob([content], {type: mime});
     const url = URL.createObjectURL(blob);
@@ -13112,7 +13082,7 @@ function downloadTable(headers, data, baseName, fmtType){
     const csv = [headers.map(esc).join(',')].concat(data.map(r => headers.map(h => esc(r[h] ?? '')).join(','))).join('\n');
     downloadBlob(csv, 'text/csv;charset=utf-8', baseName + '.csv');
   } else {
-    const rowsHtml = data.map(r => `<tr>${headers.map(h => `<td>${String(r[h] ?? '').replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
+    const rowsHtml = data.map(r => `<tr>${headers.map(h => `<td${_txtCols.indexOf(h) >= 0 ? ' style="mso-number-format:\'\\@\'"' : ''}>${String(r[h] ?? '').replace(/</g,'&lt;')}</td>`).join('')}</tr>`).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><table border="1"><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr>${rowsHtml}</table></body></html>`;
     downloadBlob(html, 'application/vnd.ms-excel;charset=utf-8', baseName + '.xls');
   }
@@ -14544,13 +14514,13 @@ function applyRO(){
       <th>Online/Offline</th>
       <th>Individual Sold</th>
       <th>In CMBs Sold</th>
+      <th>Total Sold</th>
       ${empTx ? '' : '<th>Avg Selling Price</th>'}
       ${empTx ? '' : '<th>Discount %</th>'}
       ${empTx ? '' : '<th>Net Revenue</th>'}
       <th>Inv Stock</th>
       <th>${roAnuMode ? "Inv WIP (Anu Ma'am)" : 'Inv (WIP)'}</th>
-      <th style="min-width:160px">Remark</th>
-      <th>Total Sold</th>`;
+      <th style="min-width:160px">Remark</th>`;
 
     if (!txns.length) {
       if (tbody) tbody.innerHTML = '';
@@ -14577,7 +14547,7 @@ function applyRO(){
       const txNameHtml = (txName && txName.toUpperCase() !== String(t.sku || '').trim().toUpperCase()) ? `<div style="margin-top:3px;font-size:12px;font-weight:600;color:#4a3f2a;white-space:normal;line-height:1.35">${safeText(txName)}</div>` : '';
       return `<tr>
         <td style="text-align:center"><input type="checkbox" ${ck} onchange="roToggleTxn('${skuEsc}', this.checked)"></td>
-        <td class="gold">${t.date === 'N/A' ? '—' : t.date}</td>
+        <td class="gold">${t.date === 'N/A' ? '—' : _roFmtDate(t.date)}</td>
         <td style="min-width:230px"><div class="sku-cell">${roThumb(t.image_url)}<div style="flex:1;min-width:150px"><button class="sku-link" style="white-space:nowrap !important;word-break:normal !important;overflow-wrap:normal !important;text-align:left !important;font-size:13px" onclick="openSkuDetails('${skuEsc}')">${safeText(t.sku)}</button>${txNameHtml}${cmbTag}</div></div></td>
         <td>${safeText(t.dimensions || '—')}</td>
         <td>${safeText(t.cust)}</td>
@@ -14585,16 +14555,16 @@ function applyRO(){
         <td>${safeText(t.channel)}</td>
         <td>${safeText(saleModeText(t) || '—')}</td>
         ${isCmbTx ? `<td class="muted">0</td><td class="gold">${cmbQ}</td>` : `<td class="gold">${tq}</td><td class="muted">0</td>`}
+        <td class="gold"><b>${Math.round(isCmbTx ? cmbQ : tq)}</b></td>
         ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td>${cnxAvgSpText(t.avg_selling_price)}</td>`)}
         ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td>${tDisc}%</td>`)}
         ${empTx ? '' : (isCmbTx ? `<td class="muted">—</td>` : `<td class="gold"><b>${fmt(parseFloat(t.rev)||0)}</b></td>`)}
         <td class="${stk > 10 ? 'red' : stk > 0 ? 'orange' : 'muted'}">${stk}</td>
         <td class="${wip > 10 ? 'orange' : wip > 0 ? 'gold' : 'muted'}">${wip}</td>
         <td><input type="text" class="ro-remark" value="${(roRemarks[t.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)"></td>
-        <td class="gold"><b>${Math.round(isCmbTx ? cmbQ : tq)}</b></td>
       </tr>`;
     }).join('') + (txns.length > TX_CAP
-      ? `<tr><td colspan="16" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
+      ? `<tr><td colspan="17" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${TX_CAP} of ${txns.length.toLocaleString('en-IN')} transactions — narrow with filters. (Export includes all.)</td></tr>`
       : '');
     updateExportHint();
     return;
@@ -14605,11 +14575,9 @@ function applyRO(){
   if (thead) thead.innerHTML = `
     <th style="width:46px;text-align:center"><input type="checkbox" id="roSelectAll" onclick="roToggleAll(this.checked)" title="Select all"></th>
     <th class="sort-arrow" onclick="sortRO('sku',this)">SKU</th>
-    <th class="sort-arrow" onclick="sortRO('qty_7d',this)">7D Sale</th>
-    <th class="sort-arrow" onclick="sortRO('qty_15d',this)">15D Sale</th>
-    <th class="sort-arrow" onclick="sortRO('qty_1m',this)">30D Sale</th>
     <th class="sort-arrow" onclick="sortRO('final_qty',this)">Individual Sold</th>
     <th>In CMBs Sold</th>
+    <th>Total Sold</th>
     ${LOGIN_ROLE==='employee' ? '' : `<th title="Arithmetic average of valid COSA Selling Price rows under active filters">Avg Selling Price</th>`}
     ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_fDiscPct',this)" title="Overall average discount % vs MRP — updates with Date/Channel/Type filters">Discount %</th>`}
     ${LOGIN_ROLE==='employee' ? '' : `<th class="sort-arrow" onclick="sortRO('_rev',this)" title="Net Revenue under active filters">Net Revenue</th>`}
@@ -14619,8 +14587,7 @@ function applyRO(){
     <th class="sort-arrow" onclick="sortRO('forecast_60d',this)" title="Expected units to sell in the next 60 days. Based on recent sales velocity: last 60 days weighted 70%, last 180 days 30%, plus a small trend adjustment.">Forecast 60D</th>
     <th class="sort-arrow" onclick="sortRO('reorder_qty',this)" title="Next 60 days expected demand minus current stock + WIP">Reorder Qty</th>
     <th>Remark</th>
-    <th>Remark 2</th>
-    <th>Total Sold</th>`;
+    <th>Remark 2</th>`;
 
   if (!filtered.length) {
     if (tbody) tbody.innerHTML = '';
@@ -14665,11 +14632,9 @@ function applyRO(){
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
-      <td class="${q7 > 0 ? 'green' : 'muted'}">${Math.round(q7)}</td>
-      <td class="${q15 > 0 ? 'green' : 'muted'}">${Math.round(q15)}</td>
-      <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
       <td class="gold">${Math.round(cmbSold)}</td>
+      <td class="gold"><b>${Math.round((Number(qty)||0)+(Number(cmbSold)||0))}</b></td>
       ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,roSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="gold"><b>${fmt(saleVals.rev)}</b></td>`}
@@ -14680,10 +14645,9 @@ function applyRO(){
       <td><span class="forecast-pill" style="background:#fff4e0;color:#b45309;border-color:#f3d9a8">${item.reorder_qty || 0}</span></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
-      <td class="gold"><b>${Math.round((parseFloat(qty)||0) + (parseFloat(cmbSold)||0))}</b></td>
     </tr>`;
   }).join('') + (filtered.length > RO_CAP
-    ? `<tr><td colspan="17" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
+    ? `<tr><td colspan="15" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${filtered.length.toLocaleString('en-IN')} — use filters/search to narrow. (Export includes all ${filtered.length.toLocaleString('en-IN')}.)</td></tr>`
     : '');
 
   const allBox = document.getElementById('roSelectAll');
@@ -14817,7 +14781,7 @@ function applyColFilters(){
   );
 
   if (!roShown.length) {
-    tbody.innerHTML = `<tr><td colspan="12" class="tno-data">No rows match column filters</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="15" class="tno-data">No rows match column filters</td></tr>`;
     return;
   }
 
@@ -14849,11 +14813,9 @@ function applyColFilters(){
           <button class="details-btn" onclick="openSkuDetails('${skuEsc}')">Details</button>
           ${comboHtml}
         </span></div></td>
-      <td class="${q7 > 0 ? 'green' : 'muted'}">${Math.round(q7)}</td>
-      <td class="${q15 > 0 ? 'green' : 'muted'}">${Math.round(q15)}</td>
-      <td class="${q30 > 0 ? 'green' : 'muted'}">${Math.round(q30)}</td>
       <td class="gold">${qty}</td>
       <td class="gold">${Math.round(cmbSold)}</td>
+      <td class="gold"><b>${Math.round((Number(qty)||0)+(Number(cmbSold)||0))}</b></td>
       ${LOGIN_ROLE==='employee' ? '' : `<td>${cnxAvgSpText(cnxAvgSellingPriceForItem(item,cfSaleCtx))}</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="${(item._fDiscPct||0) > 0 ? 'orange' : 'muted'}">${item._fDiscPct||0}%</td>`}
       ${LOGIN_ROLE==='employee' ? '' : `<td class="gold"><b>${fmt(sv.rev)}</b></td>`}
@@ -14864,10 +14826,9 @@ function applyColFilters(){
       <td><span class="forecast-pill" style="background:#fff4e0;color:#b45309;border-color:#f3d9a8">${item.reorder_qty || 0}</span></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
       <td><input type="text" class="ro-remark" value="${(roRemarks2[item.sku]||'').replace(/"/g,'&quot;')}" placeholder="Type remark…" oninput="setRoRemark2('${skuEsc}', this.value)" onclick="event.stopPropagation()"></td>
-      <td class="gold"><b>${Math.round((Number(qty)||0)+(Number(cmbSold)||0))}</b></td>
     </tr>`;
   }).join('') + (colFiltered.length > RO_CAP
-    ? `<tr><td colspan="14" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
+    ? `<tr><td colspan="15" style="text-align:center;padding:12px;color:#8c7a42;font-weight:700">Showing first ${RO_CAP} of ${colFiltered.length.toLocaleString('en-IN')} — narrow with column filters or the filter panel above.</td></tr>`
     : '');
 }
 
@@ -14958,6 +14919,22 @@ function _roExpTypes(ents, typeSel){
   const s=[]; (ents||[]).forEach(e=>{const t=String((e&&e.type)||'').trim(); if(t&&!s.includes(t))s.push(t);});
   return s.length ? s.join(', ') : ((typeSel&&typeSel.length)?typeSel.join(', '):'');
 }
+function _roFmtDate(v){
+  /* Proper date text: 04-Nov-2026 (falls back to the original text if it is not a date) */
+  const iso = _roAnyDate(v);
+  if (!iso) return (v == null || v === 'N/A') ? '' : String(v);
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? (m[3] + '-' + M[+m[2] - 1] + '-' + m[1]) : String(v);
+}
+function _roMonthYear(v){
+  /* Nov-26 from any date (e.g. 4-Nov-2026) */
+  const iso = _roAnyDate(v);
+  const m = iso && iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return M[+m[2] - 1] + '-' + m[1].slice(2);
+}
 function _roAnyDate(v){
   // Dispatch/launch date kisi bhi form me: Date, Excel serial, yyyymmdd, unix, ISO, dd/mm/yyyy, "24 Jul 2023", "Jul 24, 2023"
   if (v == null || v === '') return '';
@@ -15016,7 +14993,7 @@ function exportRO(fmtType){
     const subChanSelTx = getSelectedSubChannels('rSubChan');
     const roInvCtxTx = roInvContext(typeSelTx, chanSelTx, subChanSelTx);
     const emp0 = LOGIN_ROLE === 'employee';
-    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Launch Date','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Total Sold','Online Sold','Offline Sold'];
+    const headers = ['Row Type','Dispatch Date','SKU','CN Name','SKU Name','Launch Date','Set Item Of','Stone Color','Product Dimensions','Pack Details','Customer','Type','Online/Offline','Individual Sold','In CMBs Sold','Total Sold','MRP', ...(emp0 ? [] : ['Avg Selling Price','Net Revenue','Discount %']),'Inv Stock','Inv WIP','Remark','Image Link','Online Sold','Offline Sold','Month-Year'];
     const data = [];
     txns.forEach(t => {
       const skuKey=String(t.sku||'').trim().toUpperCase();
@@ -15033,11 +15010,11 @@ function exportRO(fmtType){
         const cq0 = parseFloat(t._cmbQty) || 0;
         data.push({
           'Row Type': 'In CMB Sold',
-          'Dispatch Date': t.date === 'N/A' ? '' : t.date,
+          'Dispatch Date': t.date === 'N/A' ? '' : _roFmtDate(t.date),
           SKU: t.sku,
           'CN Name': _roExpCn(t.sku, parentItem.cn_name),
           'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
-          'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
+          'Launch Date': _roFmtDate(_roLaunchDate(itemMap[skuKey] || parentItem)),
           'Set Item Of': t._cmbParent || '',
           'Stone Color': stoneMap[skuKey] || '',
           'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
@@ -15061,11 +15038,11 @@ function exportRO(fmtType){
       }
       data.push({
       'Row Type': children.length ? 'Gift Set' : 'Product',
-      'Dispatch Date': t.date === 'N/A' ? '' : t.date,
+      'Dispatch Date': t.date === 'N/A' ? '' : _roFmtDate(t.date),
       SKU: t.sku,
       'CN Name': _roExpCn(t.sku, parentItem.cn_name),
       'SKU Name': exportSkuName(t.sku, t.sku_name || nameMap[skuKey]),
-      'Launch Date': _roLaunchDate(itemMap[skuKey] || parentItem),
+      'Launch Date': _roFmtDate(_roLaunchDate(itemMap[skuKey] || parentItem)),
       'Set Item Of': '',
       'Stone Color': stoneMap[skuKey] || '',
       'Product Dimensions': (t.dimensions || dimMap[skuKey] || ''),
@@ -15093,11 +15070,11 @@ function exportRO(fmtType){
         const childWip=childInv.wip;
         data.push({
           'Row Type':'— Set Item',
-          'Dispatch Date':t.date==='N/A'?'':t.date,
+          'Dispatch Date':t.date==='N/A'?'':_roFmtDate(t.date),
           SKU:c.sku||'',
           'CN Name':_roExpCn(c.sku, (childItem && childItem.cn_name) || c.cn_name),
           'SKU Name':exportSkuName(c.sku,c.sku_name||nameMap[childKey]),
-          'Launch Date':_roLaunchDate(itemMap[childKey] || childItem),
+          'Launch Date':_roFmtDate(_roLaunchDate(itemMap[childKey] || childItem)),
           'Set Item Of':t.sku,
           'Stone Color':c.stone_color||stoneMap[childKey]||'',
           'Product Dimensions':c.dimensions||dimMap[childKey]||'',
@@ -15117,7 +15094,8 @@ function exportRO(fmtType){
         });
       });
     });
-    downloadTable(headers, data, 'repeat_orders_transactions', fmtType);
+    data.forEach(r => { r['Month-Year'] = _roMonthYear(r['Dispatch Date']); });
+    downloadTable(headers, data, 'repeat_orders_transactions', fmtType, {textCols:['Month-Year']});
     return;
   }
 
@@ -15169,7 +15147,7 @@ function exportRO(fmtType){
   // sheet ki Balance Qty use karo, warna normal channel-aware WIP.
   const chStock = (o) => roInvStock(o, roInvCtxX);
   const chWip = (o) => roAnuModeX ? roAnuWipFor(o && o.sku) : roInvWip(o, roInvCtxX);
-  const headers = ['Row Type','SKU','CN Name','SKU Name','Launch Date','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %','Net Revenue']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Total Sold','Online Sold','Offline Sold'];
+  const headers = ['Row Type','SKU','CN Name','SKU Name','Launch Date','Stone Color','Set Item Of','Product Dimensions','Pack Details','7D Sale','15D Sale','30D Sale','Individual Sold','In CMBs Sold','Total Sold','MRP', ...(emp1 ? [] : ['Avg Selling Price','Discount %','Net Revenue']),'Inv Stock','Inv WIP','Blocked Qty','Forecast Sold Qty','Reorder Qty','Status','Taxon','Plating','Type','Customer Count','Remark','Remark 2','Image Link','Online Sold','Offline Sold'];
   const data = [];
   rows.forEach(item => {
     // Main row uses the same authoritative sales helper as the screen/KPIs.
@@ -15185,7 +15163,7 @@ function exportRO(fmtType){
       SKU: item.sku,
       'CN Name': _roExpCn(item.sku, item.cn_name),
       'SKU Name': exportSkuName(item.sku, item.sku_name),
-      'Launch Date': _roLaunchDate(item),
+      'Launch Date': _roFmtDate(_roLaunchDate(item)),
       'Stone Color': item.stone_color || '',
       'Set Item Of': '',
       'Product Dimensions': item.dimensions || '',
@@ -15218,7 +15196,7 @@ function exportRO(fmtType){
     // SKU row's "In CMBs Sold" column, so child rows are intentionally not
     // appended here.
   });
-  downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType);
+  downloadTable(headers, data, hasTicks ? 'repeat_orders_selected' : 'repeat_orders_filtered', fmtType, {dropCols:['7D Sale','15D Sale','30D Sale']});
 }
 
 function setFinderImage(dataUrl){
