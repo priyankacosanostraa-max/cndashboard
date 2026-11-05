@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -14472,11 +14472,18 @@ function applyRO(){
   if (RO_VIEW === 'txns') {
     if (colFiltersBar) colFiltersBar.style.display = 'none';
     const txns = [];
-    filtered.forEach(item => (item._fe || []).forEach(e => txns.push({
-      ...e, sku: item.sku, sku_name: item.sku_name, avg_selling_price:cnxAvgSellingPriceForItem(item,roSaleCtx),
-      inv_stock: roInvStock(item, roInvCtx), inv_wip: wipOf(item),
-      image_url: item.image_url, dimensions: item.dimensions || '', mrp: parseFloat(item.mrp) || 0
-    })));
+    /* V25.51: per-SKU values computed ONCE per SKU (not once per sale entry) - Transactions view loads much faster */
+    filtered.forEach(item => {
+      const _es = item._fe || [];
+      if (!_es.length) return;
+      const _asp = cnxAvgSellingPriceForItem(item, roSaleCtx), _stk = roInvStock(item, roInvCtx), _wip = wipOf(item);
+      const _img = item.image_url, _dim = item.dimensions || '', _mrp = parseFloat(item.mrp) || 0;
+      for (let _i = 0; _i < _es.length; _i++) txns.push({
+        ..._es[_i], sku: item.sku, sku_name: item.sku_name, avg_selling_price: _asp,
+        inv_stock: _stk, inv_wip: _wip,
+        image_url: _img, dimensions: _dim, mrp: _mrp
+      });
+    });
     /* V24.85: In CMB Sold transactions — jo SKU kisi parent CMB me bika hai uski rows bhi (SKU + "(In CMB Sold)"), pivot ke In CMBs Sold jaisa hi qty (parent qty x pieces) aur wahi filters (date/type/channel/customer). */
     if (false /* V25.46: In CMB Sold rows removed from Transactions view */ && (pastedSkuSet || hasEntryFilter || txt)) {
       const _pIdx = cnxComboParentIndex();
@@ -32817,7 +32824,9 @@ def _fetch_drg_source_rows_impl(force=False):
             raw_typ = norm_type(raw_type_value)
             legacy_amazon_source = bool(raw_amazon_fba or _is_amazon_fba_value(cust, raw_typ))
             cust, typ = _merge_amazon_identity(cust, raw_typ)
-            _is_blk = "blinkit" in str(cust or "").casefold()
+            _cl0 = (str(cust or "") + " " + str(raw_cust_value or "")).casefold()
+            # V25.52: Blinkit / Instamart are recognised from Customer Name (cosa_orderdate), whatever the Type column says
+            _is_blk = "Blinkit" if "blinkit" in _cl0 else ("Instamart" if ("instamart" in _cl0 or "swiggy" in _cl0) else "")
             if _is_blk:
                 channel = sub_channel = ""
                 target_amazon_merged = False
@@ -32839,8 +32848,8 @@ def _fetch_drg_source_rows_impl(force=False):
         if _is_blk:
             _blinkit_fallback.append({
                 "date": _iso, "rev": float(rev), "qty": float(row_qty), "sp": float(selling_price),
-                "channel": "", "sub_channel": "", "type": "Blinkit", "customer": cust,
-                "raw_customer": _raw_c, "raw_type": "Blinkit",
+                "channel": "", "sub_channel": "", "type": _is_blk, "customer": cust,
+                "raw_customer": _raw_c, "raw_type": _is_blk,
             })
             continue
         out.append({
@@ -32887,7 +32896,9 @@ def _fetch_drg_source_rows_impl(force=False):
         b_qty = find_col(bdf.columns, "Final Qty", "final quantity", "final_qty") or _drg_source_position_col(bdf, 6)
         for row in _df_chunks(bdf):
             customer = clean(row.get(b_cust, "")) if b_cust else ""
-            if "blinkit" not in customer.casefold():
+            _cl2 = customer.casefold()
+            _kind = "Blinkit" if "blinkit" in _cl2 else ("Instamart" if ("instamart" in _cl2 or "swiggy" in _cl2) else "")
+            if not _kind:
                 continue
             dt = parse_date_any(row.get(b_date, "")) if b_date else None
             if dt is None:
@@ -32901,16 +32912,16 @@ def _fetch_drg_source_rows_impl(force=False):
             _b_sp = to_num(row.get(b_sp, 0)) if b_sp else 0.0
             _b_rows.append({
                 "date": dt.strftime("%Y-%m-%d"), "rev": float(rev), "qty": float(b_row_qty), "sp": float(_b_sp or 0),
-                "channel": "", "sub_channel": "", "type": "Blinkit", "customer": customer,
-                "raw_customer": customer, "raw_type": "Blinkit",
+                "channel": "", "sub_channel": "", "type": _kind, "customer": customer,
+                "raw_customer": customer, "raw_type": _kind,
             })
         out.extend(_b_rows)
     except Exception:
         _b_rows = []
     # COSA se Blinkit na aaye (fetch fail / khaali) to Blinkit zero nahi dikhna chahiye —
     # cossa_orderdate ke Blinkit rows (upar skip karke rakhe the) use karo.
-    if not _b_rows:
-        out.extend(_blinkit_fallback)
+    _have_kinds = {r.get("type") for r in _b_rows}
+    out.extend(r for r in _blinkit_fallback if r.get("type") not in _have_kinds)
 
     _DRG_SRC_CACHE["rows"] = out
     _DRG_SRC_CACHE["ts"] = time.time()
@@ -33015,7 +33026,7 @@ def _fetch_drg_marketplace_source_rows(force=False):
 
     out = []
     meta = {}
-    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit"}
+    named_buckets = {"Website", "Amazon", "Flipkart", "Myntra", "Nykaa", "Ajio", "Tata", "Blinkit", "Instamart"}
 
     def _run_one_spec(spec):
         rows_local = []
@@ -33246,6 +33257,8 @@ def _fetch_drg_marketplace_source_rows(force=False):
         _cust_raw = str(entry.get("raw_customer") or entry.get("customer") or "")
         if "blinkit" in _cust_raw.casefold():
             _bk = "Blinkit"
+        elif "instamart" in _cust_raw.casefold() or "swiggy" in _cust_raw.casefold():
+            _bk = "Instamart"
         else:
             _ch = calc_channel(entry.get("customer"), entry.get("type"))
             _bk = _drg_bucket(_ch, entry.get("sub_channel"), entry.get("type"))
@@ -33268,7 +33281,8 @@ def _fetch_drg_marketplace_source_rows(force=False):
     # preventing double counting after the dedicated COSA-H mapping above.
     fallback_used = 0
     for e in orderdate_rows:
-        if "blinkit" in str(e.get("customer") or "").casefold():
+        _cf0 = (str(e.get("customer") or "") + " " + str(e.get("raw_customer") or "")).casefold()
+        if "blinkit" in _cf0 or "instamart" in _cf0 or "swiggy" in _cf0:
             continue
         bucket = _drg_bucket(e.get("channel"), e.get("sub_channel"), e.get("type"))
         if bucket in named_buckets:
@@ -34729,7 +34743,7 @@ def _t26_bucket_cached(customer, typ):
             return "SOR - " + _sv_lab
     # Qcom = Blinkit + Instamart (Customer Name se). Sheet Type Purchase/Bulk/Marketplace/kuch bhi ho,
     # customer naam Qcom ka ho to Qcom row me hi jaayega (pehle Type column Purchase/Bulk ho to wahan chala jaata tha).
-    if not _is_consumer_type(typ) and _is_qcom_customer(customer):
+    if _is_qcom_customer(customer) and (not _is_consumer_type(typ) or re.search(r"blinkit|instamart|swiggy", str(customer or "").casefold())):
         return _t26_label("ECom", "Qcom")
     if not _is_consumer_type(typ):      # Customer = SOR vendor -> SOR row (Type Purchase/Bulk/kuch bhi ho)
         _sor_lab = _match_channel_keys(customer, _SOR_CHANNEL_KEYS)
