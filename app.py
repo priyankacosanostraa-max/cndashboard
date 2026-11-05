@@ -24018,14 +24018,31 @@ window.loadPayments = loadPayments; window.renderPayments = renderPayments; wind
 
 /* ── PAYMENTS PLANNING (Inward Projection vs Actual) ── */
 let _planData = null;
+let _planLoadedAt = 0;
+let _planRequestId = 0;
+let _planController = null;
+const _planBrowserTtlMs = 30000;
 function loadPaymentsPlanning(force){
   const host = document.getElementById('planContent');
   if (!host) return;
-  if (!force && _planData){ renderPaymentsPlanning(); return; }
+  if (!force && _planController) return;
+  if (!force && _planData && !_planData.error && Date.now() - _planLoadedAt < _planBrowserTtlMs){
+    renderPaymentsPlanning(); return;
+  }
+  if (_planController) _planController.abort();
+  const requestId = ++_planRequestId;
+  const controller = new AbortController();
+  _planController = controller;
+  const timeout = setTimeout(() => controller.abort(), 180000);
   host.innerHTML = '<div class="home-empty" style="padding:20px">Loading…</div>';
-  fetch('/api/payments/planning' + (force ? '?force=true' : ''), {headers:{'ngrok-skip-browser-warning':'true'}})
+  fetch('/api/payments/planning?force=' + (force ? 'true' : 'false') + '&_=' + Date.now(), {
+    cache:'no-store', signal:controller.signal,
+    headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}
+  })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(d => {
+      if (requestId !== _planRequestId) return;
+      _planLoadedAt = d.error ? 0 : Date.now();
       if (d.error && (!d.rows || !d.rows.length)){
         host.innerHTML = '<div class="home-empty" style="padding:20px;color:#a33">' + escHtml(d.error) + '</div>';
         _planData = d;
@@ -24035,8 +24052,25 @@ function loadPaymentsPlanning(force){
       renderPaymentsPlanning();
       try{ if(_payData) renderPayments(); }catch(_e){}
     })
-    .catch(err => { host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' + escHtml(err.message||err) + '</div>'; });
+    .catch(err => {
+      if (requestId !== _planRequestId) return;
+      _planData = null;
+      _planLoadedAt = 0;
+      host.innerHTML = '<div class="home-empty" style="padding:20px">Failed to load: ' +
+        escHtml(err.name === 'AbortError' ? 'Planning refresh timed out. Please retry.' : (err.message||err)) + '</div>';
+    })
+    .finally(() => {
+      clearTimeout(timeout);
+      if (requestId === _planRequestId) _planController = null;
+    });
 }
+// Only poll while the Payments view is actually visible; other tabs are unaffected.
+setInterval(() => {
+  const view = document.getElementById('vPayments');
+  if (!document.hidden && view && view.getClientRects().length && !_planController){
+    loadPaymentsPlanning(false);
+  }
+}, 60000);
 function renderPaymentsPlanning(){
   const host = document.getElementById('planContent');
   const d = _planData;
@@ -38291,10 +38325,7 @@ def _plan_col_index(header, *aliases):
     for key in wanted:
         if key in normalized:
             return normalized.index(key)
-    for key in wanted:
-        for i, cell in enumerate(normalized):
-            if key and cell and (key in cell or cell in key):
-                return i
+    # Do not mistake Actual STR for a missing Actual column (or vice versa).
     return None
 
 def _plan_cell(row, index):
@@ -38391,6 +38422,7 @@ def _build_payments_planning():
         # of showing/counting them separately. Other categories remain unchanged.
         _merged_plan = {}
         _merged_order = []
+        _merged_count = {}
         for _r in rows:
             _cat = _payments_type_alias(_r.get("category", "")) or "Unknown"
             _key = _cat.lower()
@@ -38402,6 +38434,9 @@ def _build_payments_planning():
                 }
                 _merged_order.append(_key)
             _m = _merged_plan[_key]
+            _merged_count[_key] = _merged_count.get(_key, 0) + 1
+            if _merged_count[_key] == 1:
+                _m["pct_achievement"] = _r.get("pct_achievement")
             _m["inward_projection"] += float(_r.get("inward_projection") or 0)
             _m["actual"] += float(_r.get("actual") or 0)
             _m["pending"] += float(_r.get("pending") or 0)
@@ -38415,10 +38450,13 @@ def _build_payments_planning():
             _m["pending"] = round(_m["pending"], 0)
             _m["actual_str"] = round(_m["actual_str"], 0)
             _m["required_str"] = round(_m["required_str"], 0)
-            _m["pct_achievement"] = (
-                round(_m["actual"] / _m["inward_projection"] * 100, 1)
-                if _m["inward_projection"] else None
-            )
+            # A single channel must retain the sheet's displayed percentage.
+            # Recalculate only when multiple alias rows were actually combined.
+            if _merged_count[_key] > 1:
+                _m["pct_achievement"] = (
+                    round(_m["actual"] / _m["inward_projection"] * 100, 1)
+                    if _m["inward_projection"] else None
+                )
             rows.append(_m)
 
         # Parse the second Planning table (W1/W2/... Actual). This gives a
@@ -38474,8 +38512,13 @@ def _build_payments_planning():
         "weekly_actuals": weekly_actuals,
         "error": plan_err,
     }
-    _PLAN_CACHE["data"] = data
-    _PLAN_CACHE["ts"] = time.time()
+    # A transient fetch/parse error must not become a cached successful snapshot.
+    if not plan_err:
+        _PLAN_CACHE["data"] = data
+        _PLAN_CACHE["ts"] = time.time()
+    else:
+        _PLAN_CACHE["data"] = None
+        _PLAN_CACHE["ts"] = 0
     return data
 
 @app.route("/api/payments/planning")
