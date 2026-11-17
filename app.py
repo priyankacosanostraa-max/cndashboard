@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -9264,6 +9264,20 @@ select.lg-in option{background:#fff;color:#1a1610}
       <button class="go-btn" style="width:auto;padding:5px 10px;font-size:.6rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayTagSummary()">Export CSV</button>
     </div>
     <div id="payTagSummary" style="font-size:.8rem"></div>
+  </div>
+  <div id="payDelayedWrap" style="margin-bottom:18px">
+    <div class="insights-head" style="margin-bottom:6px">
+      <div class="insights-title" style="font-size:1rem">Delayed Payments</div>
+      <button class="go-btn" style="width:auto;padding:6px 12px;font-size:.65rem;letter-spacing:1px;background:#2f6f3e" onclick="exportPayDelayed()">Export CSV</button>
+    </div>
+    <div style="color:var(--cn-mid);font-size:.68rem;margin-bottom:6px">Customers whose payment is overdue (term crossed). Delayed Days = days since the oldest unpaid invoice crossed its due date; Amount = total overdue amount. 0-day customers are not listed.</div>
+    <div class="filter-box" style="margin:6px 0 10px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div class="fc"><label class="fl">Tag / Type</label>
+        <select class="fs" id="payDelTag" onchange="renderPayDelayed()"><option value="">All Tags</option></select></div>
+      <div class="fc"><label class="fl">Search Customer</label>
+        <input class="fi" id="payDelSearch" placeholder="Customer name…" oninput="renderPayDelayed_d()" style="min-width:200px"></div>
+    </div>
+    <div id="payDelayedTable" class="ro-table-wrap" style="padding:0;overflow:auto;max-height:55vh"></div>
   </div>
   <div id="payLedgerWrap" style="display:none;margin-top:10px">
     <div class="insights-head" style="margin-bottom:8px">
@@ -23586,6 +23600,7 @@ function _payFiltered(){
 }
 function renderPayments(){
   const d = _payData; if (!d) return;
+  try { renderPayDelayed(); } catch (e) { console.error(e); }
   const rows = _payFiltered();
   _applyPaySort(rows);
   // summary cards
@@ -23970,6 +23985,51 @@ function exportPayTagSummary(){
 window.exportPayToday = exportPayToday; window.exportPayMonthEnd = exportPayMonthEnd;
 window.exportPayAging = exportPayAging; window.exportPayWeek = exportPayWeek;
 window.exportPayTagSummary = exportPayTagSummary;
+/* V25.57: DELAYED PAYMENTS table (last table of the Payments tab): customers with overdue money - Delayed Days (oldest unpaid invoice past its due date) + overdue Amount. 0-day customers are not listed. Own Tag/Type + Customer search filters. */
+let _payDelSortKey = 'days', _payDelSortDir = -1;
+function sortPayDel(k){ if (_payDelSortKey === k) _payDelSortDir *= -1; else { _payDelSortKey = k; _payDelSortDir = (k === 'customer' || k === 'tag') ? 1 : -1; } renderPayDelayed(); }
+function _payDelFiltered(){
+  const d = _payData; if (!d) return [];
+  const tag = (document.getElementById('payDelTag')?.value || '').toLowerCase();
+  const q = (document.getElementById('payDelSearch')?.value || '').trim().toLowerCase();
+  const out = (d.rows || []).filter(r => (Number(r.delay_days) || 0) > 0 && (Number(r.overdue) || 0) > 0
+      && (!tag || String(r.tag || 'Unknown').toLowerCase() === tag) && (!q || String(r.customer || '').toLowerCase().includes(q)))
+    .map(r => ({customer: r.customer || '', tag: r.tag || 'Unknown', days: Number(r.delay_days) || 0, amount: Math.round(Number(r.overdue) || 0)}));
+  const k = _payDelSortKey, dir = _payDelSortDir, isStr = (k === 'customer' || k === 'tag');
+  out.sort((a, b) => { let va = a[k], vb = b[k]; if (isStr) { va = String(va); vb = String(vb); return dir * (va < vb ? -1 : va > vb ? 1 : 0); } return dir * ((va - vb) || (b.amount - a.amount)); });
+  return out;
+}
+function renderPayDelayed(){
+  const d = _payData, host = document.getElementById('payDelayedTable'); if (!d || !host) return;
+  const sel = document.getElementById('payDelTag');
+  if (sel && Array.isArray(d.tags) && sel.options.length - 1 !== d.tags.length) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Tags</option>' + d.tags.map(t => '<option value="' + escHtml(t) + '">' + escHtml(t) + '</option>').join('');
+    sel.value = cur;
+  }
+  if ((d.rows || []).length && !(d.rows || []).some(r => 'delay_days' in r)) { host.innerHTML = '<div class="home-empty" style="padding:24px">Click Refresh (top) to load delayed days.</div>'; return; }
+  const rows = _payDelFiltered();
+  const total = rows.reduce((a, r) => a + r.amount, 0);
+  const th = (label, key, align) => '<th class="sort-arrow" style="cursor:pointer' + (align ? ';text-align:' + align : '') + '" onclick="sortPayDel(\'' + key + '\')">' + label + ' ⇅</th>';
+  const body = rows.map(r => '<tr class="pay-row" style="cursor:pointer" data-customer="' + escHtml(r.customer) + '">'
+    + '<td style="font-weight:700;color:#1a5fb4;text-decoration:underline">' + escHtml(r.customer) + '</td>'
+    + '<td style="text-align:center;color:var(--cn-mid)">' + escHtml(r.tag) + '</td>'
+    + '<td class="red" style="text-align:center;font-weight:800">' + r.days + ' day' + (r.days === 1 ? '' : 's') + '</td>'
+    + '<td style="text-align:right;font-weight:800">' + fmt(r.amount) + '</td></tr>').join('');
+  host.innerHTML = '<table class="ro" style="width:100%;min-width:520px"><thead><tr>'
+    + th('Customer Name', 'customer') + th('Tag', 'tag', 'center') + th('Delayed Days', 'days', 'center') + th('Amount', 'amount', 'right')
+    + '</tr></thead><tbody>' + (body || '<tr><td colspan="4" style="text-align:center;padding:20px;color:#999">No delayed payments</td></tr>') + '</tbody>'
+    + '<tfoot><tr style="font-weight:800;background:var(--cn-ivory);position:sticky;bottom:0;z-index:5;box-shadow:0 -1px 0 #ccc"><td>Total (' + rows.length + ' customers)</td><td></td><td></td><td style="text-align:right">' + fmt(total) + '</td></tr></tfoot></table>';
+}
+function exportPayDelayed(){
+  const rows = _payDelFiltered();
+  if (!rows.length) { alert('No data to export'); return; }
+  const data = rows.map(r => [r.customer, r.tag, r.days, r.amount]);
+  data.push(['Total', '', '', rows.reduce((a, r) => a + r.amount, 0)]);
+  _dlCsv(['Customer Name', 'Tag / Type', 'Delayed Days', 'Amount'], data, 'delayed_payments');
+}
+const renderPayDelayed_d = _debounce(() => renderPayDelayed(), 200);
+window.sortPayDel = sortPayDel; window.renderPayDelayed = renderPayDelayed; window.exportPayDelayed = exportPayDelayed; window.renderPayDelayed_d = renderPayDelayed_d;
 // Single delegated click handler for customer rows (today + month-end tables)
 document.addEventListener('click', function(ev){
   const tr = ev.target.closest && ev.target.closest('.pay-row');
@@ -38127,6 +38187,7 @@ def _build_payments():
         cust_due_me = cust_over_me = 0.0
         cust_carry_over = 0.0   # balance jo is month se PEHLE hi due/overdue tha aur abhi tak nahi mila
         cust_aging = {k: 0.0 for k in AG_LABELS}
+        cust_max_od = 0   # oldest unpaid overdue invoice = days past its due date (Delayed Payments table)
         for inv in open_inv:
             rem = round(inv["amt"], 2)
             if rem <= 0.009:
@@ -38141,6 +38202,8 @@ def _build_payments():
             if due_date and today > due_date:
                 cust_over += rem
                 od = (today - due_date).days
+                if od > cust_max_od:
+                    cust_max_od = od
                 bkt = _ag_bucket(od)
                 aging[bkt] += rem
                 cust_aging[bkt] += rem
@@ -38216,6 +38279,7 @@ def _build_payments():
             "balance": round(cust_bal, 0),
             "due_me": round(cust_due_me, 0),
             "overdue_me": round(cust_over_me, 0),
+            "delay_days": int(cust_max_od),
             "aging": {k: round(v, 0) for k, v in cust_aging.items()},
             "collected_month": round(cust_collected_month, 0),
             "carry_over_overdue": round(cust_carry_over, 0),
