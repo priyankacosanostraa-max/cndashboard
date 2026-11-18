@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -873,6 +873,12 @@ WEBSITE_UNIWARE_GID = os.environ.get("WEBSITE_UNIWARE_GID", "1485200781").strip(
 # are ever changed. Defaults below auto-try direct + published Google endpoints.
 WEBSITE_RETURN_RTO_LIVE_URL = os.environ.get("WEBSITE_RETURN_RTO_LIVE_URL", "").strip()
 WEBSITE_UNIWARE_LIVE_URL = os.environ.get("WEBSITE_UNIWARE_LIVE_URL", "").strip()
+# "sparsh comment" sheet: Order ID (col A) -> `sparsh comment` (last column). Used only for the
+# Sparsh Comment column + filter in the Website Returns "All Website Orders" table.
+SPARSH_COMMENT_URL = os.environ.get(
+    "SPARSH_COMMENT_URL",
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLSn6Ko65xdFykkIAgs6nuybEu0FUJDyrDa1IoDEnRCnwaZ-3nKPrDhNJYIKS4FnVVUFCezztwAXER/pub?gid=0&single=true&output=csv",
+).strip()
 # Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
 PRODUCTION_URL = (os.environ.get("PRODUCTION_LIVE_URL", "").strip() or os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv"))
@@ -8973,6 +8979,8 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="ops-section-head" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
       <div><div class="ops-section-title">All Website Orders</div><div class="small-note" id="wrTableNote"></div></div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+        <label class="small-note" for="wrTableSparsh">Sparsh Comment</label>
+        <select class="fs" id="wrTableSparsh" style="width:auto;min-width:190px;max-width:280px" onchange="websiteOrdersSparshChanged()"><option value="All" selected>All Comments</option><option value="__with__">With Comment</option><option value="__none__">No Comment</option></select>
         <label class="small-note" for="wrTableStatusGroup">Status Group · Multi</label>
         <select class="fs" id="wrTableStatusGroup" multiple size="3" style="width:auto;min-width:168px;height:76px" onmousedown="_wrMultiSelectMouseDown(event)" onchange="websiteOrdersTableStatusGroupChanged()"><option value="All" selected>All Groups</option></select>
         <label class="small-note" for="wrTablePageSize">Rows/page</label>
@@ -8983,13 +8991,13 @@ select.lg-in option{background:#fff;color:#1a1610}
       </div>
     </div>
     <div class="ro-wrap"><div class="ro-table-wrap" style="max-height:690px">
-      <table class="ops-table" id="websiteReturnsTable" style="min-width:2580px">
+      <table class="ops-table" id="websiteReturnsTable" style="min-width:2860px">
         <thead><tr>
           <th>Order ID</th><th>SKU(s)</th><th>CN Name(s)</th><th>Customer</th><th>Customer Contact</th><th>Payment Mode</th>
           <th>Order Date</th><th>Order Stage</th><th>Website Order Status</th><th>Order Qty</th><th>Return Type</th><th>RTO Qty</th>
-          <th>Return Date</th><th>Return Reason</th><th>BlueDart Pickup</th><th>BlueDart Status</th><th>Status Date</th><th>Destination</th><th>WayBill</th>
+          <th>Return Date</th><th>Return Reason</th><th>BlueDart Pickup</th><th>BlueDart Status</th><th>Status Date</th><th>Destination</th><th>WayBill</th><th>Sparsh Comment</th>
         </tr></thead>
-        <tbody id="websiteReturnsBody"><tr><td colspan="19" class="ops-empty">Open this tab to load all Website orders.</td></tr></tbody>
+        <tbody id="websiteReturnsBody"><tr><td colspan="20" class="ops-empty">Open this tab to load all Website orders.</td></tr></tbody>
       </table>
     </div></div>
   </div>
@@ -24600,6 +24608,7 @@ function _wrOverviewParams(force=false){
   put('reason',_wrEl('wrReason')?.value||'All');
   put('sku',_wrEl('wrSku')?.value||'');
   put('search',_wrEl('wrSearch')?.value||'');
+  put('sparsh',_wrEl('wrTableSparsh')?.value||'All');
   p.set('table_page',String(Math.max(1,Number(_websiteReturnsTablePage||1))));
   p.set('table_page_size',String(Math.max(50,Math.min(500,Number(_websiteReturnsTablePageSize||350)))));
   if(force)p.set('force','1');
@@ -24738,10 +24747,28 @@ function _wrCnNamesForOrder(r){
   const names=Array.from(new Set(raw.map(s=>exportCnName(s,'')).map(_wrText).filter(Boolean)));
   return names.length?names.join(', '):'—';
 }
+function _wrFillSparshOptions(opts){
+  const el=_wrEl('wrTableSparsh');if(!el)return;
+  const list=Array.isArray(opts)?opts:[];
+  const sig=JSON.stringify(list.map(o=>[o.value,o.count]));
+  if(el.dataset.sig===sig)return;
+  el.dataset.sig=sig;
+  const cur=el.value||'All';
+  el.innerHTML='<option value="All">All Comments</option><option value="__with__">With Comment</option><option value="__none__">No Comment</option>'
+    +list.map(o=>`<option value="${escHtml(o.value)}">${escHtml(o.value)} (${Number(o.count||0).toLocaleString('en-IN')})</option>`).join('');
+  el.value=Array.from(el.options).some(o=>o.value===cur)?cur:'All';
+}
+function websiteOrdersSparshChanged(){
+  _websiteReturnsTablePage=1;
+  _websiteReturnsOverviewLastKey='';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="20" class="ops-empty">Loading Website orders\u2026</td></tr>';
+  loadWebsiteReturnsOverview(false);
+}
 function renderWebsiteOrdersTable(data=_websiteReturnsOverview){
   const body=_wrEl('websiteReturnsBody'),note=_wrEl('wrTableNote'),pageLabel=_wrEl('wrTablePageLabel');
   const prev=_wrEl('wrTablePrev'),next=_wrEl('wrTableNext'),sizeEl=_wrEl('wrTablePageSize');
-  if(!data){if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading all Website orders…</td></tr>';return;}
+  if(!data){if(body)body.innerHTML='<tr><td colspan="20" class="ops-empty">Loading all Website orders…</td></tr>';return;}
+  _wrFillSparshOptions(data.sparsh_options);
   const rows=Array.isArray(data.table_orders)?data.table_orders:[];
   _websiteReturnsTableRows=rows;
   _websiteReturnsTableTotal=Math.max(0,Number(data.table_total||0));
@@ -24752,9 +24779,9 @@ function renderWebsiteOrdersTable(data=_websiteReturnsOverview){
   if(pageLabel)pageLabel.textContent=`Page ${_websiteReturnsTablePage.toLocaleString('en-IN')} of ${pages.toLocaleString('en-IN')}`;
   if(prev)prev.disabled=_websiteReturnsTablePage<=1;
   if(next)next.disabled=_websiteReturnsTablePage>=pages;
-  if(note)note.textContent=`${_websiteReturnsTableTotal.toLocaleString('en-IN')} Website order${_websiteReturnsTableTotal===1?'':'s'} match the active filters · showing ${rows.length.toLocaleString('en-IN')} on this page · Export CSV includes all filtered orders.`;
+  if(note)note.textContent=`${_websiteReturnsTableTotal.toLocaleString('en-IN')} Website order${_websiteReturnsTableTotal===1?'':'s'} match the active filters · showing ${rows.length.toLocaleString('en-IN')} on this page · Export CSV includes all filtered orders.`+(data.sparsh_error?` Sparsh Comment sheet could not be loaded (${data.sparsh_error}).`:'');
   if(!body)return;
-  if(!rows.length){body.innerHTML='<tr><td colspan="19" class="ops-empty">No Website orders match the selected filters.</td></tr>';return;}
+  if(!rows.length){body.innerHTML='<tr><td colspan="20" class="ops-empty">No Website orders match the selected filters.</td></tr>';return;}
   body.innerHTML=rows.map(r=>`<tr>
     <td style="font-weight:900;white-space:nowrap">${escHtml(r.display_order_code||'—')}</td>
     <td style="font-weight:800;min-width:170px">${escHtml(r.sku_text||'—')}</td>
@@ -24775,6 +24802,7 @@ function renderWebsiteOrdersTable(data=_websiteReturnsOverview){
     <td>${_wrFmtDate(r.bluedart_status_date)}</td>
     <td style="min-width:150px">${escHtml(r.bluedart_destination||r.city||'—')}</td>
     <td style="white-space:nowrap">${escHtml(r.bluedart_waybill||'—')}</td>
+    <td style="min-width:240px;font-weight:800">${r.sparsh_comment?escHtml(r.sparsh_comment):'<span style="color:var(--cn-mid)">\u2014</span>'}</td>
   </tr>`).join('');
 }
 function websiteOrdersPage(delta){
@@ -24783,7 +24811,7 @@ function websiteOrdersPage(delta){
   if(next===_websiteReturnsTablePage)return;
   _websiteReturnsTablePage=next;
   _websiteReturnsOverviewLastKey='';
-  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading Website orders…</td></tr>';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="20" class="ops-empty">Loading Website orders…</td></tr>';
   loadWebsiteReturnsOverview(false);
 }
 function websiteReturnsStatusGroupChanged(){
@@ -25084,7 +25112,7 @@ function renderWebsiteReturnsAnalytics(rows){
 function renderWebsiteReturns(){
   const body=_wrEl('websiteReturnsBody');
   if(!_websiteReturnsData){
-    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="19" class="ops-empty">Website order/return data has not loaded yet.</td></tr>';
+    if(body&&!_websiteReturnsLoading)body.innerHTML='<tr><td colspan="20" class="ops-empty">Website order/return data has not loaded yet.</td></tr>';
     return;
   }
   const rows=_websiteReturnsFilterRows().sort((a,b)=>String(b.status_date||b.pickup_date||b.order_date||'').localeCompare(String(a.status_date||a.pickup_date||a.order_date||''))||String(b.order_date||'').localeCompare(String(a.order_date||''))||String(b.order_id||'').localeCompare(String(a.order_id||''),undefined,{numeric:true}));
@@ -25103,7 +25131,7 @@ function renderWebsiteReturns(){
   renderWebsiteReturnsAnalytics(rows);
   // The main table is order-level and comes from /api/website-returns-overview.
   // Keep shipment-level BlueDart rows only for return KPIs/analysis above.
-  if(body&&!_websiteReturnsOverview)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading all Website orders…</td></tr>';
+  if(body&&!_websiteReturnsOverview)body.innerHTML='<tr><td colspan="20" class="ops-empty">Loading all Website orders…</td></tr>';
   const src=_wrEl('wrSourceNote');
   if(src){
     const unknown=Math.max(0,rows.length-classified);
@@ -25129,7 +25157,7 @@ async function loadWebsiteReturns(force=false){
   if(_websiteReturnsLoading)return;
   if(_websiteReturnsData&&!force){renderWebsiteReturns();renderSdWebsiteReturns();loadWebsiteReturnsOverview(false);return;}
   _websiteReturnsLoading=true;
-  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="19" class="ops-empty">Loading Website orders and return data…</td></tr>';
+  const body=_wrEl('websiteReturnsBody');if(body)body.innerHTML='<tr><td colspan="20" class="ops-empty">Loading Website orders and return data…</td></tr>';
   try{
     const r=await fetch('/api/website-returns'+(force?'?force=1':''),{cache:'no-store',headers:{'ngrok-skip-browser-warning':'true','Cache-Control':'no-cache'}});
     const d=await r.json();if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
@@ -25148,7 +25176,7 @@ async function loadWebsiteReturns(force=false){
     await loadWebsiteReturnsOverview(force);
   }catch(e){
     _websiteReturnsData=null;
-    if(body)body.innerHTML=`<tr><td colspan="19" class="ops-empty">Could not load Website Orders & Returns: ${escHtml(e?.message||e)}</td></tr>`;
+    if(body)body.innerHTML=`<tr><td colspan="20" class="ops-empty">Could not load Website Orders & Returns: ${escHtml(e?.message||e)}</td></tr>`;
     ['wrReasonAnalysis','wrStatusAnalysis','wrDestinationAnalysis'].forEach(id=>{const el=_wrEl(id);if(el)el.innerHTML='<div class="small-note">Live data load failed.</div>';});
     const src=_wrEl('wrSourceNote');if(src)src.textContent='Live sheet load failed. Use Refresh Live Sheet to retry.';
     const sdNote=_wrEl('sdWebsiteReturnsNote');if(sdNote&&_sdWebsiteReturnsFilterActive())sdNote.textContent='Website return sheet could not be loaded. Use Website Returns > Refresh Live Sheet and try again.';
@@ -25179,6 +25207,7 @@ function resetWebsiteReturnsFilters(){
   ['wrPaymentMode','wrOrigin','wrStatusDescription','wrReason'].forEach(id=>{const e=_wrEl(id);if(e)e.value='All';});
   _wrSetMultiSelectedValues('wrStatusGroup',[]);
   _wrSetMultiSelectedValues('wrTableStatusGroup',[]);
+  const _spEl=_wrEl('wrTableSparsh');if(_spEl)_spEl.value='All';
   _websiteReturnsOverviewLastKey='';
   applyWebsiteReturnsFilters();
 }
@@ -25194,9 +25223,9 @@ async function exportWebsiteReturnsCsv(){
     if(!r.ok||d.error)throw new Error(d.error||`HTTP ${r.status}`);
     const rows=Array.isArray(d.table_orders)?d.table_orders:[];
     if(!rows.length){alert('No Website orders match the active filters.');return;}
-    const headers=['Order ID','SKU(s)','CN Name(s)','Customer','Customer Contact','Payment Mode','Order Date','Order Stage','Website Order Status','Order Qty','Return Type','RTO Qty','Return Date','Return Reason','BlueDart Pickup','BlueDart Status','BlueDart Status Date','Destination','WayBill'];
+    const headers=['Order ID','SKU(s)','CN Name(s)','Customer','Customer Contact','Payment Mode','Order Date','Order Stage','Website Order Status','Order Qty','Return Type','RTO Qty','Return Date','Return Reason','BlueDart Pickup','BlueDart Status','BlueDart Status Date','Destination','WayBill','Sparsh Comment'];
     const vals=rows.map(r=>[
-      r.display_order_code||'',r.sku_text||'',_wrCnNamesForOrder(r)==='—'?'':_wrCnNamesForOrder(r),r.customer||r.bluedart_customer||'',r.customer_contact||'',r.payment_mode||'',r.order_date||'',r.order_stage||'',r.website_order_status||'',Number(r.qty||0),r.website_return_type||'',Number(r.rto_qty||0),r.website_return_date||'',r.website_return_reason||r.bluedart_rto_reason||'',r.bluedart_pickup_date||'',r.bluedart_status||'',r.bluedart_status_date||'',r.bluedart_destination||r.city||'',r.bluedart_waybill||''
+      r.display_order_code||'',r.sku_text||'',_wrCnNamesForOrder(r)==='—'?'':_wrCnNamesForOrder(r),r.customer||r.bluedart_customer||'',r.customer_contact||'',r.payment_mode||'',r.order_date||'',r.order_stage||'',r.website_order_status||'',Number(r.qty||0),r.website_return_type||'',Number(r.rto_qty||0),r.website_return_date||'',r.website_return_reason||r.bluedart_rto_reason||'',r.bluedart_pickup_date||'',r.bluedart_status||'',r.bluedart_status_date||'',r.bluedart_destination||r.city||'',r.bluedart_waybill||'',r.sparsh_comment||''
     ]);
     _dlCsv(headers,vals,'website_orders_filtered');
   }catch(e){alert('Website orders export failed: '+(e?.message||e));}
@@ -30071,6 +30100,75 @@ def _wr_current_month_summary(orders):
     }
 
 
+_SPARSH_COMMENT_CACHE = {"map": {}, "options": [], "error": "", "ts": 0.0}
+_SPARSH_COMMENT_TTL = 180
+_SPARSH_COMMENT_LOCK = threading.Lock()
+
+
+def _load_sparsh_comments(force=False):
+    """Load the live `sparsh comment` sheet -> {normalized Order ID: comment}.
+
+    Order ID is matched with the same canonical key as the Website Display Order Code.
+    The sheet has several blocks / section-label rows (e.g. "1-10 sep"); a row only
+    counts when it has an Order ID AND a non-blank `sparsh comment`. If an Order ID
+    repeats, the lowest (latest) non-blank comment wins. Failures never break the
+    Website Returns tab: the last good copy (or an empty map) is served with `error` set.
+    """
+    c = _SPARSH_COMMENT_CACHE
+    ttl = float(_SPARSH_COMMENT_TTL)
+    if not force and c.get("ts") and time.time() - float(c["ts"]) < ttl:
+        return c
+    with _SPARSH_COMMENT_LOCK:
+        if not force and c.get("ts") and time.time() - float(c["ts"]) < ttl:
+            return c
+        try:
+            df = _fetch_csv_fresh_raw(SPARSH_COMMENT_URL)
+            if df is None or df.empty:
+                raise ValueError("sparsh comment sheet is empty")
+            cols = [str(x).strip() for x in df.columns]
+            norm = [re.sub(r"\s+", " ", x).casefold() for x in cols]
+            idx_c = next((i for i, x in enumerate(norm) if x == "sparsh comment"), None)
+            if idx_c is None:
+                idx_c = next((i for i, x in enumerate(norm) if "sparsh" in x), None)
+            if idx_c is None:
+                raise ValueError("'sparsh comment' column not found")
+            idx_o = next((i for i, x in enumerate(norm) if x in ("order id", "orderid", "order no", "order no.", "order number")), 0)
+
+            def _cl(v):
+                if v is None:
+                    return ""
+                try:
+                    if pd.isna(v):
+                        return ""
+                except Exception:
+                    pass
+                return re.sub(r"\s+", " ", str(v).replace("\u00a0", " ")).strip()
+
+            m = {}
+            for o, cm in zip(df.iloc[:, idx_o].tolist(), df.iloc[:, idx_c].tolist()):
+                key = _daily_reporting_order_key(_cl(o))
+                comment = _cl(cm)
+                if key and comment:
+                    m[key] = comment
+            counts = {}
+            spell = {}
+            for comment in m.values():
+                cf = comment.casefold()
+                counts[cf] = counts.get(cf, 0) + 1
+                spell.setdefault(cf, {})
+                spell[cf][comment] = spell[cf].get(comment, 0) + 1
+            options = [
+                {"value": max(spell[cf].items(), key=lambda kv: kv[1])[0], "count": n}
+                for cf, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            ]
+            c["map"], c["options"], c["error"], c["ts"] = m, options, "", time.time()
+        except Exception as e:
+            c["error"] = str(e)[:200]
+            # keep any previous good map; retry in ~30s instead of hammering the sheet
+            c["ts"] = time.time() - ttl + 30
+    return c
+
+
 def _website_returns_overview_payload(force=False):
     """Return the order-level Website denominator under the active UI filters.
 
@@ -30119,6 +30217,7 @@ def _website_returns_overview_payload(force=False):
     reason = _arg("reason", "All") or "All"
     sku_q = _arg("sku").upper()
     search_q = _arg("search").casefold()
+    sparsh_q = _arg("sparsh", "All") or "All"
     table_all = _arg("table_all").casefold() in ("1", "true", "yes")
     try:
         table_page = max(1, int(float(_arg("table_page", "1") or 1)))
@@ -30338,6 +30437,20 @@ def _website_returns_overview_payload(force=False):
     # Main table uses the exact same filtered order set as the status mix. Keep
     # it server-paginated so 20k+ Website orders do not freeze the browser.
     table_source = status_orders
+    # Sparsh Comment (table-only column + filter): matched by Order ID.
+    sparsh_cache = _load_sparsh_comments(force=force)
+    sparsh_map = sparsh_cache.get("map") or {}
+
+    def _sparsh_of(rec):
+        return sparsh_map.get(_daily_reporting_order_key((rec or {}).get("display_order_code", "")), "")
+
+    sparsh_cf = sparsh_q.casefold()
+    if sparsh_cf == "__with__":
+        table_source = [r for r in status_orders if _sparsh_of(r)]
+    elif sparsh_cf == "__none__":
+        table_source = [r for r in status_orders if not _sparsh_of(r)]
+    elif sparsh_cf not in ("", "all"):
+        table_source = [r for r in status_orders if _sparsh_of(r).casefold() == sparsh_cf]
     table_total = len(table_source)
     table_pages = max(1, (table_total + table_page_size - 1) // table_page_size)
     table_page = min(table_page, table_pages)
@@ -30346,7 +30459,11 @@ def _website_returns_overview_payload(force=False):
     else:
         start = (table_page - 1) * table_page_size
         table_slice = table_source[start:start + table_page_size]
-    table_orders = [_wr_public_order(rec) for rec in table_slice]
+    table_orders = []
+    for rec in table_slice:
+        _o = _wr_public_order(rec)
+        _o["sparsh_comment"] = _sparsh_of(rec)
+        table_orders.append(_o)
 
     active_filter_count = sum(bool(v) for v in (
         order_from, order_to, pickup_from, pickup_to, status_from, status_to,
@@ -30389,6 +30506,8 @@ def _website_returns_overview_payload(force=False):
         "table_page_size": table_page_size,
         "table_pages": table_pages,
         "table_all": bool(table_all),
+        "sparsh_options": sparsh_cache.get("options") or [],
+        "sparsh_error": sparsh_cache.get("error") or "",
         "details_active": details_active,
         "details_total": len(detail_source) if details_active else 0,
         "details_limited": bool(details_active and len(detail_source) > 500),
