@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.66 (SECURITY: all 23 Google Sheet links/IDs removed from the source -> read from env vars / SHEET_LINKS_JSON / private sheet_links.json via _sheet_link(); /api/bulk-combo-upload is now admin-only on the server. Nothing else changed) · V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -810,17 +810,68 @@ import tempfile, hmac
 from flask import Flask, request, jsonify, render_template_string, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+# ── Google Sheet links (kept OUT of the source code) ──────────────────────────────
+# Every published-CSV link / sheet ID is read, in this order, from:
+#   1) its own environment variable (e.g. INV_URL, PAY_LEDGER_URL ...)
+#   2) one environment variable SHEET_LINKS_JSON  (a JSON object {"INV_URL": "...", ...})
+#   3) a private file sheet_links.json next to app.py (or the path in SHEET_LINKS_FILE)
+# Keep sheet_links.json OUT of git / public repos. A missing link only disables the
+# tab that needs it and prints a CONFIG WARNING at start-up.
+_SHEET_LINKS_DATA = None
+_SHEET_LINKS_WARNED = set()
+
+def _sheet_links_data():
+    global _SHEET_LINKS_DATA
+    if _SHEET_LINKS_DATA is not None:
+        return _SHEET_LINKS_DATA
+    data = {}
+    try:
+        raw_env = (os.environ.get("SHEET_LINKS_JSON") or "").strip()
+        if raw_env:
+            d = json.loads(raw_env)
+            if isinstance(d, dict):
+                data.update({str(k): str(v) for k, v in d.items() if v is not None})
+    except Exception as e:
+        print("*** CONFIG WARNING: SHEET_LINKS_JSON is not valid JSON:", str(e)[:120])
+    try:
+        path = (os.environ.get("SHEET_LINKS_FILE") or "").strip() or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "sheet_links.json")
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8") as fh:
+                d = json.load(fh)
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    if v is not None:
+                        data.setdefault(str(k), str(v))
+    except Exception as e:
+        print("*** CONFIG WARNING: could not read sheet_links.json:", str(e)[:120])
+    _SHEET_LINKS_DATA = data
+    return data
+
+def _sheet_link(name, optional=False):
+    v = (os.environ.get(name) or "").strip()
+    if v:
+        return v
+    v = str(_sheet_links_data().get(name, "") or "").strip()
+    if v:
+        return v
+    if not optional and name not in _SHEET_LINKS_WARNED:
+        _SHEET_LINKS_WARNED.add(name)
+        print("*** CONFIG WARNING: sheet link '%s' is not set (env var / SHEET_LINKS_JSON / sheet_links.json) -> the tab that uses it will have no data" % name)
+    return ""
+
+
 # ── Config ───────────────────────────────────────────────────
 # All Product / Inventory source. Prefer the actual live Google Sheet so manual
 # Sync gets the newest stock + Image Link values immediately. The older
 # published-to-web CSV stays as a fallback in case the live sheet is not
 # publicly readable from the deployment host.
-INV_LIVE_SPREADSHEET_ID = os.environ.get("INV_LIVE_SPREADSHEET_ID", "1xCW5ZHlVcyNLZdRw4H-6HZBFowRcujQbgUtkM1kmn-E").strip()
+INV_LIVE_SPREADSHEET_ID = _sheet_link("INV_LIVE_SPREADSHEET_ID")
 INV_LIVE_GID = os.environ.get("INV_LIVE_GID", "721993413").strip()   # Final
-INV_URL   = os.environ.get("INV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1511690188&single=true&output=csv").strip()
-COSA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1305194055&single=true&output=csv"
-DAILY_SALES_URL = os.environ.get("DAILY_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1170700346&single=true&output=csv").strip()
-COSA_ORDERDATE_URL = os.environ.get("COSA_ORDERDATE_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=372627801&single=true&output=csv")
+INV_URL = _sheet_link("INV_URL")
+COSA_URL = _sheet_link("COSA_URL")
+DAILY_SALES_URL = _sheet_link("DAILY_SALES_URL")
+COSA_ORDERDATE_URL = _sheet_link("COSA_ORDERDATE_URL")
 # Historical sales are stored beside this script by default. Railway/GitHub
 # deployments can override the location with HISTORICAL_SALES_XLSX. The two
 # sources never overlap: Excel is authoritative before 2026-04-01 (FY26-27),
@@ -834,15 +885,15 @@ if HISTORICAL_SALES_XLSX and not os.path.isabs(HISTORICAL_SALES_XLSX):
     HISTORICAL_SALES_XLSX = os.path.join(_APP_DIR, HISTORICAL_SALES_XLSX)
 HISTORICAL_SALES_CUTOFF = "2026-04-01"
 # Target sheet (Date, Stake Holder, Channel Type, Qty Target, SP Target)
-TARGET_URL = os.environ.get("TARGET_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1013197730&single=true&output=csv")
-MYNTRA_SALES_URL = os.environ.get("MYNTRA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1751797609&single=true&output=csv")
+TARGET_URL = _sheet_link("TARGET_URL")
+MYNTRA_SALES_URL = _sheet_link("MYNTRA_SALES_URL")
 # Exact marketplace order identities used only by the Sales Comparison AOV
 # analysis.  Raw order numbers never leave the backend; short SHA-1 tokens are
 # attached to their SKU + Order Date + marketplace instead.
-AMAZON_FLIPKART_SALES_URL = os.environ.get("AMAZON_FLIPKART_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1692691438&single=true&output=csv")
-NYKAA_SALES_URL = os.environ.get("NYKAA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=78618077&single=true&output=csv")
-TATA_SALES_URL = os.environ.get("TATA_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=0&single=true&output=csv")
-AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1360329447&single=true&output=csv")
+AMAZON_FLIPKART_SALES_URL = _sheet_link("AMAZON_FLIPKART_SALES_URL")
+NYKAA_SALES_URL = _sheet_link("NYKAA_SALES_URL")
+TATA_SALES_URL = _sheet_link("TATA_SALES_URL")
+AJIO_SALES_URL = _sheet_link("AJIO_SALES_URL")
 # Website Returns patch: contact + pickup/status analysis + COD/Prepaid + order-to-SKU join.
 # SKU Details Website filter also shows BlueDart return customers and RTO reasons.
 # Website courier-return tracker (bluedart report -> Bluedart return tab). This is intentionally
@@ -852,21 +903,12 @@ AJIO_SALES_URL = os.environ.get("AJIO_SALES_URL", "https://docs.google.com/sprea
 # "Bluedart return" tab (gid 1316634902). A new env-var name is used on
 # purpose so an old Railway WEBSITE_RETURNS_URL value cannot silently keep the
 # dashboard on the retired source.
-WEBSITE_RETURNS_URL = os.environ.get(
-    "BLUEDART_RETURNS_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTeCfLAlN7zrSsahoL4vbtthTCadfRyj5t9hsGrDX_ewFdy9T4qr9hSlgp7_1ncCLM5AfWIljaLJXdm/pub?gid=1316634902&single=true&output=csv",
-)
+WEBSITE_RETURNS_URL = _sheet_link("BLUEDART_RETURNS_URL")
 # Current Website Order Tracker workbook. The old BlueDart published tab can be
 # unavailable after sheet changes, so Website Returns also reads the live
 # RETURN &RTO sheet for return fields and New_Uniware for Notification Mobile.
-WEBSITE_ORDER_TRACKER_SPREADSHEET_ID = os.environ.get(
-    "WEBSITE_ORDER_TRACKER_SPREADSHEET_ID",
-    "107LfGjZTdJFEhYEb47qH5j5VbvZGPfG1P7jYmhxshxA",
-).strip()
-WEBSITE_ORDER_TRACKER_PUBLISHED_ID = os.environ.get(
-    "WEBSITE_ORDER_TRACKER_PUBLISHED_ID",
-    "2PACX-1vSegcNg_GA_w91K0AZzsdmAgb5jwOaD7ciZE8ORpe1dIWiLegdjKWjC4wV7s8ZOEKSu6gZStp3QBTH2",
-).strip()
+WEBSITE_ORDER_TRACKER_SPREADSHEET_ID = _sheet_link("WEBSITE_ORDER_TRACKER_SPREADSHEET_ID")
+WEBSITE_ORDER_TRACKER_PUBLISHED_ID = _sheet_link("WEBSITE_ORDER_TRACKER_PUBLISHED_ID")
 WEBSITE_RETURN_RTO_GID = os.environ.get("WEBSITE_RETURN_RTO_GID", "1711242164").strip()
 WEBSITE_UNIWARE_GID = os.environ.get("WEBSITE_UNIWARE_GID", "1485200781").strip()
 # Optional explicit CSV/GViz URLs can be supplied on Railway if sharing settings
@@ -875,13 +917,10 @@ WEBSITE_RETURN_RTO_LIVE_URL = os.environ.get("WEBSITE_RETURN_RTO_LIVE_URL", "").
 WEBSITE_UNIWARE_LIVE_URL = os.environ.get("WEBSITE_UNIWARE_LIVE_URL", "").strip()
 # "sparsh comment" sheet: Order ID (col A) -> `sparsh comment` (last column). Used only for the
 # Sparsh Comment column + filter in the Website Returns "All Website Orders" table.
-SPARSH_COMMENT_URL = os.environ.get(
-    "SPARSH_COMMENT_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSLSn6Ko65xdFykkIAgs6nuybEu0FUJDyrDa1IoDEnRCnwaZ-3nKPrDhNJYIKS4FnVVUFCezztwAXER/pub?gid=0&single=true&output=csv",
-).strip()
+SPARSH_COMMENT_URL = _sheet_link("SPARSH_COMMENT_URL")
 # Production / PPC-WIP sheet (A=Date, B=Order No, F=Order Type, G=Channel, H=SKU, I=Order Qty,
 # J=Recv Qty, K=Balance Qty, L=Delivery Date, M=Receiving Date)
-PRODUCTION_URL = (os.environ.get("PRODUCTION_LIVE_URL", "").strip() or os.environ.get("PRODUCTION_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=433995998&single=true&output=csv"))
+PRODUCTION_URL = _sheet_link("PRODUCTION_LIVE_URL", optional=True) or _sheet_link("PRODUCTION_URL")
 
 
 PKL_FILE  = "sku_finder.pkl"
@@ -31811,7 +31850,7 @@ def api_operations_inventory():
 #  📥 WIP RECEIVE — date-wise SKUs received (WIP-Recv sheet)
 #  Sheet columns: A=Date, B=Order No., C=SKU No., D=SUM of Qty.
 # ════════════════════════════════════════════════════════════════
-WIP_RECV_URL = os.environ.get("WIP_RECV_LIVE_URL", "").strip() or os.environ.get("WIP_RECV_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8UnAJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=1048577529&single=true&output=csv")
+WIP_RECV_URL = _sheet_link("WIP_RECV_LIVE_URL", optional=True) or _sheet_link("WIP_RECV_URL")
 _WIPRECV_CACHE = {"rows": None, "ts": 0.0}
 _WIPRECV_TTL = 60
 
@@ -34997,8 +35036,7 @@ def api_daily_revenue_glimpse():
 # standard PIN-region ranges par based). Matching seedha SKU se hoti hai:
 # sirf wahi rows count hoti hain jinka SKU curated Rakhi SKU list me hai —
 # yeh check client-side (Rakhi tab JS, _rkhInWhitelist) hota hai.
-RAKHI_WEBSITE_ADDR_URL = ("https://docs.google.com/spreadsheets/d/e/2PACX-1vSFHmWRlOplM6iDI4JYJA6gB8Un"
-                           "AJliu-Nuo3av_f2hThuOItMlhhaTA_qiyAo8tbClJLiwsYrC12I-/pub?gid=682845871&single=true&output=csv")
+RAKHI_WEBSITE_ADDR_URL = _sheet_link("RAKHI_WEBSITE_ADDR_URL")
 _RKH_CITY_CACHE = {"rows": None, "ts": 0}
 
 # Complete list of all 28 States + 8 UTs of India — Rakhi State/UT table
@@ -37327,15 +37365,12 @@ def api_taxon_details():
 # ════════════════════════════════════════════════════════════════
 #  💰 PAYMENTS — Ledger + Payment Terms se Due / Overdue (FIFO aging)
 # ════════════════════════════════════════════════════════════════
-PAY_LEDGER_URL = os.environ.get("PAY_LEDGER_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=745089354&single=true&output=csv")
-PAY_TERMS_URL = os.environ.get("PAY_TERMS_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSsgrfjsrSCqWYZaiyHYKHcyQnca-gsA2asz01Fjsb28J1y04CyLZDpVazFcdnre5zO95VOgQBOugXQ/pub?gid=1240216036&single=true&output=csv")
+PAY_LEDGER_URL = _sheet_link("PAY_LEDGER_URL")
+PAY_TERMS_URL = _sheet_link("PAY_TERMS_URL")
 # Planning workbook -> `recvd vs paid` sheet. This is the same source used by
 # the Planning Summary formulas for weekly Actual inward. Keep it separate from
 # Full_Ledger_Main because bank inward and ledger receipt posting can differ.
-PAY_RECEIVED_URL = os.environ.get("PAY_RECEIVED_URL",
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmZIJi58MyrgdxhjR2fvtxBwDuCJgPBjSK6puZ-w2qk2fL-fhytUAfExU2v4C-QcwKnj8aA1H_PAx7/pub?gid=99560727&single=true&output=csv")
+PAY_RECEIVED_URL = _sheet_link("PAY_RECEIVED_URL")
 _PAY_CACHE = {"data": None, "ts": 0}
 # Payments data changes throughout the day. Keep only a very short cache so
 # the Payments + Planning API calls can share one build, while Refresh always
@@ -38197,10 +38232,7 @@ def _load_payment_customer_ledger(customer_name):
 #  for Channel, Inward Projection, Actual, Pending, % Ach, Actual STR and
 #  Required STR. The loader discovers the real header below the title rows.
 # ════════════════════════════════════════════════════════════════
-PAY_PLANNING_URL = (
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmZIJi58MyrgdxhjR2fvtxBwDuCJgPBjSK6puZ-w2qk2fL-fhytUAfExU2v4C-QcwKnj8aA1H_PAx7/"
-    "pub?gid=0&single=true&output=csv"
-)
+PAY_PLANNING_URL = _sheet_link("PAY_PLANNING_URL")
 
 _PLAN_CACHE = {"data": None, "ts": 0}
 _PLAN_CACHE_TTL = max(0, int(os.environ.get("PAY_PLAN_CACHE_TTL_SECONDS", "30") or 30))
@@ -39325,6 +39357,9 @@ def api_bulk_combo_export_pdf():
 @app.route("/api/bulk-combo-upload", methods=["POST"])
 def api_bulk_combo_upload():
     """Read SKU + optional Qty from CSV/TXT/XLS/XLSX for the Bulk combo tab."""
+    # Bulk tab is admin-only in the UI; enforce it on the server too.
+    if session.get("role") != "admin":
+        return jsonify({"error": "admin only"}), 403
     f = request.files.get("file")
     if not f:
         return jsonify({"error": "No file uploaded"}), 400
