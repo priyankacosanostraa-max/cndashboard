@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.67 (FASTER COLD START: the order-date sheet (cosa_orderdate) and the Website sheet are now downloaded in the background right when the data build starts, instead of one after the other in the middle of it, so their download time overlaps the other work. Only the timing of the download changed; data and calculations are the same. Nothing else changed) · V25.66 (SNAPSHOT without a Railway Volume: if no Volume / SNAPSHOT_DIR is set, the saved dashboard copy is kept in the server temp folder, so it survives app/worker restarts inside the same container (a full redeploy still starts cold, because Railway wipes the container; only a Volume survives that). Nothing else changed) · V25.65 (DISK SNAPSHOT: after every successful data build (max once per 30 min) the finished dashboard data is saved to the Railway Volume; on redeploy/restart the app loads that saved copy first so the dashboard opens instantly, while the normal live refresh runs in the background and replaces it. Needs a Railway Volume (RAILWAY_VOLUME_MOUNT_PATH or SNAPSHOT_DIR); without a volume nothing changes. Nothing else changed) · V25.64 (SHEET CACHING: cossa + cosa_orderdate sheets are cached for 3 hours, All Product (inventory) sheet for 30 minutes, Website sheet for 2 hours. Every other sheet stays live-synced as before. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -976,12 +976,6 @@ STARTUP_GRACE_SECONDS = max(0, int(os.environ.get("STARTUP_GRACE_SECONDS", "6") 
 CN_CATALOG_START_DELAY = max(0, int(os.environ.get("CN_CATALOG_START_DELAY", "90") or 90))
 DATA_HTTP_CACHE_SECONDS = max(0, int(os.environ.get("DATA_HTTP_CACHE_SECONDS", "120") or 120))
 CACHE_TTL = 900   # bg refresher (600s) hamesha pehle chal jata hai — users ko inline refresh kabhi nahi jhelni padti
-# V25.64: per-sheet cache time (seconds) for the published Google-Sheet CSV downloads.
-# cossa + cosa_orderdate = 3 hours, All Product (inventory) = 30 min, Website sheet = 2 hours.
-# Every other sheet is NOT cached (live sync on every refresh).
-SHEET_CACHE_TTL_COSA      = max(0, int(os.environ.get("SHEET_CACHE_TTL_COSA", "10800") or 10800))       # cossa + cosa_orderdate
-SHEET_CACHE_TTL_INVENTORY = max(0, int(os.environ.get("SHEET_CACHE_TTL_INVENTORY", "1800") or 1800))     # All Product
-SHEET_CACHE_TTL_WEBSITE   = max(0, int(os.environ.get("SHEET_CACHE_TTL_WEBSITE", "7200") or 7200))       # Website sheet
 TZ        = ZoneInfo("Asia/Kolkata")
 
 CACHE    = {"data": None, "ts": 0, "debug": {}}
@@ -2341,89 +2335,6 @@ def _fetch_inventory_fresh():
     raise ValueError("No inventory source URL configured")
 
 
-# V25.64: TTL cache of the raw CSV bytes (zlib-compressed, so RAM stays low on small hosts).
-# Parsing / column selection / every calculation after the download is exactly the same as before;
-# only the network download is skipped while a cached copy is still fresh.
-_SHEET_CACHE = {}              # url -> (saved_at, zlib-compressed CSV bytes)
-_SHEET_CACHE_LOCK = threading.Lock()
-_SHEET_FETCH_LOCKS = {}        # url -> Lock (only one download per sheet at a time)
-
-
-def _sheet_cache_ttl(url):
-    """Cache seconds for a sheet URL. 0 = always live (no cache)."""
-    u = str(url or "").strip()
-    if not u:
-        return 0
-    if u in (str(COSA_URL).strip(), str(COSA_ORDERDATE_URL).strip()):
-        return SHEET_CACHE_TTL_COSA
-    try:
-        inv_urls = [str(x).strip() for x in _inventory_urls()] + [str(INV_URL).strip()]
-    except Exception:
-        inv_urls = [str(INV_URL).strip()]
-    if u in inv_urls:
-        return SHEET_CACHE_TTL_INVENTORY
-    if u == str(globals().get("RAKHI_WEBSITE_ADDR_URL", "") or "").strip():
-        return SHEET_CACHE_TTL_WEBSITE
-    return 0
-
-
-def _sheet_cached_download(url, ttl, download_fn):
-    """Return cached CSV bytes while younger than ttl, else download, store and return them."""
-    import zlib as _zlib
-    with _SHEET_CACHE_LOCK:
-        lock = _SHEET_FETCH_LOCKS.setdefault(url, threading.Lock())
-    with lock:
-        with _SHEET_CACHE_LOCK:
-            hit = _SHEET_CACHE.get(url)
-        if hit and (time.time() - hit[0]) < ttl:
-            try:
-                return _zlib.decompress(hit[1])
-            except Exception:
-                pass
-        content = download_fn()
-        try:
-            packed = _zlib.compress(content, 1)
-            with _SHEET_CACHE_LOCK:
-                _SHEET_CACHE[url] = (time.time(), packed)
-        except Exception:
-            pass
-        return content
-
-
-_SHEET_HEADERS = {"Cache-Control": "no-cache, no-store, max-age=0",
-                  "Pragma": "no-cache",
-                  "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard)"}
-
-
-def _sheet_download_bytes(url):
-    """Download one published Google CSV (cache-busted) and return the raw bytes."""
-    bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
-    r = requests.get(url + bust, headers=_SHEET_HEADERS, timeout=(8, 45), allow_redirects=True)
-    r.raise_for_status()
-    data = r.content
-    if "<html" in data[:512].decode("utf-8", errors="replace").lower():
-        raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
-    return data
-
-
-def _prefetch_sheets_bytes(urls):
-    """V25.67: download cached-type sheets ahead of time (one at a time, to keep RAM low).
-    Only fills the V25.64 sheet cache; the normal fetch later finds the bytes ready (or waits
-    for the download already in progress). Failures are ignored - the normal fetch retries."""
-    for u in urls:
-        try:
-            ttl = _sheet_cache_ttl(u)
-            if ttl <= 0:
-                continue
-            with _SHEET_CACHE_LOCK:
-                hit = _SHEET_CACHE.get(u)
-            if hit and (time.time() - hit[0]) < ttl:
-                continue                      # already cached and fresh
-            _sheet_cached_download(u, ttl, lambda u=u: _sheet_download_bytes(u))
-        except Exception as e:
-            print("sheet prefetch skipped:", str(e)[:100])
-
-
 def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     """Published Google CSV fetch + V24.71 BT SKU numeric suffix cleanup."""
     return _bt_strip_frame(_fetch_csv_fresh_raw(url, select_groups, select_positions))
@@ -2452,13 +2363,14 @@ def _fetch_csv_fresh_raw(url, select_groups=None, select_positions=None):
             txt = content.decode("utf-8", errors="replace")
             return pd.read_csv(io.StringIO(txt), **kwargs)
 
-    def _download():
-        return _sheet_download_bytes(url)
-
     for attempt in range(3):
         try:
-            _ttl = _sheet_cache_ttl(url)   # V25.64: cossa/cosa_orderdate 3h, inventory 30m, website 2h, rest live
-            content = _sheet_cached_download(url, _ttl, _download) if _ttl > 0 else _download()
+            bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
+            r = requests.get(url + bust, headers=headers, timeout=(8, 45), allow_redirects=True)
+            r.raise_for_status()
+            content = r.content
+            if "<html" in content[:512].decode("utf-8", errors="replace").lower():
+                raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
             read_kwargs = {"dtype": str, "on_bad_lines": "skip"}
             raw_cols = []
             if select_groups or select_positions:
@@ -3351,13 +3263,6 @@ def _refresh_data():
         # Inventory and the main sales sheet are independent. Downloading them
         # in parallel removes one full network wait from every cold/manual sync
         # while keeping the exact same downstream calculations.
-        try:   # V25.67: pre-download the order-date + Website sheets in the background (own try: can never break the build)
-            threading.Thread(
-                target=_prefetch_sheets_bytes,
-                args=((COSA_ORDERDATE_URL, globals().get("RAKHI_WEBSITE_ADDR_URL", "")),),
-                daemon=True, name="cn-sheet-prefetch").start()
-        except Exception:
-            pass
         from concurrent.futures import ThreadPoolExecutor
         _wstage("fetching", "Downloading inventory + sales sheets in parallel…")
         with ThreadPoolExecutor(max_workers=3, thread_name_prefix="cn-core-fetch") as ex:
@@ -5268,7 +5173,6 @@ def _refresh_data():
     CACHE["orderdate_customer_activity"] = orderdate_customer_activity
     CACHE["orderdate_customer_activity_ts"] = orderdate_customer_activity_ts
     CACHE["ts"]    = time.time()
-    _COSTS_CACHE["rows"] = None   # profit margin cache bhi refresh karo
     CACHE["debug"] = dbg
     return CACHE["data"]
 
@@ -7391,63 +7295,6 @@ footer{background:var(--cn-dark) !important;border-top:1px solid rgba(212,175,55
 .combo-iv b.muted{color:#b0a890}
 
 
-/* ── Profit Margin tab ── */
-.pm-mode{display:flex;justify-content:center;margin:6px 0 6px}
-.pm-mode-btn{border:none;background:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;
-  letter-spacing:.04em;color:var(--cn-mid);padding:11px 22px;border-radius:999px;transition:.2s;white-space:nowrap}
-.pm-mode{background:#fff;border:1px solid var(--cn-line);border-radius:999px;padding:5px;display:inline-flex;
-  margin-left:auto;margin-right:auto;box-shadow:0 8px 22px rgba(26,22,16,.08)}
-.pm-mode-btn.on{background:var(--cn-dark);color:#fff}
-.pm-note{text-align:center;color:var(--cn-mid);font-size:12.5px;margin:10px 0 20px}
-.pm-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:20px;align-items:start}
-@media(max-width:860px){.pm-grid{grid-template-columns:1fr}}
-.pm-inputs{padding:20px !important}
-.pm-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
-.pm-num{font-family:'JetBrains Mono',monospace !important;font-weight:700 !important;text-align:right}
-.pm-skurow{margin-bottom:16px}
-.pm-skulist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:#fff;
-  border:1px solid var(--cn-line);border-radius:11px;box-shadow:0 14px 36px rgba(26,22,16,.14);
-  max-height:240px;overflow:auto;display:none}
-.pm-skulist.show{display:block}
-.pm-skuopt{padding:10px 14px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:13px;
-  font-weight:600;display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #f3eede}
-.pm-skuopt:last-child{border-bottom:none}
-.pm-skuopt:hover{background:var(--cn-ivory)}
-.pm-skuopt .mrp{color:var(--cn-gold);font-weight:700}
-.pm-skustatus{font-size:12px;color:var(--cn-mid);margin-top:8px;min-height:16px}
-.pm-sp{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
-  background:linear-gradient(120deg,#fbf6e8,#fdfcf7);border:1px solid var(--cn-line);border-radius:13px;margin-bottom:6px}
-.pm-sp-lab{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cn-mid);font-weight:800}
-.pm-sp-val{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;color:var(--cn-dark)}
-.pm-seclabel{display:flex;align-items:center;gap:10px;margin:18px 0 14px}
-.pm-seclabel span:first-child{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--cn-mid);font-weight:800}
-.pm-seclabel .ln{flex:1;height:1px;background:var(--cn-line)}
-.pm-result{position:sticky;top:18px;background:#fff;border:1px solid var(--cn-line);border-radius:16px;
-  overflow:hidden;box-shadow:0 14px 40px rgba(26,22,16,.10)}
-.pm-hero{padding:24px;text-align:center;background:linear-gradient(160deg,#1f1a12,#13100b);color:#fff}
-.pm-hero-lab{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--cn-gold2);font-weight:800;margin-bottom:8px}
-.pm-margin{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:58px;line-height:1}
-.pm-margin.pos{color:#9be3a8}.pm-margin.neg{color:#ff9b76}
-.pm-profit{margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#e9e0c8}
-.pm-verdict{display:inline-block;margin-top:12px;font-size:11px;font-weight:800;letter-spacing:.1em;
-  text-transform:uppercase;padding:6px 14px;border-radius:999px}
-.pm-verdict.good{background:rgba(155,227,168,.16);color:#9be3a8}
-.pm-verdict.thin{background:rgba(212,175,55,.16);color:var(--cn-gold2)}
-.pm-verdict.loss{background:rgba(255,155,118,.16);color:#ff9b76}
-.pm-break{padding:18px 20px 20px}
-.pm-br{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;
-  border-bottom:1px dashed var(--cn-line);font-size:13px}
-.pm-br:last-child{border-bottom:none}
-.pm-br span:first-child{color:var(--cn-mid)}
-.pm-br span:last-child{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--cn-dark)}
-.pm-br.head span:first-child{color:var(--cn-dark);font-weight:700}
-.pm-br.minus span:last-child{color:var(--cn-red,#b4451f)}
-.pm-br.total{margin-top:6px;padding-top:12px;border-top:2px solid var(--cn-dark);border-bottom:none}
-.pm-br.total span:first-child{font-weight:800;text-transform:uppercase;letter-spacing:.06em;font-size:11.5px;color:var(--cn-dark)}
-.pm-br.total span:last-child{font-size:17px}
-.pm-br.profit-row span:last-child{font-size:17px}
-.pm-br.profit-row.pos span:last-child{color:#2f6f3e}
-.pm-br.profit-row.neg span:last-child{color:#b4451f}
 
 
 /* Production table: compact rows, wrapped text, clearer SKU images */
@@ -7589,7 +7436,7 @@ input::placeholder, textarea::placeholder{font-weight:500 !important;opacity:.8}
 
 /* Global SKU scene flags are appended to the SKU label itself so every existing
    table/card/search result shows the stock scene immediately. */
-.sku,.sku-link,.tc-sku,.combo-sku,.prod-sku-text,.bulk-product-name,.pm-skuopt{line-height:1.45}
+.sku,.sku-link,.tc-sku,.combo-sku,.prod-sku-text,.bulk-product-name{line-height:1.45}
 
 
 
@@ -7818,7 +7665,6 @@ table.ro img,
 .ops-page .ops-num,
 .ops-page .anom-metric,
 #vRakhi .rkh-metric,
-.pm-num,
 .prod-num,
 #vBulk .bulk-money{
   text-align:center !important;
@@ -8393,7 +8239,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   <button class="menu-item" id="m38" onclick="showTab('wipreceive')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 8h16v11H4zM4 8l2-4h12l2 4"/><path d="M12 11v5M9.5 13.5 12 16l2.5-2.5"/></svg></span><span>WIP Receive</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#2f6f3e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m39" onclick="showTab('ramyana')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM4 10h16M9 5v14"/></svg></span><span>Ramayana</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
   <button class="menu-item" id="m40" onclick="showTab('webtop50')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span>Website Best Sellers</span><span style="margin-left:auto;padding:2px 6px;border-radius:999px;background:#b3261e;color:#fff;font-size:7px;font-weight:900">NEW</span></button>
-  <button class="menu-item" id="m14" onclick="showTab('profit')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7c0-2-2-3-4-3S8 5 8 7s2 3 4 3 4 1 4 3-2 4-4 4-4-1-4-3"/></svg></span><span>Profit Margin</span></button>
   <button class="menu-item" id="m16" onclick="showTab('atrisk')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 20c0-4 3-7 7-7 2 0 4 .8 5.2 2M18 15v3M18 21h.01"/></svg></span><span>At-Risk Customers</span></button>
   <button class="menu-item" id="m18" onclick="showTab('taxon')"><span class="cn-menu-icon"><svg viewBox="0 0 24 24"><path d="M4 5h6v6H4zM14 5h6v6h-6zM4 15h6v4H4zM14 15h6v4h-6z"/></svg></span><span>Taxon Details</span></button>
   <button class="menu-item" id="m20" onclick="showTab('rakhi')"><span class="cn-menu-icon cn-rakhi-icon"></span><span>Rakhi</span></button>
@@ -9394,109 +9239,6 @@ select.lg-in option{background:#fff;color:#1a1610}
   </div>
   </div>
 
-
-  <div id="vProfit" style="display:none">
-  <div class="insights-head">
-    <div>
-      <div class="insights-title">Net Profit Margin</div>
-    </div>
-    <div class="insight-toolbar-actions">
-      <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:2px;background:#2f6f3e" onclick="exportProfit()">Export CSV</button>
-      <button class="go-btn" style="width:auto;padding:10px 16px;letter-spacing:2px;background:#f3f6fb;color:#111" onclick="resetProfit()">Reset</button>
-    </div>
-  </div>
-
-  <div class="pm-mode">
-    <button class="pm-mode-btn on" id="pmOld" onclick="pmSetMode('old')">Old Product · auto from sheet</button>
-    <button class="pm-mode-btn" id="pmNew" onclick="pmSetMode('new')">New Product · manual</button>
-  </div>
-  <div class="pm-note" id="pmNote">Pick a SKU — MRP and Product Cost load from the All Product sheet. You can still edit anything.</div>
-
-  <div class="pm-grid">
-    <div class="filter-box pm-inputs">
-      <div class="pm-skurow" id="pmSkuRow">
-        <label class="fl">Find SKU</label>
-        <div style="position:relative">
-          <input class="fi" id="pmSkuSearch" placeholder="Type SKU, e.g. BH-1290" autocomplete="off" oninput="pmSkuType()" onfocus="pmSkuType()" style="font-family:'JetBrains Mono',monospace;font-weight:700">
-          <div class="pm-skulist" id="pmSkuList"></div>
-        </div>
-        <div class="pm-skustatus" id="pmSkuStatus">Loading catalogue…</div>
-      </div>
-
-      <div class="pm-two">
-        <div class="fc"><label class="fl">MRP (₹)</label><input type="number" class="fi pm-num" id="pmMrp" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Discount (%)</label><input type="number" class="fi pm-num" id="pmDisc" placeholder="0" min="0" max="100" step="0.5" oninput="pmCalc()"></div>
-      </div>
-
-      <div class="pm-sp">
-        <span class="pm-sp-lab">Selling Price (SP)</span>
-        <span class="pm-sp-val" id="pmSpOut">₹0</span>
-      </div>
-
-      <div class="pm-two">
-        <div class="fc"><label class="fl">Sold Qty (for total)</label><input type="number" class="fi pm-num" id="pmQty" placeholder="1" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Net Revenue (COSA)</label><input type="number" class="fi pm-num" id="pmNetRev" placeholder="0" min="0" readonly style="background:#f5f0e6"></div>
-      </div>
-
-      <div class="pm-seclabel"><span>Deductions</span><span class="ln"></span></div>
-
-      <div class="fc" style="margin-bottom:12px"><label class="fl">Commission (% of SP)</label><input type="number" class="fi pm-num" id="pmComm" placeholder="0" min="0" step="0.1" oninput="pmCalc()"></div>
-      <div class="pm-two">
-        <div class="fc"><label class="fl">Product Cost (₹)</label><input type="number" class="fi pm-num" id="pmProdCost" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Box Cost (₹)</label><input type="number" class="fi pm-num" id="pmBox" placeholder="0" min="0" oninput="pmCalc()"></div>
-      </div>
-      <div class="pm-two">
-        <div class="fc"><label class="fl">Pack Fee (₹)</label><input type="number" class="fi pm-num" id="pmPack" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Shipping Fees (₹)</label><input type="number" class="fi pm-num" id="pmShip" placeholder="0" min="0" oninput="pmCalc()"></div>
-      </div>
-      <div class="pm-two">
-        <div class="fc"><label class="fl">Ad Spend (₹)</label><input type="number" class="fi pm-num" id="pmAd" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">PG Charges (₹)</label><input type="number" class="fi pm-num" id="pmPG" placeholder="0" min="0" oninput="pmCalc()"></div>
-      </div>
-      <div class="pm-two">
-        <div class="fc"><label class="fl">CR / RTO Charges (₹)</label><input type="number" class="fi pm-num" id="pmRTO" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Inwarding Fee (₹)</label><input type="number" class="fi pm-num" id="pmInward" placeholder="0" min="0" oninput="pmCalc()"></div>
-      </div>
-      <div class="pm-two">
-        <div class="fc"><label class="fl">Storage Fee (₹)</label><input type="number" class="fi pm-num" id="pmStore" placeholder="0" min="0" oninput="pmCalc()"></div>
-        <div class="fc"><label class="fl">Fulfillment Fee (₹)</label><input type="number" class="fi pm-num" id="pmFulfil" placeholder="0" min="0" oninput="pmCalc()"></div>
-      </div>
-      <div class="fc"><label class="fl">Inventory Recall (₹)</label><input type="number" class="fi pm-num" id="pmRecall" placeholder="0" min="0" oninput="pmCalc()"></div>
-    </div>
-
-    <div class="pm-result">
-      <div class="pm-hero">
-        <div class="pm-hero-lab">Net Profit Margin</div>
-        <div class="pm-margin pos" id="pmMargin">0.0%</div>
-        <div class="pm-profit" id="pmProfitTop">₹0 profit</div>
-        <div><span class="pm-verdict thin" id="pmVerdict">Enter values</span></div>
-      </div>
-      <div class="pm-break">
-        <div class="pm-br head"><span>Selling Price</span><span id="pmBrSP">₹0</span></div>
-        <div class="pm-br minus"><span>Commission</span><span id="pmBrComm">−₹0</span></div>
-        <div class="pm-br minus"><span>Product Cost</span><span id="pmBrProd">−₹0</span></div>
-        <div class="pm-br minus"><span>Box Cost</span><span id="pmBrBox">−₹0</span></div>
-        <div class="pm-br minus"><span>Pack Fee</span><span id="pmBrPack">−₹0</span></div>
-        <div class="pm-br minus"><span>Shipping Fees</span><span id="pmBrShip">−₹0</span></div>
-        <div class="pm-br minus"><span>Ad Spend</span><span id="pmBrAd">−₹0</span></div>
-        <div class="pm-br minus"><span>PG Charges</span><span id="pmBrPG">−₹0</span></div>
-        <div class="pm-br minus"><span>CR / RTO Charges</span><span id="pmBrRTO">−₹0</span></div>
-        <div class="pm-br minus"><span>Inwarding Fee</span><span id="pmBrInward">−₹0</span></div>
-        <div class="pm-br minus"><span>Storage Fee</span><span id="pmBrStore">−₹0</span></div>
-        <div class="pm-br minus"><span>Fulfillment Fee</span><span id="pmBrFulfil">−₹0</span></div>
-        <div class="pm-br minus"><span>Inventory Recall</span><span id="pmBrRecall">−₹0</span></div>
-        <div class="pm-br total"><span>Total Deductions <span style="opacity:.6;font-weight:600">(per unit)</span></span><span id="pmBrTotal">−₹0</span></div>
-        <div class="pm-br profit-row pos"><span>Profit Amount <span style="opacity:.6;font-weight:600">(per unit)</span></span><span id="pmBrProfit">₹0</span></div>
-      </div>
-      <div class="pm-break" id="pmTotalBox" style="margin-top:14px">
-        <div class="pm-br head"><span>Sold Qty</span><span id="pmTotQty">1</span></div>
-        <div class="pm-br"><span>Total Selling Value</span><span id="pmTotSP">₹0</span></div>
-        <div class="pm-br minus"><span>Total Deductions</span><span id="pmTotDed">−₹0</span></div>
-        <div class="pm-br profit-row pos"><span>Total Profit (× Qty)</span><span id="pmTotProfit">₹0</span></div>
-      </div>
-    </div>
-  </div>
-  </div>
 
   <div id="vProduction" style="display:none">
   <div class="insights-head">
@@ -11889,7 +11631,6 @@ const MENU_TAB_META = {
   m12: {name:"Discounts",        desc:"MRP discount, selling price and revenue leakage."},
   m13: {name:"Production",       desc:"Orders, received quantity, balance and delivery."},
   m38: {name:"WIP Receive",      desc:"Date-wise SKUs received from production with image, received quantity and date filter."},
-  m14: {name:"Profit",           desc:"SKU revenue, cost, margin and profit."},
   m16: {name:"Customer Risk",    desc:"Customers whose buying activity is falling."},
   m18: {name:"Categories",       desc:"Category-wise SKUs, quantity and revenue."},
   m20: {name:"Rakhi",            desc:"Rakhi sales, stock, returns and top products."},
@@ -11912,7 +11653,7 @@ const MENU_TAB_META = {
 function _menuTabAllowedForRole(item){
   const id = String(item?.id || '');
   const employee = LOGIN_ROLE === 'employee';
-  if (employee) return !['m2','m7','m12','m14','m21'].includes(id);
+  if (employee) return !['m2','m7','m12','m21'].includes(id);
   return id !== 'm11';
 }
 
@@ -15611,9 +15352,6 @@ function applyRoleUI(){
   // Production admin + employee dono ko.
   const prodBtn = document.getElementById('m13');
   if (prodBtn) prodBtn.style.display = '';
-  // Profit Margin SIRF admin ko (cost/margin sensitive).
-  const pmBtn = document.getElementById('m14');
-  if (pmBtn) pmBtn.style.display = isEmployee ? 'none' : '';
   // Bulk Make Combo contains selling-price information, so keep it admin-only.
   const bulkBtn = document.getElementById('m21');
   if (bulkBtn) bulkBtn.style.display = isEmployee ? 'none' : '';
@@ -20765,179 +20503,6 @@ async function exportProduction(format){
 window.loadProduction = loadProduction; window.exportProduction = exportProduction; window._productionQueryString = _productionQueryString;
 window.resetProduction = resetProduction; window.prodSearchDebounced = prodSearchDebounced;
 
-
-/* ── PROFIT MARGIN (admin) ── */
-let PM_MODE = 'old';
-let PM_CATALOG = [];
-let pmLoaded = false;
-const pmRupee = n => '₹' + Math.round(n).toLocaleString('en-IN');
-const pmMinus = n => (n>0?'−':'') + '₹' + Math.round(Math.abs(n)).toLocaleString('en-IN');
-const pmNum = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v)?0:v; };
-
-function pmInit(){
-  pmSetMode(PM_MODE);
-  pmCalc();
-}
-function pmSetMode(m){
-  PM_MODE = m;
-  document.getElementById('pmOld').classList.toggle('on', m==='old');
-  document.getElementById('pmNew').classList.toggle('on', m==='new');
-  document.getElementById('pmSkuRow').style.display = (m==='old') ? '' : 'none';
-  if (m==='old'){
-    document.getElementById('pmNote').innerHTML = 'Pick a SKU — MRP and Product Cost load from the All Product sheet. You can still edit anything.';
-    if (!pmLoaded) pmLoadCatalog(false); else {
-      // already loaded — agar koi bhi MRP/cost 0 hai to fresh load karo
-      const needsRefresh = PM_CATALOG.length > 0 && PM_CATALOG.every(c => !c.mrp && !c.cost);
-      if (needsRefresh){ pmLoaded = false; pmLoadCatalog(true); }
-    }
-  } else {
-    document.getElementById('pmNote').textContent = 'Enter everything by hand — nothing is pulled from the sheet.';
-    const l = document.getElementById('pmSkuList'); if (l) l.classList.remove('show');
-  }
-}
-function pmLoadCatalog(force){
-  const st = document.getElementById('pmSkuStatus');
-  st.textContent = 'Loading catalogue…';
-  const url = '/api/sku-costs' + (force ? '?force=true' : '');
-  fetch(url, {headers:{'ngrok-skip-browser-warning':'true'}})
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
-    .then(d => {
-      if (d.error){ st.textContent = d.error; return; }
-      PM_CATALOG = d.rows || [];
-      pmLoaded = true;
-      const withMrp  = PM_CATALOG.filter(c => c.mrp  > 0).length;
-      const withCost = PM_CATALOG.filter(c => c.cost > 0).length;
-      st.textContent = PM_CATALOG.length.toLocaleString('en-IN') + ' SKUs loaded'
-        + (withMrp  ? ' • ' + withMrp.toLocaleString('en-IN')  + ' with MRP'  : '')
-        + (withCost ? ' • ' + withCost.toLocaleString('en-IN') + ' with Cost' : '')
-        + ' — start typing a SKU.';
-    })
-    .catch(err => { st.innerHTML = 'Could not load SKUs. <button onclick="pmLoadCatalog(true)" style="text-decoration:underline;background:none;border:none;cursor:pointer;color:#d4af5a">Retry</button> or switch to <b>New Product</b>.'; });
-}
-function pmSkuType(){
-  const q = (document.getElementById('pmSkuSearch').value || '').trim().toLowerCase();
-  const list = document.getElementById('pmSkuList');
-  if (!pmLoaded){ pmLoadCatalog(); }
-  if (!q){ list.classList.remove('show'); return; }
-  const matches = PM_CATALOG.filter(c => c.sku.toLowerCase().includes(q)).slice(0,40);
-  list.innerHTML = matches.length
-    ? matches.map(c => {
-        const im = (c.image_url && String(c.image_url).trim() && String(c.image_url).toLowerCase()!=='nan')
-          ? `<img src="${escHtml(c.image_url)}" loading="lazy" style="width:26px;height:26px;object-fit:cover;border-radius:5px;margin-right:8px;vertical-align:middle" onerror="this.style.display='none'">` : '';
-        return `<div class="pm-skuopt" onclick="pmPickSku('${c.sku.replace(/'/g,"\\'")}')"><span>${im}${escHtml(skuLabel(c.sku, c.sku_name))}</span><span class="mrp">${c.mrp?'MRP '+pmRupee(c.mrp):'MRP —'}${c.cost?' · Cost '+pmRupee(c.cost):''}</span></div>`;
-      }).join('')
-    : '<div class="pm-skuopt" style="cursor:default;color:#a99">No match</div>';
-  list.classList.add('show');
-}
-function pmPickSku(sku){
-  const c = PM_CATALOG.find(x => x.sku === sku);
-  if (!c) return;
-  document.getElementById('pmSkuSearch').value = c.sku;
-  document.getElementById('pmSkuList').classList.remove('show');
-  document.getElementById('pmMrp').value = c.mrp || '';
-  document.getElementById('pmProdCost').value = c.cost || '';
-  const qEl = document.getElementById('pmQty'); if (qEl) qEl.value = c.final_qty || '';
-  const nrEl = document.getElementById('pmNetRev'); if (nrEl) nrEl.value = c.net_revenue ? Math.round(c.net_revenue) : '';
-  const im = (c.image_url && String(c.image_url).trim() && String(c.image_url).toLowerCase()!=='nan')
-    ? `<img src="${escHtml(c.image_url)}" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--cn-line);margin-right:10px;vertical-align:middle" onerror="this.style.display='none'">` : '';
-  document.getElementById('pmSkuStatus').innerHTML = `${im}<b>${escHtml(skuLabel(c.sku, c.sku_name))}</b> · MRP ${c.mrp?pmRupee(c.mrp):'—'} · Cost ${c.cost?pmRupee(c.cost):'—'} · Sold Qty ${c.final_qty||0} · Net Rev ${c.net_revenue?pmRupee(c.net_revenue):'—'}. Edit any field if needed.`;
-  pmCalc();
-}
-document.addEventListener('click', e => {
-  const l = document.getElementById('pmSkuList');
-  if (l && !e.target.closest('#pmSkuRow')) l.classList.remove('show');
-});
-function pmCalc(){
-  const mrp = pmNum('pmMrp'), disc = pmNum('pmDisc');
-  const sp = Math.max(0, mrp * (1 - disc/100));
-  document.getElementById('pmSpOut').textContent = pmRupee(sp);
-  const comm = sp * pmNum('pmComm')/100;
-  const items = {
-    pmBrComm: comm, pmBrProd: pmNum('pmProdCost'), pmBrBox: pmNum('pmBox'),
-    pmBrPack: pmNum('pmPack'), pmBrShip: pmNum('pmShip'), pmBrAd: pmNum('pmAd'),
-    pmBrPG: pmNum('pmPG'), pmBrRTO: pmNum('pmRTO'), pmBrInward: pmNum('pmInward'),
-    pmBrStore: pmNum('pmStore'), pmBrFulfil: pmNum('pmFulfil'), pmBrRecall: pmNum('pmRecall'),
-  };
-  let total = 0;
-  for (const id in items){ total += items[id]; document.getElementById(id).textContent = pmMinus(items[id]); }
-  const profit = sp - total;
-  const margin = sp>0 ? (profit/sp*100) : 0;
-  document.getElementById('pmBrSP').textContent = pmRupee(sp);
-  document.getElementById('pmBrTotal').textContent = pmMinus(total);
-  const brProfit = document.getElementById('pmBrProfit');
-  brProfit.textContent = (profit<0?'−':'') + '₹' + Math.abs(Math.round(profit)).toLocaleString('en-IN');
-  const prow = brProfit.closest('.profit-row');
-  prow.classList.toggle('pos', profit>=0); prow.classList.toggle('neg', profit<0);
-  const mEl = document.getElementById('pmMargin');
-  mEl.textContent = (sp>0?margin.toFixed(1):'0.0') + '%';
-  mEl.classList.toggle('pos', profit>=0); mEl.classList.toggle('neg', profit<0);
-  document.getElementById('pmProfitTop').textContent = (profit<0?'−':'') + '₹' + Math.abs(Math.round(profit)).toLocaleString('en-IN') + ' profit';
-  // Per-unit × Final Qty = Total
-  const qty = Math.max(0, pmNum('pmQty')) || 0;
-  const tQty = qty || 1;
-  document.getElementById('pmTotQty').textContent = (qty||1).toLocaleString('en-IN');
-  document.getElementById('pmTotSP').textContent = pmRupee(sp * tQty);
-  document.getElementById('pmTotDed').textContent = pmMinus(total * tQty);
-  const totProfit = profit * tQty;
-  const tp = document.getElementById('pmTotProfit');
-  tp.textContent = (totProfit<0?'−':'') + '₹' + Math.abs(Math.round(totProfit)).toLocaleString('en-IN');
-  const tprow = tp.closest('.profit-row');
-  tprow.classList.toggle('pos', totProfit>=0); tprow.classList.toggle('neg', totProfit<0);
-  const v = document.getElementById('pmVerdict');
-  if (sp<=0){ v.textContent='Enter values'; v.className='pm-verdict thin'; }
-  else if (profit<0){ v.textContent='Loss — below cost'; v.className='pm-verdict loss'; }
-  else if (margin<10){ v.textContent='Thin margin'; v.className='pm-verdict thin'; }
-  else { v.textContent='Healthy margin'; v.className='pm-verdict good'; }
-}
-function resetProfit(){
-  document.querySelectorAll('#vProfit input').forEach(i => i.value='');
-  const s = document.getElementById('pmSkuSearch'); if (s) s.value='';
-  if (PM_MODE==='old' && pmLoaded) document.getElementById('pmSkuStatus').textContent = PM_CATALOG.length.toLocaleString('en-IN') + ' SKUs loaded — start typing a SKU.';
-  pmCalc();
-}
-window.pmInit = pmInit; window.pmSetMode = pmSetMode; window.pmSkuType = pmSkuType;
-window.pmPickSku = pmPickSku; window.pmCalc = pmCalc; window.resetProfit = resetProfit;
-
-function exportProfit(){
-  const g = id => pmNum(id);
-  const mrp = g('pmMrp'), disc = g('pmDisc');
-  const sp = Math.max(0, mrp*(1-disc/100));
-  const comm = sp * g('pmComm')/100;
-  const ded = [
-    ['MRP', mrp], ['Discount %', disc], ['Selling Price (SP)', Math.round(sp)],
-    ['Commission % of SP', g('pmComm')], ['Commission ₹', Math.round(comm)],
-    ['Product Cost', g('pmProdCost')], ['Box Cost', g('pmBox')], ['Pack Fee', g('pmPack')],
-    ['Shipping Fees', g('pmShip')], ['Ad Spend', g('pmAd')], ['PG Charges', g('pmPG')],
-    ['CR/RTO Charges', g('pmRTO')], ['Inwarding Fee', g('pmInward')], ['Storage Fee', g('pmStore')],
-    ['Fulfillment Fee', g('pmFulfil')], ['Inventory Recall', g('pmRecall')],
-  ];
-  const totalDed = comm + g('pmProdCost')+g('pmBox')+g('pmPack')+g('pmShip')+g('pmAd')+g('pmPG')+g('pmRTO')+g('pmInward')+g('pmStore')+g('pmFulfil')+g('pmRecall');
-  const profit = sp - totalDed;
-  const margin = sp>0 ? (profit/sp*100) : 0;
-  const qty = Math.max(0, g('pmQty')) || 1;
-  const sku = (document.getElementById('pmSkuSearch')?.value || '').trim();
-  const pmMatch = (PM_CATALOG || []).find(c => c.sku === sku);
-  const pmName = pmMatch ? exportSkuName(sku, pmMatch.sku_name) : '';
-  const rows = [['SKU', sku || '(manual)'], ['SKU Name', pmName]];
-  ded.forEach(d => rows.push(d));
-  rows.push(['Total Deductions (per unit)', Math.round(totalDed)]);
-  rows.push(['Profit Amount (per unit)', Math.round(profit)]);
-  rows.push(['Net Profit Margin %', margin.toFixed(1)]);
-  rows.push(['Sold Qty', qty]);
-  rows.push(['Total Selling Value', Math.round(sp*qty)]);
-  rows.push(['Total Deductions', Math.round(totalDed*qty)]);
-  rows.push(['Total Profit', Math.round(profit*qty)]);
-  const csv = [['Field','Value']].concat(rows).map(r => r.map(c => {
-    const s = String(c==null?'':c);
-    return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
-  }).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'profit_margin_' + (sku||'manual').replace(/[^A-Za-z0-9_-]/g,'') + '.csv';
-  a.click();
-}
-window.exportProfit = exportProfit;
 
 /* ── AT-RISK CUSTOMERS ── */
 let _arData = null;
@@ -26989,7 +26554,7 @@ showTab = function(t){
   // Removed tabs and disabled views are redirected to Home.
   if (t === 'marketplaces' || t === 'smart' || t === 'insights' || t === 'stockstatus') t = 'home';
   if (t === 'anomaly') t = 'salesanomaly';
-  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'profit' || t === 'bulk')) t = 'home';
+  if (LOGIN_ROLE === 'employee' && (t === 'matrix' || t === 'marketplaces' || t === 'discount' || t === 'bulk')) t = 'home';
   if (LOGIN_ROLE === 'admin' && t === 'help') t = 'home';   // admin ko Help tab nahi
   const map = {
     home: {id: 'vHome', btn: 'm1'},
@@ -27008,7 +26573,6 @@ showTab = function(t){
     wipreceive: {id: 'vWipReceive', btn: 'm38'},
     ramyana: {id: 'vRamyana', btn: 'm39'},
     webtop50: {id: 'vWebTop50', btn: 'm40'},
-    profit: {id: 'vProfit', btn: 'm14'},
     atrisk: {id: 'vAtrisk', btn: 'm16'},
     taxon: {id: 'vTaxon', btn: 'm18'},
     stockstatus: {id: 'vStockStatus', btn: 'm19'},
@@ -27069,7 +26633,6 @@ showTab = function(t){
       wipreceive: 'WIP RECEIVE',
       ramyana: 'RAMAYANA',
       webtop50: 'WEBSITE BEST SELLERS',
-      profit: 'PROFIT',
       atrisk: 'CUSTOMER RISK',
       taxon: 'CATEGORIES',
       stockstatus: 'STOCK STATUS',
@@ -27116,7 +26679,6 @@ showTab = function(t){
   if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyanaCmb(); }catch(e){console.error(e);} }, 0);
   if (t === 'ramyana') setTimeout(()=>{ try{ renderRamyanaOverall(); }catch(e){console.error(e);} }, 0);
   if (t === 'webtop50') setTimeout(()=>{ try{ renderWebTop50(); }catch(e){console.error(e);} }, 0);
-  if (t === 'profit') setTimeout(()=>{ try{ pmInit(); }catch(e){console.error(e);} }, 0);
   if (t === 'atrisk') setTimeout(()=>{ try{ loadAtRisk(); }catch(e){console.error(e);} }, 0);
   if (t === 'taxon') setTimeout(()=>{ try{ initTaxonTypeChecks(); loadTaxon(); }catch(e){console.error(e);} }, 0);
   if (t === 'stockstatus') setTimeout(()=>{ try{ loadStockStatus(); }catch(e){console.error(e);} }, 0);
@@ -37555,114 +37117,6 @@ def api_production_export_xlsx():
         return jsonify({"error": f"production Excel export failed: {e}"}), 500
 
 # ════════════════════════════════════════════════════════════════
-#  💰 SKU COSTS (Profit Margin tab) — admin only
-#  All Product sheet: column N (index 13)=MRP, column M (index 12)=Cost.
-# ════════════════════════════════════════════════════════════════
-_COSTS_CACHE = {"rows": None, "ts": 0}
-
-def _build_sku_costs():
-    if _COSTS_CACHE["rows"] is not None and (time.time() - _COSTS_CACHE["ts"] < 600):
-        return _COSTS_CACHE["rows"]
-
-    # ── Seedha compiled data se — wahi column detection jo main data me hoti hai ──
-    # MRP aur Cost dono wahan se lo (I_COST ab compiled items me hai).
-    out = []
-    seen = set()
-    try:
-        comp = get_data()[0]
-        for it in comp:
-            sk = str(it.get("sku", "")).strip()
-            if not sk:
-                continue
-            ku = sk.upper()
-            if ku in seen:
-                continue
-            seen.add(ku)
-            mrp_val  = float(it.get("mrp")  or 0)
-            cost_val = float(it.get("cost") or 0)
-            # agar compiled me cost nahi mila (purana cache) to sheet se try karo
-            out.append({
-                "sku":         sk,
-                "sku_name":    it.get("sku_name") or cn_sku_label(sk),
-                "image_url":   it.get("image_url", "") or "",
-                "mrp":         mrp_val,
-                "cost":        cost_val,
-                "final_qty":   int(it.get("final_qty") or 0),
-                "net_revenue": float(it.get("total_net_revenue") or 0),
-            })
-    except Exception:
-        pass
-
-    # agar compiled me kuch SKUs ka cost 0 aa raha ho (purana cache), sheet se patch karo
-    zero_cost_skus = {r["sku"].upper() for r in out if r["cost"] == 0}
-    if zero_cost_skus:
-        try:
-            df = _fetch_csv_fresh(INV_URL)
-            cols = list(df.columns)
-            def _at(i): return cols[i] if len(cols) > i else None
-            # Live All Product: C=SKU, E=Image Link, M=Cost, N=MRP. V24.71: SKU
-            # physical column C primary; header match only as fallback.
-            C_SKU  = _at(1) or find_col(df.columns, "SKU", "sku code", "item code")   # V25.36: All Product SKU = column B
-            C_COST = find_col(df.columns, "Cost", "cost", "product cost", "hi cost", "item cost") or _at(12)
-            C_MRP  = find_col(df.columns, "MRP", "mrp", "m.r.p") or _at(13)
-            C_IMG2 = find_col(df.columns, "Image Link", "imagelink", "image", "img") or _at(4)
-            patch_cost = {}; patch_mrp = {}; patch_img = {}
-            for _, r in df.iterrows():
-                sku = clean(r.get(C_SKU, "")) if C_SKU else ""
-                if not sku:
-                    continue
-                ku = sku.strip().upper()
-                if ku not in patch_cost:
-                    patch_cost[ku] = to_num(r.get(C_COST, 0)) if C_COST else 0
-                    patch_mrp[ku]  = to_num(r.get(C_MRP,  0)) if C_MRP  else 0
-                    patch_img[ku]  = clean(r.get(C_IMG2, "")) if C_IMG2 else ""
-            # patch existing rows
-            for row in out:
-                ku = row["sku"].upper()
-                if ku in zero_cost_skus:
-                    if patch_cost.get(ku, 0) > 0:
-                        row["cost"] = patch_cost[ku]
-                    if row["mrp"] == 0 and patch_mrp.get(ku, 0) > 0:
-                        row["mrp"] = patch_mrp[ku]
-                    if not row["image_url"] and patch_img.get(ku):
-                        row["image_url"] = patch_img[ku]
-            # add sheet-only SKUs (not in COSA)
-            for _, r in df.iterrows():
-                sku = clean(r.get(C_SKU, "")) if C_SKU else ""
-                if not sku:
-                    continue
-                ku = sku.strip().upper()
-                if ku not in seen:
-                    seen.add(ku)
-                    out.append({
-                        "sku":         sku,
-                        "sku_name":    cn_sku_label(sku),
-                        "image_url":   clean(r.get(C_IMG2, "")) if C_IMG2 else "",
-                        "mrp":         to_num(r.get(C_MRP,  0)) if C_MRP  else 0,
-                        "cost":        to_num(r.get(C_COST, 0)) if C_COST else 0,
-                        "final_qty":   0,
-                        "net_revenue": 0,
-                    })
-        except Exception:
-            pass
-
-    _COSTS_CACHE["rows"] = out
-    _COSTS_CACHE["ts"]   = time.time()
-    return out
-
-@app.route("/api/sku-costs")
-def api_sku_costs():
-    if session.get("role") != "admin":
-        return jsonify({"error": "admin only"}), 403
-    try:
-        # force=true → cache saaf karo aur fresh data lo
-        if request.args.get("force", "false").lower() == "true":
-            _COSTS_CACHE["rows"] = None
-        return jsonify({"rows": _build_sku_costs()})
-    except Exception as e:
-        return jsonify({"error": f"sku costs failed: {e}"}), 500
-
-# ════════════════════════════════════════════════════════════════
 #  ⚠️ AT-RISK CUSTOMERS — pehle regular the, ab 60+ din se nahi aaye
 # ════════════════════════════════════════════════════════════════
 _RISK_CACHE = {"items": {}}
@@ -40290,151 +39744,14 @@ def _keepalive_loop():
         except Exception:
             pass
 
-# ── V25.65: disk snapshot (instant start after redeploy / restart) ──────────
-# The finished dashboard data (the result of _refresh_data) is pickled to a Railway Volume.
-# On boot it is loaded first, so users get the dashboard immediately; the normal live refresh
-# then runs in the background and replaces it. The sheet cache (V25.64) is NOT saved, so the
-# first refresh after a redeploy still downloads every sheet fresh.
-SNAPSHOT_SCHEMA = "V25.65"
-SNAPSHOT_SAVE_EVERY_SEC = max(60, int(os.environ.get("SNAPSHOT_SAVE_EVERY_SEC", "1800") or 1800))
-SNAPSHOT_MAX_AGE_SEC = max(300, int(os.environ.get("SNAPSHOT_MAX_AGE_SEC", "86400") or 86400))
-_SNAPSHOT_KEYS = (
-    "data", "channels", "sub_channels", "ecom_sub_channels", "sor_sub_channels",
-    "website_payment_summary", "website_returns_payment_summary",
-    "website_return_payment_mode_lookup", "website_return_order_skus",
-    "marketplace_returns_payment_summary", "daily_reporting_daily", "daily_reporting_orders",
-    "daily_reporting_website_orders", "daily_reporting_marketplace_orders",
-    "daily_reporting_qcommerce_orders", "orderdate_customer_activity",
-    "orderdate_customer_activity_ts",
-)
-_SNAP_STATE = {"last_save": 0.0, "noted": False}
-
-
-def _snapshot_path():
-    """File used for the snapshot, or None when no volume is configured (feature OFF)."""
-    if os.environ.get("SNAPSHOT_DISABLE", "0") == "1":
-        return None
-    d = (os.environ.get("SNAPSHOT_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or "").strip()
-    if d:
-        try:
-            os.makedirs(d, exist_ok=True)
-            if os.access(d, os.W_OK):
-                return os.path.join(d, "cn_dashboard_snapshot.pkl.gz")
-        except Exception:
-            pass
-    # V25.66: no Volume configured -> use the server temp folder. It survives restarts of this
-    # container / worker, but Railway wipes it on a redeploy (only a Volume survives a redeploy).
-    try:
-        import tempfile as _tf
-        td = os.path.join(_tf.gettempdir(), "cn_dashboard")
-        os.makedirs(td, exist_ok=True)
-        if os.access(td, os.W_OK):
-            if not _SNAP_STATE["noted"]:
-                _SNAP_STATE["noted"] = True
-                print("SNAPSHOT: using temp folder (survives restarts, not redeploys; attach a Railway Volume to survive redeploys)")
-            return os.path.join(td, "cn_dashboard_snapshot.pkl.gz")
-    except Exception:
-        pass
-    if not _SNAP_STATE["noted"]:
-        _SNAP_STATE["noted"] = True
-        print("SNAPSHOT: OFF (no writable folder found)")
-    return None
-
-
-def _snapshot_save_if_due(force=False):
-    """Save the current dashboard data to disk (throttled). Never raises."""
-    path = _snapshot_path()
-    if not path or CACHE.get("data") is None:
-        return
-    if not force and (time.time() - _SNAP_STATE["last_save"]) < SNAPSHOT_SAVE_EVERY_SEC:
-        return
-    _SNAP_STATE["last_save"] = time.time()   # set first: a failing save is not retried every cycle
-    tmp = path + ".tmp"
-    try:
-        t0 = time.time()
-        payload = {
-            "schema": SNAPSHOT_SCHEMA,
-            "saved_at": time.time(),
-            "cache": {k: CACHE.get(k) for k in _SNAPSHOT_KEYS if k in CACHE},
-            "image_map": _PRODUCT_IMAGE_URL_BY_SKU,
-        }
-        with open(tmp, "wb") as raw:
-            with _gzip_mod.GzipFile(fileobj=raw, mode="wb", compresslevel=1, mtime=0) as zf:
-                pickle.dump(payload, zf, protocol=pickle.HIGHEST_PROTOCOL)
-        os.replace(tmp, path)      # atomic: a half-written file can never be loaded
-        payload = None
-        print("SNAPSHOT: saved %.1f MB in %.1fs" % (os.path.getsize(path) / 1048576.0, time.time() - t0))
-    except Exception as e:
-        print("SNAPSHOT: save failed:", str(e)[:140])
-        try:
-            if os.path.exists(tmp):
-                os.remove(tmp)
-        except Exception:
-            pass
-
-
-def _snapshot_load():
-    """Load the saved dashboard data into CACHE. Returns True only if it was used. Never raises."""
-    global _PRODUCT_IMAGE_URL_BY_SKU
-    path = _snapshot_path()
-    if not path or not os.path.exists(path):
-        return False
-    try:
-        t0 = time.time()
-        with _gzip_mod.open(path, "rb") as f:
-            payload = pickle.load(f)
-        age = time.time() - float(payload.get("saved_at") or 0)
-        if age > SNAPSHOT_MAX_AGE_SEC:
-            print("SNAPSHOT: ignored (%.1f h old, limit %.1f h)" % (age / 3600.0, SNAPSHOT_MAX_AGE_SEC / 3600.0))
-            return False
-        if os.environ.get("SNAPSHOT_SAME_VERSION_ONLY", "0") == "1" and payload.get("schema") != SNAPSHOT_SCHEMA:
-            print("SNAPSHOT: ignored (saved by %s, running %s)" % (payload.get("schema"), SNAPSHOT_SCHEMA))
-            return False
-        saved = payload.get("cache") or {}
-        data = saved.get("data")
-        if not (isinstance(data, tuple) and len(data) == 15 and isinstance(data[0], list) and data[0]):
-            print("SNAPSHOT: ignored (unexpected format)")
-            return False
-        if CACHE.get("data") is not None:
-            return False                # a live build already finished first — keep it
-        for k, v in saved.items():
-            if k != "data":
-                CACHE[k] = v
-        img = payload.get("image_map")
-        if isinstance(img, dict):
-            _PRODUCT_IMAGE_URL_BY_SKU = img
-        CACHE["data"] = data
-        CACHE["ts"] = time.time()
-        print("SNAPSHOT: loaded saved dashboard data (%.0f min old) in %.1fs — live refresh continues in background"
-              % (age / 60.0, time.time() - t0))
-        return True
-    except Exception as e:
-        print("SNAPSHOT: load failed, doing a normal full load:", str(e)[:140])
-        return False
-
-
 def _warmup_and_refresh_loop():
     """Warm data after a short boot grace, then refresh in the background.
 
     The grace period is deliberate: Flask/Gunicorn can bind its public port and
     answer Railway/Render health checks before pandas starts the heavy build.
     """
-    # V25.65: open instantly from the saved copy (if a Volume snapshot exists); live refresh follows below.
-    _snap_loaded = False
-    try:
-        _snap_loaded = _snapshot_load()
-        if _snap_loaded:
-            try:
-                _build_role_gz("admin")
-            except Exception as e:
-                print("snapshot prebuild failed:", str(e)[:100])
-            _wstage("ready", "Ready (saved copy; refreshing in background)")
-    except Exception as e:
-        print("SNAPSHOT: startup skipped:", str(e)[:120])
-
     if STARTUP_GRACE_SECONDS:
-        if not _snap_loaded:
-            _wstage("starting", f"Server online; data warm-up starts in {STARTUP_GRACE_SECONDS}s")
+        _wstage("starting", f"Server online; data warm-up starts in {STARTUP_GRACE_SECONDS}s")
         time.sleep(STARTUP_GRACE_SECONDS)
 
     ok = False
@@ -40457,10 +39774,6 @@ def _warmup_and_refresh_loop():
             print("prebuild admin failed:", str(e)[:100])
         _wstage("ready", "Ready")
         print("WARMUP: data ready ✔")
-        try:
-            _snapshot_save_if_due()
-        except Exception as e:
-            print("snapshot save skipped:", str(e)[:120])
         if os.environ.get("EAGER_VISION") == "1":
             try:
                 init_vision(); _vision_self_test()
@@ -40477,10 +39790,6 @@ def _warmup_and_refresh_loop():
                 _wstage("ready", "Ready")
                 print("WARMUP: data ready ✔ (recovered)")
             _build_role_gz("admin")
-            try:
-                _snapshot_save_if_due()
-            except Exception as e:
-                print("snapshot save skipped:", str(e)[:120])
             try:
                 import resource
                 _mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
