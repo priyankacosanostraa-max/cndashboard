@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.67 (FASTER COLD START: the order-date sheet (cosa_orderdate) and the Website sheet are now downloaded in the background right when the data build starts, instead of one after the other in the middle of it, so their download time overlaps the other work. Only the timing of the download changed; data and calculations are the same. Nothing else changed) · V25.66 (SNAPSHOT without a Railway Volume: if no Volume / SNAPSHOT_DIR is set, the saved dashboard copy is kept in the server temp folder, so it survives app/worker restarts inside the same container (a full redeploy still starts cold, because Railway wipes the container; only a Volume survives that). Nothing else changed) · V25.65 (DISK SNAPSHOT: after every successful data build (max once per 30 min) the finished dashboard data is saved to the Railway Volume; on redeploy/restart the app loads that saved copy first so the dashboard opens instantly, while the normal live refresh runs in the background and replaces it. Needs a Railway Volume (RAILWAY_VOLUME_MOUNT_PATH or SNAPSHOT_DIR); without a volume nothing changes. Nothing else changed) · V25.64 (SHEET CACHING: cossa + cosa_orderdate sheets are cached for 3 hours, All Product (inventory) sheet for 30 minutes, Website sheet for 2 hours. Every other sheet stays live-synced as before. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -976,6 +976,12 @@ STARTUP_GRACE_SECONDS = max(0, int(os.environ.get("STARTUP_GRACE_SECONDS", "6") 
 CN_CATALOG_START_DELAY = max(0, int(os.environ.get("CN_CATALOG_START_DELAY", "90") or 90))
 DATA_HTTP_CACHE_SECONDS = max(0, int(os.environ.get("DATA_HTTP_CACHE_SECONDS", "120") or 120))
 CACHE_TTL = 900   # bg refresher (600s) hamesha pehle chal jata hai — users ko inline refresh kabhi nahi jhelni padti
+# V25.64: per-sheet cache time (seconds) for the published Google-Sheet CSV downloads.
+# cossa + cosa_orderdate = 3 hours, All Product (inventory) = 30 min, Website sheet = 2 hours.
+# Every other sheet is NOT cached (live sync on every refresh).
+SHEET_CACHE_TTL_COSA      = max(0, int(os.environ.get("SHEET_CACHE_TTL_COSA", "10800") or 10800))       # cossa + cosa_orderdate
+SHEET_CACHE_TTL_INVENTORY = max(0, int(os.environ.get("SHEET_CACHE_TTL_INVENTORY", "1800") or 1800))     # All Product
+SHEET_CACHE_TTL_WEBSITE   = max(0, int(os.environ.get("SHEET_CACHE_TTL_WEBSITE", "7200") or 7200))       # Website sheet
 TZ        = ZoneInfo("Asia/Kolkata")
 
 CACHE    = {"data": None, "ts": 0, "debug": {}}
@@ -2335,6 +2341,89 @@ def _fetch_inventory_fresh():
     raise ValueError("No inventory source URL configured")
 
 
+# V25.64: TTL cache of the raw CSV bytes (zlib-compressed, so RAM stays low on small hosts).
+# Parsing / column selection / every calculation after the download is exactly the same as before;
+# only the network download is skipped while a cached copy is still fresh.
+_SHEET_CACHE = {}              # url -> (saved_at, zlib-compressed CSV bytes)
+_SHEET_CACHE_LOCK = threading.Lock()
+_SHEET_FETCH_LOCKS = {}        # url -> Lock (only one download per sheet at a time)
+
+
+def _sheet_cache_ttl(url):
+    """Cache seconds for a sheet URL. 0 = always live (no cache)."""
+    u = str(url or "").strip()
+    if not u:
+        return 0
+    if u in (str(COSA_URL).strip(), str(COSA_ORDERDATE_URL).strip()):
+        return SHEET_CACHE_TTL_COSA
+    try:
+        inv_urls = [str(x).strip() for x in _inventory_urls()] + [str(INV_URL).strip()]
+    except Exception:
+        inv_urls = [str(INV_URL).strip()]
+    if u in inv_urls:
+        return SHEET_CACHE_TTL_INVENTORY
+    if u == str(globals().get("RAKHI_WEBSITE_ADDR_URL", "") or "").strip():
+        return SHEET_CACHE_TTL_WEBSITE
+    return 0
+
+
+def _sheet_cached_download(url, ttl, download_fn):
+    """Return cached CSV bytes while younger than ttl, else download, store and return them."""
+    import zlib as _zlib
+    with _SHEET_CACHE_LOCK:
+        lock = _SHEET_FETCH_LOCKS.setdefault(url, threading.Lock())
+    with lock:
+        with _SHEET_CACHE_LOCK:
+            hit = _SHEET_CACHE.get(url)
+        if hit and (time.time() - hit[0]) < ttl:
+            try:
+                return _zlib.decompress(hit[1])
+            except Exception:
+                pass
+        content = download_fn()
+        try:
+            packed = _zlib.compress(content, 1)
+            with _SHEET_CACHE_LOCK:
+                _SHEET_CACHE[url] = (time.time(), packed)
+        except Exception:
+            pass
+        return content
+
+
+_SHEET_HEADERS = {"Cache-Control": "no-cache, no-store, max-age=0",
+                  "Pragma": "no-cache",
+                  "User-Agent": "Mozilla/5.0 (CosaNostraaDashboard)"}
+
+
+def _sheet_download_bytes(url):
+    """Download one published Google CSV (cache-busted) and return the raw bytes."""
+    bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
+    r = requests.get(url + bust, headers=_SHEET_HEADERS, timeout=(8, 45), allow_redirects=True)
+    r.raise_for_status()
+    data = r.content
+    if "<html" in data[:512].decode("utf-8", errors="replace").lower():
+        raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
+    return data
+
+
+def _prefetch_sheets_bytes(urls):
+    """V25.67: download cached-type sheets ahead of time (one at a time, to keep RAM low).
+    Only fills the V25.64 sheet cache; the normal fetch later finds the bytes ready (or waits
+    for the download already in progress). Failures are ignored - the normal fetch retries."""
+    for u in urls:
+        try:
+            ttl = _sheet_cache_ttl(u)
+            if ttl <= 0:
+                continue
+            with _SHEET_CACHE_LOCK:
+                hit = _SHEET_CACHE.get(u)
+            if hit and (time.time() - hit[0]) < ttl:
+                continue                      # already cached and fresh
+            _sheet_cached_download(u, ttl, lambda u=u: _sheet_download_bytes(u))
+        except Exception as e:
+            print("sheet prefetch skipped:", str(e)[:100])
+
+
 def _fetch_csv_fresh(url, select_groups=None, select_positions=None):
     """Published Google CSV fetch + V24.71 BT SKU numeric suffix cleanup."""
     return _bt_strip_frame(_fetch_csv_fresh_raw(url, select_groups, select_positions))
@@ -2363,14 +2452,13 @@ def _fetch_csv_fresh_raw(url, select_groups=None, select_positions=None):
             txt = content.decode("utf-8", errors="replace")
             return pd.read_csv(io.StringIO(txt), **kwargs)
 
+    def _download():
+        return _sheet_download_bytes(url)
+
     for attempt in range(3):
         try:
-            bust = ("&" if "?" in url else "?") + f"cachebust={int(time.time()*1000)}"
-            r = requests.get(url + bust, headers=headers, timeout=(8, 45), allow_redirects=True)
-            r.raise_for_status()
-            content = r.content
-            if "<html" in content[:512].decode("utf-8", errors="replace").lower():
-                raise ValueError("Received HTML instead of CSV — re-check the sheet's Publish-to-web setting")
+            _ttl = _sheet_cache_ttl(url)   # V25.64: cossa/cosa_orderdate 3h, inventory 30m, website 2h, rest live
+            content = _sheet_cached_download(url, _ttl, _download) if _ttl > 0 else _download()
             read_kwargs = {"dtype": str, "on_bad_lines": "skip"}
             raw_cols = []
             if select_groups or select_positions:
@@ -3263,6 +3351,13 @@ def _refresh_data():
         # Inventory and the main sales sheet are independent. Downloading them
         # in parallel removes one full network wait from every cold/manual sync
         # while keeping the exact same downstream calculations.
+        try:   # V25.67: pre-download the order-date + Website sheets in the background (own try: can never break the build)
+            threading.Thread(
+                target=_prefetch_sheets_bytes,
+                args=((COSA_ORDERDATE_URL, globals().get("RAKHI_WEBSITE_ADDR_URL", "")),),
+                daemon=True, name="cn-sheet-prefetch").start()
+        except Exception:
+            pass
         from concurrent.futures import ThreadPoolExecutor
         _wstage("fetching", "Downloading inventory + sales sheets in parallel…")
         with ThreadPoolExecutor(max_workers=3, thread_name_prefix="cn-core-fetch") as ex:
@@ -40195,14 +40290,151 @@ def _keepalive_loop():
         except Exception:
             pass
 
+# ── V25.65: disk snapshot (instant start after redeploy / restart) ──────────
+# The finished dashboard data (the result of _refresh_data) is pickled to a Railway Volume.
+# On boot it is loaded first, so users get the dashboard immediately; the normal live refresh
+# then runs in the background and replaces it. The sheet cache (V25.64) is NOT saved, so the
+# first refresh after a redeploy still downloads every sheet fresh.
+SNAPSHOT_SCHEMA = "V25.65"
+SNAPSHOT_SAVE_EVERY_SEC = max(60, int(os.environ.get("SNAPSHOT_SAVE_EVERY_SEC", "1800") or 1800))
+SNAPSHOT_MAX_AGE_SEC = max(300, int(os.environ.get("SNAPSHOT_MAX_AGE_SEC", "86400") or 86400))
+_SNAPSHOT_KEYS = (
+    "data", "channels", "sub_channels", "ecom_sub_channels", "sor_sub_channels",
+    "website_payment_summary", "website_returns_payment_summary",
+    "website_return_payment_mode_lookup", "website_return_order_skus",
+    "marketplace_returns_payment_summary", "daily_reporting_daily", "daily_reporting_orders",
+    "daily_reporting_website_orders", "daily_reporting_marketplace_orders",
+    "daily_reporting_qcommerce_orders", "orderdate_customer_activity",
+    "orderdate_customer_activity_ts",
+)
+_SNAP_STATE = {"last_save": 0.0, "noted": False}
+
+
+def _snapshot_path():
+    """File used for the snapshot, or None when no volume is configured (feature OFF)."""
+    if os.environ.get("SNAPSHOT_DISABLE", "0") == "1":
+        return None
+    d = (os.environ.get("SNAPSHOT_DIR") or os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or "").strip()
+    if d:
+        try:
+            os.makedirs(d, exist_ok=True)
+            if os.access(d, os.W_OK):
+                return os.path.join(d, "cn_dashboard_snapshot.pkl.gz")
+        except Exception:
+            pass
+    # V25.66: no Volume configured -> use the server temp folder. It survives restarts of this
+    # container / worker, but Railway wipes it on a redeploy (only a Volume survives a redeploy).
+    try:
+        import tempfile as _tf
+        td = os.path.join(_tf.gettempdir(), "cn_dashboard")
+        os.makedirs(td, exist_ok=True)
+        if os.access(td, os.W_OK):
+            if not _SNAP_STATE["noted"]:
+                _SNAP_STATE["noted"] = True
+                print("SNAPSHOT: using temp folder (survives restarts, not redeploys; attach a Railway Volume to survive redeploys)")
+            return os.path.join(td, "cn_dashboard_snapshot.pkl.gz")
+    except Exception:
+        pass
+    if not _SNAP_STATE["noted"]:
+        _SNAP_STATE["noted"] = True
+        print("SNAPSHOT: OFF (no writable folder found)")
+    return None
+
+
+def _snapshot_save_if_due(force=False):
+    """Save the current dashboard data to disk (throttled). Never raises."""
+    path = _snapshot_path()
+    if not path or CACHE.get("data") is None:
+        return
+    if not force and (time.time() - _SNAP_STATE["last_save"]) < SNAPSHOT_SAVE_EVERY_SEC:
+        return
+    _SNAP_STATE["last_save"] = time.time()   # set first: a failing save is not retried every cycle
+    tmp = path + ".tmp"
+    try:
+        t0 = time.time()
+        payload = {
+            "schema": SNAPSHOT_SCHEMA,
+            "saved_at": time.time(),
+            "cache": {k: CACHE.get(k) for k in _SNAPSHOT_KEYS if k in CACHE},
+            "image_map": _PRODUCT_IMAGE_URL_BY_SKU,
+        }
+        with open(tmp, "wb") as raw:
+            with _gzip_mod.GzipFile(fileobj=raw, mode="wb", compresslevel=1, mtime=0) as zf:
+                pickle.dump(payload, zf, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, path)      # atomic: a half-written file can never be loaded
+        payload = None
+        print("SNAPSHOT: saved %.1f MB in %.1fs" % (os.path.getsize(path) / 1048576.0, time.time() - t0))
+    except Exception as e:
+        print("SNAPSHOT: save failed:", str(e)[:140])
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+
+
+def _snapshot_load():
+    """Load the saved dashboard data into CACHE. Returns True only if it was used. Never raises."""
+    global _PRODUCT_IMAGE_URL_BY_SKU
+    path = _snapshot_path()
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        t0 = time.time()
+        with _gzip_mod.open(path, "rb") as f:
+            payload = pickle.load(f)
+        age = time.time() - float(payload.get("saved_at") or 0)
+        if age > SNAPSHOT_MAX_AGE_SEC:
+            print("SNAPSHOT: ignored (%.1f h old, limit %.1f h)" % (age / 3600.0, SNAPSHOT_MAX_AGE_SEC / 3600.0))
+            return False
+        if os.environ.get("SNAPSHOT_SAME_VERSION_ONLY", "0") == "1" and payload.get("schema") != SNAPSHOT_SCHEMA:
+            print("SNAPSHOT: ignored (saved by %s, running %s)" % (payload.get("schema"), SNAPSHOT_SCHEMA))
+            return False
+        saved = payload.get("cache") or {}
+        data = saved.get("data")
+        if not (isinstance(data, tuple) and len(data) == 15 and isinstance(data[0], list) and data[0]):
+            print("SNAPSHOT: ignored (unexpected format)")
+            return False
+        if CACHE.get("data") is not None:
+            return False                # a live build already finished first — keep it
+        for k, v in saved.items():
+            if k != "data":
+                CACHE[k] = v
+        img = payload.get("image_map")
+        if isinstance(img, dict):
+            _PRODUCT_IMAGE_URL_BY_SKU = img
+        CACHE["data"] = data
+        CACHE["ts"] = time.time()
+        print("SNAPSHOT: loaded saved dashboard data (%.0f min old) in %.1fs — live refresh continues in background"
+              % (age / 60.0, time.time() - t0))
+        return True
+    except Exception as e:
+        print("SNAPSHOT: load failed, doing a normal full load:", str(e)[:140])
+        return False
+
+
 def _warmup_and_refresh_loop():
     """Warm data after a short boot grace, then refresh in the background.
 
     The grace period is deliberate: Flask/Gunicorn can bind its public port and
     answer Railway/Render health checks before pandas starts the heavy build.
     """
+    # V25.65: open instantly from the saved copy (if a Volume snapshot exists); live refresh follows below.
+    _snap_loaded = False
+    try:
+        _snap_loaded = _snapshot_load()
+        if _snap_loaded:
+            try:
+                _build_role_gz("admin")
+            except Exception as e:
+                print("snapshot prebuild failed:", str(e)[:100])
+            _wstage("ready", "Ready (saved copy; refreshing in background)")
+    except Exception as e:
+        print("SNAPSHOT: startup skipped:", str(e)[:120])
+
     if STARTUP_GRACE_SECONDS:
-        _wstage("starting", f"Server online; data warm-up starts in {STARTUP_GRACE_SECONDS}s")
+        if not _snap_loaded:
+            _wstage("starting", f"Server online; data warm-up starts in {STARTUP_GRACE_SECONDS}s")
         time.sleep(STARTUP_GRACE_SECONDS)
 
     ok = False
@@ -40225,6 +40457,10 @@ def _warmup_and_refresh_loop():
             print("prebuild admin failed:", str(e)[:100])
         _wstage("ready", "Ready")
         print("WARMUP: data ready ✔")
+        try:
+            _snapshot_save_if_due()
+        except Exception as e:
+            print("snapshot save skipped:", str(e)[:120])
         if os.environ.get("EAGER_VISION") == "1":
             try:
                 init_vision(); _vision_self_test()
@@ -40241,6 +40477,10 @@ def _warmup_and_refresh_loop():
                 _wstage("ready", "Ready")
                 print("WARMUP: data ready ✔ (recovered)")
             _build_role_gz("admin")
+            try:
+                _snapshot_save_if_due()
+            except Exception as e:
+                print("snapshot save skipped:", str(e)[:120])
             try:
                 import resource
                 _mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0
