@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 *.log
 venv/
+
+# private config (real Google Sheet links) - never commit
+sheet_links.json
