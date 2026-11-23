@@ -1,4 +1,4 @@
-# Cosa Nostraa — V25.66 (SECURITY: all 23 Google Sheet links/IDs removed from the source -> read from env vars / SHEET_LINKS_JSON / private sheet_links.json via _sheet_link(); /api/bulk-combo-upload is now admin-only on the server. Nothing else changed) · V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
+# Cosa Nostraa — V25.67 (PRODUCT PHOTOS FIX: photos from the All Product (inventory) sheet now load everywhere - All Products cards, SKU Details, Repeat Orders and every other tab. If the sheet image link is blocked by the browser (hotlink/referrer block, Drive thumbnail limit) the photo is retried automatically through the server image proxy (new /api/img-proxy, only known inventory image links are allowed), then once more after a short wait. Referrer is no longer sent to image hosts. Nothing else changed) · V25.66 (SECURITY: all 23 Google Sheet links/IDs removed from the source -> read from env vars / SHEET_LINKS_JSON / private sheet_links.json via _sheet_link(); /api/bulk-combo-upload is now admin-only on the server. Nothing else changed) · V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
 # V25.24: 'SKU Group' filter teeno tables me (Ramayana CMB = 10 CMB / BTC CMB = baaki sab CMB / Other SKUs = baaki SKUs); Overall KPIs me Total Net Revenue + CMB/Child revenue %. V25.23: Teeno tables ke filters ab Repeat Order jaise: Type / Channel / ECom / SOR (tick one or more), Customer (naam me contain), date range - same sale logic (cnxSaleTotalsForItem). V25.22: Date / Type / Customer / Theme me se koi bhi filter lagane par teeno tables me sirf sold > 0 wale SKU/CMB (KPIs, TOTAL, export bhi); koi filter nahi to poori list. V25.21: Customer YA Type (channel) lagane par teeno tables me sirf wahi SKU/CMB bachte hain jinki us customer/channel me sale hui; KPIs (SKUs count, Low Stock, Inv Stock/WIP, Sold, Revenue) bhi usi ke hisaab se. V25.20: Customer search lagane par teeno tables me sirf wahi SKU/CMB dikhte hain jo us customer ne kharide (sold > 0); KPIs/TOTAL/export bhi usi se. V25.19: Teeno tables me Type = sales CHANNEL (Target / Repeat Order jaisa): B2B/Purchase, SOR, Marketplace(Ecom), Bulk, Store, Exhibition, Website/D2C - sab hamesha list me; sold/revenue usi channel ki sales se. V25.18: Teeno tables me Theme filter (Ram=Maryada, Hanuman=Bhakti, Ravan=Maya, blank=Blank) ramayana_skus.xlsx ke hisaab se; KPIs/export filter ke saath. V25.17: Ramayana Overall table + export me MRP column (Product Type ke baad). V25.16: Teeno tables me SKU search ab SKU code + SKU name dono me, aur ek saath kai SKU (comma se). Overall table + export me SKU Name column (SKU/Image ke baad). V25.15: Customer Name ab search box (type karke search / list se chuno, naam me match) teeno tables me; Overall KPIs me CMB/Child Net Revenue. V25.14: Teeno tables me Customer Name filter (data + export dono me), Ramayana Overall me Net Revenue column/KPI/export. V25.13: Ramayana tab ki teeno tables me Type dropdown ab SALES type (Marketplace / Website / SOR / Blinkit ...) hai - sold qty usi type ki sales se. Overall table ka SKU type column 'Product Type'. V25.12: Ramayana tab me 3rd table 'Ramayana Overall' (SKU, Image, Type, Sold Qty = SKU ki apni sale, Inv Stock, Inv WIP) + date/type/customer filter + KPIs + Excel export. V25.11: Ramayana tab ki dono tables me Type filter (SKU prefix se: Bracelet/Brooch/Bookmark...; CMB table me us type wale CMBs) + CMB table me KPI (CMBs, Total Sold, Inv Stock, Inv WIP). V25.10: Ramayana tab ki dono tables me SKU pe click karne se SKU Details tab khulta hai. V25.09: Set of N ab Combo Details ke SKU count se (same SKU/part 2 baar ho to 2 count, naam ke saath x2). V25.08: CMB table me Product Dimensions ab sirf item names ("Set of 3: Bracelet Adjustable, Brooch, Bookmark", sizes hata di) + naya Combo Details column (table aur export).
@@ -1020,6 +1020,7 @@ TZ        = ZoneInfo("Asia/Kolkata")
 CACHE    = {"data": None, "ts": 0, "debug": {}}
 # Normalized SKU -> image URL, rebuilt atomically with each data refresh.
 _PRODUCT_IMAGE_URL_BY_SKU = {}
+_PRODUCT_IMAGE_KNOWN_URLS = set()   # V25.67: allow-list for /api/img-proxy
 UPLOAD_REPORTS = {}
 AI_READY = False
 db_data, processor, dino_model, client = None, None, None, None
@@ -3295,7 +3296,7 @@ def get_data(force=False):
         _DATA_LOCK.release()
 
 def _refresh_data():
-    global CACHE, _PRODUCT_IMAGE_URL_BY_SKU
+    global CACHE, _PRODUCT_IMAGE_URL_BY_SKU, _PRODUCT_IMAGE_KNOWN_URLS
     dbg = {"errors": []}
     daily_sales_df, daily_sales_err = None, ""
     try:
@@ -5174,6 +5175,11 @@ def _refresh_data():
         if _img_sku and _img_url:
             _new_image_map[_img_sku] = _img_url
     _PRODUCT_IMAGE_URL_BY_SKU = _new_image_map
+    _PRODUCT_IMAGE_KNOWN_URLS = set(_new_image_map.values())
+    try:
+        print("Inventory photos: %d of %d SKUs have an image link (image column: %s)" % (len(_new_image_map), len(compiled), I_IMG))
+    except Exception:
+        pass
 
     CACHE["data"] = (
         compiled,
@@ -5501,7 +5507,7 @@ def vision_search(img_bytes, inventory, top_k=10, more_k=0):
 
 # ── HTML ─────────────────────────────────────────────────────
 HTML = r"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="UTF-8"><meta name="referrer" content="same-origin"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cosa Nostraa — Live Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&family=Playfair+Display:wght@600;800;900&family=Space+Grotesk:wght@500;700&family=Inter:wght@300;400;500;600;700;800&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -11192,6 +11198,40 @@ function skuInsightBadge(item){
   });
   return parts.length ? `<span style="display:flex;flex-wrap:wrap;gap:4px;max-width:320px">${parts.join('')}</span>` : '';
 }
+
+// ── V25.67 PRODUCT PHOTO FALLBACK (applies to EVERY <img> in the dashboard) ──────────
+// 1st failure of an external photo  -> retry through the server proxy (/api/img-proxy)
+// 2nd failure (proxy busy/slow)      -> one more try after a short wait
+// 3rd failure                         -> normal behaviour (each tab's own 💎 placeholder)
+(function(){
+  if (window.__cnxImgFallbackInstalled) return;
+  window.__cnxImgFallbackInstalled = true;
+  document.addEventListener('error', function(ev){
+    const el = ev && ev.target;
+    if (!el || el.tagName !== 'IMG') return;
+    const cur = el.getAttribute('src') || '';
+    if (!/^https?:\/\//i.test(cur) && cur.indexOf('/api/img-proxy') !== 0) return;
+    let orig = el.getAttribute('data-cnx-orig');
+    if (!orig) {
+      if (cur.indexOf('/api/img-proxy') === 0) return;      // not ours
+      orig = cur;
+      el.setAttribute('data-cnx-orig', orig);
+    }
+    const step = parseInt(el.getAttribute('data-cnx-step') || '0', 10);
+    const proxy = '/api/img-proxy?u=' + encodeURIComponent(orig);
+    if (step === 0) {
+      ev.stopImmediatePropagation();
+      el.setAttribute('data-cnx-step', '1');
+      el.removeAttribute('srcset');
+      el.src = proxy;
+    } else if (step === 1) {
+      ev.stopImmediatePropagation();
+      el.setAttribute('data-cnx-step', '2');
+      setTimeout(function(){ try { el.src = proxy + '&r=' + Date.now(); } catch(_e){} }, 3500);
+    }
+    // step >= 2: let the tab's own onerror (placeholder) run
+  }, true);
+})();
 
 function roThumb(url, sku=''){
   const cleanUrl = (url && String(url).trim() && String(url).toLowerCase() !== 'nan') ? String(url).trim() : '';
@@ -28157,7 +28197,28 @@ def api_product_image(sku):
             image_url = ""
     if not image_url:
         return ("", 404)
+    return _serve_product_image(image_url, sku_key)
 
+
+@app.route("/api/img-proxy")
+def api_img_proxy():
+    """V25.67: proxy for ANY inventory photo by its URL (used by the page-wide image fallback).
+    Only URLs that are in the All Product sheet are served -> not an open proxy."""
+    u = str(request.args.get("u", "") or "").strip()
+    if not u:
+        return ("", 404)
+    known = _PRODUCT_IMAGE_KNOWN_URLS
+    if not known:
+        try:
+            known = set(_PRODUCT_IMAGE_URL_BY_SKU.values())
+        except Exception:
+            known = set()
+    if u not in known:
+        return ("", 404)
+    return _serve_product_image(u, "by-url")
+
+
+def _serve_product_image(image_url, sku_key):
     now = time.time()
     with _PRODUCT_IMAGE_CACHE_LOCK:
         hit = _PRODUCT_IMAGE_CACHE.get(image_url)
@@ -28174,14 +28235,17 @@ def api_product_image(sku):
     if not _PRODUCT_IMAGE_SEM.acquire(timeout=3):
         return ("", 503)          # bahut saari parallel image requests
     try:
-        rr = requests.get(
-            image_url, timeout=(4, 10), allow_redirects=True,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
-                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-                "Referer": "https://cosanostraa.com/",
-            },
-        )
+        _hdrs = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Referer": "https://cosanostraa.com/",
+        }
+        rr = requests.get(image_url, timeout=(4, 10), allow_redirects=True, headers=_hdrs)
+        if (not rr.ok or not str(rr.headers.get("Content-Type") or "").lower().startswith("image/")):
+            _dm = re.search(r"drive\.google\.com/thumbnail\?id=([A-Za-z0-9_-]+)", image_url)
+            if _dm:   # Drive thumbnail refused -> try the direct view link once
+                rr = requests.get("https://drive.google.com/uc?export=view&id=" + _dm.group(1),
+                                  timeout=(4, 10), allow_redirects=True, headers=_hdrs)
         rr.raise_for_status()
         ctype = str(rr.headers.get("Content-Type") or "image/jpeg").split(";",1)[0].strip().lower()
         if not ctype.startswith("image/") or not rr.content:
