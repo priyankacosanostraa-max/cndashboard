@@ -7976,6 +7976,14 @@ body.cnx-large-data .ro-table-wrap,body.cnx-large-data .ops-table-wrap{box-shado
 /* CN Name lookup + Rel/Non-Rel comparison surfaces. */
 .sd-search-shell{position:relative;flex:1 1 360px;max-width:650px}.sd-search-shell .fi{width:100%;max-width:none!important}.sd-search-results{position:absolute;z-index:40;left:0;right:0;top:calc(100% + 7px);max-height:330px;overflow:auto;border:1px solid rgba(123,91,33,.18);border-radius:14px;background:#fffefb;box-shadow:0 22px 52px rgba(55,38,12,.2);display:none}.sd-search-results.is-open{display:block}.sd-search-result{width:100%;display:grid;grid-template-columns:minmax(110px,.45fr) minmax(220px,1fr) auto;gap:12px;align-items:center;padding:11px 13px;border:0;border-bottom:1px solid rgba(123,91,33,.1);background:transparent;text-align:left;cursor:pointer}.sd-search-result:last-child{border-bottom:0}.sd-search-result:hover,.sd-search-result:focus{background:#fff3d9;outline:none}.sd-search-result .code{font-size:10px;font-weight:950;color:#765317}.sd-search-result .name{font-size:10px;font-weight:800;color:#201a12;line-height:1.4}.cn-class-badge{display:inline-flex;align-items:center;justify-content:center;min-width:62px;padding:5px 8px;border-radius:999px;font-size:7px;font-weight:950;letter-spacing:.8px;text-transform:uppercase}.cn-class-badge.rel{background:rgba(168,121,32,.13);color:#80570f}.cn-class-badge.non-rel{background:rgba(23,137,94,.11);color:#14714d}.cn-class-badge.unclassified{background:#eee9df;color:#746c60}
 .rel-compare-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:12px;margin:15px 0}.rel-compare-chart{overflow:auto;border:1px solid rgba(123,91,33,.11);border-radius:16px;background:#fffefb}.rel-compare-chart svg{display:block;width:100%;min-width:720px;height:300px}.rel-legend{display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:9px;font-weight:850;color:#706553}.rel-legend span{display:inline-flex;align-items:center;gap:6px}.rel-legend i{width:10px;height:10px;border-radius:50%;display:inline-block}.rel-note{margin-top:10px;color:#847968;font-size:9px;font-weight:700;line-height:1.55}
+/* SKU Details fixes: search dropdown stays on top of the filter box below; photo shown fully (no crop) */
+.filter-box.sd-search-box{position:relative;z-index:200;overflow:visible}
+#sdFilterBox{position:relative;z-index:1}
+.sd-search-shell{z-index:201}
+.sd-search-results{z-index:300;background:#fffefb!important;opacity:1;max-height:340px}
+.sd-search-result .name small{display:block;margin-top:2px;font-size:9px;font-weight:700;color:#8a7d66}
+.sd-head-img{flex:0 0 auto}
+.sd-head-img img{width:120px;height:120px;object-fit:contain;background:#faf7ef;padding:3px;box-sizing:border-box}
 @media(max-width:700px){.sd-search-result{grid-template-columns:1fr auto}.sd-search-result .name{grid-column:1/-1;grid-row:2}.rel-compare-kpis{grid-template-columns:1fr 1fr}}
 
 /* Table headings: always one line (never wrapped or split). Only the cell text in the rows wraps where needed. */
@@ -8714,7 +8722,7 @@ select.lg-in option{background:#fff;color:#1a1610}
     <div class="filter-box" style="margin:8px 0 10px;padding:10px 14px">
       <div class="small-note" style="white-space:normal"><b>Good Running</b> = at least 1 positive unit sold in the latest 30 calendar days under the active SKU Details filters. <b>Slow Movers</b> = 0 positive units sold in that same 30-day window. <b>Stock/WIP is not used</b> to decide Good vs Slow; New Launch and No Record remain separate statuses; CMB-only demand counts as a valid movement record.</div>
     </div>
-    <div class="filter-box" style="margin:8px 0 16px">
+    <div class="filter-box sd-search-box" style="margin:8px 0 16px">
       <label class="fl" style="margin-bottom:8px;display:block">Search SKU / CN Name</label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:relative">
         <div class="sd-search-shell">
@@ -11651,7 +11659,12 @@ function cnClassBadge(value){
 function _sdMatchingItems(){
   const q=(document.getElementById('sdSearchBox')?.value||'').trim().toLowerCase();
   const cls=document.getElementById('sdCnClassFilter')?.value||'All';
-  return (master||[]).filter(item=>{
+  const _rank=item=>{
+    const s=String(item.sku||'').toLowerCase(), c=String(item.cn_name||'').toLowerCase();
+    if(s===q) return 0; if(s.startsWith(q)) return 1; if(s.includes(q)) return 2;
+    if(c.startsWith(q)) return 3; if(c.includes(q)) return 4; return 5;
+  };
+  const out=(master||[]).filter(item=>{
     if(!cnxItemMatchesGlobalCn(item)) return false;
     if(cls!=='All'&&cnClassOf(item)!==cls) return false;
     if(!q) return cls!=='All';
@@ -11659,6 +11672,8 @@ function _sdMatchingItems(){
       || String(item.cn_name||'').toLowerCase().includes(q)
       || String(item.sku_name||'').toLowerCase().includes(q);
   });
+  if(q) out.sort((a,b)=>_rank(a)-_rank(b));
+  return out;
 }
 function _sdRenderSearchResults(){
   const host=document.getElementById('sdSearchResults');
@@ -11671,7 +11686,7 @@ function _sdRenderSearchResults(){
   host.innerHTML=shown.length?shown.map(item=>{
     const sku=String(item.sku||'');
     const skuEsc=sku.replace(/'/g,"\\'");
-    return `<button type="button" class="sd-search-result" onclick="sdPickSearch('${skuEsc}')"><span class="code">${escHtml(sku)}</span><span class="name">${escHtml(item.cn_name||'CN Name not available')}</span>${cnClassBadge(cnClassOf(item))}</button>`;
+    return `<button type="button" class="sd-search-result" onclick="sdPickSearch('${skuEsc}')"><span class="code">${escHtml(sku)}</span><span class="name">${escHtml(item.cn_name||'CN Name not available')}${(()=>{const ql=q.toLowerCase();if(!ql)return '';const hit=String(item.sku||'').toLowerCase().includes(ql)||String(item.cn_name||'').toLowerCase().includes(ql);const sn=String(item.sku_name||'');return (!hit&&sn)?'<small>SKU Name: '+escHtml(sn)+'</small>':'';})()}</span>${cnClassBadge(cnClassOf(item))}</button>`;
   }).join(''):`<div class="small-note" style="padding:16px">No SKU or CN Name matches this search.</div>`;
   if(_sdSearchMatches.length>shown.length) host.innerHTML+=`<div class="small-note" style="padding:9px 13px;border-top:1px solid rgba(123,91,33,.1)">Showing first ${shown.length} of ${_sdSearchMatches.length.toLocaleString('en-IN')} matches — type more to narrow.</div>`;
   host.classList.add('is-open');
@@ -12393,9 +12408,10 @@ function renderSkuDetails(sku){
 
   const imgEl = document.getElementById('sdImg');
   if (imgEl) {
-    imgEl.innerHTML = (item.image_url && String(item.image_url).toLowerCase() !== 'nan' && item.image_url !== '')
-      ? `<img src="${item.image_url}" loading="lazy" decoding="async" onerror="this.outerHTML='<div class=&quot;img-ph&quot;>💎</div>'">`
-      : `<div class="img-ph">💎</div>`;
+    const _sdU = String(item.image_url || '').trim();
+    const _sdOk = _sdU && _sdU.toLowerCase() !== 'nan';
+    const _sdPx = '/api/product-image/' + encodeURIComponent(String(item.sku || '').trim()).replace(/'/g, '%27');
+    imgEl.innerHTML = `<img src="${_sdOk ? escHtml(_sdU) : _sdPx}" referrerpolicy="no-referrer" loading="lazy" decoding="async" onerror="if(!this.dataset.px){this.dataset.px='1';this.src='${_sdPx}';}else{this.outerHTML='<div class=&quot;img-ph&quot;>💎</div>';}">`;
   }
   const setT = (id,v) => { const el=document.getElementById(id); if (el) el.textContent = v; };
   setT('sdSku', skuLabel(item.sku, item.sku_name));
