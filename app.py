@@ -1,3 +1,4 @@
+# Cosa Nostraa — V25.68 (RAMAYANA TAB 3rd table (Ramayana Overall) EXPORTS: Selling Price added. SKU PIVOT export = new "Selling Price" column (per-unit selling price of the SKU's own orders under the active filters); TRANSACTIONS export = new "Selling Price" column (per order line, blank for Set Item rows). Nothing else changed)
 # Cosa Nostraa — V25.67 (PRODUCT PHOTOS FIX: photos from the All Product (inventory) sheet now load everywhere - All Products cards, SKU Details, Repeat Orders and every other tab. If the sheet image link is blocked by the browser (hotlink/referrer block, Drive thumbnail limit) the photo is retried automatically through the server image proxy (new /api/img-proxy, only known inventory image links are allowed), then once more after a short wait. Referrer is no longer sent to image hosts. Nothing else changed) · V25.66 (SECURITY: all 23 Google Sheet links/IDs removed from the source -> read from env vars / SHEET_LINKS_JSON / private sheet_links.json via _sheet_link(); /api/bulk-combo-upload is now admin-only on the server. Nothing else changed) · V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
 # Cosa Nostraa — V25.07 (RAMYANA TAB: NEW "RAMYANA CMBs" TABLE BELOW THE EXISTING TABLE)
@@ -17944,7 +17945,7 @@ function _ryoTxns(rows){
   rows.forEach(r => {
     const base = {sku: r.sku, open: r.open, found: r.found, name: r.name, img: r.img, ptype: r.type, it: r.it};
     if (r.it) entsOf(r.it).forEach(e => { if (!_ryoEntryOk(e, ctx)) return; const q = Number(e.qty) || 0; if (!q) return;
-      out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: q, inc: 0, via: '', rev: Number(e.rev) || 0})); });
+      out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: q, inc: 0, via: '', rev: Number(e.rev) || 0, sp: (e.sp_valid === true && Number.isFinite(Number(e.sp))) ? Number(e.sp) : null})); });
     const keys = [r.sku]; const ik = _ryKey(r.it && r.it.sku); if (ik && ik !== r.sku) keys.push(ik);
     const seenP = new Set();
     /* V25.53: Via CMB Sold rows back (SKU sold only inside Ramayana CMBs also shows) */
@@ -18023,7 +18024,7 @@ async function exportRamyanaOverallTxnsExcel(){
     try { parentItem = roExactSkuItem(t.it || {sku: t.sku}); } catch (_e) { parentItem = t.it || null; }
     const children = (parentItem && Array.isArray(parentItem.combo_details)) ? parentItem.combo_details : [];
     rows.push(Object.assign({date: t.date, sku: t.sku, sku_name: t.name, product_type: t.ptype, image: t.img, customer: t.cust, type: t.type, channel: t.channel,
-               row_type: children.length ? 'Gift Set' : 'Product', set_item_of: '', individual: t.ind, in_cmb: 0, net_revenue: t.rev}, drrOf(t.sku, byRow.has(t.sku) ? byRow.get(t.sku).stock : null)));
+               row_type: children.length ? 'Gift Set' : 'Product', set_item_of: '', individual: t.ind, in_cmb: 0, selling_price: t.sp, net_revenue: t.rev}, drrOf(t.sku, byRow.has(t.sku) ? byRow.get(t.sku).stock : null)));
     children.forEach(c => {
       let ci = null; try { ci = _rcFind(_ryKey(c && c.sku)); } catch (_e) {}
       const q = (Number(t.ind) || 0) * (Number(cnxChildComponentQty(parentItem, c.sku)) || 0);
@@ -18043,6 +18044,16 @@ function resetRamyanaOverallFilters(){
   _ryClearChecks('ryo');
   renderRamyanaOverall();
 }
+/* V25.68: Selling Price for the pivot export = the sheet's own per-unit Selling Price (cosa_orderdate col H) of the SKU's LATEST order under the active filters. No averaging. */
+function _ryoSp(r){
+  try {
+    const ctx = _ryCtx('ryo'), item = roExactSkuItem(r.it || {sku: r.sku});
+    const ents = Array.isArray(item && item.orderdate_sales_entries) ? item.orderdate_sales_entries : [];
+    let best = null, bd = '';
+    ents.forEach(e => { if (!_ryoEntryOk(e, ctx) || !(Number(e.qty) || 0)) return; if (!(e.sp_valid === true && Number.isFinite(Number(e.sp)))) return; const d = String(e.date || '').slice(0, 10); if (best === null || d >= bd) { best = Number(e.sp); bd = d; } });
+    return best;
+  } catch (_e) { return null; }
+}
 async function exportRamyanaOverallExcel(){
   if (_ryoView === 'txns') return exportRamyanaOverallTxnsExcel();
   if (!_ryoRows.length) renderRamyanaOverall();
@@ -18054,7 +18065,7 @@ async function exportRamyanaOverallExcel(){
   try {
     const resp = await fetch('/api/ramyana_overall/export.xlsx', {method: 'POST', headers: {'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true'},
       body: JSON.stringify({period: ((d1 || d2) ? ((d1 || 'start') + ' to ' + (d2 || 'today')) : 'All time') + _ryFilterText('ryo') + (_ryThemeLabel('ryoThemeF') ? ' | Theme: ' + _ryThemeLabel('ryoThemeF') : ''), customer: cust,
-        rows: rows.map(r => Object.assign({sku: r.sku, sku_name: r.name, type: r.type, mrp: r.mrp, image: r.img, sold: r.sold, in_cmb: r.inc, total: r.tot, net_revenue: r.rev, inv_stock: r.stock, inv_wip: r.wip}, _ryoRowDrr(r, st))), kpis: _ryoKpiList(rows, st)})});
+        rows: rows.map(r => Object.assign({sku: r.sku, sku_name: r.name, type: r.type, mrp: r.mrp, image: r.img, sold: r.sold, in_cmb: r.inc, total: r.tot, net_revenue: r.rev, selling_price: _ryoSp(r), inv_stock: r.stock, inv_wip: r.wip}, _ryoRowDrr(r, st))), kpis: _ryoKpiList(rows, st)})});
     if (!resp.ok) { let msg = 'HTTP ' + resp.status; try { const j = await resp.json(); msg = (j && j.error) || msg; } catch (_e) {} throw new Error(msg); }
     const blob = await resp.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -34169,13 +34180,13 @@ def api_ramyana_overall_export_xlsx():
             rows.append({"sku": sku, "name": clean((r or {}).get("sku_name", "")), "type": clean((r or {}).get("type", "")), "image": clean((r or {}).get("image", "")),
                          "mrp": _n((r or {}).get("mrp")),
                          "sold": to_int((r or {}).get("sold", 0)), "inc": to_int((r or {}).get("in_cmb", 0)), "tot": to_int((r or {}).get("total", to_int((r or {}).get("sold", 0)) + to_int((r or {}).get("in_cmb", 0)))),
-                         "rev": to_num((r or {}).get("net_revenue", 0)),
+                         "rev": to_num((r or {}).get("net_revenue", 0)), "sp": _f((r or {}).get("selling_price")),
                          "stock": _n((r or {}).get("inv_stock")), "wip": _n((r or {}).get("inv_wip")),
                          "fo": clean((r or {}).get("first_order", "")), "drr": _f((r or {}).get("drr")), "invd": _f((r or {}).get("inv_days"))})
         if not rows:
             return jsonify({"error": "No Ramayana Overall rows to export."}), 404
 
-        headers = ["SKU", "SKU Name", "Product Type", "MRP", "Image Link", "Individual Sold", "In CMB Sold", "Total Sold", "Net Revenue", "Inv Stock", "Inv WIP", "First Order Date", "DRR", "Inv Days"]
+        headers = ["SKU", "SKU Name", "Product Type", "MRP", "Image Link", "Individual Sold", "In CMB Sold", "Total Sold", "Selling Price", "Net Revenue", "Inv Stock", "Inv WIP", "First Order Date", "DRR", "Inv Days"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -34187,7 +34198,7 @@ def api_ramyana_overall_export_xlsx():
         ws.row_dimensions[1].height = 27
         ws.merge_cells(f"A2:{last_col}2")
         ws["A2"] = (f"Sales period: {period}" + (f" | Customer: {customer}" if customer else "")
-                    + f" | Individual Sold = the SKU's own sales, In CMB Sold = sold through the Ramayana CMBs | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+                    + f" | Individual Sold = the SKU's own sales, In CMB Sold = sold through the Ramayana CMBs | Selling Price = per-unit selling price from the sheet for the SKU's latest order | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
         ws["A2"].font = Font(italic=True, size=9, color="6B6258")
 
         thin = Side(style="thin", color="DDD5C5")
@@ -34202,20 +34213,20 @@ def api_ramyana_overall_export_xlsx():
         ws.row_dimensions[hr].height = 24
 
         for i, r in enumerate(rows, hr + 1):
-            vals = [r["sku"], r["name"], r["type"], r["mrp"] if r["mrp"] is not None else "", r["image"], r["sold"], r["inc"], r["tot"], round(r["rev"], 2),
+            vals = [r["sku"], r["name"], r["type"], r["mrp"] if r["mrp"] is not None else "", r["image"], r["sold"], r["inc"], r["tot"], (r["sp"] if r["sp"] is not None else ""), round(r["rev"], 2),
                     r["stock"] if r["stock"] is not None else "", r["wip"] if r["wip"] is not None else "",
                     r["fo"], (r["drr"] if r["drr"] is not None else ""), (r["invd"] if r["invd"] is not None else "")]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
                 cell.border = border
-                cell.alignment = Alignment(horizontal=("right" if c in (4, 6, 7, 8, 9, 10, 11, 13, 14) else "left"), vertical="center")
-                if c in (4, 6, 7, 8, 10, 11):
+                cell.alignment = Alignment(horizontal=("right" if c in (4, 6, 7, 8, 9, 10, 11, 12, 14, 15) else "left"), vertical="center")
+                if c in (4, 6, 7, 8, 11, 12):
                     cell.number_format = "#,##0"
-                elif c == 9:
+                elif c in (9, 10):
                     cell.number_format = "#,##0.00"
-                elif c == 13:
-                    cell.number_format = "0.00"
                 elif c == 14:
+                    cell.number_format = "0.00"
+                elif c == 15:
                     cell.number_format = "#,##0.0"
             if r["image"].startswith(("http://", "https://")):
                 ic = ws.cell(i, 5)
@@ -34231,20 +34242,20 @@ def api_ramyana_overall_export_xlsx():
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 1, "TOTAL")
-        for c in (6, 7, 8, 9, 10, 11):
+        for c in (6, 7, 8, 10, 11, 12):
             L = get_column_letter(c)
-            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 9 else "#,##0")
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 10 else "#,##0")
         for c in range(1, ncol + 1):
             cell = ws.cell(tr, c)
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="F2E5CF")
             cell.border = border
-            if c in (4, 6, 7, 8, 9, 10, 11):
+            if c in (4, 6, 7, 8, 9, 10, 11, 12):
                 cell.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([18, 34, 22, 12, 52, 15, 14, 14, 16, 14, 14, 16, 10, 11], 1):
+        for i, w in enumerate([18, 34, 22, 12, 52, 15, 14, 14, 16, 16, 14, 14, 16, 10, 11], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         _ryo_add_kpi_sheet(wb, body.get("kpis"))
@@ -34286,11 +34297,11 @@ def api_ramyana_overall_txns_export_xlsx():
                          "image": clean(r.get("image", "")), "cust": clean(r.get("customer", "")), "type": clean(r.get("type", "")), "channel": clean(r.get("channel", "")),
                          "ind": to_int(r.get("individual", 0)), "inc": to_int(r.get("in_cmb", 0)), "rtype": rtype, "setof": clean(r.get("set_item_of", "")),
                          "fo": clean(r.get("first_order", "")), "drr": _nf(r.get("drr")), "istock": _nf(r.get("inv_stock")), "invd": _nf(r.get("inv_days")),
-                         "rev": to_num(r.get("net_revenue", 0))})
+                         "rev": to_num(r.get("net_revenue", 0)), "sp": _nf(r.get("selling_price"))})
         if not rows:
             return jsonify({"error": "No Ramayana Overall transactions to export."}), 404
 
-        headers = ["Order Date", "SKU", "SKU Name", "Product Type", "Image Link", "Customer", "Type", "Channel", "Row Type", "Set Item Of", "Individual Sold", "In CMB Sold", "Net Revenue", "Total Sold", "First Order Date", "DRR", "Inv Stock", "Inv Days"]
+        headers = ["Order Date", "SKU", "SKU Name", "Product Type", "Image Link", "Customer", "Type", "Channel", "Row Type", "Set Item Of", "Individual Sold", "In CMB Sold", "Selling Price", "Net Revenue", "Total Sold", "First Order Date", "DRR", "Inv Stock", "Inv Days"]
         ncol = len(headers)
         last_col = get_column_letter(ncol)
         wb = openpyxl.Workbook()
@@ -34302,7 +34313,7 @@ def api_ramyana_overall_txns_export_xlsx():
         ws.row_dimensions[1].height = 27
         ws.merge_cells(f"A2:{last_col}2")
         ws["A2"] = (f"Sales period: {period}" + (f" | Customer: {customer}" if customer else "")
-                    + f" | Row Types: Gift Set / Product / Set Item (In CMB Sold = CMB qty x pieces) | DRR = units from 01-Oct-2026 onwards / days since that SKU's first order; Inv Days = Inv Stock / DRR | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
+                    + f" | Row Types: Gift Set / Product / Set Item (In CMB Sold = CMB qty x pieces) | Selling Price = per-unit selling price of that order line (blank for Set Item rows) | DRR = units from 01-Oct-2026 onwards / days since that SKU's first order; Inv Days = Inv Stock / DRR | Generated: {datetime.now(TZ).strftime('%d-%b-%Y %I:%M %p')}")
         ws["A2"].font = Font(italic=True, size=9, color="6B6258")
 
         thin = Side(style="thin", color="DDD5C5")
@@ -34318,19 +34329,19 @@ def api_ramyana_overall_txns_export_xlsx():
 
         for i, r in enumerate(rows, hr + 1):
             vals = [r["date"], r["sku"], r["name"], r["ptype"], r["image"], r["cust"], r["type"], r["channel"], r["rtype"], r["setof"],
-                    r["ind"], r["inc"], ("" if r["rtype"] == "— Set Item" else round(r["rev"], 2)), r["ind"] + r["inc"],
+                    r["ind"], r["inc"], ("" if (r["rtype"] == "— Set Item" or r["sp"] is None) else round(r["sp"], 2)), ("" if r["rtype"] == "— Set Item" else round(r["rev"], 2)), r["ind"] + r["inc"],
                     r["fo"], ("" if r["drr"] is None else r["drr"]), ("" if r["istock"] is None else r["istock"]), ("" if r["invd"] is None else r["invd"])]
             for c, v in enumerate(vals, 1):
                 cell = ws.cell(i, c, v)
                 cell.border = border
-                cell.alignment = Alignment(horizontal=("right" if c in (11, 12, 13, 14, 15, 16, 17, 18) else "left"), vertical="center")
-                if c in (11, 12, 14, 17):
+                cell.alignment = Alignment(horizontal=("right" if c in (11, 12, 13, 14, 15, 16, 17, 18, 19) else "left"), vertical="center")
+                if c in (11, 12, 15, 18):
                     cell.number_format = "#,##0"
-                elif c == 13:
+                elif c in (13, 14):
                     cell.number_format = "#,##0.00"
-                elif c == 16:
+                elif c == 17:
                     cell.number_format = "0.00"
-                elif c == 18:
+                elif c == 19:
                     cell.number_format = "#,##0.0"
             if r["image"].startswith(("http://", "https://")):
                 ic = ws.cell(i, 5)
@@ -34339,25 +34350,25 @@ def api_ramyana_overall_txns_export_xlsx():
                 ic.border = border
                 ic.alignment = Alignment(horizontal="left", vertical="center")
             ws.cell(i, 2).font = Font(bold=True)
-            ws.cell(i, 14).font = Font(bold=True)
+            ws.cell(i, 15).font = Font(bold=True)
 
         tr = hr + len(rows) + 1
         first, lastr = hr + 1, hr + len(rows)
         ws.cell(tr, 1, "TOTAL")
-        for c in (11, 12, 13, 14):
+        for c in (11, 12, 14, 15):
             L = get_column_letter(c)
-            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 13 else "#,##0")
+            ws.cell(tr, c, f"=SUM({L}{first}:{L}{lastr})").number_format = ("#,##0.00" if c == 14 else "#,##0")
         for c in range(1, ncol + 1):
             cell = ws.cell(tr, c)
             cell.font = Font(bold=True)
             cell.fill = PatternFill("solid", fgColor="F2E5CF")
             cell.border = border
-            if c in (11, 12, 13, 14):
+            if c in (11, 12, 13, 14, 15):
                 cell.alignment = Alignment(horizontal="right")
 
         ws.freeze_panes = f"A{hr + 1}"
         ws.auto_filter.ref = f"A{hr}:{last_col}{lastr}"
-        for i, w in enumerate([13, 18, 34, 20, 40, 28, 16, 16, 12, 18, 15, 14, 16, 12, 16, 10, 11, 11], 1):
+        for i, w in enumerate([13, 18, 34, 20, 40, 28, 16, 16, 12, 18, 15, 14, 14, 16, 12, 16, 10, 11, 11], 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
         _ryo_add_kpi_sheet(wb, body.get("kpis"))
