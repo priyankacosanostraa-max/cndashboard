@@ -1,3 +1,4 @@
+# Cosa Nostraa — V25.69 (SPEED: sales-total engine now single-pass and remembers results per SKU + filter set until data reload (CMB children no longer re-scan the CMB sales again and again); heading-clean-up observer batched, Repeat Orders column filters + Repeat Customers search debounced. Numbers unchanged. Nothing else changed)
 # Cosa Nostraa — V25.68 (RAMAYANA TAB 3rd table (Ramayana Overall) EXPORTS: Selling Price added. SKU PIVOT export = new "Selling Price" column (per-unit selling price of the SKU's own orders under the active filters); TRANSACTIONS export = new "Selling Price" column (per order line, blank for Set Item rows). Nothing else changed)
 # Cosa Nostraa — V25.67 (PRODUCT PHOTOS FIX: photos from the All Product (inventory) sheet now load everywhere - All Products cards, SKU Details, Repeat Orders and every other tab. If the sheet image link is blocked by the browser (hotlink/referrer block, Drive thumbnail limit) the photo is retried automatically through the server image proxy (new /api/img-proxy, only known inventory image links are allowed), then once more after a short wait. Referrer is no longer sent to image hosts. Nothing else changed) · V25.66 (SECURITY: all 23 Google Sheet links/IDs removed from the source -> read from env vars / SHEET_LINKS_JSON / private sheet_links.json via _sheet_link(); /api/bulk-combo-upload is now admin-only on the server. Nothing else changed) · V25.65 (MENU: removed the NEW badges; Ramayana, Website Best Sellers and Refresh now use the same title/description font + colour as every other menu item (they were missing from MENU_TAB_META). Nothing else changed) · V25.64 (PROFIT MARGIN tab removed completely: menu button (m14), page, JS, CSS, /api/sku-costs backend and its cache. Nothing else changed) · V25.63 (WEBSITE RETURNS > All Website Orders table: new "Sparsh Comment" column + filter (dropdown: All / With Comment / No Comment / each comment). Comment comes from the live sparsh comment sheet matched by Order ID (SPARSH_COMMENT_URL env can override the sheet). Also in Export All Orders CSV. Nothing else changed) · V25.62 (DELAYED PAYMENTS table: if no Payment Term is found for a customer (ledger Terms and Terms sheet both blank/0), 30 days is shown by default. Nothing else changed) · V25.61 (PAYMENTS Terms sheet (Sheet2) FIX: its customer column is named Vendor_SBC, which the loader was dropping, so no customer matched its Terms/Tag and Payment Term showed 0 days. Vendor_SBC is now read as the customer name column. Nothing else changed) · V25.60 (DELAYED PAYMENTS table: Payment Term now comes from the ledger Terms (Full_Ledger_Main column G) of the customer's oldest overdue invoice (fallback: Terms sheet), was showing 0 days. Nothing else changed) · V25.59 (MENU: Refresh button (hard refresh, same as Ctrl+Shift+R) moved from the Home tab to the very first item of the menu; removed from Home. Nothing else changed) · V25.58 (PAYMENTS TAB, Delayed Payments table: new "Payment Term" column (days) right after Customer Name, also in its Export CSV. Nothing else changed) · V25.57 (PAYMENTS TAB: new last table "Delayed Payments" - customers with overdue money, Delayed Days (oldest unpaid invoice past due) + Amount, 0-day customers hidden, Tag/Type + customer search filters, Export CSV. Nothing else changed) · V25.56 (HOME TAB: Refresh button at the very top = hard refresh like Ctrl+Shift+R (clears cache + reloads). Nothing else changed) · V25.55 (RAMAYANA TAB 3rd table (Ramayana Overall): DRR (daily run rate = units / days since the SKU's first order; only orders from 2026-10-01 are counted) + Inv Days (Inv Stock / DRR) added in the dashboard (KPI cards + table columns) and in both Excel exports (pivot + transactions, incl. a KPI Summary sheet). Nothing else changed) · V25.54 (RAMAYANA TAB 3rd table: Transactions view shows "(Via CMB Sold)" rows (SKU sold only inside Ramayana CMBs also appears); Transactions EXCEL export now uses the same Row Types as Repeat Orders - Gift Set / Product / — Set Item. REPEAT ORDERS Transactions: unchanged from V25.52 (no In/Via CMB rows)) · V25.52 (TARGET TAB: Blinkit and Instamart are now picked from Customer Name (cossa + cosa_orderdate) whatever the Type column says - Instamart row in Marketplace Sheet Sales, Qcom row in Target / Glimpse. Nothing else changed) · V25.51 (REPEAT ORDERS TRANSACTIONS view: faster load - per-SKU price/stock/WIP calculated once per SKU instead of once per sale entry) · V25.50 (REPEAT ORDERS EXPORT: Month-Year is paste-safe text Nov-26 for Google Sheets) · V25.49 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date are real Excel dates shown as dd-mm-yyyy; Month-Year is a real date (1st of the Dispatch Date month) shown as Nov-26) · V25.48 (REPEAT ORDERS EXPORT: Dispatch Date / Launch Date hard-coded as text dd-mm-yyyy, Month-Year (Nov-26) taken from that Dispatch Date text) · V25.47 (REPEAT ORDERS: 7D/15D/30D Sale columns removed from the dashboard table, its column filters and the export · Total Sold now sits right next to Individual Sold / In CMBs Sold (dashboard + export) and follows the active filters · Dispatch Date / Launch Date shown as 04-Nov-2026 · Transactions export has a last column Month-Year (Nov-26) from Dispatch Date. Nothing else changed) · V25.46 (REPEAT ORDERS + RAMAYANA TAB, TRANSACTIONS view: "In CMB Sold" / "Via CMB Sold" rows removed from the table and the export; only the SKU's own order lines are shown. Nothing else changed) · V25.45 (RAMAYANA TAB, 3rd table (Ramayana Overall): now 2 views like Repeat Orders - SKU PIVOT (Individual Sold / In CMB Sold / Total Sold) and TRANSACTIONS order-date wise, where a CMB sale is tagged "(Via CMB Sold)" with its CMB; Export Excel works for both views) · V25.44 (SKU FINDER: photo search now shows 10 results + a "Show more similar results" button that reveals 10 more similar SKUs, no repeats · SKU DETAILS CRASH FIX: opening a SKU from any tab no longer freezes/crashes the browser - revenue-share context read the DOM filters 5x per SKU of the whole catalogue, now read once) · V25.42 (COMBO RISK child -> parent CMBs export: Parent CMB names are now the CN Name (All Product 'Name' column AF), comma separated in the same order as Parent CMB SKUs) · V25.41 (COMBO RISK child -> parent CMBs table: Export CSV now also has Parent CMB Names, comma separated in the same order as Parent CMB SKUs) · V25.40 (COMBO RISK TAB new table: one row per child SKU (from column I Combo Details) with ALL its parent CMB SKUs (column B) comma separated in front; child SKU filter narrows it, blank = all) · V25.39 (COMBO RISK TAB new filter reversed: select parent CMB(s) -> every child SKU of those CMBs is listed with Image, and in front of each child ALL CMBs using it, comma separated) · V25.38 (COMBO DETAILS: child SKUs / parent CMBs now come ONLY from All Product column I (Combo Details) everywhere in the dashboard - Stone Details/Remarks (column J) is no longer used for child SKUs, not even as fallback; column J text is kept only for search and the 'customer' hide rule) · V25.37 (COMBO RISK TAB: new 'Child SKU' search + select filter showing Child SKU, Image and all parent CMBs comma separated)
 # Cosa Nostraa — V25.35 (Ramayana tab: every sales number, customer list, type list and Channel / ECom / SOR dropdown now comes from cosa_orderdate (Order-Date entries); stock / WIP / MRP / name stay from All Product) · V25.35 (Ramayana tab Theme filter + Maryada/Bhakti/Maya KPIs: a child SKU not in the theme list now takes the theme of the Ramayana CMB it sits in, instead of Blank) · V25.34 (Ramayana tab: Taxon filter (table 1) and Set Of filter (table 2) now show only SKUs / CMBs that actually sold, like every other filter; KPIs, totals and export follow) · V25.33 (Ramayana tab, all 3 tables + KPIs: sales now by ORDER DATE from cosa_orderdate so data runs till today (was Dispatch Date = till yesterday) · In CMB Sold counts only the 10 Ramayana CMBs of table 2 (other BTC CMBs no longer inflate it; hover on a value shows the CMB-wise split) · Bracelet KPI = table rows (Single + Via Combos) · customer/type lists from the same source) · V25.32 (Ramayana Bracelet KPI now uses Target New Launch numbers · dropdown filters re-render once, not per tick) · V25.31 (Bracelet = BR-0015 to BR-0021 in both Target New Launch Daily Sales and Ramayana KPI) · V25.30 (Ramayana Bracelet KPI now counted like Target > New Launch Daily Sales: BR-0015 to BR-0019, Single + Via Combos) · V25.29 (filter dropdowns open above KPIs · 'Set Of' filter name · bolder filter text · Bracelet KPI detection widened) · V25.28 (Ramayana tab: SKU Group filter removed · Dimension (Set of 5/3/2) filter in CMB table · Taxon filter in SKU table · Channel/ECom/SOR now searchable multi-select dropdowns · Maryada/Bhakti/Maya KPIs show % of total sold) · V25.27 (BH-2753, 2758, 2759, 2763, 2768, 2773, 2775 excluded from all Ramayana tab tables) · V25.26 (Bookmark Total Sold KPI replaced by Steering Charm (SW-0001) Total Sold) · V25.25 (RAMAYANA TAB: spelling fix · Type filter removed from all 3 tables · Maryada/Bhakti/Maya Total Sold KPIs · fixed GRAND TOTAL row · SKU Group now a proper group filter: shows every SKU/CMB of the chosen group, not only sold ones)
@@ -4455,7 +4456,7 @@ def _refresh_data():
                 "fy": _si(fy),
             }
             order_entry = {
-                "qty": qty, "rev": rev, "date": _si(order_date_iso),
+                "qty": qty, "rev": rev, "osp": sp, "osp_ok": sp_valid, "date": _si(order_date_iso),
                 "cust": _si(cust), "type": _si(typ),
                 "channel": _si(channel), "sub_channel": _si(sub_channel),
             }
@@ -8542,7 +8543,7 @@ select.lg-in option{background:#fff;color:#1a1610}
         <div class="ro-col-filters" id="roColFilters">
           <div class="cf-group" style="min-width:110px">
             <label>SKU</label>
-            <input type="text" id="cfSku" placeholder="Filter SKU…" oninput="applyColFilters()">
+            <input type="text" id="cfSku" placeholder="Filter SKU…" oninput="applyColFilters_d()">
           </div>
           <div class="cf-group">
             <label>Individual Sold</label>
@@ -8597,7 +8598,7 @@ select.lg-in option{background:#fff;color:#1a1610}
           </div>
           <div class="cf-group">
             <label>Remark</label>
-            <input type="text" id="cfRemark" placeholder="Filter remark…" oninput="applyColFilters()">
+            <input type="text" id="cfRemark" placeholder="Filter remark…" oninput="applyColFilters_d()">
           </div>
           <button class="cf-reset" onclick="resetColFilters()">✕ Clear</button>
         </div>
@@ -8675,7 +8676,7 @@ select.lg-in option{background:#fff;color:#1a1610}
       <div class="fg">
         <div class="fc"><label class="fl">Purchase Date From</label><input class="fi" type="date" id="crrFrom" onchange="renderConsumerRepeat()"></div>
         <div class="fc"><label class="fl">Purchase Date To</label><input class="fi" type="date" id="crrTo" onchange="renderConsumerRepeat()"></div>
-        <div class="fc"><label class="fl">Search Customer Name</label><input class="fi" id="crrSearch" placeholder="e.g. Priya, Rahul..." oninput="renderConsumerRepeatDetail()"></div>
+        <div class="fc"><label class="fl">Search Customer Name</label><input class="fi" id="crrSearch" placeholder="e.g. Priya, Rahul..." oninput="renderConsumerRepeatDetail_d()"></div>
       </div>
       <div class="small-note" id="crrSourceNote" style="margin-top:8px"></div>
     </div>
@@ -10908,7 +10909,23 @@ function cnxSaleEntryDate(e, ctx){
   const d = String(e && e.date || '').trim();
   return d && d !== 'N/A' ? d : '';
 }
+/* V25.69 SPEED: the same SKU / CMB + the same filters is asked for again and again (every child of a CMB re-scanned the CMB's whole sales list, every re-render re-scanned everything).
+   Results are now remembered per SKU + filter set until the data is reloaded (master changes). Numbers are identical - only the repeated scanning is skipped. */
+let _cnxSaleMemoRef = null, _cnxSaleMemo = new WeakMap();
 function cnxSaleTotalsForItem(rawItem, saleCtx){
+  if (_cnxSaleMemoRef !== master) { _cnxSaleMemoRef = master; _cnxSaleMemo = new WeakMap(); }
+  const item = roExactSkuItem(rawItem || {});
+  if (!item || typeof item !== 'object') return _cnxSaleTotalsForItemCalc(rawItem, saleCtx);
+  const c = saleCtx || {};
+  let sig;
+  try { sig = JSON.stringify([c.sourceField, c.types, c.channels, c.subChannels, c.marketplaces, c.customer, c.fy, c.d1, c.d2, c.months, c.businessChannel ? 1 : 0, c.saleMode, todayISO]); } catch (_e) { return _cnxSaleTotalsForItemCalc(rawItem, saleCtx); }
+  let m = _cnxSaleMemo.get(item);
+  if (!m) { m = new Map(); _cnxSaleMemo.set(item, m); }
+  let r = m.get(sig);
+  if (!r) { r = _cnxSaleTotalsForItemCalc(item, saleCtx); if (m.size > 60) m.clear(); m.set(sig, r); }
+  return {q7:r.q7,q15:r.q15,q30:r.q30,sold:r.sold,rev:r.rev};
+}
+function _cnxSaleTotalsForItemCalc(rawItem, saleCtx){
   const item = roExactSkuItem(rawItem || {});
   const ctx = saleCtx || {};
   const sourceField = ctx.sourceField || 'sales_entries';
@@ -10948,11 +10965,14 @@ function cnxSaleTotalsForItem(rawItem, saleCtx){
   const now = String(todayISO || new Date().toISOString().slice(0,10));
   const ago = n => new Date(new Date(now + 'T00:00:00Z').getTime() - Math.max(0,n-1)*86400000).toISOString().slice(0,10);
   const D7=ago(7), D15=ago(15), D30=ago(30);
-  const win = since => kept.reduce((sum,e) => {
-    const d=cnxSaleEntryDate(e,ctx),q=Number(e && e.qty)||0;
-    return sum + (d && d >= since ? q : 0);
-  },0);
-  return {q7:win(D7),q15:win(D15),q30:win(D30),sold:kept.reduce((sum,e)=>sum+(Number(e&&e.qty)||0),0),rev:kept.reduce((sum,e)=>sum+(Number(e&&e.rev)||0),0)};
+  /* V25.69 SPEED: one pass instead of five (same numbers) */
+  let q7=0,q15=0,q30=0,sold=0,rev=0;
+  for (let i=0;i<kept.length;i++){
+    const e=kept[i],d=cnxSaleEntryDate(e,ctx),q=Number(e && e.qty)||0;
+    sold+=q; rev+=Number(e && e.rev)||0;
+    if (d){ if (d>=D7) q7+=q; if (d>=D15) q15+=q; if (d>=D30) q30+=q; }
+  }
+  return {q7:q7,q15:q15,q30:q30,sold:sold,rev:rev};
 }
 /* Arithmetic mean of valid COSA Selling Price cells under the same active
    sales filters as Sold Qty. This is deliberately row-based (not revenue/qty),
@@ -11391,6 +11411,9 @@ function _debounce(fn, ms){
   let t = null;
   return function(){ clearTimeout(t); t = setTimeout(fn, ms); };
 }
+/* V25.69 SPEED: Repeat Orders column filters + Repeat Customers search re-drew a table on every keystroke - now once after typing stops */
+const applyColFilters_d = _debounce(() => applyColFilters(), 220);
+const renderConsumerRepeatDetail_d = _debounce(() => renderConsumerRepeatDetail(), 220);
 /* ── Customer Name suggestions (Google-Sheets style autocomplete) ──
    Har keystroke par poori allCusts list ke against match karta hai
    (sirf pehle 300 customers tak limited nahi), taaki koi bhi customer
@@ -11868,7 +11891,9 @@ function _simplifyDashboardHeadings(root){
 }
 document.addEventListener('DOMContentLoaded',()=>{
   _simplifyDashboardHeadings(document);
-  const observer=new MutationObserver(records=>records.forEach(rec=>rec.addedNodes.forEach(node=>{if(node.nodeType===1)_simplifyDashboardHeadings(node);}))); 
+  /* V25.69 SPEED: collect added nodes and process them once, shortly after the render finishes (was: scan every added node immediately, per render) */
+  let _hq=new Set(),_ht=null;
+  const observer=new MutationObserver(records=>{records.forEach(rec=>rec.addedNodes.forEach(node=>{if(node.nodeType===1)_hq.add(node);}));if(_ht)return;_ht=setTimeout(()=>{_ht=null;const q=Array.from(_hq);_hq=new Set();q.forEach(n=>{if(n.isConnected)_simplifyDashboardHeadings(n);});},150);});
   observer.observe(document.body,{childList:true,subtree:true});
 });
 
@@ -17945,7 +17970,7 @@ function _ryoTxns(rows){
   rows.forEach(r => {
     const base = {sku: r.sku, open: r.open, found: r.found, name: r.name, img: r.img, ptype: r.type, it: r.it};
     if (r.it) entsOf(r.it).forEach(e => { if (!_ryoEntryOk(e, ctx)) return; const q = Number(e.qty) || 0; if (!q) return;
-      out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: q, inc: 0, via: '', rev: Number(e.rev) || 0, sp: (e.sp_valid === true && Number.isFinite(Number(e.sp))) ? Number(e.sp) : null})); });
+      out.push(Object.assign({}, base, {date: e.date || '', cust: e.cust || '', type: e.type || '', channel: e.channel || '', ind: q, inc: 0, via: '', rev: Number(e.rev) || 0, sp: _ryoEntrySp(e)})); });
     const keys = [r.sku]; const ik = _ryKey(r.it && r.it.sku); if (ik && ik !== r.sku) keys.push(ik);
     const seenP = new Set();
     /* V25.53: Via CMB Sold rows back (SKU sold only inside Ramayana CMBs also shows) */
@@ -18045,12 +18070,17 @@ function resetRamyanaOverallFilters(){
   renderRamyanaOverall();
 }
 /* V25.68: Selling Price for the pivot export = the sheet's own per-unit Selling Price (cosa_orderdate col H) of the SKU's LATEST order under the active filters. No averaging. */
+function _ryoEntrySp(e){
+  if (e && e.osp_ok === true && Number.isFinite(Number(e.osp))) return Number(e.osp);
+  if (e && e.sp_valid === true && Number.isFinite(Number(e.sp))) return Number(e.sp);
+  return null;
+}
 function _ryoSp(r){
   try {
     const ctx = _ryCtx('ryo'), item = roExactSkuItem(r.it || {sku: r.sku});
     const ents = Array.isArray(item && item.orderdate_sales_entries) ? item.orderdate_sales_entries : [];
     let best = null, bd = '';
-    ents.forEach(e => { if (!_ryoEntryOk(e, ctx) || !(Number(e.qty) || 0)) return; if (!(e.sp_valid === true && Number.isFinite(Number(e.sp)))) return; const d = String(e.date || '').slice(0, 10); if (best === null || d >= bd) { best = Number(e.sp); bd = d; } });
+    ents.forEach(e => { if (!_ryoEntryOk(e, ctx) || !(Number(e.qty) || 0)) return; const sp = _ryoEntrySp(e); if (sp === null) return; const d = String(e.date || '').slice(0, 10); if (best === null || d >= bd) { best = sp; bd = d; } });
     return best;
   } catch (_e) { return null; }
 }
@@ -28335,7 +28365,7 @@ def _employee_view(comp, period_kpis):
         d["marketplace_product_price_events"] = []
         d["sales_entries"] = [{**e, "rev": 0, "sp": 0, "ret_amt": 0} for e in i.get("sales_entries", [])]
         d["orderdate_sales_entries"] = [
-            {**e, "rev": 0, "sp": 0, "ret_amt": 0}
+            {**e, "rev": 0, "sp": 0, "ret_amt": 0, **({"osp": 0} if "osp" in e else {})}
             for e in i.get("orderdate_sales_entries", [])
         ]
         d["rakhi_sales_entries"] = [
